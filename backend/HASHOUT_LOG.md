@@ -194,3 +194,10 @@ Each sheet gains `merges`, a list of `[r0, c0, r1, c1]`. `PUT /api/workbooks/{id
 - logged: v0.22.0 · 2026-10-21
 
 Each sheet gains `rules`, one line per rule in precedence order. `PUT /api/workbooks/{id}/rules` replaces a sheet's list; lines that do not parse are dropped on load rather than failing the workbook.
+
+### Links in the file
+- refers-to: app/services/store.py :: _write, _load, get, set_links; app/routers/workbooks.py :: set_links
+- kind: explainer
+- logged: v0.23.0 · 2026-10-21
+
+Each sheet gains `links`, a list of `[row, col, target]` for links held by cells; links from HYPERLINK formulas live in the formulas. `POST /api/workbooks/{id}/links` takes the `/cells` body; an empty target removes the link.

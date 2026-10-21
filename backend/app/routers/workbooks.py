@@ -142,6 +142,16 @@ def set_look(wid: str, body: LookIn) -> dict:
         raise HTTPException(422, f"That theme or cell style could not be saved: {e}")
 
 
+@router.post("/workbooks/{wid}/links")
+def set_links(wid: str, body: EditIn) -> dict:
+    try:
+        return store().set_links(wid, body.sheet, body.cells)
+    except (KeyError, FileNotFoundError):
+        raise missing(wid)
+    except (IndexError, ValueError) as e:
+        raise HTTPException(422, f"Those links could not be saved: {e}")
+
+
 class RulesIn(BaseModel):
     sheet: int = 0
     lines: list[str] = Field(default_factory=list, max_length=5000)

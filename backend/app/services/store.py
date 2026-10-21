@@ -71,7 +71,7 @@ class Store:
                "modified": b.modified, "template": b.template, "preview": b.preview(),
                "names": [list(n) for n in b.engine.names()],
                "theme": b.engine.theme(), "cellStyles": b.engine.cell_styles(),
-               "sheets": [{"name": n, "view": b.views[i] if i < len(b.views) else {}, "cells": b.engine.cells(i), "formats": b.engine.formats(i), "styles": b.engine.styles(i), "merges": [list(m) for m in b.engine.merges(i)], "rules": b.engine.rules(i)} for i, n in enumerate(b.sheet_names())]}
+               "sheets": [{"name": n, "view": b.views[i] if i < len(b.views) else {}, "cells": b.engine.cells(i), "formats": b.engine.formats(i), "styles": b.engine.styles(i), "merges": [list(m) for m in b.engine.merges(i)], "rules": b.engine.rules(i), "links": b.engine.links(i)} for i, n in enumerate(b.sheet_names())]}
         target = self.path(b.id)
         tmp = target.with_suffix(".fcel.tmp")
         with zipfile.ZipFile(tmp, "w", zipfile.ZIP_DEFLATED) as z:
@@ -106,6 +106,7 @@ class Store:
                 eng.load_styles([tuple(c) for c in s.get("styles", [])], i)
                 eng.load_merges([tuple(m) for m in s.get("merges", [])], i)
                 eng.load_rules(s.get("rules", []), i)
+                eng.load_links([tuple(c) for c in s.get("links", [])], i)
                 eng.load([tuple(c) for c in s["cells"]], i)
             for name, refers in doc.get("names", []):
                 try:
@@ -156,7 +157,17 @@ class Store:
         b = self._load(wid)
         with b.lock:
             n = len(b.sheet_names())
-            return {**b.meta(), "names": [list(x) for x in b.engine.names()], "theme": b.engine.theme(), "cellStyles": b.engine.cell_styles(), "cells": [b.engine.cells(i) for i in range(n)], "formats": [b.engine.formats(i) for i in range(n)], "styles": [b.engine.styles(i) for i in range(n)], "merges": [[list(m) for m in b.engine.merges(i)] for i in range(n)], "rules": [b.engine.rules(i) for i in range(n)]}
+            return {**b.meta(), "names": [list(x) for x in b.engine.names()], "theme": b.engine.theme(), "cellStyles": b.engine.cell_styles(), "cells": [b.engine.cells(i) for i in range(n)], "formats": [b.engine.formats(i) for i in range(n)], "styles": [b.engine.styles(i) for i in range(n)], "merges": [[list(m) for m in b.engine.merges(i)] for i in range(n)], "rules": [b.engine.rules(i) for i in range(n)], "links": [b.engine.links(i) for i in range(n)]}
+
+    def set_links(self, wid: str, sheet: int, cells: list[tuple[int, int, str]]) -> dict:
+        b = self._load(wid)
+        with b.lock:
+            if sheet >= len(b.sheet_names()):
+                raise IndexError(sheet)
+            b.engine.load_links(cells, sheet)
+            b.modified = now()
+            self._write(b)
+            return {"id": b.id, "modified": b.modified}
 
     def set_rules(self, wid: str, sheet: int, lines: list[str]) -> dict:
         b = self._load(wid)
