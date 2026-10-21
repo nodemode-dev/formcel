@@ -9,6 +9,8 @@ export interface WhatIfHost {
   makeSheet(base: string): Promise<number>;
   persist(lines: string[]): void;
   pivotsChanged(): Promise<void>;
+  showSheet(i: number): void;
+  newBook(title: string, cells: [number, number, string][]): Promise<void>;
 }
 
 const esc = (s: string): string => s.replace(/\\/g, '\\\\').replace(/\t/g, '\\t').replace(/\n/g, '\\n').replace(/\r/g, '\\r');
@@ -20,6 +22,8 @@ const input = (k: string, label: string, hint = '') => `<label class="fc-fmt-lab
 const area = (k: string, label: string, hint = '') => `<label class="fc-fmt-label">${label}<textarea class="fc-fmt-input fc-wi-text" data-k="${k}" spellcheck="false" rows="4"${hint ? ` placeholder="${hint}"` : ''}></textarea></label>`;
 const pick = (k: string, label: string, opts: [string, string][]) => `<label class="fc-fmt-label">${label}<select class="fc-fmt-input" data-k="${k}">${opts.map(([v, t]) => `<option value="${v}">${t}</option>`).join('')}</select></label>`;
 const check = (k: string, label: string, on = false) => `<label class="fc-sort-check"><input type="checkbox" data-k="${k}"${on ? ' checked' : ''}>${label}</label>`;
+const OUT = pick('dest', 'Output options', [['ply', 'New worksheet ply'], ['book', 'New workbook'], ['range', 'Output range']]) + input('plyname', 'New worksheet ply name, optional') + input('outcell', 'Output range, a cell such as Sheet2!B3', 'A1');
+const settle = (): Promise<void> => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(() => done())));
 
 class Box {
   readonly el: HTMLFormElement;
@@ -88,7 +92,7 @@ class Box {
     this.el.hidden = false;
     const f = first ? this.field<HTMLInputElement>(first) : null;
     f?.focus();
-    f?.select();
+    if (f && typeof f.select === 'function') f.select();
   }
 
   close(): void {
@@ -128,11 +132,11 @@ const TOOLS: Record<string, ToolSpec> = {
   anova2r: { label: 'Anova: Two-Factor With Replication', tool: 'anova2r', fields: [{ ...RANGE, label: 'Input range, with labels in the first row and column' }, { k: 'per', label: 'Rows per sample', def: '2' }, ALPHA], slots: ['per', 'alpha'], note: 'Each sample takes the same number of rows under its row label.' },
   correl: { label: 'Correlation', tool: 'correl', fields: [RANGE, BY, LABELS], slots: ['by', 'labels'], note: 'A matrix of correlation coefficients between the columns or rows.' },
   covar: { label: 'Covariance', tool: 'covar', fields: [RANGE, BY, LABELS], slots: ['by', 'labels'], note: 'A matrix of population covariances between the columns or rows.' },
-  expsmooth: { label: 'Exponential Smoothing', tool: 'expsmooth', fields: [RANGE, { k: 'damp', label: 'Damping factor', def: '0.3' }, LABELS], slots: ['damp', 'labels'], note: 'Each forecast is the damped mix of the last value and the last forecast.' },
-  fourier: { label: 'Fourier Analysis', tool: 'fourier', fields: [RANGE, LABELS], slots: ['@', 'labels'], note: 'Needs a column of 2, 4, 8 ... 4096 numbers. Results are written as complex numbers.' },
+  expsmooth: { label: 'Exponential Smoothing', tool: 'expsmooth', fields: [RANGE, { k: 'damp', label: 'Damping factor', def: '0.3' }, LABELS, { k: 'stderr', label: 'Standard errors', t: 'check' }, { k: 'chart', label: 'Chart output', t: 'check' }], slots: ['damp', 'labels', 'stderr', 'chart'], note: 'Each forecast is the damped mix of the last value and the last forecast.' },
+  fourier: { label: 'Fourier Analysis', tool: 'fourier', fields: [RANGE, LABELS, { k: 'inverse', label: 'Inverse transform', t: 'check' }], slots: ['inverse', 'labels'], note: 'Needs a column of 2, 4, 8 ... 4096 numbers, or complex numbers such as 1+2i for the inverse. Results are written as complex numbers in text form, as COMPLEX writes them.' },
   ftest: { label: 'F-Test Two-Sample for Variances', tool: 'ftest', fields: [{ ...RANGE, label: 'Variable 1 range' }, RANGE2, LABELS, ALPHA], slots: ['range2', 'labels', 'alpha'], note: 'Tests whether two groups have equal variances.' },
-  hist: { label: 'Histogram', tool: 'hist', fields: [RANGE, { k: 'bins', label: 'Bin range, blank for automatic bins' }, LABELS], slots: ['bins', 'labels'], note: 'Counts how many numbers fall in each bin.' },
-  movavg: { label: 'Moving Average', tool: 'movavg', fields: [RANGE, { k: 'interval', label: 'Interval', def: '3' }, LABELS], slots: ['interval', 'labels'], note: 'Averages each value with the ones before it.' },
+  hist: { label: 'Histogram', tool: 'hist', fields: [RANGE, { k: 'bins', label: 'Bin range, blank for automatic bins' }, LABELS, { k: 'pareto', label: 'Pareto (sorted histogram)', t: 'check' }, { k: 'cumul', label: 'Cumulative percentage', t: 'check' }, { k: 'chart', label: 'Chart output', t: 'check' }], slots: ['bins', 'labels', 'pareto', 'cumul', 'chart'], note: 'Counts how many numbers fall in each bin.' },
+  movavg: { label: 'Moving Average', tool: 'movavg', fields: [RANGE, { k: 'interval', label: 'Interval', def: '3' }, LABELS, { k: 'stderr', label: 'Standard errors', t: 'check' }, { k: 'chart', label: 'Chart output', t: 'check' }], slots: ['interval', 'labels', 'stderr', 'chart'], note: 'Averages each value with the ones before it.' },
   rand: {
     label: 'Random Number Generation',
     tool: 'rand',
@@ -158,7 +162,7 @@ const TOOLS: Record<string, ToolSpec> = {
   ztest: { label: 'z-Test: Two Sample for Means', tool: 'ztest', fields: [{ ...RANGE, label: 'Variable 1 range' }, RANGE2, HYP, { k: 'var1', label: 'Variable 1 variance (known)' }, { k: 'var2', label: 'Variable 2 variance (known)' }, LABELS, ALPHA], slots: ['range2', 'hyp', 'var1', 'var2', 'labels', 'alpha'], note: 'Tests two means when both variances are known.' },
 };
 
-const AGGR: [string, string][] =[['0', 'Average'], ['1', 'Count'], ['2', 'CountA'], ['3', 'Max'], ['4', 'Median'], ['5', 'Min'], ['6', 'Sum']];
+const AGGR: [string, string][] = [['0', 'Average'], ['2', 'Count'], ['3', 'CountA'], ['4', 'Max'], ['5', 'Median'], ['6', 'Min'], ['7', 'Sum']];
 
 export class WhatIf {
   private boxes = new Map<string, Box>();
@@ -168,7 +172,11 @@ export class WhatIf {
   private timer = 0;
   private panel: { el: HTMLElement; list: HTMLElement; note: HTMLElement } | null = null;
   private last = '';
+  private fresh = 0;
+  private fields: string[] | null = null;
+  private fieldKey = '';
   private readonly gs = { steps: 0, found: '' };
+  private readonly sv: { opts: Record<string, string | boolean>; trial: number; hasRun: boolean; origin: string } = { opts: {}, trial: 0, hasRun: false, origin: '' };
 
   constructor(private readonly host: WhatIfHost) {}
 
@@ -239,7 +247,64 @@ export class WhatIf {
     const probe = await this.run(make('-'));
     if (probe.startsWith('error')) return probe;
     const i = await this.host.makeSheet(base);
+    this.fresh = i;
     return this.run(make(String(i)));
+  }
+
+  private async place(bx: Box, base: string, make: (dst: string, at: string) => (string | number)[], first = 2): Promise<boolean> {
+    const dest = bx.get('dest');
+    if (dest === 'book') {
+      const r = this.result(await this.run(make('=', 'A1')));
+      if (r[0] !== 'dump') {
+        bx.say(r[1] ?? 'That did not work.', true);
+        return false;
+      }
+      const cells: [number, number, string][] = [];
+      for (let i = 3; i + 2 < r.length; i += 3) cells.push([Number(r[i]), Number(r[i + 1]), unesc(r[i + 2])]);
+      await this.host.newBook(base, cells);
+      bx.say('The results are in a new workbook, opened in another tab. Charts stay in this workbook only.');
+      return true;
+    }
+    let r: string[];
+    if (dest === 'range') {
+      const m = /^(?:(.+)!)?\$?([A-Za-z]{1,3})\$?(\d+)$/.exec(bx.get('outcell') || 'A1');
+      if (!m) {
+        bx.say('Give the output range as a cell such as B3 or Sheet2!B3.', true);
+        return false;
+      }
+      const at = m[1] ? this.host.sheetNames().indexOf(m[1].replace(/^'|'$/g, '').replace(/''/g, "'")) : this.g.sheetIndex;
+      if (at < 0) {
+        bx.say(`There is no sheet named ${m[1]}.`, true);
+        return false;
+      }
+      r = this.result(await this.run(make(String(at), `${m[2].toUpperCase()}${m[3]}`)));
+      if (r[0] === 'error') {
+        bx.say(r[1], true);
+        return false;
+      }
+      if (at !== this.g.sheetIndex) {
+        this.host.showSheet(at);
+        await settle();
+      }
+    } else {
+      r = this.result(await this.toNewSheet(bx.get('plyname') || base, (dst) => make(dst, 'A1')));
+      if (r[0] === 'error') {
+        bx.say(r[1], true);
+        return false;
+      }
+      this.host.showSheet(this.fresh);
+      await settle();
+    }
+    this.charts(r, first);
+    return true;
+  }
+
+  private charts(r: string[], first: number): void {
+    for (const f of r.slice(first)) {
+      const p = f.split('|');
+      if (p.length < 7 || p[0] === 'pivot') continue;
+      document.dispatchEvent(new CustomEvent('fc-ai-chart', { detail: { type: p[0], range: p[1], title: p[2], xTitle: p[3], yTitle: p[4], secondary: p[5] ? p[5].split(',').map(Number) : [], byRows: false, at: p[6] } }));
+    }
   }
 
   goalSeek(): void {
@@ -437,41 +502,54 @@ export class WhatIf {
       input('obj', 'Set objective') +
         `<div class="fc-wi-row">${pick('mode', 'To', [['max', 'Max'], ['min', 'Min'], ['value', 'Value of']])}${input('target', 'Value')}</div>` +
         input('vars', 'By changing variable cells') +
-        area('cons', 'Subject to the constraints, one per line', 'B5<=20000') +
+        area('cons', 'Subject to the constraints, one per line: B5<=20000, C2:C9 int, D2:D9 bin, A1:A6 dif (all different)', 'B5<=20000') +
         check('nonneg', 'Make unconstrained variables non-negative', true) +
-        pick('method', 'Solving method', [['auto', 'Automatic (Simplex LP when the model is linear)'], ['nl', 'Derivative-free search']]),
-      [['report', 'Answer report'], ['sensitivity', 'Sensitivity report'], ['limits', 'Limits report'], ['restore', 'Restore original values']],
+        pick('method', 'Select a solving method', [['auto', 'Simplex LP when the model is linear, otherwise GRG Nonlinear'], ['nl', 'GRG Nonlinear (derivative-free search)'], ['evo', 'Evolutionary']]) +
+        input('scen', 'Scenario name, for Save Scenario'),
+      [['options', 'Options'], ['continue', 'Continue'], ['keep', 'Keep solver solution'], ['restore', 'Restore original values'], ['scenario', 'Save scenario'], ['report', 'Answer report'], ['sensitivity', 'Sensitivity report'], ['limits', 'Limits report']],
       'Solve',
       async (bx, who) => {
+        if (who === 'options') return this.solverOptions();
         if (who === 'restore') {
+          if (!this.sv.hasRun) return bx.say('Solve first; there is nothing to restore.', true);
           await this.g.undo();
+          this.solverState(bx, false, false);
           return bx.say('The original values are back.');
+        }
+        if (who === 'keep') {
+          if (!this.sv.hasRun) return bx.say('Solve first; there is nothing to keep.', true);
+          this.solverState(bx, false, false);
+          return bx.say('The solver solution is kept in the sheet. Undo still takes it back.');
+        }
+        if (who === 'scenario') {
+          if (!this.sv.hasRun) return bx.say('Solve first; the scenario holds the solution.', true);
+          const name = bx.get('scen');
+          if (!name) return bx.say('Type a scenario name first.', true);
+          const r = this.result(await this.run(['solve.scen', this.sheet(), name]));
+          if (r[0] === 'error') return bx.say(r[1], true);
+          await this.state();
+          return bx.say(`Scenario ${name} holds the solution. Open Scenario Manager to show it.`);
+        }
+        if (who === 'continue') {
+          if (!this.sv.trial) return bx.say('Solve with Show Iteration Results on to step through trial solutions.', true);
+          await this.g.undo();
+          return this.solveNow(bx, this.sv.trial + 1);
         }
         if (who === 'report' || who === 'sensitivity' || who === 'limits') {
           const name = who === 'report' ? 'Answer Report' : who === 'sensitivity' ? 'Sensitivity Report' : 'Limits Report';
           const r = this.result(await this.toNewSheet(name, (dst) => (who === 'report' ? ['solve.report', dst] : ['solve.report', dst, who])));
           return bx.say(r[0] === 'ok' ? `The ${name.toLowerCase()} is on a new sheet.` : r[1], r[0] !== 'ok');
         }
-        const cons: string[] = [];
-        for (const line of bx.get('cons').split('\n').map((l) => l.trim()).filter(Boolean)) {
-          const m = /^(.+?)\s*(<=|>=|=|\s+int|\s+bin)\s*(.*)$/i.exec(line);
-          if (!m) return bx.say(`Constraint "${line}" needs <=, >=, =, int or bin.`, true);
-          cons.push(`${m[1].trim()}|${m[2].trim().toLowerCase()}|${m[3].trim()}`);
-        }
-        const model = JSON.stringify([bx.get('obj'), bx.get('mode'), bx.get('target'), bx.get('vars'), bx.get('cons'), bx.on('nonneg'), bx.get('method')]);
-        await this.run(['model.set', this.sheet(), model]);
-        await this.state();
-        const r = this.result(await this.run(['solve', this.sheet(), bx.get('obj'), bx.get('mode'), bx.get('target'), bx.get('vars'), bx.on('nonneg') ? '1' : '0', bx.get('method'), ...cons]));
-        if (r[0] === 'error') return bx.say(r[1], true);
-        if (r[0] === 'fail') return bx.say(`${r[1]} The cells were left as they were.`, true);
-        bx.say(`${r[1]} Objective value: ${r[2]}. Method: ${r[3]}. The solution is in the sheet; use Restore original values to undo it.`);
+        await this.solveNow(bx, this.sv.opts.sho === true ? 1 : 0);
       },
       () => this.g.focus(),
     ));
+    b.el.classList.add('fc-wi-wide');
+    this.solverState(b, false, this.sv.hasRun);
     void this.run(['model.get', this.sheet()]).then((t) => {
       if (b.get('obj') || !t) return;
       try {
-        const [obj, mode, target, vars, cons, nonneg, method] = JSON.parse(t) as [string, string, string, string, string, boolean, string];
+        const [obj, mode, target, vars, cons, nonneg, method, opts] = JSON.parse(t) as [string, string, string, string, string, boolean, string, Record<string, string | boolean>?];
         b.set('obj', obj);
         b.set('mode', mode);
         b.set('target', target);
@@ -479,14 +557,94 @@ export class WhatIf {
         b.set('cons', cons);
         b.field<HTMLInputElement>('nonneg').checked = nonneg;
         b.set('method', method);
+        this.sv.opts = opts ?? {};
       } catch {
         return;
       }
     });
     const sel = this.g.selection();
     if (!b.get('obj')) b.set('obj', rangeText({ ...sel, r1: sel.r0, c1: sel.c0 }));
-    b.say('Finds the best value for the objective cell by changing the variable cells within your limits. Linear models use Simplex LP; others use a local derivative-free search.');
+    b.say('Finds the best value for the objective cell by changing the variable cells within your limits. Choose a solving method, add constraints, and open Options for precision, time, iterations, scaling, multistart and the evolutionary settings.');
     b.show('obj');
+  }
+
+  private solverState(bx: Box, stepping: boolean, ran: boolean): void {
+    this.sv.hasRun = ran;
+    if (!stepping) this.sv.trial = 0;
+    const cont = bx.el.querySelector<HTMLElement>('[data-a="continue"]');
+    if (cont) cont.hidden = !stepping;
+  }
+
+  private async solveNow(bx: Box, trial: number): Promise<void> {
+    const cons: string[] = [];
+    for (const line of bx.get('cons').split('\n').map((l) => l.trim()).filter(Boolean)) {
+      const m = /^(.+?)\s*(<=|>=|=|\s+int|\s+bin|\s+dif)\s*(.*)$/i.exec(line);
+      if (!m) return bx.say(`Constraint "${line}" needs <=, >=, =, int, bin or dif.`, true);
+      cons.push(`${m[1].trim()}|${m[2].trim().toLowerCase()}|${m[3].trim()}`);
+    }
+    const o = this.sv.opts;
+    const pairs = [`eng=${bx.get('method')}`];
+    for (const [k, v] of Object.entries(o)) {
+      if (typeof v === 'boolean') pairs.push(`${k}=${v ? 1 : 0}`);
+      else if (String(v).trim()) pairs.push(`${k}=${String(v).trim()}`);
+    }
+    if (trial) pairs.push(`trial=${trial}`);
+    const model = JSON.stringify([bx.get('obj'), bx.get('mode'), bx.get('target'), bx.get('vars'), bx.get('cons'), bx.on('nonneg'), bx.get('method'), o]);
+    await this.run(['model.set', this.sheet(), model]);
+    await this.state();
+    const r = this.result(await this.run(['solve', this.sheet(), bx.get('obj'), bx.get('mode'), bx.get('target'), bx.get('vars'), bx.on('nonneg') ? '1' : '0', bx.get('method'), `@opts|${pairs.join('|')}`, ...cons]));
+    if (r[0] === 'error') return bx.say(r[1], true);
+    if (r[0] === 'fail') {
+      this.solverState(bx, false, false);
+      return bx.say(`${r[1]} The cells were left as they were.`, true);
+    }
+    const iters = Number(r[4] ?? '0');
+    const stepping = trial > 0 && iters >= trial && trial < (bx.get('method') === 'evo' ? 2000 : Number(o.itr) || 100);
+    this.solverState(bx, stepping, true);
+    if (stepping) {
+      this.sv.trial = trial;
+      return bx.say(`Trial solution after iteration ${trial}: objective ${r[2]}, ${r[3]}. Continue runs the next iteration. Keep solver solution, Restore original values or Save scenario ends the run.`);
+    }
+    bx.say(`${r[1]} Objective value: ${r[2]}. Method: ${r[3]}.${iters ? ` Iterations: ${iters}.` : ''} Choose Keep solver solution or Restore original values; Save scenario stores the solution.${r[5] ? ` Progress: ${r[5]}` : ''}`);
+  }
+
+  private solverOptions(): void {
+    const b = this.box('solveropts', () => new Box(
+      'Solver Options',
+      '<span class="fc-wi-sec">All methods</span>' +
+        `<div class="fc-wi-row3">${input('pre', 'Constraint precision', '0.000001')}${input('tim', 'Max time (seconds)', '100')}${input('itr', 'Iterations', '100')}</div>` +
+        `<div class="fc-wi-row">${input('tol', 'Integer optimality (%)', '1')}${input('sub', 'Max subproblems', '4000')}</div>` +
+        check('scl', 'Use automatic scaling', true) + check('sho', 'Show iteration results', false) +
+        '<span class="fc-wi-sec">GRG Nonlinear and Evolutionary</span>' +
+        `<div class="fc-wi-row3">${input('cvg', 'Convergence', '0.0001')}${input('pop', 'Population size', '100')}${input('seed', 'Random seed', '0')}</div>` +
+        check('ms', 'Use multistart (GRG Nonlinear)', false) + check('rb', 'Require bounds on variables', true) +
+        '<span class="fc-wi-sec">Evolutionary</span>' +
+        `<div class="fc-wi-row">${input('mut', 'Mutation rate', '0.075')}${input('nimp', 'Max time without improvement (seconds)', '30')}</div>`,
+      [['reset', 'Reset all']],
+      'OK',
+      async (bx, who) => {
+        const numeric = ['pre', 'tim', 'itr', 'tol', 'sub', 'cvg', 'pop', 'mut', 'seed', 'nimp'];
+        if (who === 'reset') {
+          for (const k of numeric) bx.set(k, '');
+          for (const k of ['scl', 'rb']) bx.field<HTMLInputElement>(k).checked = true;
+          for (const k of ['sho', 'ms']) bx.field<HTMLInputElement>(k).checked = false;
+          return bx.say('Every option is back to its default.');
+        }
+        const next: Record<string, string | boolean> = {};
+        for (const k of numeric) if (bx.get(k)) next[k] = bx.get(k);
+        for (const k of ['scl', 'sho', 'ms', 'rb']) next[k] = bx.on(k);
+        this.sv.opts = next;
+        bx.close();
+        this.solver();
+      },
+      () => this.solver(),
+    ));
+    b.el.classList.add('fc-wi-wide');
+    const o = this.sv.opts;
+    for (const k of ['pre', 'tim', 'itr', 'tol', 'sub', 'cvg', 'pop', 'mut', 'seed', 'nimp']) b.set(k, String(o[k] ?? ''));
+    for (const k of ['scl', 'sho', 'ms', 'rb']) b.field<HTMLInputElement>(k).checked = typeof o[k] === 'boolean' ? (o[k] as boolean) : k === 'scl' || k === 'rb';
+    b.say('Blank boxes use the default shown in grey. Convergence, population size and random seed apply to multistart and to the Evolutionary engine.');
+    b.show('pre');
   }
 
   forecast(): void {
@@ -495,12 +653,15 @@ export class WhatIf {
       input('tl', 'Timeline range') + input('vals', 'Values range') + input('end', 'Forecast end', '2026-12-31') + input('start', 'Forecast start, optional') +
         `<div class="fc-wi-row">${input('conf', 'Confidence interval %')}${input('seas', 'Seasonality (1 detect, 0 none)')}</div>` +
         `<div class="fc-wi-row">${pick('comp', 'Fill missing points', [['1', 'Interpolate'], ['0', 'Zeros']])}${pick('aggr', 'Aggregate duplicates', AGGR)}</div>` +
-        check('stats', 'Include forecast statistics', false),
+        check('stats', 'Include forecast statistics', false) + pick('chart', 'Chart', [['line', 'Line chart'], ['column', 'Column chart'], ['none', 'No chart']]),
       [],
       'Create',
       async (bx) => {
-        const r = this.result(await this.toNewSheet('Forecast', (dst) => ['fsheet', this.sheet(), bx.get('tl'), bx.get('vals'), dst, bx.get('end'), bx.get('conf') || '0', bx.get('seas') || '1', bx.get('comp'), bx.get('aggr'), bx.get('start'), bx.on('stats') ? '1' : '0']));
+        const r = this.result(await this.toNewSheet('Forecast', (dst) => ['fsheet', this.sheet(), bx.get('tl'), bx.get('vals'), dst, bx.get('end'), bx.get('conf') || '0', bx.get('seas') || '1', bx.get('comp'), bx.get('aggr'), bx.get('start'), bx.on('stats') ? '1' : '0', bx.get('chart')]));
         if (r[0] === 'error') return bx.say(r[1], true);
+        this.host.showSheet(this.fresh);
+        await settle();
+        this.charts(r, 4);
         bx.close();
       },
       () => this.g.focus(),
@@ -520,13 +681,11 @@ export class WhatIf {
     const b = this.box('desc', () => new Box(
       'Descriptive Statistics',
       input('range', 'Input range') + pick('by', 'Grouped by', [['c', 'Columns'], ['r', 'Rows']]) + check('labels', 'Labels in the first row or column', false) + check('summary', 'Summary statistics', true) +
-        `<div class="fc-wi-row">${input('kl', 'Kth largest')}${input('ks', 'Kth smallest')}</div>` + input('conf', 'Confidence level for the mean %'),
+        `<div class="fc-wi-row">${input('kl', 'Kth largest')}${input('ks', 'Kth smallest')}</div>` + input('conf', 'Confidence level for the mean %') + OUT,
       [],
       'OK',
       async (bx) => {
-        const r = this.result(await this.toNewSheet('Descriptive Statistics', (dst) => ['desc', this.sheet(), bx.get('range'), dst, 'A1', bx.get('by'), bx.on('labels') ? '1' : '0', bx.on('summary') ? '1' : '0', bx.get('kl') || '0', bx.get('ks') || '0', bx.get('conf') || '0']));
-        if (r[0] === 'error') return bx.say(r[1], true);
-        bx.close();
+        if (await this.place(bx, 'Descriptive Statistics', (dst, at) => ['desc', this.sheet(), bx.get('range'), dst, at, bx.get('by'), bx.on('labels') ? '1' : '0', bx.on('summary') ? '1' : '0', bx.get('kl') || '0', bx.get('ks') || '0', bx.get('conf') || '0'])) bx.close();
       },
       () => this.g.focus(),
     ));
@@ -538,13 +697,12 @@ export class WhatIf {
   regression(): void {
     const b = this.box('reg', () => new Box(
       'Regression',
-      input('y', 'Input Y range') + input('x', 'Input X range, one or more columns') + check('labels', 'Labels in the first row', true) + check('zero', 'Constant is zero', false) + input('conf', 'Confidence level %') + check('resid', 'Residuals', false),
+      input('y', 'Input Y range') + input('x', 'Input X range, one or more columns') + check('labels', 'Labels in the first row', true) + check('zero', 'Constant is zero', false) + input('conf', 'Confidence level %') + check('resid', 'Residuals', false) + check('stdres', 'Standardized residuals', false) + check('resplot', 'Residual plots', false) + check('fitplot', 'Line fit plots', false) + check('probplot', 'Normal probability plots', false) + OUT,
       [],
       'OK',
       async (bx) => {
-        const r = this.result(await this.toNewSheet('Regression', (dst) => ['regress', this.sheet(), bx.get('y'), bx.get('x'), dst, 'A1', bx.on('labels') ? '1' : '0', bx.on('zero') ? '0' : '1', bx.get('conf') || '95', bx.on('resid') ? '1' : '0']));
-        if (r[0] === 'error') return bx.say(r[1], true);
-        bx.close();
+        const flag = (k: string): string => (bx.on(k) ? '1' : '0');
+        if (await this.place(bx, 'Regression', (dst, at) => ['regress', this.sheet(), bx.get('y'), bx.get('x'), dst, at, flag('labels'), bx.on('zero') ? '0' : '1', bx.get('conf') || '95', flag('resid'), flag('stdres'), flag('resplot'), flag('fitplot'), flag('probplot')])) bx.close();
       },
       () => this.g.focus(),
     ));
@@ -571,7 +729,7 @@ export class WhatIf {
   private toolForm(id: string): void {
     const spec = TOOLS[id];
     if (!spec) return;
-    const body = spec.fields.map((f) => (f.t === 'pick' ? pick(f.k, f.label, f.opts ?? []) : f.t === 'check' ? check(f.k, f.label, false) : input(f.k, f.label))).join('');
+    const body = spec.fields.map((f) => (f.t === 'pick' ? pick(f.k, f.label, f.opts ?? []) : f.t === 'check' ? check(f.k, f.label, false) : input(f.k, f.label))).join('') + OUT;
     const b = this.box(`tp:${id}`, () => new Box(spec.label, body, [], 'OK', async (bx) => {
       const val = (k: string): string => {
         if (k.startsWith('@')) return k.slice(1);
@@ -579,9 +737,7 @@ export class WhatIf {
         return f?.t === 'check' ? (bx.on(k) ? '1' : '0') : bx.get(k);
       };
       const first = spec.tool === 'rand' ? 'dist' : 'range';
-      const r = this.result(await this.toNewSheet(spec.label, (dst) => ['tp', spec.tool, this.sheet(), val(first), dst, 'A1', ...spec.slots.map(val)]));
-      if (r[0] === 'error') return bx.say(r[1], true);
-      bx.close();
+      if (await this.place(bx, spec.label, (dst, at) => ['tp', spec.tool, this.sheet(), val(first), dst, at, ...spec.slots.map(val)])) bx.close();
     }, () => this.g.focus()));
     for (const f of spec.fields) if (f.def && !b.get(f.k)) b.set(f.k, f.def);
     if (spec.fields.some((f) => f.k === 'range') && !b.get('range')) b.set('range', rangeText(this.g.selection()));
@@ -595,7 +751,14 @@ export class WhatIf {
       el.className = 'fc-explore';
       el.hidden = true;
       el.setAttribute('aria-label', 'Analyze Data');
-      el.innerHTML = '<div class="fc-explore-head"><span class="fc-fmt-title">Analyze Data</span><span class="fc-explore-actions"><button type="button" class="fc-btn" data-a="refresh">Refresh</button><button type="button" class="fc-btn" data-a="close">Close</button></span></div><form class="fc-explore-ask"><input class="fc-fmt-input" data-k="ask" spellcheck="false" autocomplete="off" aria-label="Ask a question about your data" placeholder="Ask, for example: total sales by region"><button type="submit" class="fc-btn fc-btn-primary">Ask</button></form><p class="fc-explore-note" aria-live="polite"></p><ul class="fc-explore-list"></ul>';
+      el.innerHTML = '<div class="fc-explore-head"><span class="fc-fmt-title">Analyze Data</span><span class="fc-explore-actions"><button type="button" class="fc-btn" data-a="refresh">Refresh</button><button type="button" class="fc-btn" data-a="close">Close</button></span></div><form class="fc-explore-ask"><input class="fc-fmt-input" data-k="ask" spellcheck="false" autocomplete="off" aria-label="Ask a question about your data" placeholder="Ask, for example: total sales by region"><button type="submit" class="fc-btn fc-btn-primary">Ask</button></form><details class="fc-explore-fields"><summary>Fields</summary><div class="fc-explore-fieldlist" role="group" aria-label="Fields to analyze"></div></details><p class="fc-explore-note" aria-live="polite"></p><ul class="fc-explore-list"></ul>';
+      el.querySelector<HTMLElement>('.fc-explore-fieldlist')!.addEventListener('change', () => {
+        const on = [...el.querySelectorAll<HTMLInputElement>('.fc-explore-fieldlist input')];
+        this.fields = on.every((i) => i.checked) ? null : on.filter((i) => i.checked).map((i) => i.value);
+        this.last = '';
+        const q = el.querySelector<HTMLInputElement>('[data-k="ask"]')!.value;
+        void (q.trim() ? this.ask(q) : this.explore());
+      });
       el.querySelector<HTMLFormElement>('.fc-explore-ask')!.addEventListener('submit', (e) => {
         e.preventDefault();
         void this.ask(el.querySelector<HTMLInputElement>('[data-k="ask"]')!.value);
@@ -609,7 +772,10 @@ export class WhatIf {
           el.hidden = true;
           this.g.focus();
         } else if (a === 'refresh') void this.explore();
-        else {
+        else if (a === 'chart' || a === 'pivot' || a === 'pchart') {
+          const li = t.closest<HTMLElement>('[data-visual]');
+          if (li) void this.insertVisual(li.dataset.visual!, a);
+        } else {
           const li = t.closest<HTMLElement>('[data-range]');
           const r = li ? parseRef(li.dataset.range!) : null;
           if (r) this.g.select(r.r0, r.c0, r.r1, r.c1);
@@ -630,17 +796,65 @@ export class WhatIf {
     const p = this.panel;
     if (!p) return;
     const r = rangeText(this.g.selection());
-    const t = (await engine().whatif(this.host.book(), cmdText(['explore', this.sheet(), r]))).text;
+    void this.fieldList(r);
+    const t = (await engine().whatif(this.host.book(), cmdText(['explore', this.sheet(), r, this.fields ? this.fields.join('\u001f') : '']))).text;
     if (t === this.last) return;
     this.last = t;
     this.paint(t, 'Click an insight to select the cells it describes.', 'No insights for this selection.');
+  }
+
+  private async fieldList(range: string): Promise<void> {
+    const p = this.panel;
+    if (!p) return;
+    const t = (await engine().whatif(this.host.book(), cmdText(['ask.fields', this.sheet(), range]))).text;
+    if (t.startsWith('error\t')) return;
+    const list = rows(t);
+    const key = `${this.sheet()}\n${list.map((l) => l[0]).join('\n')}`;
+    if (key === this.fieldKey) return;
+    this.fieldKey = key;
+    this.fields = null;
+    const box = p.el.querySelector<HTMLElement>('.fc-explore-fieldlist')!;
+    box.replaceChildren(...list.map(([name, kind]) => {
+      const l = document.createElement('label');
+      l.className = 'fc-sort-check';
+      const i = document.createElement('input');
+      i.type = 'checkbox';
+      i.checked = true;
+      i.value = name;
+      l.append(i, document.createTextNode(`${name} (${kind})`));
+      return l;
+    }));
+  }
+
+  private async insertVisual(visual: string, how: string): Promise<void> {
+    const p = this.panel;
+    if (!p) return;
+    const v = visual.split('|');
+    if (v[0] === 'chart' && how === 'chart') {
+      document.dispatchEvent(new CustomEvent('fc-ai-chart', { detail: { type: v[1], range: v[2], title: v[3], xTitle: '', yTitle: '', secondary: [], byRows: false } }));
+      p.note.textContent = 'The chart is on the sheet. Drag it where you want it.';
+      return;
+    }
+    if (v[0] !== 'pivot') return;
+    const r = this.result(await this.toNewSheet('Analyze Data', (dst) => ['ask.pivot', dst, this.sheet(), v[1], v[2], v[3], v[4]]));
+    if (r[0] === 'error') {
+      p.note.textContent = r[1];
+      return;
+    }
+    await this.host.pivotsChanged();
+    this.host.showSheet(this.fresh);
+    await settle();
+    if (how === 'pchart') {
+      document.dispatchEvent(new CustomEvent('fc-ai-chart', { detail: { type: 'column', range: '', title: `${v[3] || 'Count'} by ${v[2]}`, xTitle: '', yTitle: '', secondary: [], byRows: false, pivot: r[1], at: 'E2' } }));
+    }
+    p.note.textContent = how === 'pchart' ? `The PivotTable and its PivotChart are on the new sheet (${r[1]}).` : `The PivotTable is on the new sheet (${r[1]}).`;
   }
 
   private async ask(question: string): Promise<void> {
     const p = this.panel;
     if (!p) return;
     if (!question.trim()) return this.explore();
-    const t = (await engine().whatif(this.host.book(), cmdText(['ask', this.sheet(), rangeText(this.g.selection()), question]))).text;
+    const t = (await engine().whatif(this.host.book(), cmdText(['ask', this.sheet(), rangeText(this.g.selection()), question, this.fields ? this.fields.join('\u001f') : '']))).text;
     this.last = '';
     this.paint(t, 'Click an answer to select the cells it comes from.', 'FormCel found nothing to answer that with.');
   }
@@ -656,16 +870,23 @@ export class WhatIf {
     const list = rows(t);
     p.note.textContent = list.length ? hint : none;
     const have = [...p.list.children] as HTMLElement[];
-    list.forEach(([kind, title, detail, range], i) => {
+    list.forEach(([kind, title, detail, range, visual], i) => {
       let li = have[i];
       if (!li) {
         li = document.createElement('li');
         li.className = 'fc-explore-item';
-        li.innerHTML = '<button type="button" class="fc-explore-card"><span class="fc-explore-title"></span><span class="fc-explore-detail"></span></button>';
+        li.innerHTML = '<button type="button" class="fc-explore-card" data-a="select"><span class="fc-explore-title"></span><span class="fc-explore-detail"></span></button><span class="fc-explore-do" hidden><button type="button" class="fc-btn" data-a="chart" hidden>Insert chart</button><button type="button" class="fc-btn" data-a="pivot" hidden>Insert PivotTable</button><button type="button" class="fc-btn" data-a="pchart" hidden>Insert PivotChart</button></span>';
         p.list.appendChild(li);
       }
       li.dataset.kind = kind;
       li.dataset.range = range;
+      const kindOf = (visual ?? '').split('|')[0];
+      if ((li.dataset.visual ?? '') !== (visual ?? '')) li.dataset.visual = visual ?? '';
+      const row = li.querySelector<HTMLElement>('.fc-explore-do')!;
+      row.hidden = !kindOf;
+      li.querySelector<HTMLElement>('[data-a="chart"]')!.hidden = kindOf !== 'chart';
+      li.querySelector<HTMLElement>('[data-a="pivot"]')!.hidden = kindOf !== 'pivot';
+      li.querySelector<HTMLElement>('[data-a="pchart"]')!.hidden = kindOf !== 'pivot';
       const [a, b] = [li.querySelector('.fc-explore-title')!, li.querySelector('.fc-explore-detail')!];
       if (a.textContent !== title) a.textContent = title;
       if (b.textContent !== detail) b.textContent = detail;

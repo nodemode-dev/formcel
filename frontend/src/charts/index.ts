@@ -73,11 +73,15 @@ export class Charts {
     document.body.appendChild(this.file);
     this.commands();
     document.addEventListener('fc-ai-chart', (e) => {
-      const d = (e as CustomEvent<{ type: string; range: string; title: string; byRows: boolean }>).detail;
+      const d = (e as CustomEvent<{ type: string; range: string; title: string; byRows: boolean; xTitle?: string; yTitle?: string; secondary?: number[]; at?: string; pivot?: string }>).detail;
       if (!this.host.active()) return;
       const type = (CHART_TYPES.some((t) => t.id === d.type) ? d.type : 'column') as ChartType;
-      const o = this.layer.viewOrigin();
-      this.layer.add({ kind: 'chart', x: o.x, y: o.y, w: 480, h: 300, chart: { ...blankChart(type, d.range.replace(/^.*!/, '')), title: d.title, byRows: d.byRows } });
+      const home = this.layer.viewOrigin();
+      const cell = d.at ? parseRangeText(d.at)?.range : null;
+      const o = cell ? { x: this.grid.cols.offsetOf(cell.c0), y: this.grid.rows.offsetOf(cell.r0) } : home;
+      const spec: ChartSpec = { ...blankChart(type, d.range.replace(/^.*!/, '')), title: d.title, byRows: d.byRows, xTitle: d.xTitle ?? '', yTitle: d.yTitle ?? '', secondary: d.secondary ?? [] };
+      if (d.pivot) spec.pivot = d.pivot;
+      this.layer.add({ kind: 'chart', x: o.x, y: o.y, w: d.pivot ? 520 : 480, h: d.pivot ? 330 : 300, chart: spec });
     });
   }
 
