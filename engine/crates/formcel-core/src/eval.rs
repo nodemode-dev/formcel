@@ -404,10 +404,420 @@ impl Eval<'_> {
                 "ISTEXT" => Value::Bool(matches!(self.scalar(a.first().ok_or(ErrKind::Na)?), Value::Text(_))),
                 "ISERROR" => Value::Bool(matches!(self.scalar(a.first().ok_or(ErrKind::Na)?), Value::Error(_))),
                 "NA" => return Err(ErrKind::Na),
+                "IFS" => {
+                    if a.len() < 2 || !a.len().is_multiple_of(2) {
+                        return Err(ErrKind::Na);
+                    }
+                    for p in a.chunks(2) {
+                        if bool_of(&self.scalar(&p[0]))? {
+                            return Ok(self.scalar(&p[1]));
+                        }
+                    }
+                    return Err(ErrKind::Na);
+                }
+                "SWITCH" => {
+                    if a.len() < 3 {
+                        return Err(ErrKind::Na);
+                    }
+                    let v = self.scalar(&a[0]);
+                    if let Value::Error(k) = v {
+                        return Err(k);
+                    }
+                    let rest = &a[1..];
+                    for p in rest.chunks(2) {
+                        if p.len() == 1 {
+                            return Ok(self.scalar(&p[0]));
+                        }
+                        if same(&v, &self.scalar(&p[0])) {
+                            return Ok(self.scalar(&p[1]));
+                        }
+                    }
+                    return Err(ErrKind::Na);
+                }
+                "CHOOSE" => {
+                    let i = self.n(a, 0)?.trunc();
+                    if i < 1.0 || i as usize >= a.len() {
+                        return Err(ErrKind::Value);
+                    }
+                    self.scalar(&a[i as usize])
+                }
+                "SUMIF" | "AVERAGEIF" | "COUNTIF" => {
+                    if !count(2, if name == "COUNTIF" { 2 } else { 3 }) {
+                        return Err(ErrKind::Na);
+                    }
+                    let (s, area) = self.range(&a[0])?;
+                    let hits = self.matching(&[(s, area, self.scalar(&a[1]))])?;
+                    let target = if a.len() == 3 { self.range(&a[2])? } else { (s, area) };
+                    self.aggregate(name, &hits, target)?
+                }
+                "SUMIFS" | "AVERAGEIFS" | "COUNTIFS" => {
+                    let start = usize::from(name != "COUNTIFS");
+                    if a.len() < start + 2 || !(a.len() - start).is_multiple_of(2) {
+                        return Err(ErrKind::Na);
+                    }
+                    let mut pairs = Vec::new();
+                    for p in a[start..].chunks(2) {
+                        let (s, area) = self.range(&p[0])?;
+                        pairs.push((s, area, self.scalar(&p[1])));
+                    }
+                    let shape = |ar: &Area| (ar.r1 - ar.r0, ar.c1 - ar.c0);
+                    if pairs.iter().any(|p| shape(&p.1) != shape(&pairs[0].1)) {
+                        return Err(ErrKind::Value);
+                    }
+                    let hits = self.matching(&pairs)?;
+                    let target = if start == 1 { self.range(&a[0])? } else { (pairs[0].0, pairs[0].1) };
+                    if start == 1 && shape(&target.1) != shape(&pairs[0].1) {
+                        return Err(ErrKind::Value);
+                    }
+                    self.aggregate(name, &hits, target)?
+                }
+                "VLOOKUP" | "HLOOKUP" => {
+                    if !count(3, 4) {
+                        return Err(ErrKind::Na);
+                    }
+                    let key = self.scalar(&a[0]);
+                    if let Value::Error(k) = key {
+                        return Err(k);
+                    }
+                    let (s, t) = self.range(&a[1])?;
+                    let k = self.n(a, 2)?.trunc();
+                    let approx = a.len() < 4 || matches!(a[3], Expr::Missing) || bool_of(&self.scalar(&a[3]))?;
+                    let vertical = name == "VLOOKUP";
+                    let width = if vertical { t.c1 - t.c0 + 1 } else { t.r1 - t.r0 + 1 };
+                    if k < 1.0 {
+                        return Err(ErrKind::Value);
+                    }
+                    if k as u32 > width {
+                        return Err(ErrKind::Ref);
+                    }
+                    let first = if vertical { Area { c1: t.c0, ..t } } else { Area { r1: t.r0, ..t } };
+                    let pos = self.find(&key, s, first, if approx { 1 } else { 2 }, false)?.ok_or(ErrKind::Na)?;
+                    let off = k as u32 - 1;
+                    let at = if vertical { Addr { row: t.r0 + pos, col: t.c0 + off } } else { Addr { row: t.r0 + off, col: t.c0 + pos } };
+                    self.ctx.cell(s, at)
+                }
+                "MATCH" | "XMATCH" => {
+                    if !count(2, if name == "MATCH" { 3 } else { 4 }) {
+                        return Err(ErrKind::Na);
+                    }
+                    let key = self.scalar(&a[0]);
+                    if let Value::Error(k) = key {
+                        return Err(k);
+                    }
+                    let (s, r) = self.range(&a[1])?;
+                    if r.r0 != r.r1 && r.c0 != r.c1 {
+                        return Err(ErrKind::Na);
+                    }
+                    let opt = |i: usize, d: f64| -> Result<f64, ErrKind> { if a.len() > i && !matches!(a[i], Expr::Missing) { self.n(a, i) } else { Ok(d) } };
+                    let (mode, back) = if name == "MATCH" {
+                        (match opt(2, 1.0)? { m if m > 0.0 => 1, m if m < 0.0 => -1, _ => 2 }, false)
+                    } else {
+                        (xmode(opt(2, 0.0)?)?, opt(3, 1.0)? < 0.0)
+                    };
+                    let pos = self.find(&key, s, r, mode, back)?.ok_or(ErrKind::Na)?;
+                    Value::Number(f64::from(pos + 1))
+                }
+                "XLOOKUP" => {
+                    if !count(3, 6) {
+                        return Err(ErrKind::Na);
+                    }
+                    let key = self.scalar(&a[0]);
+                    if let Value::Error(k) = key {
+                        return Err(k);
+                    }
+                    let (s, look) = self.range(&a[1])?;
+                    let (rs, ret) = self.range(&a[2])?;
+                    let vertical = look.c0 == look.c1;
+                    let len = |ar: &Area| if vertical { ar.r1 - ar.r0 } else { ar.c1 - ar.c0 };
+                    if (look.r0 != look.r1 && look.c0 != look.c1) || len(&look) != len(&ret) || (vertical && ret.c0 != ret.c1) || (!vertical && ret.r0 != ret.r1) {
+                        return Err(ErrKind::Value);
+                    }
+                    let opt = |i: usize, d: f64| -> Result<f64, ErrKind> { if a.len() > i && !matches!(a[i], Expr::Missing) { self.n(a, i) } else { Ok(d) } };
+                    let mode = xmode(opt(4, 0.0)?)?;
+                    let back = opt(5, 1.0)? < 0.0;
+                    match self.find(&key, s, look, mode, back)? {
+                        Some(p) => self.ctx.cell(rs, if vertical { Addr { row: ret.r0 + p, col: ret.c0 } } else { Addr { row: ret.r0, col: ret.c0 + p } }),
+                        None if a.len() > 3 && !matches!(a[3], Expr::Missing) => self.scalar(&a[3]),
+                        None => return Err(ErrKind::Na),
+                    }
+                }
+                "INDEX" => {
+                    if !count(2, 3) {
+                        return Err(ErrKind::Na);
+                    }
+                    let (s, t) = self.range(&a[0])?;
+                    let (h, w) = (t.r1 - t.r0 + 1, t.c1 - t.c0 + 1);
+                    let i = self.n(a, 1)?.trunc();
+                    let j = if a.len() == 3 { self.n(a, 2)?.trunc() } else { 0.0 };
+                    let (r, c) = if a.len() == 2 && h == 1 { (1.0, i) } else if a.len() == 2 && w == 1 { (i, 1.0) } else { (i, j) };
+                    if r < 1.0 || c < 1.0 {
+                        return Err(ErrKind::Value);
+                    }
+                    if r as u32 > h || c as u32 > w {
+                        return Err(ErrKind::Ref);
+                    }
+                    self.ctx.cell(s, Addr { row: t.r0 + r as u32 - 1, col: t.c0 + c as u32 - 1 })
+                }
                 _ => return Err(ErrKind::Name),
             })
         })();
         r.unwrap_or_else(err)
+    }
+}
+
+impl Eval<'_> {
+    fn range(&self, e: &Expr) -> Result<(usize, Area), ErrKind> {
+        match self.arg(e) {
+            Arg::R(s, ar) => Ok((s, ar)),
+            Arg::V(Value::Error(k)) => Err(k),
+            Arg::V(_) => Err(ErrKind::Value),
+        }
+    }
+
+    fn matching(&self, pairs: &[(usize, Area, Value)]) -> Result<Vec<(u32, u32)>, ErrKind> {
+        let crits = pairs.iter().map(|p| crit_of(&p.2)).collect::<Result<Vec<_>, _>>()?;
+        let (s0, a0) = (pairs[0].0, pairs[0].1);
+        let total = u64::from(a0.r1 - a0.r0 + 1) * u64::from(a0.c1 - a0.c0 + 1);
+        let mut hits = Vec::new();
+        if crit_matches(&crits[0], &Value::Empty) && total <= 200_000 {
+            for r in a0.r0..=a0.r1 {
+                for c in a0.c0..=a0.c1 {
+                    if crit_matches(&crits[0], &self.ctx.cell(s0, Addr { row: r, col: c })) {
+                        hits.push((r - a0.r0, c - a0.c0));
+                    }
+                }
+            }
+        } else {
+            self.ctx.each(s0, a0, &mut |a, v| {
+                if crit_matches(&crits[0], v) {
+                    hits.push((a.row - a0.r0, a.col - a0.c0));
+                }
+            });
+        }
+        for (i, p) in pairs.iter().enumerate().skip(1) {
+            hits.retain(|&(dr, dc)| crit_matches(&crits[i], &self.ctx.cell(p.0, Addr { row: p.1.r0 + dr, col: p.1.c0 + dc })));
+        }
+        Ok(hits)
+    }
+
+    fn aggregate(&self, name: &str, hits: &[(u32, u32)], (s, t): (usize, Area)) -> Result<Value, ErrKind> {
+        if name.starts_with("COUNT") {
+            return Ok(Value::Number(hits.len() as f64));
+        }
+        let mut sum = 0.0;
+        let mut n = 0usize;
+        for &(dr, dc) in hits {
+            let (row, col) = (t.r0 + dr, t.c0 + dc);
+            if row >= crate::MAX_ROWS || col >= crate::MAX_COLS {
+                continue;
+            }
+            match self.ctx.cell(s, Addr { row, col }) {
+                Value::Number(x) => {
+                    sum += x;
+                    n += 1;
+                }
+                Value::Error(k) => return Err(k),
+                _ => {}
+            }
+        }
+        if name.starts_with("AVERAGE") {
+            if n == 0 {
+                return Err(ErrKind::Div0);
+            }
+            return Ok(num(sum / n as f64));
+        }
+        Ok(num(sum))
+    }
+
+    fn find(&self, key: &Value, s: usize, ar: Area, mode: i32, back: bool) -> Result<Option<u32>, ErrKind> {
+        use std::cmp::Ordering::{Equal, Greater, Less};
+        let vertical = ar.c0 == ar.c1;
+        let mut cells: Vec<(u32, Value)> = Vec::new();
+        self.ctx.each(s, ar, &mut |a, v| cells.push((if vertical { a.row - ar.r0 } else { a.col - ar.c0 }, v.clone())));
+        cells.sort_by_key(|c| c.0);
+        if back {
+            cells.reverse();
+        }
+        match mode {
+            0 | 2 => Ok(cells.iter().find(|(_, v)| lookup_eq(key, v, mode == 2)).map(|c| c.0)),
+            1 | -1 => {
+                let mut best = None;
+                for (p, v) in &cells {
+                    if rank(v) != rank(key) {
+                        continue;
+                    }
+                    match (compare(v, key), mode) {
+                        (Greater, 1) | (Less, -1) => break,
+                        _ => best = Some(*p),
+                    }
+                }
+                Ok(best)
+            }
+            _ => {
+                let mut best: Option<(u32, &Value)> = None;
+                for (p, v) in &cells {
+                    if rank(v) != rank(key) {
+                        continue;
+                    }
+                    let o = compare(v, key);
+                    if o == Equal {
+                        return Ok(Some(*p));
+                    }
+                    let side = if mode == 10 { Less } else { Greater };
+                    if o == side && best.is_none_or(|(_, b)| compare(v, b) == if mode == 10 { Greater } else { Less }) {
+                        best = Some((*p, v));
+                    }
+                }
+                Ok(best.map(|b| b.0))
+            }
+        }
+    }
+}
+
+fn xmode(m: f64) -> Result<i32, ErrKind> {
+    match m as i64 {
+        0 => Ok(0),
+        -1 => Ok(10),
+        1 => Ok(11),
+        2 => Ok(2),
+        _ => Err(ErrKind::Value),
+    }
+}
+
+fn same(a: &Value, b: &Value) -> bool {
+    lookup_eq(a, b, false)
+}
+
+fn lookup_eq(key: &Value, v: &Value, wild: bool) -> bool {
+    match (key, v) {
+        (Value::Number(a), Value::Number(b)) => a == b,
+        (Value::Text(a), Value::Text(b)) => {
+            if wild {
+                wild_match(a, b)
+            } else {
+                a.to_lowercase() == b.to_lowercase()
+            }
+        }
+        (Value::Bool(a), Value::Bool(b)) => a == b,
+        _ => false,
+    }
+}
+
+pub fn wild_match(pattern: &str, text: &str) -> bool {
+    let mut p: Vec<(char, bool)> = Vec::new();
+    let mut it = pattern.chars().flat_map(char::to_lowercase);
+    while let Some(c) = it.next() {
+        match c {
+            '~' => {
+                if let Some(n) = it.next() {
+                    p.push((n, false));
+                }
+            }
+            '*' | '?' => p.push((c, true)),
+            _ => p.push((c, false)),
+        }
+    }
+    let t: Vec<char> = text.chars().flat_map(char::to_lowercase).collect();
+    let mut row = vec![false; t.len() + 1];
+    row[0] = true;
+    for &(pc, special) in &p {
+        let mut next = vec![false; t.len() + 1];
+        if special && pc == '*' {
+            let mut any = false;
+            for j in 0..=t.len() {
+                any = any || row[j];
+                next[j] = any;
+            }
+        } else {
+            for j in 0..t.len() {
+                if row[j] && ((special && pc == '?') || t[j] == pc) {
+                    next[j + 1] = true;
+                }
+            }
+        }
+        row = next;
+    }
+    row[t.len()]
+}
+
+struct Crit {
+    op: Op,
+    v: Value,
+}
+
+fn crit_of(v: &Value) -> Result<Crit, ErrKind> {
+    match v {
+        Value::Error(k) => Err(*k),
+        Value::Text(s) => {
+            let (op, rest) = [("<=", Op::Le), (">=", Op::Ge), ("<>", Op::Ne), ("<", Op::Lt), (">", Op::Gt), ("=", Op::Eq)]
+                .into_iter()
+                .find_map(|(p, o)| s.strip_prefix(p).map(|r| (o, r)))
+                .unwrap_or((Op::Eq, s.as_str()));
+            let val = if rest.is_empty() {
+                Value::Empty
+            } else {
+                match Value::parse_input(rest) {
+                    Value::Text(_) => Value::Text(rest.to_string()),
+                    o => o,
+                }
+            };
+            Ok(Crit { op, v: val })
+        }
+        o => Ok(Crit { op: Op::Eq, v: o.clone() }),
+    }
+}
+
+fn holds(op: Op, o: Option<std::cmp::Ordering>) -> bool {
+    use std::cmp::Ordering::{Equal, Greater, Less};
+    match (op, o) {
+        (_, None) => false,
+        (Op::Eq, Some(o)) => o == Equal,
+        (Op::Ne, Some(o)) => o != Equal,
+        (Op::Lt, Some(o)) => o == Less,
+        (Op::Le, Some(o)) => o != Greater,
+        (Op::Gt, Some(o)) => o == Greater,
+        (Op::Ge, Some(o)) => o != Less,
+        _ => false,
+    }
+}
+
+fn crit_matches(c: &Crit, cell: &Value) -> bool {
+    match &c.v {
+        Value::Empty => {
+            let blank = matches!(cell, Value::Empty) || matches!(cell, Value::Text(t) if t.is_empty());
+            match c.op {
+                Op::Eq => blank,
+                Op::Ne => !blank,
+                _ => false,
+            }
+        }
+        Value::Number(n) => {
+            let x = match cell {
+                Value::Number(x) => Some(*x),
+                Value::Text(t) if matches!(c.op, Op::Eq | Op::Ne) => match Value::parse_input(t) {
+                    Value::Number(x) => Some(x),
+                    _ => None,
+                },
+                _ => None,
+            };
+            match x {
+                Some(x) => holds(c.op, x.partial_cmp(n)),
+                None => c.op == Op::Ne,
+            }
+        }
+        Value::Text(p) => match cell {
+            Value::Text(t) => match c.op {
+                Op::Eq => wild_match(p, t),
+                Op::Ne => !wild_match(p, t),
+                op => holds(op, Some(t.to_lowercase().cmp(&p.to_lowercase()))),
+            },
+            _ => c.op == Op::Ne,
+        },
+        Value::Bool(b) => match cell {
+            Value::Bool(x) => holds(c.op, Some(x.cmp(b))),
+            _ => c.op == Op::Ne,
+        },
+        Value::Error(_) => false,
     }
 }
 

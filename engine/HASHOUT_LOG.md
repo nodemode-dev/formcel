@@ -166,6 +166,15 @@ The cell store keeps each formula cell's computed value, so display, reads, the 
 
 An edit seeds a search for formulas that read the changed cells: single-cell references through a cell index, ranges by a scan of the formulas that use ranges. The dirty set is then ordered so each formula runs after the dirty formulas it reads (Kahn's algorithm; a range's precedents are found by walking its cells when it is smaller than the sheet's dirty set, by checking the dirty set otherwise). Formulas left over form a cycle and get `#REF!`. Opening, renaming, deleting or moving sheets and shifting rows recalculate everything (`recalc_all` skips the search).
 
+### Criteria and lookups
+- refers-to: src/eval.rs :: matching, aggregate, find, crit_of, crit_matches, wild_match, lookup_eq
+- kind: explainer
+- logged: v0.8.0 · 2026-10-21
+
+Criteria take a leading `<=`, `>=`, `<>`, `<`, `>` or `=`; the rest is read as a number, boolean or text, and text matches without case with `*`, `?` and `~` for a literal. An empty criterion matches blank cells and empty text. Number criteria also match number-like text for `=` and `<>`. `matching` walks only the filled cells of the first criteria range, unless the criterion matches blanks and the range has at most 200,000 cells, then filters by the other ranges at the same offsets; the *IFS functions need every range the same shape (`#VALUE!` otherwise), SUMIF and AVERAGEIF read their optional sum range from its top-left cell in the criteria range's shape.
+
+`find` is the one search behind VLOOKUP, HLOOKUP, MATCH, XMATCH and XLOOKUP. Modes: exact; exact with wildcards (VLOOKUP and MATCH exact, XLOOKUP and XMATCH mode 2); sorted ascending, largest at or below the key, stopping at the first larger value (VLOOKUP approximate, MATCH 1); sorted descending (MATCH -1); and exact or next smaller or larger by a full scan (XLOOKUP and XMATCH -1 and 1). Values of another type never match. XLOOKUP returns a single cell, so its return range must be one row or column of the lookup's length; spilling a multi-column result waits for dynamic arrays. Added with them: IFS, SWITCH, CHOOSE. As with the first tranche, results are FormCel's reading and are not yet checked against vendor function pages.
+
 ### The dependency graph is kept between edits
 - refers-to: src/graph.rs :: Graph, Fx; src/lib.rs :: ensure_graph, set_raw, recalc_with, evaluate
 - kind: rationale
