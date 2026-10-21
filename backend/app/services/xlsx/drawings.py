@@ -138,7 +138,9 @@ def chart_out(wb, host, obj: dict, view: dict, pivots: dict | None = None) -> bo
     tagged = kind in chartex.TAGGED
     if tagged:
         kind = "column"
-    text = str(spec.get("range", ""))
+    text = str(spec.get("range", "")).strip().lstrip("=")
+    if "!" not in text and text in wb.defined_names:
+        text = str(wb.defined_names[text].attr_text or "").lstrip("=")
     ws = host
     if "!" in text:
         name, text = text.rsplit("!", 1)

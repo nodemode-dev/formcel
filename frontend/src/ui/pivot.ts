@@ -8,6 +8,17 @@ export interface PivotValue {
   func: string;
   show: string;
   name: string;
+  baseField: string;
+  baseItem: string;
+}
+
+export interface PivotGroup {
+  field: string;
+  date: boolean;
+  units: string[];
+  start: string;
+  end: string;
+  by: string;
 }
 
 export interface PivotDef {
@@ -25,6 +36,7 @@ export interface PivotDef {
   values: PivotValue[];
   filters: { field: string; items: string[] }[];
   calc: { name: string; formula: string }[];
+  groups: PivotGroup[];
 }
 
 export interface PivotFields {
@@ -39,7 +51,19 @@ export const FUNCS: [string, string][] = [
   ['countnums', 'Count Numbers'], ['stdev', 'StdDev'], ['stdevp', 'StdDevp'], ['var', 'Var'], ['varp', 'Varp'],
 ];
 
-export const SHOWS: [string, string][] = [['none', 'No calculation'], ['grand', '% of grand total'], ['col', '% of column total'], ['row', '% of row total']];
+export const SHOWS: [string, string][] = [
+  ['none', 'No Calculation'], ['grand', '% of Grand Total'], ['col', '% of Column Total'], ['row', '% of Row Total'], ['of', '% Of'],
+  ['prow', '% of Parent Row Total'], ['pcol', '% of Parent Column Total'], ['parent', '% of Parent Total'],
+  ['diff', 'Difference From'], ['pdiff', '% Difference From'], ['run', 'Running Total In'], ['prun', '% Running Total In'],
+  ['rankasc', 'Rank Smallest to Largest'], ['rankdesc', 'Rank Largest to Smallest'], ['index', 'Index'],
+];
+
+const NEEDS_BASE = new Set(['of', 'prow', 'pcol', 'parent', 'diff', 'pdiff', 'run', 'prun', 'rankasc', 'rankdesc']);
+const NEEDS_ITEM = new Set(['of', 'diff', 'pdiff']);
+
+export const GROUP_UNITS: [string, string][] = [
+  ['seconds', 'Seconds'], ['minutes', 'Minutes'], ['hours', 'Hours'], ['days', 'Days'], ['months', 'Months'], ['quarters', 'Quarters'], ['years', 'Years'],
+];
 
 const esc = (s: string) => s.replace(/\\/g, '\\\\').replace(/\t/g, '\\t').replace(/\n/g, '\\n').replace(/\r/g, '\\r');
 
@@ -57,6 +81,13 @@ function unesc(s: string): string {
 }
 
 const split = (s: string) => s.split(LIST).filter(Boolean);
+
+function serialOf(text: string): string {
+  const t = text.trim();
+  const m = /^(\d{4})-(\d{1,2})-(\d{1,2})$/.exec(t);
+  if (!m) return t;
+  return String(Math.round((Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3])) - Date.UTC(1899, 11, 30)) / 86400000));
+}
 
 export function parsePivot(line: string): PivotDef | null {
   const p = line.split('\t').map(unesc);
@@ -76,7 +107,7 @@ export function parsePivot(line: string): PivotDef | null {
     cols: split(p[9] ?? ''),
     values: split(p[10] ?? '').map((v) => {
       const q = v.split(PART);
-      return { field: q[0] ?? '', func: q[1] ?? 'sum', show: q[2] ?? 'none', name: q[3] ?? '' };
+      return { field: q[0] ?? '', func: q[1] ?? 'sum', show: q[2] ?? 'none', name: q[3] ?? '', baseField: q[4] ?? '', baseItem: q[5] ?? '' };
     }),
     filters: split(p[11] ?? '').map((v) => {
       const [field = '', ...items] = v.split(PART);
@@ -85,6 +116,10 @@ export function parsePivot(line: string): PivotDef | null {
     calc: split(p[12] ?? '').map((v) => {
       const [name = '', formula = ''] = v.split(PART);
       return { name, formula };
+    }),
+    groups: split(p[13] ?? '').map((v) => {
+      const q = v.split(PART);
+      return { field: q[0] ?? '', date: q[1] === 'd', units: (q[2] ?? '').split(',').filter(Boolean), start: q[3] ?? '', end: q[4] ?? '', by: q[5] || '1' };
     }),
   };
 }
@@ -101,9 +136,10 @@ export function formatPivot(d: PivotDef): string {
     d.out,
     d.rows.join(LIST),
     d.cols.join(LIST),
-    d.values.map((v) => [v.field, v.func, v.show, v.name].join(PART)).join(LIST),
+    d.values.map((v) => [v.field, v.func, v.show, v.name, v.baseField, v.baseItem].join(PART)).join(LIST),
     d.filters.map((f) => [f.field, ...f.items].join(PART)).join(LIST),
     d.calc.map((c) => [c.name, c.formula].join(PART)).join(LIST),
+    d.groups.map((g) => [g.field, g.date ? 'd' : 'n', g.units.join(','), g.start, g.end, g.by].join(PART)).join(LIST),
   ].map(esc).join('\t');
 }
 
@@ -124,7 +160,7 @@ export function parseFields(line: string): PivotFields {
 }
 
 export function emptyPivot(src: PivotFields, sheet: number, row: number, col: number): PivotDef {
-  return { name: '', sheet, row, col, srcSheet: src.sheet, src: src.area.join(','), table: src.table, flags: 'rcsa', out: '', rows: [], cols: [], values: [], filters: [], calc: [] };
+  return { name: '', sheet, row, col, srcSheet: src.sheet, src: src.area.join(','), table: src.table, flags: 'rcsa', out: '', rows: [], cols: [], values: [], filters: [], calc: [], groups: [] };
 }
 
 export function describe(d: PivotDef): string {
@@ -161,6 +197,7 @@ export interface PivotHost {
   refresh(name: string): Promise<void>;
   remove(name: string): Promise<void>;
   items(name: string, field: string): Promise<string[]>;
+  fields(name: string): Promise<PivotFields['fields']>;
   close(): void;
 }
 
@@ -171,9 +208,12 @@ export class PivotPanel {
   private readonly fieldList: HTMLElement;
   private readonly lists = new Map<Area, HTMLElement>();
   private readonly calcList: HTMLElement;
+  private readonly groupList: HTMLElement;
+  private groupKey = '';
   private readonly hint: HTMLElement;
   private readonly title: HTMLElement;
   private queue: Promise<void> = Promise.resolve();
+  private readonly itemCache = new Map<string, string[]>();
 
   constructor(private readonly host: PivotHost) {
     const el = (this.el = document.createElement('section'));
@@ -187,6 +227,7 @@ export class PivotPanel {
 <ul class="fc-pvt-fields"></ul>
 <div class="fc-pvt-areas">${areas}</div>
 <div class="fc-pvt-calc"><span class="fc-pvt-label">Calculated fields</span><ul class="fc-pvt-calcs"></ul><div class="fc-pvt-calc-new"><input class="fc-fmt-input" data-k="cname" placeholder="Name" spellcheck="false" autocomplete="off"><input class="fc-fmt-input" data-k="cformula" placeholder="= Sales * 1.2" spellcheck="false" autocomplete="off"><button type="button" class="fc-btn" data-act="calc-add">Add</button></div></div>
+<div class="fc-pvt-group"><span class="fc-pvt-label">Grouping</span><ul class="fc-pvt-groups"></ul><div class="fc-pvt-group-new"><select class="fc-fmt-input" data-k="gfield" aria-label="Field to group"></select><select class="fc-fmt-input" data-k="gkind" aria-label="Group kind"><option value="d">Dates</option><option value="n">Numbers</option></select><div class="fc-pvt-units" data-k="gunits">${GROUP_UNITS.map(([u, l]) => `<label class="fc-sort-check"><input type="checkbox" data-unit="${u}"> ${l}</label>`).join('')}</div><input class="fc-fmt-input" data-k="gstart" placeholder="Starting at" spellcheck="false" autocomplete="off" aria-label="Starting at"><input class="fc-fmt-input" data-k="gend" placeholder="Ending at" spellcheck="false" autocomplete="off" aria-label="Ending at"><input class="fc-fmt-input" data-k="gby" placeholder="By (number, or days)" spellcheck="false" autocomplete="off" aria-label="By"><button type="button" class="fc-btn" data-act="group-add">Group</button></div></div>
 <div class="fc-pvt-opts"><label class="fc-sort-check"><input type="checkbox" data-flag="r"> Grand totals for rows</label><label class="fc-sort-check"><input type="checkbox" data-flag="c"> Grand totals for columns</label><label class="fc-sort-check"><input type="checkbox" data-flag="s"> Subtotals</label><label class="fc-sort-check"><input type="checkbox" data-flag="a"> Refresh when the source data changes</label></div>
 </div>
 <footer class="fc-pvt-foot"><span class="fc-pvt-hint" aria-live="polite"></span><button type="button" class="fc-btn" data-act="refresh"></button><button type="button" class="fc-btn" data-act="remove">Delete</button></footer>`;
@@ -194,6 +235,7 @@ export class PivotPanel {
     el.querySelector('[data-act="refresh"]')!.innerHTML = `${icon('refresh')} Refresh`;
     this.fieldList = el.querySelector<HTMLElement>('.fc-pvt-fields')!;
     this.calcList = el.querySelector<HTMLElement>('.fc-pvt-calcs')!;
+    this.groupList = el.querySelector<HTMLElement>('.fc-pvt-groups')!;
     this.hint = el.querySelector<HTMLElement>('.fc-pvt-hint')!;
     this.title = el.querySelector<HTMLElement>('.fc-pvt-name')!;
     for (const [k] of AREAS) this.lists.set(k, el.querySelector<HTMLElement>(`[data-area="${k}"] .fc-pvt-list`)!);
@@ -229,6 +271,8 @@ export class PivotPanel {
 
   show(def: PivotDef, fields: PivotFields['fields']): void {
     this.fields = fields;
+    this.itemCache.clear();
+    this.groupKey = JSON.stringify(def.groups);
     this.sync(def);
     this.el.hidden = false;
   }
@@ -267,6 +311,26 @@ export class PivotPanel {
       li.innerHTML = '<span></span><button type="button" class="fc-btn" data-act="calc-del">Delete</button>';
       return li;
     }, (li, i) => setText(li.querySelector('span')!, `${def.calc[i]?.name ?? ''} = ${def.calc[i]?.formula ?? ''}`));
+    reconcile(this.groupList, def.groups.map((g, i) => `${g.field}#${i}`), (k) => {
+      const li = document.createElement('li');
+      li.className = 'fc-pvt-calc-item';
+      li.dataset.key = k;
+      li.innerHTML = '<span></span><button type="button" class="fc-btn" data-act="group-del">Ungroup</button>';
+      return li;
+    }, (li, i) => {
+      const g = def.groups[i];
+      if (!g) return;
+      const how = g.date ? g.units.map((u) => GROUP_UNITS.find((x) => x[0] === u)?.[1] ?? u).join(', ') : `${g.start || 'min'} to ${g.end || 'max'} by ${g.by}`;
+      setText(li.querySelector('span')!, `${g.field}: ${how}`);
+    });
+    const gf = this.el.querySelector<HTMLSelectElement>('[data-k="gfield"]')!;
+    const gkey = this.fields.map((f) => f.name).join(LIST);
+    if (gf.dataset.opts !== gkey) {
+      gf.dataset.opts = gkey;
+      const keep = gf.value;
+      gf.replaceChildren(...this.fields.filter((f) => !def.groups.some((g) => g.field === f.name)).map((f) => new Option(f.name, f.name)));
+      if (keep) gf.value = keep;
+    }
     for (const box of this.el.querySelectorAll<HTMLInputElement>('[data-flag]')) {
       const on = def.flags.includes(box.dataset.flag ?? '');
       if (box.checked !== on) box.checked = on;
@@ -309,7 +373,7 @@ export class PivotPanel {
       li.dataset.drag = k.slice(0, k.lastIndexOf('#'));
       li.dataset.from = 'values';
       li.draggable = true;
-      li.innerHTML = `<span class="fc-pvt-chip-name"></span><span class="fc-pvt-chip-acts"><button type="button" class="fc-btn" data-act="up" aria-label="Move up">Up</button><button type="button" class="fc-btn" data-act="down" aria-label="Move down">Down</button><button type="button" class="fc-btn" data-act="drop" aria-label="Remove">Remove</button></span><div class="fc-pvt-vset"><select class="fc-fmt-input" data-k="func" aria-label="Summarize values by">${opt(FUNCS)}</select><select class="fc-fmt-input" data-k="show" aria-label="Show values as">${opt(SHOWS)}</select><input class="fc-fmt-input" data-k="vname" placeholder="Custom name" spellcheck="false" autocomplete="off" aria-label="Custom name"></div>`;
+      li.innerHTML = `<span class="fc-pvt-chip-name"></span><span class="fc-pvt-chip-acts"><button type="button" class="fc-btn" data-act="up" aria-label="Move up">Up</button><button type="button" class="fc-btn" data-act="down" aria-label="Move down">Down</button><button type="button" class="fc-btn" data-act="drop" aria-label="Remove">Remove</button></span><div class="fc-pvt-vset"><select class="fc-fmt-input" data-k="func" aria-label="Summarize values by">${opt(FUNCS)}</select><select class="fc-fmt-input" data-k="show" aria-label="Show values as">${opt(SHOWS)}</select><select class="fc-fmt-input" data-k="bfield" aria-label="Base field" hidden></select><select class="fc-fmt-input" data-k="bitem" aria-label="Base item" hidden></select><input class="fc-fmt-input" data-k="vname" placeholder="Custom name" spellcheck="false" autocomplete="off" aria-label="Custom name"></div>`;
       return li;
     }, (li, i) => {
       const v = def.values[i];
@@ -322,7 +386,40 @@ export class PivotPanel {
       if (s.value !== v.show) s.value = v.show;
       if (document.activeElement !== n && n.value !== v.name) n.value = v.name;
       f.disabled = calc.has(v.field.toLowerCase());
+      this.syncBase(li, v, def);
     });
+  }
+
+  private syncBase(li: HTMLElement, v: PivotValue, def: PivotDef): void {
+    const bf = li.querySelector<HTMLSelectElement>('[data-k="bfield"]')!;
+    const bi = li.querySelector<HTMLSelectElement>('[data-k="bitem"]')!;
+    const need = NEEDS_BASE.has(v.show);
+    const item = need && NEEDS_ITEM.has(v.show);
+    if (bf.hidden === need) bf.hidden = !need;
+    if (bi.hidden === item) bi.hidden = !item;
+    if (!need) return;
+    const fields = [...def.rows, ...def.cols];
+    const key = fields.join(LIST);
+    if (bf.dataset.opts !== key) {
+      bf.dataset.opts = key;
+      bf.replaceChildren(...fields.map((f) => new Option(f, f)));
+    }
+    if (v.baseField && bf.value !== v.baseField) bf.value = v.baseField;
+    if (!item || !v.baseField) return;
+    const have = this.itemCache.get(v.baseField);
+    if (!have) {
+      void this.host.items(def.name, v.baseField).then((all) => {
+        this.itemCache.set(v.baseField, all);
+        if (this.def) this.sync(this.def);
+      }).catch(() => undefined);
+      return;
+    }
+    const okey = `${v.baseField}${LIST}${have.length}`;
+    if (bi.dataset.opts !== okey) {
+      bi.dataset.opts = okey;
+      bi.replaceChildren(...['(previous)', '(next)', ...have].map((t) => new Option(t, t)));
+    }
+    if (v.baseItem && bi.value !== v.baseItem) bi.value = v.baseItem;
   }
 
   private clone(): PivotDef | null {
@@ -334,6 +431,13 @@ export class PivotPanel {
       this.hint.textContent = '';
       try {
         await this.host.change(next);
+        const key = JSON.stringify(next.groups);
+        if (key !== this.groupKey) {
+          this.groupKey = key;
+          this.itemCache.clear();
+          this.fields = await this.host.fields(next.name);
+          if (this.def) this.sync(this.def);
+        }
       } catch (err) {
         this.hint.textContent = err instanceof Error ? err.message : 'Not changed';
         if (this.def) this.sync(this.def);
@@ -349,7 +453,7 @@ export class PivotPanel {
     if (area === 'values') {
       if (from === 'values') return;
       const num = this.fields.find((f) => f.name === field)?.num ?? true;
-      d.values.push({ field, func: num || calc ? 'sum' : 'count', show: 'none', name: '' });
+      d.values.push({ field, func: num || calc ? 'sum' : 'count', show: 'none', name: '', baseField: '', baseItem: '' });
     } else {
       d.rows = d.rows.filter((x) => x !== field);
       d.cols = d.cols.filter((x) => x !== field);
@@ -385,6 +489,46 @@ export class PivotPanel {
       d.calc.push({ name, formula });
       q('cname').value = '';
       q('cformula').value = '';
+      return this.push(d);
+    }
+    if (act === 'group-add') {
+      const q = (k: string) => this.el.querySelector<HTMLInputElement | HTMLSelectElement>(`[data-k="${k}"]`)!;
+      const field = q('gfield').value;
+      const date = q('gkind').value === 'd';
+      const units = Array.from(this.el.querySelectorAll<HTMLInputElement>('[data-unit]')).filter((b) => b.checked).map((b) => b.dataset.unit ?? '');
+      const by = q('gby').value.trim() || '1';
+      const start = date ? serialOf(q('gstart').value) : q('gstart').value.trim();
+      const end = date ? serialOf(q('gend').value) : q('gend').value.trim();
+      if (!field) {
+        this.hint.textContent = 'Choose the field to group.';
+        return;
+      }
+      if (date && !units.length) {
+        this.hint.textContent = 'Tick at least one of seconds, minutes, hours, days, months, quarters or years.';
+        return;
+      }
+      if (!(Number(by) > 0)) {
+        this.hint.textContent = 'The step after By must be a number above zero.';
+        return;
+      }
+      if ((start && Number.isNaN(Number(start))) || (end && Number.isNaN(Number(end)))) {
+        this.hint.textContent = date ? 'Type start and end as dates such as 2024-01-31, or leave them blank.' : 'Type start and end as numbers, or leave them blank.';
+        return;
+      }
+      d.groups = d.groups.filter((g) => g.field !== field);
+      d.groups.push({ field, date, units: date ? units : [], start, end, by });
+      return this.push(d);
+    }
+    if (act === 'group-del') {
+      const idx = Array.from(this.groupList.children).indexOf(b.closest<HTMLElement>('li')!);
+      const gone = d.groups[idx];
+      if (!gone) return;
+      const names = gone.date ? gone.units.map((u) => GROUP_UNITS.find((x) => x[0] === u)?.[1] ?? u) : [`${gone.field} groups`];
+      d.groups.splice(idx, 1);
+      d.rows = d.rows.filter((x) => !names.includes(x));
+      d.cols = d.cols.filter((x) => !names.includes(x));
+      d.filters = d.filters.filter((x) => !names.includes(x.field));
+      d.values = d.values.filter((x) => !names.includes(x.field));
       return this.push(d);
     }
     if (act === 'calc-del') {
@@ -499,7 +643,14 @@ export class PivotPanel {
       const v = d.values[idx];
       if (!v) return;
       if (t.dataset.k === 'func') v.func = t.value;
-      else if (t.dataset.k === 'show') v.show = t.value;
+      else if (t.dataset.k === 'show') {
+        v.show = t.value;
+        if (NEEDS_BASE.has(v.show) && !v.baseField) v.baseField = d.rows[0] ?? d.cols[0] ?? '';
+        if (NEEDS_ITEM.has(v.show) && !v.baseItem) v.baseItem = '(previous)';
+      } else if (t.dataset.k === 'bfield') {
+        v.baseField = t.value;
+        v.baseItem = NEEDS_ITEM.has(v.show) ? '(previous)' : '';
+      } else if (t.dataset.k === 'bitem') v.baseItem = t.value;
       else if (t.dataset.k === 'vname') v.name = t.value.trim();
       this.push(d);
     }
@@ -590,20 +741,38 @@ export class PivotDialog {
       lines = [];
     }
     if (mine !== this.stamp) return;
-    this.lines = lines;
-    const defs = lines.map((l) => parsePivot(l));
-    reconcile(this.sugg, defs.map((_, i) => String(i)), (k) => {
+    const items = lines.map((l) => {
+      const [line = '', fit = '', title = '', prev = ''] = l.split('\u001d');
+      return { line, fit, title, prev };
+    });
+    this.lines = items.map((x) => x.line);
+    reconcile(this.sugg, items.map((_, i) => String(i)), (k) => {
       const b = document.createElement('button');
       b.type = 'button';
       b.className = 'fc-btn fc-pvt-pick';
       b.dataset.key = k;
       b.dataset.sugg = k;
+      b.innerHTML = '<span class="fc-pvt-pick-head"><span class="fc-pvt-pick-title"></span><span class="fc-pvt-pick-fit"></span></span><table class="fc-pvt-prev"><tbody></tbody></table>';
       return b;
     }, (b, i) => {
-      const d = defs[i];
-      setText(b, d ? describe(d) : '');
+      const x = items[i];
+      if (!x) return;
+      setText(b.querySelector('.fc-pvt-pick-title')!, x.title);
+      setText(b.querySelector('.fc-pvt-pick-fit')!, `Fit ${x.fit}`);
+      if (b.dataset.sig === x.prev) return;
+      b.dataset.sig = x.prev;
+      const body = b.querySelector('tbody')!;
+      body.replaceChildren(...x.prev.split('\u001e').map((r, ri) => {
+        const tr = document.createElement('tr');
+        tr.replaceChildren(...r.split('\u001f').map((c) => {
+          const td = document.createElement(ri === 0 ? 'th' : 'td');
+          td.textContent = c;
+          return td;
+        }));
+        return tr;
+      }));
     });
-    this.sugg.dataset.empty = defs.length ? '' : '1';
+    this.sugg.dataset.empty = items.length ? '' : '1';
   }
 
   private async submit(layout: string | null): Promise<void> {

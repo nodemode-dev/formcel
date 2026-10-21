@@ -2,7 +2,7 @@ import type { EngineClient } from '../engine';
 import type { Grid, ObjectsHook } from '../grid/grid';
 import type { PivotDef } from '../ui/pivot';
 import { anchorOf, frameOf, fromLine, toLine } from './anchor';
-import { build, parseRangeText, readMatrix } from './data';
+import { build, readMatrix, resolveRange } from './data';
 import { FILTER_BAR, pivotChartData, pivotLabel } from './pivotchart';
 import { renderChartAsync } from './svg';
 import { isFloat, newId, type FloatObject } from './types';
@@ -521,7 +521,7 @@ export class ObjectLayer implements ObjectsHook {
       else if (!data) html = '<div class="fc-chart-empty">The PivotTable has no values to chart yet. Add fields to its Rows and Values.</div>';
       else html = await renderChartAsync(this.eng, spec, data, n.obj.w, Math.max(40, n.obj.h - FILTER_BAR));
     } else {
-      const ref = parseRangeText(spec.range);
+      const ref = await resolveRange(this.eng, this.io.book(), spec.range);
       if (!ref) html = `<div class="fc-chart-empty">The data range ${spec.range ? `"${spec.range}"` : ''} is not a range. Edit the chart to pick one.</div>`;
       else {
         const sheet = ref.sheet ? this.io.sheetNames().indexOf(ref.sheet) : this.sheetNo;

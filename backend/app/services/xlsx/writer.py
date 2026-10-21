@@ -16,6 +16,8 @@ from .chartex import inject
 from .drawings import objects_out, pivot_ranges
 from .formulas import to_file
 from .overlay import finish as overlay_finish
+from .pivots import finish as pivots_finish
+from .pivots import pivots_out
 from .props import app_xml, core_out, patch_app
 from .protect import book_out, notes_out, sheet_out
 from .review import finish as review_finish, placeholders, ranges_out
@@ -23,6 +25,7 @@ from .styles import apply_out
 from .tables import ref_of, tables_out
 from .theme import theme_out
 from .validation import validations_out
+from .whatif import whatif_out
 
 COL_PX = 100
 ROW_PX = 24
@@ -37,7 +40,7 @@ def _number(text: str) -> int | float:
     return int(n) if n.is_integer() and abs(n) < 2**53 else n
 
 
-def write(eng, views: list[dict], vba: dict[str, bytes] | None = None, objects: list[list[dict]] | None = None, notes: dict | None = None, threads: list[dict] | None = None, props: dict | None = None, stamps: tuple[str, str] | None = None) -> bytes:
+def write(eng, views: list[dict], vba: dict[str, bytes] | None = None, objects: list[list[dict]] | None = None, notes: dict | None = None, threads: list[dict] | None = None, props: dict | None = None, stamps: tuple[str, str] | None = None, whatif: list[str] | None = None) -> bytes:
     threads = threads or []
     ranges: dict[int, list[tuple[str, str]]] = {}
     wb = Workbook()
@@ -165,6 +168,8 @@ def write(eng, views: list[dict], vba: dict[str, bytes] | None = None, objects: 
                 ws.auto_filter.filterColumn = []
     plans: dict[int, dict] = {}
     pivots = pivot_ranges(eng.pivots(), eng.sheet_names())
+    shows = pivots_out(wb, eng)
+    whatif_out(wb, whatif or [])
     for i, items in enumerate(objects or []):
         if items and i < len(wb.worksheets):
             plans[i] = objects_out(wb, wb.worksheets[i], items, views[i] if i < len(views) else {}, pivots=pivots)
@@ -177,5 +182,6 @@ def write(eng, views: list[dict], vba: dict[str, bytes] | None = None, objects: 
         wb.vba_archive = zipfile.ZipFile(io.BytesIO(buf.getvalue()))
     out = io.BytesIO()
     wb.save(out)
-    data = patch_app(out.getvalue(), app_xml(props or {}, eng.sheet_names(), VERSION)) if stamps else out.getvalue()
+    data = pivots_finish(out.getvalue(), shows)
+    data = patch_app(data, app_xml(props or {}, eng.sheet_names(), VERSION)) if stamps else data
     return overlay_finish(inject(review_finish(data, threads, ranges), wb, views, COL_PX, ROW_PX), plans, eng.sheet_names(), views)

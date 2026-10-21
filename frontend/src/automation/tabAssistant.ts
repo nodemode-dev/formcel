@@ -234,7 +234,7 @@ export class AssistantTab {
       const def = emptyPivot(fields, this.env.grid.sheetIndex, 0, 0);
       def.rows = p.rows.map(real).filter(Boolean);
       def.cols = p.cols.map(real).filter(Boolean);
-      def.values = p.values.filter((v) => names.has(v.field.toLowerCase())).map((v) => ({ field: real(v.field), func: FUNCS.some(([k]) => k === v.func) ? v.func : 'sum', show: 'none', name: '' }));
+      def.values = p.values.filter((v) => names.has(v.field.toLowerCase())).map((v) => ({ field: real(v.field), func: FUNCS.some(([k]) => k === v.func) ? v.func : 'sum', show: 'none', name: '', baseField: '', baseItem: '' }));
       if (!def.rows.length && !def.cols.length && !def.values.length) throw new Error('None of the proposed fields match the source columns.');
       document.dispatchEvent(new CustomEvent('fc-ai-pivot', { detail: { src: p.source, layout: formatPivot(def) } }));
       btn.disabled = true;

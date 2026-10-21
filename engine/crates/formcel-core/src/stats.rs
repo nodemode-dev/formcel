@@ -196,6 +196,30 @@ pub fn norm_s_inv(p: f64) -> f64 {
     x
 }
 
+pub fn norm_cdf(z: f64) -> f64 {
+    let x = z.abs() / std::f64::consts::SQRT_2;
+    let upper = if x < 2.0 {
+        let (mut term, mut sum, mut n) = (x, x, 0.0);
+        while term.abs() > 1e-17 * sum.abs() && n < 500.0 {
+            n += 1.0;
+            term *= 2.0 * x * x / (2.0 * n + 1.0);
+            sum += term;
+        }
+        1.0 - 2.0 / std::f64::consts::PI.sqrt() * (-x * x).exp() * sum
+    } else {
+        let mut f = 0.0;
+        for k in (1..=200).rev() {
+            f = f64::from(k) / 2.0 / (x + f);
+        }
+        (-x * x).exp() / std::f64::consts::PI.sqrt() / (x + f)
+    } / 2.0;
+    if z >= 0.0 {
+        1.0 - upper
+    } else {
+        upper
+    }
+}
+
 pub fn correl(x: &[f64], y: &[f64]) -> Option<f64> {
     if x.len() != y.len() || x.len() < 2 {
         return None;

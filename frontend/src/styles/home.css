@@ -572,12 +572,24 @@
 .fc-pvt-opts { display: grid; gap: var(--space-1); }
 .fc-pvt-foot { display: flex; align-items: center; justify-content: flex-end; gap: var(--space-2); }
 .fc-pvt-hint { flex: 1; min-height: 16px; font-size: var(--text-xs); color: var(--bad); }
-.fc-pvt-dialog { width: 380px; }
+.fc-pvt-dialog { width: 420px; }
 .fc-pvt-dest { display: grid; gap: var(--space-1); margin: 0; padding: var(--space-2); border: 1px solid var(--border-color); border-radius: var(--radius-sm); }
 .fc-pvt-dest legend { font-size: var(--text-xs); color: var(--text-muted); padding: 0 var(--space-1); }
-.fc-pvt-sugg { display: grid; align-content: start; gap: var(--space-1); min-height: 132px; }
+.fc-pvt-sugg { display: grid; align-content: start; gap: var(--space-1); min-height: 132px; max-height: 280px; overflow-y: auto; }
+.fc-pvt-group, .fc-pvt-groups { display: grid; gap: var(--space-1); margin: 0; padding: 0; list-style: none; }
+.fc-pvt-group-new { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-1); }
+.fc-pvt-group-new .fc-fmt-input { height: 26px; font-size: var(--text-xs); }
+.fc-pvt-group-new .fc-btn { height: 22px; padding: 0 var(--space-2); font-size: var(--text-xs); grid-column: 1 / -1; }
+.fc-pvt-units { grid-column: 1 / -1; display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 2px var(--space-2); font-size: var(--text-xs); }
+.fc-pvt-vset [hidden] { display: none; }
+.fc-pvt-pick-head { display: flex; justify-content: space-between; gap: var(--space-2); }
+.fc-pvt-pick-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fc-pvt-pick-fit { flex: none; color: var(--text-muted); }
+.fc-pvt-prev { border-collapse: collapse; width: 100%; font-size: var(--text-xs); color: var(--text-secondary); table-layout: fixed; }
+.fc-pvt-prev th, .fc-pvt-prev td { padding: 1px var(--space-1); border: 1px solid var(--border-color); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left; }
+.fc-pvt-prev th { background: var(--bg-tertiary); color: var(--text-primary); font-weight: 600; }
 .fc-pvt-sugg[data-empty="1"]::before { content: "Recommendations appear when the source has text and number columns."; font-size: var(--text-xs); color: var(--text-muted); }
-.fc-pvt-pick { justify-self: stretch; height: 24px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left; font-size: var(--text-xs); }
+.fc-pvt-pick { justify-self: stretch; display: grid; gap: var(--space-1); height: auto; min-height: 24px; padding: var(--space-1) var(--space-2); overflow: hidden; text-align: left; font-size: var(--text-xs); }
 .fc-pvt-dialog .fc-pvt-pick { justify-self: stretch; }
 .fc-tabled-types { display: grid; gap: var(--space-1); max-height: 160px; overflow-y: auto; }
 .fc-tabled-type { display: grid; grid-template-columns: 1fr 110px; gap: var(--space-1); align-items: center; }

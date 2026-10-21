@@ -20,6 +20,15 @@ export function parseRangeText(text: string): RangeRef | null {
   return range ? { sheet, range } : null;
 }
 
+export async function resolveRange(eng: EngineClient, book: number, text: string): Promise<RangeRef | null> {
+  const direct = parseRangeText(text);
+  if (direct) return direct;
+  const t = text.trim().replace(/^=/, '');
+  if (!/^[A-Za-z_\\][\w.]*$/.test(t)) return null;
+  const hit = (await eng.names(book)).find(([name]) => name.toLowerCase() === t.toLowerCase());
+  return hit ? parseRangeText(hit[1].trim().replace(/^=/, '')) : null;
+}
+
 export function rangeLabel(r: Range): string {
   const a = `${colName(r.c0)}${r.r0 + 1}`;
   return r.r0 === r.r1 && r.c0 === r.c1 ? a : `${a}:${colName(r.c1)}${r.r1 + 1}`;

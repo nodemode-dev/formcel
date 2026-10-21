@@ -86,7 +86,7 @@ impl Workbook {
         Ok(p)
     }
 
-    fn sample(&mut self, p: &Problem, x: &[f64]) -> Option<Sample> {
+    pub(super) fn sample(&mut self, p: &Problem, x: &[f64]) -> Option<Sample> {
         let sets: Vec<(Key, String)> = p.vars.iter().zip(x).map(|(k, v)| (*k, num_raw(*v))).collect();
         self.temp(&sets);
         let obj = self.numval(p.obj)?;
@@ -102,7 +102,7 @@ impl Workbook {
         Some(Sample { obj, gaps })
     }
 
-    fn violation(p: &Problem, s: &Sample, x: &[f64]) -> f64 {
+    pub(super) fn violation(p: &Problem, s: &Sample, x: &[f64]) -> f64 {
         let mut v = 0.0;
         for (l, r, op) in &s.gaps {
             v += match op.as_str() {
@@ -152,6 +152,7 @@ impl Workbook {
         let mut result: Option<(Vec<f64>, String, String)> = None;
         let mut message = String::new();
         let mut linear = false;
+        let mut lin_model: Option<LinModel> = None;
         if hint != "nl" {
             let x0: Vec<f64> = orig.clone();
             if let Some((base, cols)) = self.linear_model(&p, &x0) {
@@ -221,6 +222,7 @@ impl Workbook {
                         LpOut::Optimal(v, _) => {
                             let x: Vec<f64> = (0..n).map(|i| if free { v[i] - v[n + i] } else { v[i] }).collect();
                             let method = if ints.is_empty() { "Simplex LP" } else { "Simplex LP with branch and bound" };
+                            lin_model = Some(LinModel { lp: lp.clone(), n, free, sign, ncons: p.cons.len(), exact: ints.is_empty() && p.mode != "value" });
                             result = Some((x, method.to_string(), "Solver found a solution. All constraints and optimality conditions are satisfied.".to_string()));
                         }
                         LpOut::Infeasible => message = "Solver could not find a feasible solution.".to_string(),
@@ -311,6 +313,9 @@ impl Workbook {
             cons,
             method: method.clone(),
             message: msg.clone(),
+            problem: Some(p.clone()),
+            lin: lin_model,
+            x: x.iter().map(|v| clean(*v)).collect(),
         });
         Ok(format!("ok\t{}\t{}\t{}", msg, fnum(final_obj), method))
     }
@@ -320,6 +325,11 @@ impl Workbook {
         let Some(run) = self.whatif.last.clone() else {
             return Err("Run Solver first; the report describes the last solution.".to_string());
         };
+        match a.get(1).map(String::as_str) {
+            Some("sensitivity") => return self.sens_report(dst, &run, fx),
+            Some("limits") => return self.limits_report(dst, &run, fx),
+            _ => {}
+        }
         let name_of = |wb: &Workbook, k: Key| -> String {
             let left = if k.1.col > 0 { wb.val((k.0, Addr { row: k.1.row, col: k.1.col - 1 })) } else { Value::Empty };
             let up = if k.1.row > 0 { wb.val((k.0, Addr { row: k.1.row - 1, col: k.1.col })) } else { Value::Empty };

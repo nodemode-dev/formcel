@@ -382,9 +382,14 @@ class Store:
             kept = eng.load_tables(book["tables"])
             if kept < len(book["tables"]):
                 notes.append(f"{len(book['tables']) - kept} tables FormCel could not read brought in as plain ranges")
+        if book.get("pivots"):
+            kept = eng.load_pivots(book["pivots"])
+            if kept < len(book["pivots"]):
+                notes.append(f"{len(book['pivots']) - kept} pivot tables FormCel could not read left out")
         stamp = now()
         b = Book(uuid.uuid4().hex[:12], (title or "Imported workbook")[:120], stamp, stamp, eng, None, [s["view"] for s in book["sheets"]])
         b.objects = [list(s.get("objects") or []) for s in book["sheets"]]
+        b.whatif = list(book.get("whatif") or [])
         b.vba = book.get("vba")
         b.props = clean_props(book.get("props"))
         for i, s in enumerate(book["sheets"]):
@@ -460,7 +465,7 @@ class Store:
             b.fit_views()
             if macros and not b.vba:
                 raise LookupError(wid)
-            return b.title, xlsx.write(b.engine, b.views, b.vba if macros else None, b.fit_objects(), b.collab["notes"], b.collab["threads"], b.props, (b.created, b.modified))
+            return b.title, xlsx.write(b.engine, b.views, b.vba if macros else None, b.fit_objects(), b.collab["notes"], b.collab["threads"], b.props, (b.created, b.modified), whatif=b.whatif)
 
     def properties(self, wid: str) -> dict:
         b = self._load(wid)

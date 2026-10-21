@@ -1,5 +1,5 @@
 import { engine } from '../engine';
-import { parseRef, rangeText } from '../grid/a1';
+import { colName, parseRef, rangeText } from '../grid/a1';
 import type { Grid } from '../grid/grid';
 
 export interface WhatIfHost {
@@ -8,6 +8,7 @@ export interface WhatIfHost {
   sheetNames(): string[];
   makeSheet(base: string): Promise<number>;
   persist(lines: string[]): void;
+  pivotsChanged(): Promise<void>;
 }
 
 const esc = (s: string): string => s.replace(/\\/g, '\\\\').replace(/\t/g, '\\t').replace(/\n/g, '\\n').replace(/\r/g, '\\r');
@@ -97,7 +98,67 @@ class Box {
   }
 }
 
-const AGGR: [string, string][] = [['0', 'Average'], ['1', 'Count'], ['2', 'CountA'], ['3', 'Max'], ['4', 'Median'], ['5', 'Min'], ['6', 'Sum']];
+interface ToolField {
+  k: string;
+  label: string;
+  t?: 'pick' | 'check';
+  opts?: [string, string][];
+  def?: string;
+}
+
+interface ToolSpec {
+  label: string;
+  tool: string;
+  fields: ToolField[];
+  slots: string[];
+  note: string;
+}
+
+const BY: ToolField = { k: 'by', label: 'Grouped by', t: 'pick', opts: [['c', 'Columns'], ['r', 'Rows']] };
+const LABELS: ToolField = { k: 'labels', label: 'Labels in the first row or column', t: 'check' };
+const ALPHA: ToolField = { k: 'alpha', label: 'Alpha', def: '0.05' };
+const RANGE: ToolField = { k: 'range', label: 'Input range' };
+const RANGE2: ToolField = { k: 'range2', label: 'Variable 2 range' };
+const HYP: ToolField = { k: 'hyp', label: 'Hypothesized mean difference', def: '0' };
+const TTEST: ToolField[] = [{ ...RANGE, label: 'Variable 1 range' }, RANGE2, HYP, LABELS, ALPHA];
+
+const TOOLS: Record<string, ToolSpec> = {
+  anova1: { label: 'Anova: Single Factor', tool: 'anova1', fields: [RANGE, BY, LABELS, ALPHA], slots: ['by', 'labels', 'alpha'], note: 'Compares the means of two or more groups of numbers.' },
+  anova2: { label: 'Anova: Two-Factor Without Replication', tool: 'anova2', fields: [RANGE, LABELS, ALPHA], slots: ['labels', 'alpha'], note: 'One number in each cell; rows and columns are the two factors.' },
+  anova2r: { label: 'Anova: Two-Factor With Replication', tool: 'anova2r', fields: [{ ...RANGE, label: 'Input range, with labels in the first row and column' }, { k: 'per', label: 'Rows per sample', def: '2' }, ALPHA], slots: ['per', 'alpha'], note: 'Each sample takes the same number of rows under its row label.' },
+  correl: { label: 'Correlation', tool: 'correl', fields: [RANGE, BY, LABELS], slots: ['by', 'labels'], note: 'A matrix of correlation coefficients between the columns or rows.' },
+  covar: { label: 'Covariance', tool: 'covar', fields: [RANGE, BY, LABELS], slots: ['by', 'labels'], note: 'A matrix of population covariances between the columns or rows.' },
+  expsmooth: { label: 'Exponential Smoothing', tool: 'expsmooth', fields: [RANGE, { k: 'damp', label: 'Damping factor', def: '0.3' }, LABELS], slots: ['damp', 'labels'], note: 'Each forecast is the damped mix of the last value and the last forecast.' },
+  fourier: { label: 'Fourier Analysis', tool: 'fourier', fields: [RANGE, LABELS], slots: ['@', 'labels'], note: 'Needs a column of 2, 4, 8 ... 4096 numbers. Results are written as complex numbers.' },
+  ftest: { label: 'F-Test Two-Sample for Variances', tool: 'ftest', fields: [{ ...RANGE, label: 'Variable 1 range' }, RANGE2, LABELS, ALPHA], slots: ['range2', 'labels', 'alpha'], note: 'Tests whether two groups have equal variances.' },
+  hist: { label: 'Histogram', tool: 'hist', fields: [RANGE, { k: 'bins', label: 'Bin range, blank for automatic bins' }, LABELS], slots: ['bins', 'labels'], note: 'Counts how many numbers fall in each bin.' },
+  movavg: { label: 'Moving Average', tool: 'movavg', fields: [RANGE, { k: 'interval', label: 'Interval', def: '3' }, LABELS], slots: ['interval', 'labels'], note: 'Averages each value with the ones before it.' },
+  rand: {
+    label: 'Random Number Generation',
+    tool: 'rand',
+    fields: [
+      { k: 'dist', label: 'Distribution', t: 'pick', opts: [['uniform', 'Uniform'], ['normal', 'Normal'], ['bernoulli', 'Bernoulli'], ['binomial', 'Binomial'], ['poisson', 'Poisson'], ['patterned', 'Patterned'], ['discrete', 'Discrete']] },
+      { k: 'nvars', label: 'Number of variables', def: '1' },
+      { k: 'count', label: 'Numbers per variable', def: '100' },
+      { k: 'seed', label: 'Random seed, blank for none' },
+      { k: 'p1', label: 'Between (Uniform), Mean (Normal), P (Bernoulli, Binomial), Lambda (Poisson), From (Patterned), Value and probability range (Discrete)' },
+      { k: 'p2', label: 'And (Uniform), Standard deviation (Normal), Trials (Binomial), To (Patterned)' },
+      { k: 'step', label: 'Step (Patterned)', def: '1' },
+      { k: 'each', label: 'Repeat each value (Patterned)', def: '1' },
+      { k: 'seq', label: 'Repeat the sequence (Patterned)', def: '1' },
+    ],
+    slots: ['nvars', 'count', 'seed', 'p1', 'p2', 'step', 'each', 'seq'],
+    note: 'Fills a new sheet with random numbers from the distribution you pick.',
+  },
+  rank: { label: 'Rank and Percentile', tool: 'rank', fields: [RANGE, BY, LABELS], slots: ['by', 'labels'], note: 'Lists each value with its rank and percent rank.' },
+  sample: { label: 'Sampling', tool: 'sample', fields: [RANGE, { k: 'mode', label: 'Sampling method', t: 'pick', opts: [['periodic', 'Periodic'], ['random', 'Random']] }, { k: 'size', label: 'Period, or number of samples', def: '5' }, LABELS], slots: ['mode', 'size', 'labels'], note: 'Takes every nth value, or a random draw with replacement.' },
+  ttestPaired: { label: 't-Test: Paired Two Sample for Means', tool: 'ttest', fields: TTEST, slots: ['range2', '@paired', 'hyp', 'labels', 'alpha'], note: 'Tests the mean difference between paired observations.' },
+  ttestEqual: { label: 't-Test: Two-Sample Assuming Equal Variances', tool: 'ttest', fields: TTEST, slots: ['range2', '@equal', 'hyp', 'labels', 'alpha'], note: 'Pooled-variance test of two means.' },
+  ttestUnequal: { label: 't-Test: Two-Sample Assuming Unequal Variances', tool: 'ttest', fields: TTEST, slots: ['range2', '@unequal', 'hyp', 'labels', 'alpha'], note: 'Welch test of two means.' },
+  ztest: { label: 'z-Test: Two Sample for Means', tool: 'ztest', fields: [{ ...RANGE, label: 'Variable 1 range' }, RANGE2, HYP, { k: 'var1', label: 'Variable 1 variance (known)' }, { k: 'var2', label: 'Variable 2 variance (known)' }, LABELS, ALPHA], slots: ['range2', 'hyp', 'var1', 'var2', 'labels', 'alpha'], note: 'Tests two means when both variances are known.' },
+};
+
+const AGGR: [string, string][] =[['0', 'Average'], ['1', 'Count'], ['2', 'CountA'], ['3', 'Max'], ['4', 'Median'], ['5', 'Min'], ['6', 'Sum']];
 
 export class WhatIf {
   private boxes = new Map<string, Box>();
@@ -107,6 +168,7 @@ export class WhatIf {
   private timer = 0;
   private panel: { el: HTMLElement; list: HTMLElement; note: HTMLElement } | null = null;
   private last = '';
+  private readonly gs = { steps: 0, found: '' };
 
   constructor(private readonly host: WhatIfHost) {}
 
@@ -144,6 +206,11 @@ export class WhatIf {
     }
   }
 
+  async tableText(row: number, col: number): Promise<string> {
+    if (!this.tables) return '';
+    return (await this.run(['dt.at', this.sheet(), `${colName(col)}${row + 1}`])).trim();
+  }
+
   changed(): void {
     if (!this.tables || this.busy) return;
     window.clearTimeout(this.timer);
@@ -176,15 +243,49 @@ export class WhatIf {
   }
 
   goalSeek(): void {
-    const b = this.box('goal', () => new Box('Goal Seek', input('set', 'Set cell') + input('to', 'To value') + input('by', 'By changing cell'), [], 'OK', async (bx) => {
-      const r = this.result(await this.run(['goal', this.sheet(), bx.get('set'), bx.get('to'), bx.get('by')]));
-      if (r[0] === 'error') return bx.say(r[1], true);
-      if (r[0] === 'ok') return bx.say(`Goal Seeking with cell ${bx.get('set').toUpperCase()} found a solution. Target value: ${bx.get('to')}. Current value: ${r[2]}. Cell ${bx.get('by').toUpperCase()} now holds ${r[1]}.`);
-      bx.say(`Goal Seeking with cell ${bx.get('set').toUpperCase()} may not have found a solution. Target value: ${bx.get('to')}. The closest it came was ${r[2]}. Nothing was changed.`, true);
-    }, () => this.g.focus()));
+    const gs = this.gs;
+    const seek = (bx: Box, cap: string, mode: string): Promise<string> => this.run(['goal', this.sheet(), bx.get('set'), bx.get('to'), bx.get('by'), cap, bx.get('tol'), mode]);
+    const report = (bx: Box, r: string[], done: boolean): void => {
+      const cell = bx.get('set').toUpperCase();
+      const by = bx.get('by').toUpperCase();
+      gs.found = r[0];
+      if (r[0] === 'ok') return bx.say(`Goal Seeking with cell ${cell} found a solution. Target value: ${bx.get('to')}. Current value: ${r[2]}. Cell ${by} would hold ${r[1]} after ${r[3]} tries. Apply puts it in the sheet.`);
+      if (r[0] === 'stop') return bx.say(`${done ? 'Stopped at the limit' : 'Paused'} after ${r[3]} tries. Target value: ${bx.get('to')}. Current value: ${r[2]} with ${by} at ${r[1]}. Step, Continue or Apply.`);
+      bx.say(`Goal Seeking with cell ${cell} may not have found a solution. Target value: ${bx.get('to')}. The closest it came was ${r[2]} with ${by} at ${r[1]}. Apply keeps that value; Close leaves the sheet alone.`, true);
+    };
+    const b = this.box('goal', () => new Box(
+      'Goal Seek',
+      input('set', 'Set cell') + input('to', 'To value') + input('by', 'By changing cell') + `<div class="fc-wi-row">${input('cap', 'Maximum tries, blank for no limit')}${input('tol', 'Maximum change, blank for default')}</div>`,
+      [['step', 'Step'], ['cont', 'Continue'], ['apply', 'Apply']],
+      'Seek',
+      async (bx, who) => {
+        if (who === 'step') {
+          gs.steps += 1;
+          const r = this.result(await seek(bx, String(gs.steps), 'preview'));
+          if (r[0] === 'error') return bx.say(r[1], true);
+          return report(bx, r, false);
+        }
+        if (who === 'apply') {
+          if (!gs.found) return bx.say('Seek first, or press Step.', true);
+          const r = this.result(await seek(bx, bx.get('cap'), gs.found === 'ok' ? 'commit' : 'force'));
+          if (r[0] === 'error') return bx.say(r[1], true);
+          await this.state();
+          gs.found = '';
+          gs.steps = 0;
+          return bx.say(`Applied. Cell ${bx.get('by').toUpperCase()} now holds ${r[1]} and cell ${bx.get('set').toUpperCase()} shows ${r[2]}. Undo restores the earlier value.`);
+        }
+        if (who === 'ok') gs.steps = 0;
+        const r = this.result(await seek(bx, bx.get('cap'), 'preview'));
+        if (r[0] === 'error') return bx.say(r[1], true);
+        report(bx, r, true);
+      },
+      () => this.g.focus(),
+    ));
     const sel = this.g.selection();
     b.set('set', rangeText({ ...sel, r1: sel.r0, c1: sel.c0 }));
-    b.say('Finds the input that makes a formula give the result you want. The changing cell must hold a value, and the set cell must depend on it.');
+    gs.steps = 0;
+    gs.found = '';
+    b.say('Finds the input that makes a formula give the result you want. Seek shows what it found before anything changes; Step shows one more try each press; Apply puts the result in the sheet.');
     b.show('to');
   }
 
@@ -232,10 +333,11 @@ export class WhatIf {
   }
 
   scenarios(): void {
-    const b = this.box('sc', () => new Box('Scenario Manager', pick('pick', 'Scenarios', []), [['add', 'Add or edit'], ['show', 'Show'], ['del', 'Delete']], 'Summary', async (x, who) => {
+    const b = this.box('sc', () => new Box('Scenario Manager', pick('pick', 'Scenarios', []), [['add', 'Add or edit'], ['merge', 'Merge'], ['show', 'Show'], ['del', 'Delete']], 'Summary', async (x, who) => {
       const list = await this.scenarioList(x);
       const cur = list.find((l) => l[0] === x.get('pick'));
       if (who === 'add') return this.scenarioForm(cur);
+      if (who === 'merge') return this.mergeForm();
       if (who === 'ok') return this.summaryForm();
       if (!cur) return x.say('Add a scenario first.', true);
       const r = this.result(await this.run([who === 'show' ? 'sc.show' : 'sc.delete', cur[0]]));
@@ -295,13 +397,38 @@ export class WhatIf {
   }
 
   private summaryForm(): void {
-    const b = this.box('scsum', () => new Box('Scenario Summary', input('cells', 'Result cells, separated by commas'), [], 'OK', async (bx) => {
-      const r = this.result(await this.toNewSheet('Scenario Summary', (dst) => ['sc.summary', dst, this.sheet(), bx.get('cells')]));
+    const b = this.box('scsum', () => new Box('Scenario Summary', pick('kind', 'Report type', [['summary', 'Scenario summary'], ['pivot', 'Scenario PivotTable report']]) + input('cells', 'Result cells, separated by commas'), [], 'OK', async (bx) => {
+      const pivot = bx.get('kind') === 'pivot';
+      const r = this.result(await this.toNewSheet(pivot ? 'Scenario PivotTable' : 'Scenario Summary', (dst) => [pivot ? 'sc.pivot' : 'sc.summary', dst, this.sheet(), bx.get('cells')]));
       if (r[0] === 'error') return bx.say(r[1], true);
+      if (pivot) await this.host.pivotsChanged();
       bx.close();
     }, () => this.g.focus()));
-    b.say('The summary is written to a new sheet with one column for each scenario.');
+    b.say('The summary is written to a new sheet with one column for each scenario. The PivotTable report lists the scenarios as rows and the result cells as values.');
     b.show('cells');
+  }
+
+  private mergeForm(): void {
+    const names = this.host.sheetNames();
+    const b = this.box('scmerge', () => new Box('Merge Scenarios', pick('from', 'Merge scenarios from sheet', names.map((n, i) => [String(i), n] as [string, string])), [], 'Merge', async (bx) => {
+      const from = bx.get('from');
+      if (from === this.sheet()) return bx.say('Choose a different sheet to merge from.', true);
+      const r = this.result(await this.run(['sc.merge', from, this.sheet()]));
+      if (r[0] === 'error') return bx.say(r[1], true);
+      await this.state();
+      bx.say(`Merged ${r[1]} scenario${r[1] === '1' ? '' : 's'} into this sheet. Names that clash got a number after them.`);
+    }, () => this.g.focus()));
+    const sel = b.field<HTMLSelectElement>('from');
+    if ([...sel.options].map((o) => o.textContent).join('\n') !== names.join('\n')) {
+      sel.replaceChildren(...names.map((n, i) => {
+        const o = document.createElement('option');
+        o.value = String(i);
+        o.textContent = n;
+        return o;
+      }));
+    }
+    b.say('Copies the scenarios of another sheet onto this one.');
+    b.show('from');
   }
 
   solver(): void {
@@ -313,16 +440,17 @@ export class WhatIf {
         area('cons', 'Subject to the constraints, one per line', 'B5<=20000') +
         check('nonneg', 'Make unconstrained variables non-negative', true) +
         pick('method', 'Solving method', [['auto', 'Automatic (Simplex LP when the model is linear)'], ['nl', 'Derivative-free search']]),
-      [['report', 'Answer report'], ['restore', 'Restore original values']],
+      [['report', 'Answer report'], ['sensitivity', 'Sensitivity report'], ['limits', 'Limits report'], ['restore', 'Restore original values']],
       'Solve',
       async (bx, who) => {
         if (who === 'restore') {
           await this.g.undo();
           return bx.say('The original values are back.');
         }
-        if (who === 'report') {
-          const r = this.result(await this.toNewSheet('Answer Report', (dst) => ['solve.report', dst]));
-          return bx.say(r[0] === 'ok' ? 'The answer report is on a new sheet.' : r[1], r[0] !== 'ok');
+        if (who === 'report' || who === 'sensitivity' || who === 'limits') {
+          const name = who === 'report' ? 'Answer Report' : who === 'sensitivity' ? 'Sensitivity Report' : 'Limits Report';
+          const r = this.result(await this.toNewSheet(name, (dst) => (who === 'report' ? ['solve.report', dst] : ['solve.report', dst, who])));
+          return bx.say(r[0] === 'ok' ? `The ${name.toLowerCase()} is on a new sheet.` : r[1], r[0] !== 'ok');
         }
         const cons: string[] = [];
         for (const line of bx.get('cons').split('\n').map((l) => l.trim()).filter(Boolean)) {
@@ -430,13 +558,48 @@ export class WhatIf {
     b.show('y');
   }
 
+  dataAnalysis(): void {
+    const b = this.box('tppick', () => new Box('Data Analysis', pick('tool', 'Analysis tool', Object.entries(TOOLS).map(([id, t]) => [id, t.label] as [string, string])), [], 'OK', async (bx) => {
+      const id = bx.get('tool');
+      bx.close();
+      this.toolForm(id);
+    }, () => this.g.focus()));
+    b.say('Statistical tools that write their tables to a new sheet.');
+    b.show('tool');
+  }
+
+  private toolForm(id: string): void {
+    const spec = TOOLS[id];
+    if (!spec) return;
+    const body = spec.fields.map((f) => (f.t === 'pick' ? pick(f.k, f.label, f.opts ?? []) : f.t === 'check' ? check(f.k, f.label, false) : input(f.k, f.label))).join('');
+    const b = this.box(`tp:${id}`, () => new Box(spec.label, body, [], 'OK', async (bx) => {
+      const val = (k: string): string => {
+        if (k.startsWith('@')) return k.slice(1);
+        const f = spec.fields.find((x) => x.k === k);
+        return f?.t === 'check' ? (bx.on(k) ? '1' : '0') : bx.get(k);
+      };
+      const first = spec.tool === 'rand' ? 'dist' : 'range';
+      const r = this.result(await this.toNewSheet(spec.label, (dst) => ['tp', spec.tool, this.sheet(), val(first), dst, 'A1', ...spec.slots.map(val)]));
+      if (r[0] === 'error') return bx.say(r[1], true);
+      bx.close();
+    }, () => this.g.focus()));
+    for (const f of spec.fields) if (f.def && !b.get(f.k)) b.set(f.k, f.def);
+    if (spec.fields.some((f) => f.k === 'range') && !b.get('range')) b.set('range', rangeText(this.g.selection()));
+    b.say(spec.note);
+    b.show(spec.fields[0].k);
+  }
+
   analyze(): void {
     if (!this.panel) {
       const el = document.createElement('aside');
       el.className = 'fc-explore';
       el.hidden = true;
       el.setAttribute('aria-label', 'Analyze Data');
-      el.innerHTML = '<div class="fc-explore-head"><span class="fc-fmt-title">Analyze Data</span><span class="fc-explore-actions"><button type="button" class="fc-btn" data-a="refresh">Refresh</button><button type="button" class="fc-btn" data-a="close">Close</button></span></div><p class="fc-explore-note" aria-live="polite"></p><ul class="fc-explore-list"></ul>';
+      el.innerHTML = '<div class="fc-explore-head"><span class="fc-fmt-title">Analyze Data</span><span class="fc-explore-actions"><button type="button" class="fc-btn" data-a="refresh">Refresh</button><button type="button" class="fc-btn" data-a="close">Close</button></span></div><form class="fc-explore-ask"><input class="fc-fmt-input" data-k="ask" spellcheck="false" autocomplete="off" aria-label="Ask a question about your data" placeholder="Ask, for example: total sales by region"><button type="submit" class="fc-btn fc-btn-primary">Ask</button></form><p class="fc-explore-note" aria-live="polite"></p><ul class="fc-explore-list"></ul>';
+      el.querySelector<HTMLFormElement>('.fc-explore-ask')!.addEventListener('submit', (e) => {
+        e.preventDefault();
+        void this.ask(el.querySelector<HTMLInputElement>('[data-k="ask"]')!.value);
+      });
       document.getElementById('overlay-root')!.appendChild(el);
       this.panel = { el, list: el.querySelector<HTMLElement>('.fc-explore-list')!, note: el.querySelector<HTMLElement>('.fc-explore-note')! };
       el.addEventListener('click', (e) => {
@@ -470,13 +633,28 @@ export class WhatIf {
     const t = (await engine().whatif(this.host.book(), cmdText(['explore', this.sheet(), r]))).text;
     if (t === this.last) return;
     this.last = t;
+    this.paint(t, 'Click an insight to select the cells it describes.', 'No insights for this selection.');
+  }
+
+  private async ask(question: string): Promise<void> {
+    const p = this.panel;
+    if (!p) return;
+    if (!question.trim()) return this.explore();
+    const t = (await engine().whatif(this.host.book(), cmdText(['ask', this.sheet(), rangeText(this.g.selection()), question]))).text;
+    this.last = '';
+    this.paint(t, 'Click an answer to select the cells it comes from.', 'FormCel found nothing to answer that with.');
+  }
+
+  private paint(t: string, hint: string, none: string): void {
+    const p = this.panel;
+    if (!p) return;
     if (t.startsWith('error\t')) {
       p.note.textContent = unesc(t.slice(6));
       p.list.replaceChildren();
       return;
     }
     const list = rows(t);
-    p.note.textContent = list.length ? 'Click an insight to select the cells it describes.' : 'No insights for this selection.';
+    p.note.textContent = list.length ? hint : none;
     const have = [...p.list.children] as HTMLElement[];
     list.forEach(([kind, title, detail, range], i) => {
       let li = have[i];

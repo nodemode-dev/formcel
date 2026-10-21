@@ -58,25 +58,48 @@ pub enum Show {
     Grand,
     Col,
     Row,
+    Of,
+    ParentRow,
+    ParentCol,
+    Parent,
+    Diff,
+    PctDiff,
+    Running,
+    PctRunning,
+    RankAsc,
+    RankDesc,
+    Index,
 }
+
+const SHOWS: [(Show, &str); 15] = [
+    (Show::Normal, "none"),
+    (Show::Grand, "grand"),
+    (Show::Col, "col"),
+    (Show::Row, "row"),
+    (Show::Of, "of"),
+    (Show::ParentRow, "prow"),
+    (Show::ParentCol, "pcol"),
+    (Show::Parent, "parent"),
+    (Show::Diff, "diff"),
+    (Show::PctDiff, "pdiff"),
+    (Show::Running, "run"),
+    (Show::PctRunning, "prun"),
+    (Show::RankAsc, "rankasc"),
+    (Show::RankDesc, "rankdesc"),
+    (Show::Index, "index"),
+];
 
 impl Show {
     fn code(self) -> &'static str {
-        match self {
-            Show::Normal => "none",
-            Show::Grand => "grand",
-            Show::Col => "col",
-            Show::Row => "row",
-        }
+        SHOWS.iter().find(|s| s.0 == self).map_or("none", |s| s.1)
     }
 
     fn parse(s: &str) -> Show {
-        match s {
-            "grand" => Show::Grand,
-            "col" => Show::Col,
-            "row" => Show::Row,
-            _ => Show::Normal,
-        }
+        SHOWS.iter().find(|x| x.1 == s).map_or(Show::Normal, |x| x.0)
+    }
+
+    fn needs_base(self) -> bool {
+        !matches!(self, Show::Normal | Show::Grand | Show::Col | Show::Row | Show::Index)
     }
 }
 
@@ -86,6 +109,8 @@ pub struct ValueField {
     pub func: Func,
     pub show: Show,
     pub name: String,
+    pub base_field: String,
+    pub base_item: String,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -107,6 +132,7 @@ pub struct Pivot {
     pub values: Vec<ValueField>,
     pub filters: Vec<(String, Vec<String>)>,
     pub calc: Vec<(String, String)>,
+    pub groups: Vec<Group>,
 }
 
 fn area_text(a: Area) -> String {
@@ -149,12 +175,14 @@ impl Pivot {
         put(&self.out.map_or(String::new(), |(s, a)| format!("{s}:{}", area_text(a))), &mut out);
         put(&join_list(&self.rows), &mut out);
         put(&join_list(&self.cols), &mut out);
-        let vals: Vec<String> = self.values.iter().map(|v| [v.field.as_str(), v.func.code(), v.show.code(), v.name.as_str()].join(&PART.to_string())).collect();
+        let vals: Vec<String> = self.values.iter().map(|v| [v.field.as_str(), v.func.code(), v.show.code(), v.name.as_str(), v.base_field.as_str(), v.base_item.as_str()].join(&PART.to_string())).collect();
         put(&join_list(&vals), &mut out);
         let filters: Vec<String> = self.filters.iter().map(|(f, items)| std::iter::once(f.as_str()).chain(items.iter().map(String::as_str)).collect::<Vec<_>>().join(&PART.to_string())).collect();
         put(&join_list(&filters), &mut out);
         let calc: Vec<String> = self.calc.iter().map(|(n, f)| [n.as_str(), f.as_str()].join(&PART.to_string())).collect();
         put(&join_list(&calc), &mut out);
+        let groups: Vec<String> = self.groups.iter().map(Group::line).collect();
+        put(&join_list(&groups), &mut out);
         out.pop();
         out
     }
@@ -179,7 +207,7 @@ impl Pivot {
             .iter()
             .filter_map(|v| {
                 let q: Vec<&str> = v.split(PART).collect();
-                (q.len() >= 4 && !q[0].is_empty()).then(|| ValueField { field: q[0].to_string(), func: Func::parse(q[1]), show: Show::parse(q[2]), name: q[3].to_string() })
+                (q.len() >= 4 && !q[0].is_empty()).then(|| ValueField { field: q[0].to_string(), func: Func::parse(q[1]), show: Show::parse(q[2]), name: q[3].to_string(), base_field: q.get(4).map_or(String::new(), |s| s.to_string()), base_item: q.get(5).map_or(String::new(), |s| s.to_string()) })
             })
             .collect();
         let filters = split_list(&p[11])
@@ -197,6 +225,7 @@ impl Pivot {
                 (!n.is_empty()).then(|| (n.to_string(), f.to_string()))
             })
             .collect();
+        let groups = p.get(13).map_or(Vec::new(), |g| split_list(g).iter().filter_map(|x| Group::parse(x)).collect());
         Some(Pivot {
             name: p[0].clone(),
             sheet: p[1].parse().ok()?,
@@ -215,6 +244,7 @@ impl Pivot {
             values,
             filters,
             calc,
+            groups,
         })
     }
 }
@@ -517,7 +547,17 @@ struct Vf {
     func: Func,
     show: Show,
     name: String,
+    base: Option<(bool, usize)>,
+    base_item: String,
 }
+
+#[path = "pivot_group.rs"]
+mod group;
+#[path = "pivot_show.rs"]
+mod showas;
+#[path = "pivot_suggest.rs"]
+mod suggest;
+pub use group::Group;
 
 fn aggregate(data: &Data, vf: &Vf, recs: &[usize]) -> Result<Option<f64>, ()> {
     if recs.is_empty() {
@@ -618,7 +658,7 @@ impl Workbook {
         if area.r1 <= area.r0 {
             return Err(EngineError::BadStyle("the source needs a header row and at least one row of data".into()));
         }
-        let data = self.pivot_data(sheet, area);
+        let data = group::apply(self.pivot_data(sheet, area), &p.groups);
         let mut all: Vec<String> = data.names.clone();
         let base_names = data.names.clone();
         for (n, f) in &p.calc {
@@ -641,7 +681,15 @@ impl Workbook {
                 (Src::Field(i), v.func)
             };
             let auto = if matches!(src, Src::Calc(_)) { format!("Sum of {}", v.field) } else { format!("{} of {}", func.label(), v.field) };
-            vfs.push(Vf { src, func, show: v.show, name: if v.name.trim().is_empty() { auto } else { v.name.trim().to_string() } });
+            let base = if v.show.needs_base() {
+                match find(&v.base_field) {
+                    Ok(bi) => rf.iter().position(|&x| x == bi).map(|l| (true, l)).or_else(|| cf.iter().position(|&x| x == bi).map(|l| (false, l))),
+                    Err(_) => None,
+                }
+            } else {
+                None
+            };
+            vfs.push(Vf { src, func, show: v.show, name: if v.name.trim().is_empty() { auto } else { v.name.trim().to_string() }, base, base_item: v.base_item.clone() });
         }
         for i in 0..vfs.len() {
             let mut k = 2;
@@ -765,24 +813,12 @@ impl Workbook {
                 }
                 for vf in &vfs {
                     let own = aggregate(&data, vf, &cur);
-                    let (raw, pct) = match vf.show {
-                        Show::Normal => (num_text(own), false),
-                        other => {
-                            let den_recs: Vec<usize> = match other {
-                                Show::Grand => keep.clone(),
-                                Show::Col => keep.iter().copied().filter(|&r| hit(&cd, cpath, r)).collect(),
-                                _ => rrecs.clone(),
-                            };
-                            let den = aggregate(&data, vf, &den_recs);
-                            let t = match (own, den) {
-                                (Ok(None), _) => String::new(),
-                                (Ok(Some(a)), Ok(Some(b))) if b != 0.0 && (a / b).is_finite() => format!("{}", a / b),
-                                _ => "#DIV/0!".to_string(),
-                            };
-                            (t, true)
-                        }
+                    let (raw, shape) = match vf.show {
+                        Show::Normal => (num_text(own), 0),
+                        _ => showas::apply(&showas::Ctx { data: &data, keep: &keep, rd: &rd, cd: &cd }, vf, rpath, cpath, own),
                     };
-                    let dec = !pct && (matches!(vf.src, Src::Calc(_)) || matches!(vf.func, Func::Average | Func::StDev | Func::StDevP | Func::Var | Func::VarP));
+                    let pct = shape == 1;
+                    let dec = shape == 3 || (shape == 0 && (matches!(vf.src, Src::Calc(_)) || matches!(vf.func, Func::Average | Func::StDev | Func::StDevP | Func::Var | Func::VarP)));
                     row.push(Cl { raw, st, pct, dec });
                 }
             }
@@ -830,15 +866,17 @@ impl Workbook {
         }
     }
 
-    fn fields_line(&self, sheet: usize, area: Area, table: &str) -> String {
-        let data = self.pivot_data(sheet, area);
+    fn fields_line(&self, sheet: usize, area: Area, table: &str, groups: &[Group]) -> String {
+        let plain = self.pivot_data(sheet, area);
+        let base = plain.names.len();
+        let data = group::apply(plain, groups);
         let mut out = format!("{sheet}\t{}\t", area_text(area));
         escape(table, &mut out);
         for (i, n) in data.names.iter().enumerate() {
             let filled: Vec<&Value> = data.vals.iter().map(|r| &r[i]).filter(|v| **v != Value::Empty).collect();
             let nums = filled.iter().filter(|v| matches!(v, Value::Number(_))).count();
             out.push('\t');
-            out.push(if !filled.is_empty() && nums * 5 >= filled.len() * 4 { 'n' } else { 't' });
+            out.push(if i < base && !filled.is_empty() && nums * 5 >= filled.len() * 4 { 'n' } else { 't' });
             escape(n, &mut out);
         }
         out
@@ -849,19 +887,19 @@ impl Workbook {
         if a.r1 <= a.r0 {
             return Err(EngineError::BadStyle("the source needs a header row and at least one row of data".into()));
         }
-        Ok(self.fields_line(s, a, &t))
+        Ok(self.fields_line(s, a, &t, &[]))
     }
 
     pub fn pivot_fields(&self, name: &str) -> Result<String, EngineError> {
         let p = &self.pivots[self.find_pivot(name)?];
         let (s, a) = self.pivot_range(p)?;
-        Ok(self.fields_line(s, a, &p.table))
+        Ok(self.fields_line(s, a, &p.table, &p.groups))
     }
 
     pub fn pivot_items(&self, name: &str, field: &str) -> Result<Vec<String>, EngineError> {
         let p = &self.pivots[self.find_pivot(name)?];
         let (s, a) = self.pivot_range(p)?;
-        let data = self.pivot_data(s, a);
+        let data = group::apply(self.pivot_data(s, a), &p.groups);
         let f = data.names.iter().position(|n| n.eq_ignore_ascii_case(field)).ok_or_else(|| EngineError::BadName(field.to_string()))?;
         let keep: Vec<usize> = (0..data.vals.len()).collect();
         let d = dim(&data, &[f], &keep);
@@ -870,53 +908,7 @@ impl Workbook {
 
     pub fn pivot_suggest(&self, sheet: usize, text: &str) -> Result<Vec<String>, EngineError> {
         let (s, a, t) = self.resolve_source(sheet, text)?;
-        let data = self.pivot_data(s, a);
-        let n = data.vals.len();
-        let mut texts: Vec<String> = Vec::new();
-        let mut nums: Vec<String> = Vec::new();
-        for (i, name) in data.names.iter().enumerate() {
-            let filled: Vec<&Value> = data.vals.iter().map(|r| &r[i]).filter(|v| **v != Value::Empty).collect();
-            if filled.is_empty() {
-                continue;
-            }
-            let numeric = filled.iter().filter(|v| matches!(v, Value::Number(_))).count() * 5 >= filled.len() * 4;
-            if numeric {
-                let low = name.to_lowercase();
-                if !["id", "year", "zip", "code", "phone"].iter().any(|w| low == *w || low.ends_with(&format!(" {w}")) || low.ends_with(&format!("_{w}"))) {
-                    nums.push(name.clone());
-                }
-            } else {
-                let mut seen: Vec<&String> = data.txt.iter().map(|r| &r[i]).collect();
-                seen.sort();
-                seen.dedup();
-                if seen.len() >= 2 && seen.len() <= 40.max(n / 4).min(n.max(2)) && seen.len() < n.max(3) {
-                    texts.push(name.clone());
-                }
-            }
-        }
-        let base = Pivot { name: String::new(), sheet, row: 0, col: 0, src_sheet: s, src: a, table: t, grand_rows: true, grand_cols: true, subtotals: true, auto: true, out: None, rows: Vec::new(), cols: Vec::new(), values: Vec::new(), filters: Vec::new(), calc: Vec::new() };
-        let vf = |f: &str, func: Func| ValueField { field: f.to_string(), func, show: Show::Normal, name: String::new() };
-        let mut out = Vec::new();
-        if let Some(t1) = texts.first() {
-            if let Some(n1) = nums.first() {
-                out.push(Pivot { rows: vec![t1.clone()], values: vec![vf(n1, Func::Sum)], ..base.clone() });
-                if let Some(t2) = texts.get(1) {
-                    out.push(Pivot { rows: vec![t1.clone()], cols: vec![t2.clone()], values: vec![vf(n1, Func::Sum)], ..base.clone() });
-                    out.push(Pivot { rows: vec![t1.clone(), t2.clone()], values: vec![vf(n1, Func::Sum)], ..base.clone() });
-                }
-                if let Some(n2) = nums.get(1) {
-                    out.push(Pivot { rows: vec![t1.clone()], values: vec![vf(n1, Func::Sum), vf(n2, Func::Sum)], ..base.clone() });
-                } else {
-                    out.push(Pivot { rows: vec![t1.clone()], values: vec![vf(n1, Func::Average)], ..base.clone() });
-                }
-            }
-            if nums.is_empty() {
-                out.push(Pivot { rows: vec![t1.clone()], values: vec![vf(t1, Func::Count)], ..base.clone() });
-            }
-        } else if let Some(n1) = nums.first() {
-            out.push(Pivot { values: vec![vf(n1, Func::Sum)], ..base.clone() });
-        }
-        Ok(out.iter().take(5).map(Pivot::line).collect())
+        Ok(suggest::run(self, sheet, s, a, t))
     }
 
     fn pivot_name_free(&self, name: &str, except: Option<usize>) -> bool {
