@@ -28,7 +28,7 @@ def now() -> str:
 
 
 ENGINE = threading.RLock()
-LOCALES = ("en-US", "en-GB", "de-DE", "fr-FR", "ja-JP")
+LOCALES = ("en-US", "en-GB", "de-DE", "fr-FR", "ja-JP", "es-ES", "it-IT", "pt-BR", "nl-NL", "sv-SE", "pl-PL", "ru-RU", "zh-CN", "ko-KR")
 
 
 class BookLock:
@@ -427,6 +427,25 @@ class Store:
             notes.append(f"1 file read as {info['encoding']}")
         stamp = now()
         b = Book(uuid.uuid4().hex[:12], (title.rpartition(".")[0] or title)[:120], stamp, stamp, eng, None, [{}])
+        with self.guard:
+            self.open[b.id] = b
+        self._write(b)
+        return {**b.meta(), "notes": notes}
+
+    def import_tables(self, data: bytes, title: str, kind: str) -> dict:
+        from . import tabular
+
+        sheets, notes = tabular.read(data, kind)
+        eng = formcel_engine.Workbook()
+        for i, (name, cells) in enumerate(sheets):
+            if i:
+                eng.add_sheet(name)
+            else:
+                eng.rename_sheet(0, name)
+            eng.load(cells, i)
+        stamp = now()
+        stem = (title.rpartition(".")[0] or title)[:120]
+        b = Book(uuid.uuid4().hex[:12], stem, stamp, stamp, eng, None, [{} for _ in sheets])
         with self.guard:
             self.open[b.id] = b
         self._write(b)

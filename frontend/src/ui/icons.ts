@@ -82,6 +82,8 @@ export const icons = {
   share: svg('<circle cx="6.5" cy="12" r="2.3"/><circle cx="17.5" cy="6.5" r="2.3"/><circle cx="17.5" cy="17.5" r="2.3"/><path d="M8.5 10.9l7-3.3M8.5 13.1l7 3.3"/>'),
   page: svg('<path d="M7 3.5h7l4 4v13H7z"/><path d="M14 3.5v4h4M9.5 12h5M9.5 15.5h5"/>'),
   access: svg('<circle cx="12" cy="5.5" r="1.75"/><path d="M5 9l7 1.5L19 9M12 10.5v4M9 20l3-5.5 3 5.5"/>'),
+  clipboard: svg('<rect x="5.5" y="5" width="13" height="15.5" rx="2"/><path d="M9 5V3.8h6V5M8.5 11h7M8.5 14.5h7"/>'),
+  spell: svg('<path d="M4 15l3.5-9L11 15M5.2 12h4.6M13.5 17.5l2.5 2.5 4.5-5.5"/>'),
   upload: svg('<path d="M12 15V4M7.5 8.5L12 4l4.5 4.5M5 19.5h14"/>'),
   chevronDown: svg('<path d="M6 9.5l6 6 6-6"/>'),
   script: svg('<path d="M9 7.5L4.5 12 9 16.5M15 7.5l4.5 4.5-4.5 4.5M13.5 5l-3 14"/>'),

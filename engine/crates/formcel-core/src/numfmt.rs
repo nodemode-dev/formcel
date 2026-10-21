@@ -124,7 +124,7 @@ fn parse_date(s: &str) -> Option<f64> {
     let s = s.trim();
     let loc = crate::locale::current();
     for sep in ['-', '/', '.'] {
-        if sep == '.' && loc != crate::locale::Locale::DeDe {
+        if sep == '.' && loc.date_sep() != '.' {
             continue;
         }
         let p: Vec<&str> = s.split(sep).collect();
@@ -138,7 +138,7 @@ fn parse_date(s: &str) -> Option<f64> {
             if p[0].len() == 4 && p[0].chars().all(|c| c.is_ascii_digit()) {
                 return valid(p[0].parse().ok()?, num(p[1])?, num(p[2])?);
             }
-            if sep == '/' || sep == '.' {
+            if sep == '/' || sep == '.' || sep == loc.date_sep() {
                 return match loc.order() {
                     crate::locale::Order::Mdy => valid(year_of(p[2])?, num(p[0])?, num(p[1])?),
                     _ => valid(year_of(p[2])?, num(p[1])?, num(p[0])?),
@@ -243,7 +243,7 @@ pub fn show(n: f64, f: Fmt) -> Option<String> {
     let loc = crate::locale::current();
     Some(match f {
         Fmt::Currency(d) if loc.currency_after() => format!("{}{} {}", if n < 0.0 { "-" } else { "" }, grouped(n, d), loc.symbol()),
-        Fmt::Currency(d) => format!("{}{}{}", if n < 0.0 { "-" } else { "" }, loc.symbol(), grouped(n, d)),
+        Fmt::Currency(d) => format!("{}{}{}{}", if n < 0.0 { "-" } else { "" }, loc.symbol(), if matches!(loc, crate::locale::Locale::PtBr | crate::locale::Locale::NlNl) { "\u{a0}" } else { "" }, grouped(n, d)),
         Fmt::Percent(d) => crate::locale::localize_number(&format!("{:.*}%", d as usize, n * 100.0)),
         Fmt::Date => {
             let (y, m, d) = ymd(n)?;

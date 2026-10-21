@@ -314,6 +314,8 @@ impl Workbook {
             "checkbox" => self.t_checkbox(sheet, &p),
             "pastespecial" => self.t_paste(sheet, &p),
             "tabletype" => self.t_tabletype(sheet, &p),
+            "tableheader" => self.set_header(arg(&p, 1), arg(&p, 2) == "1").map(|e| (e, say("Header row set."))),
+            "tablestep" => Ok((Effect::default(), say(&self.step_table_cols(arg(&p, 1), arg(&p, 2).parse().unwrap_or(0))))),
             "typecheck" => self.t_typecheck(sheet, &p),
             "complete" => self.t_complete(sheet, &p),
             "mirror" => self.t_mirror(sheet, &p),

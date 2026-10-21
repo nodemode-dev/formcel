@@ -12,8 +12,8 @@ const CATEGORIES = ['General', 'Number', 'Currency', 'Accounting', 'Date', 'Time
 type Category = (typeof CATEGORIES)[number];
 
 const SYMBOLS: [string, string][] = [['$', 'US dollar $'], ['\u20ac', 'Euro \u20ac'], ['\u00a3', 'Pound \u00a3'], ['\u00a5', 'Yen \u00a5'], ['', 'None']];
-const LOCALE_SYMBOL: Record<string, string> = { 'en-US': '$', 'en-GB': '\u00a3', 'de-DE': '\u20ac', 'fr-FR': '\u20ac', 'ja-JP': '\u00a5' };
-const LOCALE_DATE: Record<string, string> = { 'en-US': 'm/d/yyyy', 'en-GB': 'dd/mm/yyyy', 'de-DE': 'dd.mm.yyyy', 'fr-FR': 'dd/mm/yyyy', 'ja-JP': 'yyyy/mm/dd' };
+const LOCALE_SYMBOL: Record<string, string> = { 'en-US': '$', 'en-GB': '\u00a3', 'de-DE': '\u20ac', 'fr-FR': '\u20ac', 'ja-JP': '\u00a5', 'es-ES': '\u20ac', 'it-IT': '\u20ac', 'pt-BR': 'R$', 'nl-NL': '\u20ac', 'sv-SE': 'kr', 'pl-PL': 'z\u0142', 'ru-RU': '\u20bd', 'zh-CN': '\u00a5', 'ko-KR': '\u20a9' };
+const LOCALE_DATE: Record<string, string> = { 'en-US': 'm/d/yyyy', 'en-GB': 'dd/mm/yyyy', 'de-DE': 'dd.mm.yyyy', 'fr-FR': 'dd/mm/yyyy', 'ja-JP': 'yyyy/mm/dd', 'es-ES': 'dd/mm/yyyy', 'it-IT': 'dd/mm/yyyy', 'pt-BR': 'dd/mm/yyyy', 'nl-NL': 'dd-mm-yyyy', 'sv-SE': 'yyyy-mm-dd', 'pl-PL': 'dd.mm.yyyy', 'ru-RU': 'dd.mm.yyyy', 'zh-CN': 'yyyy/mm/dd', 'ko-KR': 'yyyy-mm-dd' };
 const NEGATIVES = ['-1234.10', '-1234.10 in red', '(1234.10)', '(1234.10) in red'];
 const DATES = ['m/d/yyyy', 'dd/mm/yyyy', 'dd.mm.yyyy', 'yyyy/mm/dd', 'yyyy-mm-dd', 'd-mmm-yy', 'd mmmm yyyy', 'mmmm d, yyyy', 'dddd, mmmm d, yyyy', 'dddd, d mmmm yyyy', 'mmm-yy', 'mmmm yyyy', 'm/d', 'd/m', 'yyyy'];
 const TIMES = ['h:mm AM/PM', 'h:mm:ss AM/PM', 'h:mm', 'h:mm:ss', '[h]:mm:ss', 'mm:ss.0', 'm/d/yyyy h:mm', 'yyyy-mm-dd hh:mm:ss'];

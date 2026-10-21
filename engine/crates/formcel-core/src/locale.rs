@@ -7,7 +7,33 @@ pub enum Locale {
     DeDe = 2,
     FrFr = 3,
     JaJp = 4,
+    EsEs = 5,
+    ItIt = 6,
+    PtBr = 7,
+    NlNl = 8,
+    SvSe = 9,
+    PlPl = 10,
+    RuRu = 11,
+    ZhCn = 12,
+    KoKr = 13,
 }
+
+pub const ALL: [Locale; 14] = [
+    Locale::EnUs,
+    Locale::EnGb,
+    Locale::DeDe,
+    Locale::FrFr,
+    Locale::JaJp,
+    Locale::EsEs,
+    Locale::ItIt,
+    Locale::PtBr,
+    Locale::NlNl,
+    Locale::SvSe,
+    Locale::PlPl,
+    Locale::RuRu,
+    Locale::ZhCn,
+    Locale::KoKr,
+];
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum Order {
@@ -26,74 +52,88 @@ impl Locale {
             "de-de" => Locale::DeDe,
             "fr-fr" => Locale::FrFr,
             "ja-jp" => Locale::JaJp,
+            "es-es" => Locale::EsEs,
+            "it-it" => Locale::ItIt,
+            "pt-br" => Locale::PtBr,
+            "nl-nl" => Locale::NlNl,
+            "sv-se" => Locale::SvSe,
+            "pl-pl" => Locale::PlPl,
+            "ru-ru" => Locale::RuRu,
+            "zh-cn" => Locale::ZhCn,
+            "ko-kr" => Locale::KoKr,
             _ => return None,
         })
     }
 
     pub fn tag(self) -> &'static str {
-        ["en-US", "en-GB", "de-DE", "fr-FR", "ja-JP"][self as usize]
+        ["en-US", "en-GB", "de-DE", "fr-FR", "ja-JP", "es-ES", "it-IT", "pt-BR", "nl-NL", "sv-SE", "pl-PL", "ru-RU", "zh-CN", "ko-KR"][self as usize]
     }
 
     pub fn decimal(self) -> char {
         match self {
-            Locale::DeDe | Locale::FrFr => ',',
-            _ => '.',
+            Locale::EnUs | Locale::EnGb | Locale::JaJp | Locale::ZhCn | Locale::KoKr => '.',
+            _ => ',',
         }
     }
 
     pub fn group(self) -> char {
         match self {
-            Locale::DeDe => '.',
+            Locale::DeDe | Locale::EsEs | Locale::ItIt | Locale::PtBr | Locale::NlNl => '.',
             Locale::FrFr => '\u{202f}',
+            Locale::SvSe | Locale::PlPl | Locale::RuRu => '\u{a0}',
             _ => ',',
         }
     }
 
     pub fn list(self) -> char {
-        match self {
-            Locale::DeDe | Locale::FrFr => ';',
-            _ => ',',
+        if self.decimal() == ',' {
+            ';'
+        } else {
+            ','
         }
     }
 
     pub fn order(self) -> Order {
         match self {
             Locale::EnUs => Order::Mdy,
-            Locale::JaJp => Order::Ymd,
+            Locale::JaJp | Locale::SvSe | Locale::ZhCn | Locale::KoKr => Order::Ymd,
             _ => Order::Dmy,
         }
     }
 
     pub fn date_sep(self) -> char {
-        if self == Locale::DeDe {
-            '.'
-        } else {
-            '/'
+        match self {
+            Locale::DeDe | Locale::PlPl | Locale::RuRu => '.',
+            Locale::NlNl | Locale::SvSe | Locale::KoKr => '-',
+            _ => '/',
         }
     }
 
     pub fn currency_after(self) -> bool {
-        matches!(self, Locale::DeDe | Locale::FrFr)
+        matches!(self, Locale::DeDe | Locale::FrFr | Locale::EsEs | Locale::ItIt | Locale::SvSe | Locale::PlPl | Locale::RuRu)
     }
 
     pub fn symbol(self) -> &'static str {
         match self {
             Locale::EnUs => "$",
             Locale::EnGb => "\u{a3}",
-            Locale::DeDe | Locale::FrFr => "\u{20ac}",
-            Locale::JaJp => "\u{a5}",
+            Locale::DeDe | Locale::FrFr | Locale::EsEs | Locale::ItIt | Locale::NlNl => "\u{20ac}",
+            Locale::JaJp | Locale::ZhCn => "\u{a5}",
+            Locale::PtBr => "R$",
+            Locale::SvSe => "kr",
+            Locale::PlPl => "z\u{142}",
+            Locale::RuRu => "\u{20bd}",
+            Locale::KoKr => "\u{20a9}",
         }
+    }
+
+    pub fn space_group(self) -> bool {
+        matches!(self, Locale::FrFr | Locale::SvSe | Locale::PlPl | Locale::RuRu)
     }
 }
 
 pub fn current() -> Locale {
-    match CURRENT.load(Ordering::Relaxed) {
-        1 => Locale::EnGb,
-        2 => Locale::DeDe,
-        3 => Locale::FrFr,
-        4 => Locale::JaJp,
-        _ => Locale::EnUs,
-    }
+    ALL.get(CURRENT.load(Ordering::Relaxed) as usize).copied().unwrap_or(Locale::EnUs)
 }
 
 pub fn set(l: Locale) {
@@ -130,7 +170,7 @@ pub fn normalize_input(s: &str) -> Option<String> {
     };
     let (rest, pct) = rest.strip_suffix('%').map_or((rest, ""), |r| (r.trim_end(), "%"));
     let (int, frac) = rest.split_once(',').map_or((rest, None), |(a, b)| (a, Some(b)));
-    let is_group = |c: char| c == l.group() || (l == Locale::FrFr && matches!(c, ' ' | '\u{a0}'));
+    let is_group = |c: char| c == l.group() || (l.space_group() && matches!(c, ' ' | '\u{a0}' | '\u{202f}'));
     let parts: Vec<&str> = int.split(is_group).collect();
     let digits = |x: &str| !x.is_empty() && x.chars().all(|c| c.is_ascii_digit());
     if !parts.iter().all(|x| digits(x)) || (parts.len() > 1 && (parts[0].len() > 3 || parts[1..].iter().any(|x| x.len() != 3))) {

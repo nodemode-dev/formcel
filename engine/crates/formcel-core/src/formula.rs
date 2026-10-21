@@ -160,6 +160,7 @@ pub struct TableSpec {
     pub items: u8,
     pub cols: Option<(String, String)>,
     pub long: bool,
+    pub fixed: bool,
 }
 
 fn unquote_col(s: &str) -> String {
@@ -210,9 +211,9 @@ fn bracketed(s: &str) -> Option<&str> {
     s.strip_prefix('[')?.strip_suffix(']')
 }
 
-fn col_range(s: &str) -> Option<(String, String)> {
+fn col_range(s: &str) -> Option<(String, String, bool)> {
     let s = s.trim();
-    let Some(inner) = bracketed(s) else { return Some((unquote_col(s), unquote_col(s))) };
+    let Some(inner) = bracketed(s) else { return Some((unquote_col(s), unquote_col(s), false)) };
     let mut depth = 0;
     let mut quoted = false;
     for (i, c) in s.char_indices() {
@@ -227,36 +228,43 @@ fn col_range(s: &str) -> Option<(String, String)> {
             ':' if depth == 0 => {
                 let a = bracketed(s[..i].trim())?;
                 let b = bracketed(s[i + 1..].trim())?;
-                return Some((unquote_col(a), unquote_col(b)));
+                return Some((unquote_col(a), unquote_col(b), true));
             }
             _ => {}
         }
     }
-    Some((unquote_col(inner), unquote_col(inner)))
+    Some((unquote_col(inner), unquote_col(inner), false))
 }
 
 pub fn parse_spec(raw: &str) -> Option<TableSpec> {
     let raw = raw.trim();
     if let Some(rest) = raw.strip_prefix('@') {
         let rest = rest.trim();
-        let cols = if rest.is_empty() { None } else { Some(col_range(rest)?) };
-        return Some(TableSpec { items: ITEM_THIS, cols, long: false });
+        let (cols, fixed) = if rest.is_empty() {
+            (None, false)
+        } else {
+            let (a, b, f) = col_range(rest)?;
+            (Some((a, b)), f)
+        };
+        return Some(TableSpec { items: ITEM_THIS, cols, long: false, fixed });
     }
     if !raw.contains('[') {
         if raw.starts_with('#') {
             let item = ITEMS.iter().find(|(n, _)| n.eq_ignore_ascii_case(raw))?.1;
-            return Some(TableSpec { items: item, cols: None, long: false });
+            return Some(TableSpec { items: item, cols: None, long: false, fixed: false });
         }
         let c = unquote_col(raw);
-        return Some(TableSpec { items: 0, cols: Some((c.clone(), c)), long: false });
+        return Some(TableSpec { items: 0, cols: Some((c.clone(), c)), long: false, fixed: false });
     }
-    let mut spec = TableSpec { items: 0, cols: None, long: false };
+    let mut spec = TableSpec { items: 0, cols: None, long: false, fixed: false };
     for g in groups(raw)? {
         let inner = bracketed(&g).map(str::trim);
         if let Some(item) = inner.and_then(|i| ITEMS.iter().find(|(n, _)| n.eq_ignore_ascii_case(i))) {
             spec.items |= item.1;
         } else if spec.cols.is_none() {
-            spec.cols = Some(col_range(&g)?);
+            let (a, b, f) = col_range(&g)?;
+            spec.cols = Some((a, b));
+            spec.fixed = f;
         } else {
             return None;
         }
@@ -282,11 +290,11 @@ fn plain_col(s: &str) -> bool {
     s.chars().all(|c| c.is_alphanumeric() || c == ' ') && !s.starts_with(' ') && !s.ends_with(' ')
 }
 
-fn print_cols(cols: &(String, String), out: &mut String) {
+fn print_cols(cols: &(String, String), fixed: bool, out: &mut String) {
     out.push('[');
     out.push_str(&escape_col(&cols.0));
     out.push(']');
-    if cols.0 != cols.1 {
+    if cols.0 != cols.1 || fixed {
         out.push_str(":[");
         out.push_str(&escape_col(&cols.1));
         out.push(']');
@@ -294,13 +302,13 @@ fn print_cols(cols: &(String, String), out: &mut String) {
 }
 
 pub fn print_spec(spec: &TableSpec, out: &mut String) {
-    let single = spec.cols.as_ref().filter(|c| c.0 == c.1);
+    let single = spec.cols.as_ref().filter(|c| c.0 == c.1 && !spec.fixed);
     if spec.items == ITEM_THIS && !spec.long {
         out.push_str("[@");
         match (&spec.cols, single) {
             (None, _) => {}
             (Some(_), Some(c)) if plain_col(&c.0) && !c.0.contains(' ') => out.push_str(&escape_col(&c.0)),
-            (Some(c), _) => print_cols(c, out),
+            (Some(c), _) => print_cols(c, spec.fixed, out),
         }
         out.push(']');
         return;
@@ -315,7 +323,7 @@ pub fn print_spec(spec: &TableSpec, out: &mut String) {
             }
             (Some(c), _) => {
                 out.push('[');
-                print_cols(c, out);
+                print_cols(c, spec.fixed, out);
                 out.push(']');
             }
         }
@@ -339,7 +347,7 @@ pub fn print_spec(spec: &TableSpec, out: &mut String) {
     }
     if let Some(c) = &spec.cols {
         out.push(',');
-        print_cols(c, out);
+        print_cols(c, spec.fixed, out);
     }
     out.push(']');
 }
