@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.16.0 · 2026-10-21
+
+- New template, Function conformance: every example table on Microsoft's function pages for FormCel's functions. Each sheet holds the page's data, each formula, the page's result and a live TRUE/FALSE check, and a Summary sheet totals them. 181 of the 186 compared cases match. The 5 others need TEXT, and the cases not compared say why.
+- New: ERROR.TYPE and EXACT (106 functions in all).
+- Templates can carry workbook names, and a template whose first rows hold formulas shows computed values in its Home preview.
+- Phase 2 exit check: one edit among 100,000 formulas recalculates in 3 to 10 ms in the window. A 100,000-step chain still takes 300 to 360 ms. The items still open are moved to later phases in the plan.
+
 ## 0.15.0 · 2026-10-21
 
 - Array shaping: VSTACK and HSTACK, TOCOL and TOROW, TAKE and DROP, CHOOSECOLS and CHOOSEROWS, WRAPROWS and WRAPCOLS, and EXPAND. All spill, and gaps are padded with `#N/A` unless you give a pad value.
