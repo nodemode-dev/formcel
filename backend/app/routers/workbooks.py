@@ -292,6 +292,29 @@ def set_validations(wid: str, body: RulesIn) -> dict:
         raise HTTPException(422, f"Those data validation rules could not be saved: {e}")
 
 
+class ObjectsIn(BaseModel):
+    sheet: int = 0
+    objects: list[dict] = Field(default_factory=list, max_length=500)
+
+
+@router.get("/workbooks/{wid}/objects")
+def get_objects(wid: str) -> dict:
+    try:
+        return {"objects": store().get_objects(wid)}
+    except (KeyError, FileNotFoundError):
+        raise missing(wid)
+
+
+@router.put("/workbooks/{wid}/objects")
+def set_objects(wid: str, body: ObjectsIn) -> dict:
+    try:
+        return store().set_objects(wid, body.sheet, body.objects)
+    except (KeyError, FileNotFoundError):
+        raise missing(wid)
+    except IndexError as e:
+        raise HTTPException(422, f"Those charts and pictures could not be saved: {e}")
+
+
 class FilterIn(BaseModel):
     sheet: int = 0
     text: str = Field(default="", max_length=2_000_000)

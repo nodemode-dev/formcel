@@ -466,3 +466,10 @@ Structured references are lexed as a bracket group and parsed into `TableSpec`: 
 Typing in the row directly below a table without a total row, or the column directly right of it, takes that row or column into the table (MS-RESIZE); a new column is named from what was typed in the header row, else ColumnN. A formula typed into a column whose other data cells are empty, or into a calculated column, fills the whole column and is remembered, so new rows get it (MS-CALCCOL). Editing a header renames the column in every structured reference; renaming the table does the same (MS-STRUCTREF). Turning the total row on uses the row below, inserting one if it is not empty, and puts Total in the first column; turning it off clears the row and remembers its formulas for next time (MS-TOTALROW). Convert to range rewrites the table's references as absolute A1 references (MS-STRUCTREF, MS-TOCONVERT). A new table also gets the sheet's filter buttons when the sheet has no filter. All of these are one undo step each; internal edits run with `table_quiet` so they do not set off the growth and calculated-column rules themselves.
 
 SUBTOTAL(function_num, ref1, ...) follows MS-SUBTOTAL: 1 to 11 and 101 to 111 for AVERAGE, COUNT, COUNTA, MAX, MIN, PRODUCT, STDEV, STDEVP, SUM, VAR, VARP; rows hidden by a filter are always left out, as are cells holding SUBTOTAL themselves. The engine does not know rows hidden by hand, so 101 to 111 count them like 1 to 11 for now. 112 functions.
+
+### SPARKLINE
+- refers-to: engine/crates/formcel-core/src/fx_chart.rs :: call_chart, sparkline
+- kind: explainer
+- logged: v0.34.0 · 2026-10-21
+
+`SPARKLINE(data, [options])` follows the Google Sheets function (GS-SPARKLINE): options are a two-column array of name and value ("charttype" line, bar, column or winloss; "color", "negcolor", "ymin", "ymax", "max", "min", "linewidth"). The value is a text marker, U+E000 then SPK and tab-separated fields, that the window draws as a mini chart in the cell. Non-numbers in the data are gaps; a range with no numbers is #VALUE!. FormCel's reading: colour names are a small fixed set plus hex.

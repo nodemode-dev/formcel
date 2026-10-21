@@ -15,6 +15,21 @@ import { Axis, type AxisState } from './axis';
 import { MAX_COLS, MAX_ROWS, a1, colName, parseRef, rangeText, type Range } from './a1';
 import { fillSeries } from './fill';
 import { parseTable, tablePaint, type TableInfo } from './tables';
+import { drawSpark, SPARK_CODE } from '../charts/spark';
+
+export interface ObjectsHook {
+  paint(): void;
+  data(): void;
+  sheet(i: number): void;
+}
+
+export interface ObjectFrame {
+  left: number;
+  top: number;
+  ox: number;
+  oy: number;
+  z: number;
+}
 
 export interface SheetView {
   rows?: AxisState;
@@ -98,6 +113,13 @@ export class Grid {
   private gh = 0;
   readonly editor: HTMLTextAreaElement;
   editorHook: ((e: KeyboardEvent) => boolean) | null = null;
+  objectsHook: ObjectsHook | null = null;
+
+  objectFrame(): ObjectFrame {
+    const z = this.z;
+    return { left: this.gw + HEAD_W * z, top: this.gh + HEAD_H * z, ox: this.gw + (HEAD_W - this.sx) * z, oy: this.gh + (HEAD_H - this.sy) * z, z };
+  }
+
   private readonly cache = new Map<number, string>();
   private readonly fx = new Map<number, string>();
   private readonly nums = new Set<number>();
@@ -418,6 +440,7 @@ export class Grid {
     if (this.sh) ctx.fillRect(0, HEAD_H + this.sh - 2, w, 4);
     if (this.sw) ctx.fillRect(HEAD_W + this.sw - 2, 0, 4, h);
     if (!this.og.hidden) this.paintOutline();
+    this.objectsHook?.paint();
     if (this.editing) this.placeEditor();
   }
 
@@ -775,7 +798,7 @@ export class Grid {
 
   private textSpan(k: number, t: string, r: number, c: number, merged: (r: number, c: number) => boolean): [number, number] {
     const st = this.styleOf(k) ?? PLAIN;
-    if (this.cfs.get(k)?.icon) return [this.x(c), this.x(c) + this.cols.size(c)];
+    if (t.charCodeAt(0) === SPARK_CODE || this.cfs.get(k)?.icon) return [this.x(c), this.x(c) + this.cols.size(c)];
     let left = this.x(c);
     let right = left + this.cols.size(c);
     if (st.wrap || st.rot || st.vertical || this.nums.has(k)) return [left, right];
@@ -790,6 +813,7 @@ export class Grid {
 
   private cellText(k: number, t: string, left: number, right: number, yy: number, rh: number): void {
     const { ctx, pal } = this;
+    if (t.charCodeAt(0) === SPARK_CODE && drawSpark(ctx, t, left, right, yy, rh, pal.fg)) return;
     const own = this.styleOf(k) ?? PLAIN;
     const st = this.linked.has(k) ? { ...own, u: true, fc: own.fc ?? pal.link } : own;
     const px = this.font(st);
@@ -1502,6 +1526,7 @@ export class Grid {
     this.resize();
     this.announce();
     this.paint();
+    this.objectsHook?.sheet(sheet);
   }
 
   get sheetIndex(): number {
@@ -1520,6 +1545,7 @@ export class Grid {
     if (!hit) return;
     this.announce();
     this.paint();
+    this.objectsHook?.data();
   }
 
   private store(k: number, t: string, f: string | undefined, n: boolean | undefined, color?: string, link?: boolean): void {
@@ -1741,6 +1767,7 @@ export class Grid {
     this.events.onHistory(hst.undo, hst.redo);
     this.announce();
     this.paint();
+    if (changed.length) this.objectsHook?.data();
   }
 
   async setActive(raw: string): Promise<boolean> {

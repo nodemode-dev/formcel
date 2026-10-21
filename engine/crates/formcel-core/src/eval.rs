@@ -3,6 +3,9 @@ use crate::{numfmt, Addr, Value};
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
+#[path = "fx_chart.rs"]
+mod fx_chart;
+
 pub trait Ctx {
     fn sheet_index(&self, name: &str) -> Option<usize>;
     fn cell(&self, sheet: usize, a: Addr) -> Value;
@@ -1179,7 +1182,10 @@ impl<'a> Eval<'a> {
                         None => return Err(ErrKind::Na),
                     }
                 }
-                _ => return Err(ErrKind::Name),
+                _ => match self.call_chart(name, a) {
+                    Some(r) => r?,
+                    None => return Err(ErrKind::Name),
+                },
             })
         })();
         r.unwrap_or_else(err)

@@ -10,6 +10,7 @@ from openpyxl.worksheet.formula import ArrayFormula, DataTableFormula
 
 from .autofilter import filter_in
 from .cf import rules_in
+from .drawings import objects_in
 from .formulas import from_file
 from .styles import tokens_in
 from .tables import tables_in
@@ -170,10 +171,7 @@ def read(data: bytes) -> dict:
         rules = rules_in(ws, notes)
         autofilter = filter_in(ws, wb, view, notes)
         valid = validations_in(ws, notes)
-        if getattr(ws, "_images", None):
-            notes["pictures left out"] += len(ws._images)
-        if getattr(ws, "_charts", None):
-            notes["charts left out"] += len(ws._charts)
+        objects = objects_in(ws, view, notes)
         if getattr(ws, "_pivots", None):
             notes["pivot tables left out"] += len(ws._pivots)
         if not autofilter:
@@ -186,7 +184,7 @@ def read(data: bytes) -> dict:
             notes["comments and notes left out"] += comments
         if ws.defined_names:
             notes["names scoped to one sheet left out"] += len(ws.defined_names)
-        sheets.append({"name": ws.title[:31], "cells": cells, "formats": formats, "styles": styles, "merges": merges, "links": links, "rules": rules, "filter": autofilter, "validations": valid, "view": view})
+        sheets.append({"name": ws.title[:31], "cells": cells, "formats": formats, "styles": styles, "merges": merges, "links": links, "rules": rules, "filter": autofilter, "validations": valid, "view": view, "objects": objects})
     for cs in wb.chartsheets:
         notes["chart sheets left out"] += 1
     names = []

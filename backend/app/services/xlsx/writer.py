@@ -9,6 +9,7 @@ from openpyxl.worksheet.hyperlink import Hyperlink
 
 from .autofilter import filter_out
 from .cf import rules_out
+from .drawings import objects_out
 from .formulas import to_file
 from .styles import apply_out
 from .tables import ref_of, tables_out
@@ -28,7 +29,7 @@ def _number(text: str) -> int | float:
     return int(n) if n.is_integer() and abs(n) < 2**53 else n
 
 
-def write(eng, views: list[dict], vba: dict[str, bytes] | None = None) -> bytes:
+def write(eng, views: list[dict], vba: dict[str, bytes] | None = None, objects: list[list[dict]] | None = None) -> bytes:
     wb = Workbook()
     xml, body, heading = theme_out(eng.theme())
     wb.loaded_theme = xml
@@ -130,6 +131,9 @@ def write(eng, views: list[dict], vba: dict[str, bytes] | None = None) -> bytes:
                     tb.autoFilter.filterColumn = list(ws.auto_filter.filterColumn)
                 ws.auto_filter.ref = None
                 ws.auto_filter.filterColumn = []
+    for i, items in enumerate(objects or []):
+        if items and i < len(wb.worksheets):
+            objects_out(wb, wb.worksheets[i], items, views[i] if i < len(views) else {})
     wb.calculation.fullCalcOnLoad = True
     if vba:
         buf = io.BytesIO()

@@ -1,6 +1,8 @@
 import { engine, type Area, type Changed, type FormatChange, type LinkChange, type Name, type Shift } from './engine';
 import { colName, parseRef, type Range } from './grid/a1';
 import { Autocomplete, FUNCTIONS, type Suggestion } from './ui/autocomplete';
+import { Charts } from './charts';
+import type { FloatObject } from './charts/types';
 import { Grid, type BorderKind, type MenuKind, type PasteKind, type SheetView } from './grid/grid';
 import { paint } from './grid/style';
 import { TABLE_STYLES } from './grid/tables';
@@ -211,6 +213,7 @@ async function api<T>(method: string, url: string, body?: unknown): Promise<T> {
 export class App {
   private readonly home: Home;
   private readonly grid: Grid;
+  private readonly charts: Charts;
   private open: Opened | null = null;
   private pending = new Map<number, Map<string, [number, number, string]>>();
   private timer = 0;
@@ -282,6 +285,13 @@ export class App {
     new Autocomplete(p.formulaBar, suggestions);
     const cellAc = new Autocomplete(this.grid.editor, suggestions);
     this.grid.editorHook = (e) => cellAc.take(e);
+    this.charts = new Charts(this.grid, engine(), {
+      book: () => this.open?.book ?? -1,
+      sheetNames: () => this.open?.sheets ?? [],
+      active: () => !!this.open,
+      load: async () => (this.open ? (await api<{ objects: FloatObject[][] }>('GET', `/api/workbooks/${this.open.id}/objects`)).objects : []),
+      save: (sheet, list) => this.sendObjects(sheet, list),
+    });
     this.button('edit.undo').disabled = true;
     this.button('edit.redo').disabled = true;
     this.commands();
@@ -1316,6 +1326,7 @@ export class App {
     this.importNotes = [];
     document.title = `${doc.title} · FormCel`;
     this.renderTabs();
+    await this.charts.layer.open();
     this.showSheet(0);
     this.button('edit.undo').disabled = true;
     this.button('edit.redo').disabled = true;
@@ -2242,6 +2253,7 @@ export class App {
     await api('POST', `/api/workbooks/${o.id}/sheets/${from}/move`, { to });
     o.sheets.splice(to, 0, o.sheets.splice(from, 1)[0]);
     o.views.splice(to, 0, o.views.splice(from, 1)[0]);
+    await this.charts.layer.open();
     this.renderTabs();
     this.showSheet(to);
     this.button('edit.undo').disabled = true;
@@ -2266,6 +2278,7 @@ export class App {
     await api('DELETE', `/api/workbooks/${o.id}/sheets/${i}`);
     o.sheets.splice(i, 1);
     o.views.splice(i, 1);
+    await this.charts.layer.open();
     this.renderTabs();
     this.showSheet(Math.min(i, o.sheets.length - 1));
     this.button('edit.undo').disabled = true;
@@ -2306,7 +2319,23 @@ export class App {
     this.timer = window.setTimeout(() => this.flush(), 400);
   }
 
+  private sendObjects(sheet: number, list: FloatObject[]): void {
+    const o = this.open;
+    if (!o) return;
+    this.status('Saving');
+    this.saving = this.saving.then(async () => {
+      try {
+        await api('PUT', `/api/workbooks/${o.id}/objects`, { sheet, objects: list });
+        if (!this.pending.size) this.status('Saved');
+      } catch (err) {
+        this.status('Not saved', true);
+        this.p.save.title = err instanceof Error ? err.message : '';
+      }
+    });
+  }
+
   private flush(): void {
+    this.charts.layer.flush();
     window.clearTimeout(this.timer);
     const o = this.open;
     if (!o || !this.pending.size) return;
