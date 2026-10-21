@@ -161,6 +161,48 @@
    }
   },
   {
+   "name": "CHOOSECOLS",
+   "args": [
+    "array",
+    "col_num1",
+    "[col_num2]",
+    "..."
+   ],
+   "summary": "Picks columns of an array by number.",
+   "category": "Lookup and reference",
+   "excel": {
+    "listed": true,
+    "since": "2024",
+    "source": "https://support.microsoft.com/en-us/excel/functions/choosecols-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Array",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "CHOOSEROWS",
+   "args": [
+    "array",
+    "row_num1",
+    "[row_num2]",
+    "..."
+   ],
+   "summary": "Picks rows of an array by number.",
+   "category": "Lookup and reference",
+   "excel": {
+    "listed": true,
+    "since": "2024",
+    "source": "https://support.microsoft.com/en-us/excel/functions/chooserows-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Array",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
    "name": "CONCAT",
    "args": [
     "text1",
@@ -373,6 +415,26 @@
    }
   },
   {
+   "name": "DROP",
+   "args": [
+    "array",
+    "rows",
+    "[columns]"
+   ],
+   "summary": "Removes rows or columns from the start or end of an array.",
+   "category": "Lookup and reference",
+   "excel": {
+    "listed": true,
+    "since": "2024",
+    "source": "https://support.microsoft.com/en-us/excel/functions/drop-function"
+   },
+   "sheets": {
+    "listed": false,
+    "category": null,
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
    "name": "EDATE",
    "args": [
     "start_date",
@@ -407,6 +469,27 @@
    "sheets": {
     "listed": true,
     "category": "Date",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "EXPAND",
+   "args": [
+    "array",
+    "rows",
+    "[columns]",
+    "[pad_with]"
+   ],
+   "summary": "Grows an array to a size, padding the new cells.",
+   "category": "Lookup and reference",
+   "excel": {
+    "listed": true,
+    "since": "2024",
+    "source": "https://support.microsoft.com/en-us/excel/functions/expand-function"
+   },
+   "sheets": {
+    "listed": false,
+    "category": null,
     "source": "https://support.google.com/docs/table/25273?hl=en"
    }
   },
@@ -482,6 +565,26 @@
    "sheets": {
     "listed": true,
     "category": "Date",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "HSTACK",
+   "args": [
+    "array1",
+    "[array2]",
+    "..."
+   ],
+   "summary": "Places arrays side by side.",
+   "category": "Lookup and reference",
+   "excel": {
+    "listed": true,
+    "since": "2024",
+    "source": "https://support.microsoft.com/en-us/excel/functions/hstack-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Array",
     "source": "https://support.google.com/docs/table/25273?hl=en"
    }
   },
@@ -1501,6 +1604,49 @@
    }
   },
   {
+   "name": "TAKE",
+   "args": [
+    "array",
+    "rows",
+    "[columns]"
+   ],
+   "summary": "Keeps rows or columns from the start or end of an array.",
+   "category": "Lookup and reference",
+   "excel": {
+    "listed": true,
+    "since": "2024",
+    "source": "https://support.microsoft.com/en-us/excel/functions/take-function"
+   },
+   "sheets": {
+    "listed": false,
+    "category": null,
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "TEXTSPLIT",
+   "args": [
+    "text",
+    "col_delimiter",
+    "[row_delimiter]",
+    "[ignore_empty]",
+    "[match_mode]",
+    "[pad_with]"
+   ],
+   "summary": "Splits text into columns and rows at delimiters.",
+   "category": "Text",
+   "excel": {
+    "listed": true,
+    "since": "2024",
+    "source": "https://support.microsoft.com/en-us/excel/functions/textsplit-function"
+   },
+   "sheets": {
+    "listed": false,
+    "category": null,
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
    "name": "TIME",
    "args": [
     "hour",
@@ -1539,6 +1685,26 @@
    }
   },
   {
+   "name": "TOCOL",
+   "args": [
+    "array",
+    "[ignore]",
+    "[scan_by_column]"
+   ],
+   "summary": "Turns an array into one column.",
+   "category": "Lookup and reference",
+   "excel": {
+    "listed": true,
+    "since": "2024",
+    "source": "https://support.microsoft.com/en-us/excel/functions/tocol-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Array",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
    "name": "TODAY",
    "args": [],
    "summary": "Today's date.",
@@ -1551,6 +1717,26 @@
    "sheets": {
     "listed": true,
     "category": "Date",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "TOROW",
+   "args": [
+    "array",
+    "[ignore]",
+    "[scan_by_column]"
+   ],
+   "summary": "Turns an array into one row.",
+   "category": "Lookup and reference",
+   "excel": {
+    "listed": true,
+    "since": "2024",
+    "source": "https://support.microsoft.com/en-us/excel/functions/torow-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Array",
     "source": "https://support.google.com/docs/table/25273?hl=en"
    }
   },
@@ -1666,6 +1852,26 @@
    }
   },
   {
+   "name": "VSTACK",
+   "args": [
+    "array1",
+    "[array2]",
+    "..."
+   ],
+   "summary": "Stacks arrays on top of each other.",
+   "category": "Look and reference",
+   "excel": {
+    "listed": true,
+    "since": "2024",
+    "source": "https://support.microsoft.com/en-us/excel/functions/vstack-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Array",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
    "name": "WEEKDAY",
    "args": [
     "serial_number",
@@ -1681,6 +1887,46 @@
    "sheets": {
     "listed": true,
     "category": "Date",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "WRAPCOLS",
+   "args": [
+    "vector",
+    "wrap_count",
+    "[pad_with]"
+   ],
+   "summary": "Wraps a row or column of values into columns of a given length.",
+   "category": "Look and reference",
+   "excel": {
+    "listed": true,
+    "since": "2024",
+    "source": "https://support.microsoft.com/en-us/excel/functions/wrapcols-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Array",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "WRAPROWS",
+   "args": [
+    "vector",
+    "wrap_count",
+    "[pad_with]"
+   ],
+   "summary": "Wraps a row or column of values into rows of a given length.",
+   "category": "Look and reference",
+   "excel": {
+    "listed": true,
+    "since": "2024",
+    "source": "https://support.microsoft.com/en-us/excel/functions/wraprows-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Array",
     "source": "https://support.google.com/docs/table/25273?hl=en"
    }
   },
