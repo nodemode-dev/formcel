@@ -3,6 +3,13 @@ use crate::{numfmt, Addr, Value};
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
+mod fx;
+mod fx_db;
+mod fx_fin;
+mod fx_math;
+mod fx_sf;
+mod fx_stat;
+
 pub trait Ctx {
     fn sheet_index(&self, name: &str) -> Option<usize>;
     fn cell(&self, sheet: usize, a: Addr) -> Value;
@@ -252,7 +259,7 @@ impl<'a> Eval<'a> {
     }
 
     fn routed(&self, name: &str) -> bool {
-        ARRAY_FNS.contains(&name) || SCOPED_FNS.contains(&name) || self.user(name)
+        ARRAY_FNS.contains(&name) || SCOPED_FNS.contains(&name) || fx::routed(name) || self.user(name)
     }
 
     fn deeper<T>(&self, f: impl FnOnce() -> Result<T, ErrKind>) -> Result<T, ErrKind> {
@@ -1179,7 +1186,7 @@ impl<'a> Eval<'a> {
                         None => return Err(ErrKind::Na),
                     }
                 }
-                _ => return Err(ErrKind::Name),
+                _ => return self.call_fx(name, a),
             })
         })();
         r.unwrap_or_else(err)
@@ -1715,7 +1722,7 @@ impl Eval<'_> {
                 }
                 Ok(Arg::A(Array { rows: cells.len(), cols, data }))
             }
-            _ => Err(ErrKind::Name),
+            _ => self.call_fx_arg(name, a),
         }
     }
 
