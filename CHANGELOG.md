@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.26.0 · 2026-10-21
+
+- Conditional formatting now travels in .xlsx files both ways: every kind FormCel has, with its order and Stop If True.
+- Open CSV, TSV and text files from Home. A preview shows the first rows, the separator (comma, semicolon, tab or vertical bar, guessed and changeable) and, for each column, what it holds; set a column to Text to keep values such as 00123 exactly. Formulas in a text file stay text.
+- The download button now offers the workbook as .xlsx or the current sheet as .csv or .tsv.
+- Fixed: text starting with `=`, such as `'=1+1`, became a formula after the workbook was reopened.
+
 ## 0.25.0 · 2026-10-21
 
 - Open Excel workbooks: Open a file on Home, or drop a .xlsx or .xlsm file onto Home. The workbook opens as a new FormCel workbook; the save indicator says if anything was left out, and its tooltip lists what.
