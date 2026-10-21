@@ -58,6 +58,15 @@ pub trait Ctx {
         None
     }
     fn host_want(&self, _key: &str) {}
+    fn ext_cells(&self, _sheet: &str, _area: Area) -> Option<Array> {
+        None
+    }
+    fn calc_mode(&self) -> &'static str {
+        "Automatic"
+    }
+    fn r1c1(&self) -> bool {
+        false
+    }
 }
 
 #[derive(Debug)]
@@ -81,7 +90,7 @@ impl Array {
         &self.data[r * self.cols + c]
     }
 
-    fn pick(&self, r: usize, c: usize) -> Value {
+    pub(crate) fn pick(&self, r: usize, c: usize) -> Value {
         let rr = if self.rows == 1 { 0 } else { r };
         let cc = if self.cols == 1 { 0 } else { c };
         if rr < self.rows && cc < self.cols {
@@ -483,7 +492,11 @@ impl<'a> Eval<'a> {
         match e {
             Expr::Ref(sheet, kind) => match self.resolve(sheet.as_deref()) {
                 Some(s) => Arg::R(s, kind.area()),
-                None => Arg::V(err(ErrKind::Ref)),
+                None => match sheet.as_deref().and_then(|n| self.ctx.ext_cells(n, kind.area())) {
+                    Some(mut a) if a.data.len() == 1 => Arg::V(a.data.remove(0)),
+                    Some(a) => Arg::A(a),
+                    None => Arg::V(err(ErrKind::Ref)),
+                },
             },
             Expr::Table(name, spec) => match self.ctx.table_ref(self.sheet, name.as_deref(), spec, self.at) {
                 Ok((s, a)) => Arg::R(s, a),

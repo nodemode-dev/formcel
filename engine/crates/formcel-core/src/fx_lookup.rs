@@ -132,7 +132,11 @@ impl Eval<'_> {
                         return Err(ErrKind::Na);
                     }
                     match self.arg(&a[0]) {
-                        Arg::R(s, ar) => Value::Text(self.ctx.formula_at(s, Addr { row: ar.r0, col: ar.c0 }).ok_or(ErrKind::Na)?),
+                        Arg::R(s, ar) => {
+                            let at = Addr { row: ar.r0, col: ar.c0 };
+                            let text = self.ctx.formula_at(s, at).ok_or(ErrKind::Na)?;
+                            Value::Text(if self.ctx.r1c1() { crate::r1c1::to_r1c1(&text, at) } else { text })
+                        }
                         Arg::V(Value::Error(k)) => return Err(k),
                         _ => return Err(ErrKind::Na),
                     }
@@ -199,9 +203,7 @@ impl Eval<'_> {
                     Some(e) => bool_of(&self.scalar(e))?,
                     None => true,
                 };
-                if !a1 {
-                    return Err(ErrKind::Ref);
-                }
+                let text = if a1 { text } else { crate::r1c1::to_a1_text(text.trim(), self.at.unwrap_or(Addr { row: 0, col: 0 })) };
                 let e = crate::formula::parse(text.trim()).ok_or(ErrKind::Ref)?;
                 match e {
                     Expr::Ref(..) | Expr::Range(..) | Expr::Name(_) | Expr::Table(..) => self.arg(&e).pipe_ref(),

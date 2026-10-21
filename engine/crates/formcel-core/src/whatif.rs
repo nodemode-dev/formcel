@@ -796,7 +796,7 @@ impl Workbook {
         Ok(format!("ok\t{n}"))
     }
 
-    fn dt_refresh(&mut self, fx: &mut Effect) -> Reply {
+    pub(crate) fn dt_refresh(&mut self, fx: &mut Effect) -> Reply {
         let tables = self.whatif.tables.clone();
         let mut total = 0;
         for t in tables {

@@ -56,7 +56,7 @@ impl Eval<'_> {
             "numfile" => Value::Number(self.ctx.sheet_total() as f64),
             "origin" => Value::Text("$A:$A$1".to_string()),
             "osversion" => Value::Text("FormCel".to_string()),
-            "recalc" => Value::Text("Automatic".to_string()),
+            "recalc" => Value::Text(self.ctx.calc_mode().to_string()),
             "release" => Value::Text("16.0".to_string()),
             "system" => Value::Text("pcdos".to_string()),
             "memavail" | "memused" | "totmem" => return Err(ErrKind::Na),

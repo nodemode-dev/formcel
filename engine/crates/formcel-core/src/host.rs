@@ -65,6 +65,7 @@ pub fn decode(data: &str) -> Array {
 fn uses(e: &Expr, h: &Host) -> bool {
     match e {
         Expr::Call(n, _) if h.is_fn(n) => true,
+        Expr::Ref(Some(s), _) if crate::xref::is_ext(s) => true,
         o => formula::children(o).into_iter().any(|c| uses(c, h)),
     }
 }
@@ -84,6 +85,10 @@ impl Workbook {
     }
 
     pub fn host_set(&mut self, key: &str, data: Option<&str>) -> Changed {
+        if key.starts_with(crate::xref::KEY_HEAD) {
+            self.ext_store(key, data);
+            return self.host_recalc();
+        }
         match data {
             Some(d) => {
                 self.host.results.insert(key.to_string(), decode(d));
