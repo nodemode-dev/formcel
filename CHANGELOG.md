@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.29.0 · 2026-10-21
+
+- Conditional formatting now travels in .ods files both ways, in the form LibreOffice uses. Stop If True and reversed icons are not part of that form and are dropped.
+- ARRAYFORMULA from Google Sheets, for example `=ARRAYFORMULA(A1:A3+B1:B3)`, so formulas from Sheets work. 109 functions. In .xlsx and .ods files the formula inside it is written instead, since Excel and LibreOffice have no ARRAYFORMULA.
+
 ## 0.28.0 · 2026-10-21
 
 - PDF: download this sheet or every sheet as a PDF, laid out on Letter pages with the cells' formatting, merges, conditional formatting colours and data bars. Wide sheets are scaled to fit.
