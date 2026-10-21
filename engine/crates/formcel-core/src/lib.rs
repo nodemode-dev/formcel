@@ -1,8 +1,10 @@
-use std::collections::{HashMap, HashSet, VecDeque};
+use graph::{FastMap, FastSet};
+use std::collections::{HashMap, VecDeque};
 use std::fmt;
 
 pub mod eval;
 pub mod formula;
+mod graph;
 mod store;
 pub mod wire;
 pub use formula::ErrKind;
@@ -207,7 +209,8 @@ pub struct Workbook {
     sheets: Vec<Sheet>,
     undo: Vec<Tx>,
     redo: Vec<Tx>,
-    formulas: HashMap<Key, Formula>,
+    formulas: FastMap<Key, Formula>,
+    graph: graph::Graph,
 }
 
 impl eval::Ctx for Workbook {
@@ -234,7 +237,7 @@ impl Default for Workbook {
 
 impl Workbook {
     pub fn new() -> Self {
-        Workbook { sheets: vec![Sheet::new("Sheet1")], undo: Vec::new(), redo: Vec::new(), formulas: HashMap::new() }
+        Workbook { sheets: vec![Sheet::new("Sheet1")], undo: Vec::new(), redo: Vec::new(), formulas: FastMap::default(), graph: graph::Graph::default() }
     }
 
     pub fn sheet_count(&self) -> usize {
@@ -247,6 +250,10 @@ impl Workbook {
 
     pub fn add_sheet(&mut self, name: &str) -> usize {
         self.sheets.push(Sheet::new(name));
+        self.graph.built = false;
+        if !self.formulas.is_empty() {
+            self.recalc_all();
+        }
         self.sheets.len() - 1
     }
 
@@ -258,6 +265,7 @@ impl Workbook {
                 formula::rename_refs(e, &old, name);
             }
         }
+        self.graph.built = false;
         self.recalc_all();
         Ok(())
     }
@@ -322,13 +330,33 @@ impl Workbook {
     }
 
     fn set_raw(&mut self, sheet: usize, a: Addr, raw: &str) {
+        let k = (sheet, a);
         if is_formula(raw) {
-            self.formulas.insert((sheet, a), Formula::new(raw));
+            let f = Formula::new(raw);
+            if self.graph.built {
+                let areas = self.areas_of(&k, &f);
+                self.graph.insert(k, areas);
+            }
+            self.formulas.insert(k, f);
             self.sheets[sheet].cells.set(a, Value::Number(0.0));
         } else {
-            self.formulas.remove(&(sheet, a));
+            if self.formulas.remove(&k).is_some() {
+                self.graph.remove(&k);
+            }
             self.sheets[sheet].cells.set(a, Value::parse_input(raw));
         }
+    }
+
+    fn ensure_graph(&mut self) {
+        if self.graph.built {
+            return;
+        }
+        let all: Vec<(Key, Vec<(usize, Area)>)> = self.formulas.iter().map(|(k, f)| (*k, self.areas_of(k, f))).collect();
+        self.graph.clear();
+        for (k, areas) in all {
+            self.graph.insert(k, areas);
+        }
+        self.graph.built = true;
     }
 
     fn sheet_by_name(&self, name: &str) -> Option<usize> {
@@ -356,119 +384,93 @@ impl Workbook {
     }
 
     fn recalc_with(&mut self, seeds: &[Key], everything: bool) -> Changed {
-        let deps: Vec<(Key, Vec<(usize, Area)>)> = self.formulas.iter().map(|(k, f)| (*k, self.areas_of(k, f))).collect();
-        let mut by_cell: HashMap<Key, Vec<usize>> = HashMap::new();
-        let mut by_range: Vec<usize> = Vec::new();
-        for (i, (_, areas)) in deps.iter().enumerate() {
-            let mut ranged = false;
-            for (s, ar) in areas {
-                if ar.r0 == ar.r1 && ar.c0 == ar.c1 {
-                    by_cell.entry((*s, Addr { row: ar.r0, col: ar.c0 })).or_default().push(i);
-                } else {
-                    ranged = true;
+        self.ensure_graph();
+        let mut dirty: FastSet<Key> = FastSet::default();
+        if everything {
+            dirty.extend(self.formulas.keys().copied());
+        } else {
+            let mut queue: VecDeque<Key> = seeds.iter().copied().collect();
+            for k in seeds {
+                if self.formulas.contains_key(k) {
+                    dirty.insert(*k);
                 }
             }
-            if ranged {
-                by_range.push(i);
-            }
-        }
-        let index: HashMap<Key, usize> = deps.iter().enumerate().map(|(i, (k, _))| (*k, i)).collect();
-        let mut dirty: HashSet<usize> = HashSet::new();
-        let mut queue: VecDeque<Key> = if everything { VecDeque::new() } else { seeds.iter().copied().collect() };
-        for k in seeds {
-            if let Some(&i) = index.get(k) {
-                dirty.insert(i);
-            }
-        }
-        while let Some(k) = queue.pop_front() {
-            let hit = |i: usize, dirty: &mut HashSet<usize>, queue: &mut VecDeque<Key>| {
-                if dirty.insert(i) {
-                    queue.push_back(deps[i].0);
-                }
-            };
-            if let Some(list) = by_cell.get(&k) {
-                for &i in list {
-                    hit(i, &mut dirty, &mut queue);
-                }
-            }
-            for &i in &by_range {
-                if deps[i].1.iter().any(|(s, ar)| *s == k.0 && ar.contains(k.1.row, k.1.col)) {
-                    hit(i, &mut dirty, &mut queue);
+            let mut found = Vec::new();
+            while let Some(k) = queue.pop_front() {
+                self.graph.dependents(&k, &mut |x| found.push(x));
+                for x in found.drain(..) {
+                    if dirty.insert(x) {
+                        queue.push_back(x);
+                    }
                 }
             }
         }
-        let mut out: Changed = seeds.iter().filter(|k| !index.contains_key(k)).map(|k| (k.0, k.1, self.sheets[k.0].cells.get(k.1).cloned().unwrap_or(Value::Empty))).collect();
-        out.extend(self.evaluate(&deps, &index, &dirty));
+        let mut out: Changed = seeds.iter().filter(|k| !self.formulas.contains_key(k)).map(|k| (k.0, k.1, self.sheets[k.0].cells.get(k.1).cloned().unwrap_or(Value::Empty))).collect();
+        out.extend(self.evaluate(dirty));
         out
     }
 
-    fn evaluate(&mut self, deps: &[(Key, Vec<(usize, Area)>)], index: &HashMap<Key, usize>, dirty: &HashSet<usize>) -> Changed {
-        let mut indeg: HashMap<usize, usize> = dirty.iter().map(|&i| (i, 0)).collect();
-        let mut users: HashMap<usize, Vec<usize>> = HashMap::new();
-        let mut by_sheet: HashMap<usize, Vec<usize>> = HashMap::new();
-        for &j in dirty {
-            by_sheet.entry(deps[j].0 .0).or_default().push(j);
+    fn evaluate(&mut self, dirty: FastSet<Key>) -> Changed {
+        let ids: Vec<Key> = dirty.into_iter().collect();
+        let id_of: FastMap<Key, usize> = ids.iter().enumerate().map(|(i, k)| (*k, i)).collect();
+        let mut by_sheet: FastMap<usize, Vec<usize>> = FastMap::default();
+        for (i, k) in ids.iter().enumerate() {
+            by_sheet.entry(k.0).or_default().push(i);
         }
-        for &i in dirty {
-            let mut pre: HashSet<usize> = HashSet::new();
-            for (s, ar) in &deps[i].1 {
+        let mut indeg = vec![0u32; ids.len()];
+        let mut users: Vec<Vec<usize>> = vec![Vec::new(); ids.len()];
+        let mut pre: Vec<usize> = Vec::new();
+        for i in 0..ids.len() {
+            pre.clear();
+            for (s, ar) in self.graph.areas(&ids[i]) {
                 let cells = u64::from(ar.r1 - ar.r0 + 1) * u64::from(ar.c1 - ar.c0 + 1);
                 let on_sheet = by_sheet.get(s).map(Vec::as_slice).unwrap_or(&[]);
                 if cells <= on_sheet.len() as u64 {
                     for r in ar.r0..=ar.r1 {
                         for c in ar.c0..=ar.c1 {
-                            if let Some(&j) = index.get(&(*s, Addr { row: r, col: c })) {
-                                if dirty.contains(&j) {
-                                    pre.insert(j);
-                                }
+                            if let Some(&j) = id_of.get(&(*s, Addr { row: r, col: c })) {
+                                pre.push(j);
                             }
                         }
                     }
                 } else {
-                    for &j in on_sheet {
-                        let a = deps[j].0 .1;
-                        if ar.contains(a.row, a.col) {
-                            pre.insert(j);
-                        }
-                    }
+                    pre.extend(on_sheet.iter().copied().filter(|&j| ar.contains(ids[j].1.row, ids[j].1.col)));
                 }
             }
-            for j in pre {
-                if j == i {
-                    continue;
+            pre.sort_unstable();
+            pre.dedup();
+            for &j in &pre {
+                if j != i {
+                    indeg[i] += 1;
+                    users[j].push(i);
                 }
-                *indeg.get_mut(&i).expect("dirty formula") += 1;
-                users.entry(j).or_default().push(i);
             }
         }
-        let mut ready: VecDeque<usize> = indeg.iter().filter(|(_, d)| **d == 0).map(|(i, _)| *i).collect();
-        let mut order = Vec::with_capacity(dirty.len());
+        let mut ready: VecDeque<usize> = (0..ids.len()).filter(|&i| indeg[i] == 0).collect();
+        let mut done = vec![false; ids.len()];
+        let mut out = Vec::with_capacity(ids.len());
         while let Some(i) = ready.pop_front() {
-            order.push(i);
-            for &u in users.get(&i).map(Vec::as_slice).unwrap_or(&[]) {
-                let d = indeg.get_mut(&u).expect("dirty formula");
-                *d -= 1;
-                if *d == 0 {
-                    ready.push_back(u);
-                }
-            }
-        }
-        let mut out = Vec::with_capacity(dirty.len());
-        let done: HashSet<usize> = order.iter().copied().collect();
-        for &i in &order {
-            let (s, a) = deps[i].0;
+            done[i] = true;
+            let (s, a) = ids[i];
             let v = match &self.formulas[&(s, a)].ast {
                 None => Value::Error(ErrKind::Error),
                 Some(e) => eval::Eval { ctx: &*self, sheet: s }.formula(e),
             };
             self.sheets[s].cells.set(a, v.clone());
             out.push((s, a, v));
+            for &u in &users[i] {
+                indeg[u] -= 1;
+                if indeg[u] == 0 {
+                    ready.push_back(u);
+                }
+            }
         }
-        for &i in dirty.iter().filter(|i| !done.contains(i)) {
-            let (s, a) = deps[i].0;
-            let v = Value::Error(ErrKind::Ref);
-            self.sheets[s].cells.set(a, v.clone());
-            out.push((s, a, v));
+        for (i, &(s, a)) in ids.iter().enumerate() {
+            if !done[i] {
+                let v = Value::Error(ErrKind::Ref);
+                self.sheets[s].cells.set(a, v.clone());
+                out.push((s, a, v));
+            }
         }
         out
     }
@@ -517,6 +519,7 @@ impl Workbook {
                 }
             }
         }
+        self.graph.built = false;
         let values = self.sheets[s.sheet].cells.shift(s.rows, s.at, s.delta);
         let on_sheet: Vec<Key> = self.formulas.keys().filter(|(sh, _)| *sh == s.sheet).copied().collect();
         let mut moving = Vec::with_capacity(on_sheet.len());
@@ -578,6 +581,7 @@ impl Workbook {
             return Err(EngineError::NoSheet(sheet));
         }
         self.sheets.remove(sheet);
+        self.graph.built = false;
         self.rekey(|s| match s.cmp(&sheet) {
             std::cmp::Ordering::Less => Some(s),
             std::cmp::Ordering::Equal => None,
@@ -594,6 +598,7 @@ impl Workbook {
         }
         let s = self.sheets.remove(from);
         self.sheets.insert(to, s);
+        self.graph.built = false;
         let mut order: Vec<usize> = (0..self.sheets.len()).collect();
         let m = order.remove(from);
         order.insert(to, m);

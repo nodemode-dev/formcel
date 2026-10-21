@@ -164,7 +164,16 @@ The cell store keeps each formula cell's computed value, so display, reads, the 
 - kind: rationale
 - logged: v0.7.0 · 2026-10-21
 
-An edit seeds a search for formulas that read the changed cells: single-cell references through a cell index, ranges by a scan of the formulas that use ranges. The dirty set is then ordered so each formula runs after the dirty formulas it reads (Kahn's algorithm; a range's precedents are found by walking its cells when it is smaller than the sheet's dirty set, by checking the dirty set otherwise). Formulas left over form a cycle and get `#REF!`. Opening, renaming, deleting or moving sheets and shifting rows recalculate everything (`recalc_all` skips the search). Every call rebuilds the dependency lists from the formulas; making that incremental is part of the Phase 2 exit target of 100 ms after one precedent changes in a 100,000-formula sheet, which has not been measured yet.
+An edit seeds a search for formulas that read the changed cells: single-cell references through a cell index, ranges by a scan of the formulas that use ranges. The dirty set is then ordered so each formula runs after the dirty formulas it reads (Kahn's algorithm; a range's precedents are found by walking its cells when it is smaller than the sheet's dirty set, by checking the dirty set otherwise). Formulas left over form a cycle and get `#REF!`. Opening, renaming, deleting or moving sheets and shifting rows recalculate everything (`recalc_all` skips the search).
+
+### The dependency graph is kept between edits
+- refers-to: src/graph.rs :: Graph, Fx; src/lib.rs :: ensure_graph, set_raw, recalc_with, evaluate
+- kind: rationale
+- logged: v0.8.0 · 2026-10-21
+
+`Graph` holds each formula's resolved areas, an index from single cells to the formulas that read them, and 64-row by 16-column buckets for ranges; a range spanning more than 256 buckets (a whole column, say) goes in a short list checked on every change. `set_raw` updates it in place. Anything that can change what a reference points at (adding, renaming, deleting or moving a sheet, a shift) marks it stale and the next recalculation rebuilds it. Maps on this path use `Fx`, a small multiply-rotate hasher, because the standard hasher dominated the profile.
+
+Measured (scratch harness and the window's engine, not shipped): one precedent in a sheet of 100,000 row formulas plus one SUM over them went from 47 ms to 1 to 2 ms native and 2.5 to 6 ms through the window's worker, against the Phase 2 target of 100 ms. A 100,000-step chain (each cell adds 1 to the one above) recalculates all 100,000 cells in 130 ms native and 306 ms through the worker, including sending every changed cell back; that worst case is over the target.
 
 ### References under insert, delete and rename
 - refers-to: src/formula.rs :: shift_refs, rename_refs, offset; src/lib.rs :: do_shift, Tx::Shift
