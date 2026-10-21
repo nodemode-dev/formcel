@@ -176,6 +176,12 @@ impl Workbook {
         self.sheets.len() - 1
     }
 
+    pub fn rename_sheet(&mut self, sheet: usize, name: &str) -> Result<(), EngineError> {
+        let s = self.sheets.get_mut(sheet).ok_or(EngineError::NoSheet(sheet))?;
+        s.name = name.to_string();
+        Ok(())
+    }
+
     fn check(&self, sheet: usize, addr: Addr) -> Result<(), EngineError> {
         if sheet >= self.sheets.len() {
             return Err(EngineError::NoSheet(sheet));
@@ -213,6 +219,21 @@ impl Workbook {
             self.redo.clear();
         }
         Ok(out)
+    }
+
+    pub fn load(&mut self, sheet: usize, edits: &[(Addr, String)]) -> Result<usize, EngineError> {
+        for (a, _) in edits {
+            self.check(sheet, *a)?;
+        }
+        for (a, raw) in edits {
+            self.sheets[sheet].cells.set(*a, Value::parse_input(raw));
+        }
+        Ok(edits.len())
+    }
+
+    pub fn clear_history(&mut self) {
+        self.undo.clear();
+        self.redo.clear();
     }
 
     fn replay(&mut self, tx: &[Change], forward: bool) -> Changed {

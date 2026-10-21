@@ -105,6 +105,42 @@ pub unsafe extern "C" fn fc_apply(id: u32, sheet: u32, edits: *const u8, len: u3
     }
 }
 
+/// Loads `row\tcol\traw` lines without recording an undo step; returns the count.
+///
+/// # Safety
+/// `edits` must point at `len` readable bytes.
+#[no_mangle]
+pub unsafe extern "C" fn fc_load(id: u32, sheet: u32, edits: *const u8, len: u32) -> i32 {
+    let Some(edits) = wire::decode_edits(text(edits, len)) else { return -1 };
+    match with_book(id, |wb| wb.load(sheet as usize, &edits)) {
+        Some(Ok(n)) => n as i32,
+        _ => -1,
+    }
+}
+
+/// # Safety
+/// `name` must point at `len` readable bytes.
+#[no_mangle]
+pub unsafe extern "C" fn fc_add_sheet(id: u32, name: *const u8, len: u32) -> i32 {
+    let name = text(name, len).to_string();
+    with_book(id, |wb| wb.add_sheet(&name) as i32).unwrap_or(-1)
+}
+
+#[no_mangle]
+pub extern "C" fn fc_sheet_names(id: u32) -> i32 {
+    match with_book(id, |wb| wb.sheet_names()) {
+        Some(names) => {
+            let mut s = String::new();
+            for n in names {
+                wire::escape(&n, &mut s);
+                s.push('\n');
+            }
+            emit(&s) as i32
+        }
+        None => -1,
+    }
+}
+
 fn history(id: u32, forward: bool) -> i32 {
     match with_book(id, |wb| if forward { wb.redo() } else { wb.undo() }) {
         Some(Some(c)) => emit(&wire::encode_changed(&c)) as i32,

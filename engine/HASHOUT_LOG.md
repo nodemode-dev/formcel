@@ -2,8 +2,15 @@
 
 Living log of comment content and rationale for the Rust engine. Source stays near comment-free; it lives here.
 
-Current build version: v0.2.0
-Last updated: 2026-10-21 · chunked store, history, reads, edges
+Current build version: v0.3.0
+Last updated: 2026-10-21 · load, sheets
+
+### Workbook::load, clear_history, rename_sheet (v0.3.0)
+- refers-to: crates/formcel-core/src/lib.rs :: load, clear_history, rename_sheet; formcel-wasm fc_load, fc_add_sheet, fc_sheet_names; formcel-py load, cells, rename_sheet
+- kind: explainer
+- logged: v0.3.0 · 2026-10-21
+
+`load` writes cells without an undo step: the window uses it to open a saved workbook (so Ctrl+Z cannot empty it) and the engine process uses it to mirror the window's edits. `cells` in the Python build reads a whole sheet, from A1 to the used range, for saving.
 
 ---
 

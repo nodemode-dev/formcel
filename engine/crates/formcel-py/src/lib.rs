@@ -43,6 +43,25 @@ impl Workbook {
         self.inner.apply(sheet, &parsed).map(pairs).map_err(|e| PyValueError::new_err(e.to_string()))
     }
 
+    #[pyo3(signature = (cells, sheet = 0))]
+    fn load(&mut self, cells: Vec<(u32, u32, String)>, sheet: usize) -> PyResult<usize> {
+        let edits: Vec<(Addr, String)> = cells.into_iter().map(|(row, col, raw)| (Addr { row, col }, raw)).collect();
+        self.inner.load(sheet, &edits).map_err(|e| PyValueError::new_err(e.to_string()))
+    }
+
+    #[pyo3(signature = (sheet = 0))]
+    fn cells(&self, sheet: usize) -> PyResult<Vec<(u32, u32, String)>> {
+        let Some(bottom) = self.inner.extent(sheet).map_err(|e| PyValueError::new_err(e.to_string()))? else {
+            return Ok(Vec::new());
+        };
+        let cells = self.inner.read(sheet, Addr { row: 0, col: 0 }, bottom).map_err(|e| PyValueError::new_err(e.to_string()))?;
+        Ok(cells.into_iter().map(|(a, v)| (a.row, a.col, v.to_string())).collect())
+    }
+
+    fn rename_sheet(&mut self, sheet: usize, name: &str) -> PyResult<()> {
+        self.inner.rename_sheet(sheet, name).map_err(|e| PyValueError::new_err(e.to_string()))
+    }
+
     fn undo(&mut self) -> Option<Vec<(String, String)>> {
         self.inner.undo().map(pairs)
     }
