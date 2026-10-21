@@ -1093,7 +1093,7 @@ pub fn refs(e: &Expr, f: &mut dyn FnMut(Option<&str>, Area)) {
     }
 }
 
-fn shift_index(i: u32, at: u32, delta: i64, limit: u32) -> Option<u32> {
+pub(crate) fn shift_index(i: u32, at: u32, delta: i64, limit: u32) -> Option<u32> {
     let (i, at) = (i64::from(i), i64::from(at));
     if delta >= 0 {
         let n = if i >= at { i + delta } else { i };
@@ -1106,7 +1106,7 @@ fn shift_index(i: u32, at: u32, delta: i64, limit: u32) -> Option<u32> {
     Some(if i >= at + n { (i - n) as u32 } else { i as u32 })
 }
 
-fn shift_span(lo: u32, hi: u32, at: u32, delta: i64, limit: u32) -> Option<(u32, u32)> {
+pub(crate) fn shift_span(lo: u32, hi: u32, at: u32, delta: i64, limit: u32) -> Option<(u32, u32)> {
     if delta >= 0 {
         let a = shift_index(lo, at, delta, limit)?;
         let b = shift_index(hi, at, delta, limit).unwrap_or(limit - 1);

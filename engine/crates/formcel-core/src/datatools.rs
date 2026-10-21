@@ -4,6 +4,12 @@ use crate::wire::{escape, unescape};
 use crate::{col_name, Addr, Effect, EngineError, Shift, Tx, Value, Workbook};
 use std::collections::{HashMap, HashSet};
 
+mod fmtdialog;
+mod gotospecial;
+mod outline;
+mod pastex;
+mod series;
+
 type Out = Result<(Effect, String), EngineError>;
 
 fn bad<T>(s: &str) -> Result<T, EngineError> {
@@ -247,6 +253,26 @@ impl Workbook {
         Ok(out)
     }
 
+    fn rewrite_block_refs(&mut self, sheet: usize, b: crate::cellshift::Block) -> Result<Effect, EngineError> {
+        let names = self.sheet_names();
+        let target = names[sheet].clone();
+        let mut per: Vec<Vec<(Addr, String)>> = vec![Vec::new(); names.len()];
+        for ((sh, ad), f) in &self.formulas {
+            if let Some(mut ast) = f.ast.clone() {
+                if crate::cellshift::remap(&mut ast, &names[*sh], &target, b) {
+                    per[*sh].push((*ad, format!("={}", crate::formula::to_text(&ast))));
+                }
+            }
+        }
+        let mut out = Effect::default();
+        for (sh, edits) in per.into_iter().enumerate() {
+            if !edits.is_empty() {
+                out.cells.extend(self.apply(sh, &edits)?);
+            }
+        }
+        Ok(out)
+    }
+
     pub fn tool(&mut self, sheet: usize, cmd: &str) -> Out {
         if sheet >= self.sheets.len() {
             return Err(EngineError::NoSheet(sheet));
@@ -272,6 +298,13 @@ impl Workbook {
             "typecheck" => self.t_typecheck(sheet, &p),
             "complete" => self.t_complete(sheet, &p),
             "mirror" => self.t_mirror(sheet, &p),
+            "series" => self.t_series(sheet, &p),
+            "pastelayers" => self.t_pastelayers(sheet, &p),
+            "gotospecial" => self.t_gotospecial(sheet, &p),
+            "autooutline" => self.t_autooutline(sheet, &p),
+            "localform" => Ok((Effect::default(), say(&crate::formlocale::convert(arg(&p, 2), arg(&p, 1) == "to")))),
+            "fmtpreview" => self.t_fmtpreview(sheet, &p),
+            "fmtspecials" => self.t_fmtspecials(sheet, &p),
             _ => bad("unknown tool"),
         };
         self.undo_group(mark);
@@ -749,8 +782,12 @@ impl Workbook {
             }
         }
         let n = edits.len();
+        if flag(p, 3) {
+            let lines: Vec<String> = edits.iter().map(|(ad, v)| format!("{}\t{}\t{}", ad.row, ad.col, v)).collect();
+            return Ok((Effect::default(), say(&format!("Flash Fill can fill {n} cells.\n{}", lines.join("\n")))));
+        }
         let cells = self.apply(sheet, &edits)?;
-        Ok((Effect { cells, ..Effect::default() }, say(&format!("Flash Fill filled {n} cells."))))
+        Ok((Effect { cells, ..Effect::default() }, say(&format!("Flash Fill filled {n} cells.\n{}\t{}\t{}\t{}", r0, col, r1, col))))
     }
 
     fn t_find(&mut self, sheet: usize, p: &[String]) -> Out {
@@ -864,7 +901,8 @@ impl Workbook {
                 }
             }
         }
-        let e = self.relocate(sheet, &moves, &clears, false)?;
+        let mut e = self.relocate(sheet, &moves, &clears, false)?;
+        e = e.join(self.rewrite_block_refs(sheet, crate::cellshift::Block { area, vertical, insert })?);
         Ok((e, say(&format!("Shifted {} cells.", moves.len()))))
     }
 

@@ -14,6 +14,7 @@ import formcel_engine
 from .. import config
 from . import collab as cb
 from . import templates
+from .xlsx.props import clean as clean_props
 
 FORMAT = "fcel"
 FORMAT_VERSION = 1
@@ -53,6 +54,7 @@ class Book:
     views: list[dict] = field(default_factory=list)
     vba: dict[str, bytes] | None = None
     objects: list[list[dict]] = field(default_factory=list)
+    props: dict = field(default_factory=dict)
 
     def fit_objects(self) -> list[list[dict]]:
         n = len(self.sheet_names())
@@ -92,7 +94,7 @@ class Book:
     def meta(self) -> dict:
         self.fit_views()
         return {"id": self.id, "title": self.title, "created": self.created, "modified": self.modified, "locale": self.locale,
-                "sheets": self.sheet_names(), "views": self.views, "template": self.template, "preview": self.preview(), "macros": bool(self.vba)}
+                "sheets": self.sheet_names(), "views": self.views, "template": self.template, "preview": self.preview(), "macros": bool(self.vba), "props": self.props}
 
 
 def neutral(fn):
@@ -127,6 +129,7 @@ class Store:
                "theme": b.engine.theme(), "cellStyles": b.engine.cell_styles(), "collab": b.collab, "protection": b.protection(),
                "sheets": [{"name": n, "view": b.views[i] if i < len(b.views) else {}, "cells": b.engine.cells(i), "formats": b.engine.formats(i), "styles": b.engine.styles(i), "merges": [list(m) for m in b.engine.merges(i)], "rules": b.engine.rules(i), "filter": b.engine.filter(i), "validations": b.engine.validations(i), "links": b.engine.links(i), "objects": b.fit_objects()[i]} for i, n in enumerate(b.sheet_names())]}
         doc["watches"] = b.watches
+        doc["props"] = b.props
         target = self.path(b.id)
         tmp = target.with_suffix(".fcel.tmp")
         with zipfile.ZipFile(tmp, "w", zipfile.ZIP_DEFLATED) as z:
@@ -215,6 +218,7 @@ class Store:
             b = Book(wid, doc["title"], doc["created"], doc["modified"], eng, doc.get("template"), [s.get("view") or {} for s in doc["sheets"]])
             b.objects = [list(s.get("objects") or []) for s in doc["sheets"]]
             b.vba = self._macros(self.path(wid))
+            b.props = clean_props(doc.get("props"))
             b.collab = cb.fit(doc.get("collab"))
             prot = doc.get("protection") or {}
             eng.load_protection(prot.get("book") or [])
@@ -372,6 +376,7 @@ class Store:
         b = Book(uuid.uuid4().hex[:12], (title or "Imported workbook")[:120], stamp, stamp, eng, None, [s["view"] for s in book["sheets"]])
         b.objects = [list(s.get("objects") or []) for s in book["sheets"]]
         b.vba = book.get("vba")
+        b.props = clean_props(book.get("props"))
         for i, s in enumerate(book["sheets"]):
             for r, c, text, author in s.get("notes", []):
                 cb.set_note(b.collab, i, r, c, text, author)
@@ -445,7 +450,24 @@ class Store:
             b.fit_views()
             if macros and not b.vba:
                 raise LookupError(wid)
-            return b.title, xlsx.write(b.engine, b.views, b.vba if macros else None, b.fit_objects(), b.collab["notes"], b.collab["threads"])
+            return b.title, xlsx.write(b.engine, b.views, b.vba if macros else None, b.fit_objects(), b.collab["notes"], b.collab["threads"], b.props, (b.created, b.modified))
+
+    def properties(self, wid: str) -> dict:
+        b = self._load(wid)
+        with b.lock:
+            n = len(b.sheet_names())
+            cells = [b.engine.cells(i) for i in range(n)]
+            formulas = sum(1 for sheet in cells for c in sheet if str(c[2]).startswith("="))
+            return {"props": b.props, "title": b.title, "created": b.created, "modified": b.modified,
+                    "stats": {"sheets": n, "cells": sum(len(s) for s in cells), "formulas": formulas, "names": len(b.engine.names()), "tables": len(b.engine.tables()), "notes": len(b.collab["notes"])}}
+
+    def set_properties(self, wid: str, props: dict) -> dict:
+        b = self._load(wid)
+        with b.lock:
+            b.props = clean_props(props)
+            b.modified = now()
+            self._write(b)
+        return self.properties(wid)
 
     def get(self, wid: str) -> dict:
         b = self._load(wid)
@@ -838,6 +860,61 @@ class Store:
             b.modified = now()
             self._write(b)
             return {"sheets": b.sheet_names(), "views": b.views}
+
+    @staticmethod
+    def _free_name(taken: list[str], want: str) -> str:
+        used = {t.lower() for t in taken}
+        base = want[:31]
+        if base.lower() not in used:
+            return base
+        stem = base
+        n = 2
+        while True:
+            tail = f" ({n})"
+            cand = stem[: 31 - len(tail)] + tail
+            if cand.lower() not in used:
+                return cand
+            n += 1
+
+    def copy_sheet(self, wid: str, sheet: int, dest: str | None = None, name: str | None = None, to: int | None = None) -> dict:
+        src = self._load(wid)
+        target = self._load(dest) if dest and dest != wid else src
+        with src.lock:
+            src.fit_views()
+            src.fit_objects()
+            names = src.sheet_names()
+            if not 0 <= sheet < len(names):
+                raise IndexError(sheet)
+            eng = src.engine
+            part = {"cells": eng.cells(sheet), "formats": eng.formats(sheet), "styles": eng.styles(sheet), "merges": eng.merges(sheet), "rules": eng.rules(sheet), "filter": eng.filter(sheet),
+                    "validations": eng.validations(sheet), "links": eng.links(sheet), "view": json.loads(json.dumps(src.views[sheet])), "objects": json.loads(json.dumps(src.objects[sheet]))}
+            notes = [(int(k.split(":")[1]), int(k.split(":")[2]), v["text"], v.get("author", "")) for k, v in src.collab["notes"].items() if int(k.split(":")[0]) == sheet]
+            original = names[sheet]
+        with target.lock:
+            target.fit_views()
+            target.fit_objects()
+            clean = "".join(ch for ch in (name or original) if ch not in "\\/?*[]:").strip() or original
+            title = self._free_name(target.sheet_names(), f"{clean[:27]} (2)" if target is src and not name else clean)
+            e = target.engine
+            idx = e.add_sheet(title)
+            e.load_formats([tuple(c) for c in part["formats"]], idx)
+            e.load_styles([tuple(c) for c in part["styles"]], idx)
+            e.load_merges([tuple(m) for m in part["merges"]], idx)
+            e.load_rules(part["rules"], idx)
+            e.load_filter(part["filter"], idx)
+            e.load_validations(part["validations"], idx)
+            e.load_links([tuple(c) for c in part["links"]], idx)
+            e.load([tuple(c) for c in part["cells"]], idx)
+            target.views.append({**part["view"], "hidden": None})
+            target.objects.append(part["objects"])
+            for r, c, text, author in notes:
+                cb.set_note(target.collab, idx, r, c, text, author)
+            target.modified = now()
+            self._write(target)
+        if to is not None and 0 <= to < idx:
+            self.sheet_op(target.id, "move", idx, to=to)
+            idx = to
+        return {"dest": target.id, "index": idx, "name": title, "sheets": target.sheet_names()}
 
     def rename(self, wid: str, title: str | None = None, sheet: int | None = None, sheet_name: str | None = None) -> dict:
         b = self._load(wid)

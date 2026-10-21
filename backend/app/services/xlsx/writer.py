@@ -6,7 +6,9 @@ from openpyxl.styles import Font, NamedStyle
 from openpyxl.utils import get_column_letter
 from openpyxl.workbook.defined_name import DefinedName
 from openpyxl.worksheet.hyperlink import Hyperlink
+from openpyxl.worksheet.properties import Outline
 
+from ...version import VERSION
 from .. import page
 from .autofilter import filter_out
 from .cf import rules_out
@@ -14,6 +16,7 @@ from .chartex import inject
 from .drawings import objects_out, pivot_ranges
 from .formulas import to_file
 from .overlay import finish as overlay_finish
+from .props import app_xml, core_out, patch_app
 from .protect import book_out, notes_out, sheet_out
 from .review import finish as review_finish, placeholders, ranges_out
 from .styles import apply_out
@@ -34,10 +37,12 @@ def _number(text: str) -> int | float:
     return int(n) if n.is_integer() and abs(n) < 2**53 else n
 
 
-def write(eng, views: list[dict], vba: dict[str, bytes] | None = None, objects: list[list[dict]] | None = None, notes: dict | None = None, threads: list[dict] | None = None) -> bytes:
+def write(eng, views: list[dict], vba: dict[str, bytes] | None = None, objects: list[list[dict]] | None = None, notes: dict | None = None, threads: list[dict] | None = None, props: dict | None = None, stamps: tuple[str, str] | None = None) -> bytes:
     threads = threads or []
     ranges: dict[int, list[tuple[str, str]]] = {}
     wb = Workbook()
+    if stamps:
+        core_out(wb, props or {}, *stamps)
     xml, body, heading = theme_out(eng.theme())
     wb.loaded_theme = xml
     wb._fonts[0] = Font(name=body, sz=10)
@@ -105,8 +110,8 @@ def write(eng, views: list[dict], vba: dict[str, bytes] | None = None, objects: 
         validations_out(ws, eng.validations(i))
         for r1, c1, r2, c2 in eng.merges(i):
             ws.merge_cells(start_row=r1 + 1, start_column=c1 + 1, end_row=r2 + 1, end_column=c2 + 1)
-        ws.sheet_format.defaultColWidth = round(COL_PX / 7, 4)
-        ws.sheet_format.defaultRowHeight = ROW_PX * 0.75
+        ws.sheet_format.defaultColWidth = round(((view.get("cols") or {}).get("base") or COL_PX) / 7, 4)
+        ws.sheet_format.defaultRowHeight = ((view.get("rows") or {}).get("base") or ROW_PX) * 0.75
         cols = view.get("cols") or {}
         for c, px in cols.get("sizes", []):
             ws.column_dimensions[get_column_letter(c + 1)].width = round(px / 7, 4)
@@ -121,6 +126,8 @@ def write(eng, views: list[dict], vba: dict[str, bytes] | None = None, objects: 
             ws.row_dimensions[r + 1].hidden = True
         for r, lv in rows.get("levels", []):
             ws.row_dimensions[r + 1].outlineLevel = lv
+        if rows.get("before") or cols.get("before"):
+            ws.sheet_properties.outlinePr = Outline(summaryBelow=not rows.get("before"), summaryRight=not cols.get("before"))
         fr, fc = int(view.get("fr") or 0), int(view.get("fc") or 0)
         if fr or fc:
             ws.freeze_panes = f"{get_column_letter(fc + 1)}{fr + 1}"
@@ -160,4 +167,5 @@ def write(eng, views: list[dict], vba: dict[str, bytes] | None = None, objects: 
         wb.vba_archive = zipfile.ZipFile(io.BytesIO(buf.getvalue()))
     out = io.BytesIO()
     wb.save(out)
-    return overlay_finish(inject(review_finish(out.getvalue(), threads, ranges), wb, views, COL_PX, ROW_PX), plans, eng.sheet_names(), views)
+    data = patch_app(out.getvalue(), app_xml(props or {}, eng.sheet_names(), VERSION)) if stamps else out.getvalue()
+    return overlay_finish(inject(review_finish(data, threads, ranges), wb, views, COL_PX, ROW_PX), plans, eng.sheet_names(), views)

@@ -3,6 +3,8 @@ export interface AxisState {
   hidden: number[];
   levels?: [number, number][];
   folded?: [number, number][];
+  base?: number;
+  before?: boolean;
 }
 
 export interface OutlineRun {
@@ -23,11 +25,35 @@ export class Axis {
   private keys: number[] = [];
   private deltas: number[] = [];
 
+  readonly home: number;
+  before = false;
+
+  summaryAt(r: OutlineRun): number {
+    if (this.before) return r.a > 0 ? r.a - 1 : r.a;
+    return r.b + 1 < this.count ? r.b + 1 : r.b;
+  }
+
+  clearOutline(): void {
+    for (const i of this.levels.keys()) this.hidden.delete(i);
+    this.levels.clear();
+    this.folded.clear();
+    this.runCache = null;
+    this.rebuild();
+  }
+
   constructor(
     readonly count: number,
-    readonly base: number,
+    public base: number,
     readonly min = 4,
-  ) {}
+  ) {
+    this.home = base;
+  }
+
+  setBase(px: number): void {
+    this.base = Math.max(this.min, Math.min(800, Math.round(px)));
+    for (const [k, v] of [...this.sizes]) if (v === this.base) this.sizes.delete(k);
+    this.rebuild();
+  }
 
   size(i: number): number {
     return this.hidden.has(i) || this.filtered.has(i) ? 0 : this.sizes.get(i) ?? this.base;
@@ -104,10 +130,14 @@ export class Axis {
     const s: AxisState = { sizes: [...this.sizes.entries()], hidden: [...this.hidden] };
     if (this.levels.size) s.levels = [...this.levels.entries()];
     if (this.folded.size) s.folded = [...this.folded.entries()];
+    if (this.base !== this.home) s.base = this.base;
+    if (this.before) s.before = true;
     return s;
   }
 
   restore(s: AxisState | undefined): void {
+    this.base = s?.base ?? this.home;
+    this.before = !!s?.before;
     this.sizes.clear();
     this.hidden.clear();
     this.levels.clear();

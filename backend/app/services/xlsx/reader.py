@@ -20,6 +20,7 @@ from .review import ranges_in, threads_in
 from .styles import tokens_in
 from .tables import tables_in
 from .theme import theme_in
+from .props import read_props
 from .validation import validations_in
 
 ZOOMS = [0.5, 0.67, 0.75, 0.9, 1, 1.1, 1.25, 1.5, 1.75, 2]
@@ -178,6 +179,14 @@ def read(data: bytes) -> dict:
         view["cols"] = _axis(ws.column_dimensions, lambda d: _px_width(d.width) if d.customWidth or d.width else None,
                              _px_width(base), max(WIDE_TO, max_c), notes)
         view["rows"] = _axis(ws.row_dimensions, lambda d: round(d.ht / 0.75) if d.ht and d.customHeight else None, None, 0, notes)
+        if _px_width(base) != 100:
+            view["cols"]["base"] = _px_width(base)
+        outline = ws.sheet_properties.outlinePr
+        if outline is not None:
+            if outline.summaryBelow is False:
+                view["rows"]["before"] = True
+            if outline.summaryRight is False:
+                view["cols"]["before"] = True
         if ws.sheet_state != "visible":
             view["hidden"] = True
         z = (ws.sheet_view.zoomScale or 100) / 100
@@ -212,4 +221,4 @@ def read(data: bytes) -> dict:
         text = dn.attr_text or ""
         names.append((name, "=" + from_file(text.lstrip("="))))
     tables = tables_in(wb, {ws.title: i for i, ws in enumerate(wb.worksheets)}, notes)
-    return {"sheets": sheets, "names": names, "tables": tables, "theme": theme_in(wb.loaded_theme), "cellStyles": custom, "vba": vba, "protection": book_in(wb), "notes": [f"{n} {what}" for what, n in sorted(notes.items())]}
+    return {"sheets": sheets, "names": names, "tables": tables, "theme": theme_in(wb.loaded_theme), "cellStyles": custom, "vba": vba, "props": read_props(wb, data), "protection": book_in(wb), "notes": [f"{n} {what}" for what, n in sorted(notes.items())]}

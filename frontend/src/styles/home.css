@@ -256,6 +256,15 @@
 
 .fc-title:hover, .fc-title:focus { border-color: var(--border-color); background: var(--bg-primary); }
 
+.fc-group-badge {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--accent-color);
+  visibility: hidden;
+}
+
+.fc-group-badge[data-on="true"] { visibility: visible; }
+
 .fc-save {
   min-width: 72px;
   font-size: var(--text-sm);

@@ -13,7 +13,7 @@ import { Menu, type MenuItem } from './ui/menu';
 import { Collab, identityHeaders } from './ui/collab';
 import { isNetworkFailure, keep, replay, waiting } from './ui/offline';
 import { takeAction } from './ui/action';
-import { DataTools } from './ui/datatools';
+import { DataTools, type DocProps } from './ui/datatools';
 import type { ShellParts } from './ui/shell';
 import { icon } from './ui/icons';
 import { emptyPivot, formatPivot, outArea, parseFields, parsePivot, PivotDialog, PivotPanel, type PivotDef } from './ui/pivot';
@@ -23,6 +23,7 @@ import { DATE_PERIODS, describe, parseRule, PRESETS, rangeText, ruleLine, withSt
 import { ScreenReaderGrid } from './ui/srgrid';
 import { bindShortcuts, Checker, initPrefs, liveRegion, setTextSize, setTheme, Shortcuts, textSize, theme, type TextSize, type ThemeName } from './ui/a11y';
 import { cleanPage, layoutOf, PageSetupDialog, type PageSetup } from './ui/pagesetup';
+import { NumberFormatDialog } from './ui/numberformat';
 
 const LOCALES: [string, string][] = [['en-US', 'English (United States)'], ['en-GB', 'English (United Kingdom)'], ['de-DE', 'Deutsch (Deutschland)'], ['fr-FR', 'Francais (France)'], ['ja-JP', 'Japanese (Japan)']];
 
@@ -295,7 +296,14 @@ export class App {
         this.currentRange = range;
         this.currentRef = this.nameOf(range) ?? ref;
         if (document.activeElement !== p.nameBox) p.nameBox.value = this.currentRef;
-        if (document.activeElement !== p.formulaBar) p.formulaBar.value = text;
+        if (document.activeElement !== p.formulaBar) {
+          p.formulaBar.value = text;
+          if (this.grid?.localForms && text.startsWith('=')) {
+            void this.grid.localise(text, true).then((v) => {
+              if (this.current === text && document.activeElement !== p.formulaBar) p.formulaBar.value = v;
+            });
+          }
+        }
         if (this.grid) {
           if (text.startsWith('=')) this.say(`${this.currentRef}, formula ${text}`);
         }
@@ -319,6 +327,7 @@ export class App {
         this.audit.invalidate();
         void this.audit.refresh();
         void this.mirror(changes);
+        this.autoFlash(changes);
       },
       onSheet: (sheet) => {
         this.markTab(sheet);
@@ -356,12 +365,10 @@ export class App {
       onView: (sheet, view) => this.saveView(sheet, view),
       onBreakMove: (axis, from, to) => this.moveBreak(axis, from, to),
       onMenu: (kind, x, y) => this.cellMenu(kind, x, y),
-      onGoto: () => {
-        p.nameBox.focus();
-        p.nameBox.select();
-      },
+      onGoto: () => this.tools.goToDialog(),
     });
     new ScreenReaderGrid(this.grid, () => this.open?.sheets[this.grid.sheetIndex] ?? '');
+    this.grid.peers = () => (this.grouped.size > 1 && this.grouped.has(this.grid.sheetIndex) ? [...this.grouped].filter((s) => s !== this.grid.sheetIndex) : []);
     this.whatIf = new WhatIf({
       grid: this.grid,
       book: () => this.open?.book ?? -1,
@@ -388,6 +395,24 @@ export class App {
         const l = o ? await engine().filterValues(o.book, this.grid.sheetIndex, col) : { values: [], blanks: false };
         return { values: l.values, blanks: l.blanks };
       },
+      names: () => this.open?.names ?? [],
+      workbooks: async () => (await api<{ id: string; title: string; sheets: string[] }[]>('GET', '/api/workbooks')).map((b) => ({ id: b.id, title: b.title, sheets: b.sheets })),
+      workbookId: () => this.open?.id ?? '',
+      moveCopy: (sheet, dest, name, before, copy) => this.moveCopySheet(sheet, dest, name, before, copy),
+      properties: async () => {
+        const o = this.open;
+        if (!o) return null;
+        this.flush();
+        await this.saving;
+        return api<DocProps>('GET', `/api/workbooks/${o.id}/properties`);
+      },
+      saveProperties: async (props) => {
+        const o = this.open;
+        if (o) await api('PUT', `/api/workbooks/${o.id}/properties`, props);
+      },
+      jump: (text) => this.jumpTo(text),
+      noteCells: (sheet) => this.collab.noteCells(sheet),
+      pasteNotes: (src, dr, dc, t) => this.collab.pasteNotes(src, dr, dc, t),
       goTo: (s, r, c) => {
         if (s !== this.grid.sheetIndex) this.showSheet(s);
         this.grid.goTo(`${colName(c)}${r + 1}`);
@@ -522,10 +547,18 @@ export class App {
     cmd('cols.insert-right', 'Insert columns right', 'Insert as many columns as are selected, right of the selection.', true, () => g.insert(false, true));
     cmd('rows.delete', 'Delete rows', 'Delete the selected rows and move the rows below up.', true, () => g.remove(true), 'Mod+-');
     cmd('cols.delete', 'Delete columns', 'Delete the selected columns and move the columns on the right left.', true, () => g.remove(false));
+    cmd('rows.height', 'Row height', 'Set the height in points of the selected rows.', true, () => this.tools.sizeDialog('rowheight'));
+    cmd('cols.width', 'Column width', 'Set the width in characters of the selected columns.', true, () => this.tools.sizeDialog('colwidth'));
+    cmd('cols.standard', 'Standard width', 'Set the width in characters that columns have unless they were sized on their own.', true, () => this.tools.sizeDialog('stdwidth'));
+    cmd('rows.autofit', 'AutoFit row height', 'Size the selected rows to fit their wrapped text, line breaks and large fonts.', true, () => g.autofitSelection(true));
+    cmd('cols.autofit', 'AutoFit column width', 'Size the selected columns to fit their longest entry.', true, () => g.autofitSelection(false));
     cmd('rows.hide', 'Hide rows', 'Hide the selected rows.', false, () => g.hide(true, true), 'Mod+9');
     cmd('rows.unhide', 'Unhide rows', 'Show hidden rows inside the selection.', false, () => g.hide(true, false), 'Mod+Shift+9');
     cmd('cols.hide', 'Hide columns', 'Hide the selected columns.', false, () => g.hide(false, true), 'Mod+0');
     cmd('cols.unhide', 'Unhide columns', 'Show hidden columns inside the selection.', false, () => g.hide(false, false), 'Mod+Shift+0');
+    cmd('data.auto-outline', 'Auto Outline', 'Group the detail rows and columns that summary formulas such as SUM and SUBTOTAL add up, one level for each nested summary.', true, () => this.tools.autoOutline());
+    cmd('data.clear-outline', 'Clear Outline', 'Remove every row and column group from the sheet and show the rows and columns they hid.', true, () => this.grid.clearOutline());
+    cmd('data.outline-settings', 'Outline settings', 'Choose whether summary rows sit below or above their detail rows and summary columns to the right or left of theirs.', true, () => this.tools.outlineSettings());
     cmd('rows.group', 'Group rows', 'Add the selected rows to an outline group one level deeper, up to 7 levels.', false, () => g.group(true, 1), 'Alt+Shift+Right');
     cmd('rows.ungroup', 'Ungroup rows', 'Take the selected rows out of one outline level.', false, () => g.group(true, -1), 'Alt+Shift+Left');
     cmd('cols.group', 'Group columns', 'Add the selected columns to an outline group one level deeper, up to 7 levels.', false, () => g.group(false, 1));
@@ -533,10 +566,12 @@ export class App {
     cmd('view.zoom-in', 'Zoom in', 'Make the sheet bigger, up to 200%.', false, () => g.zoomStep(1));
     cmd('view.zoom-out', 'Zoom out', 'Make the sheet smaller, down to 50%.', false, () => g.zoomStep(-1));
     cmd('view.zoom-reset', 'Zoom to 100%', 'Show the sheet at its normal size.', false, () => g.setZoom(1));
-    cmd('nav.goto', 'Go to', 'Type a cell or range to jump to it.', false, () => { this.p.nameBox.focus(); this.p.nameBox.select(); }, 'F5');
+    cmd('nav.goto', 'Go To and Go To Special', 'Jump to a cell, range or defined name from a list, or select blanks, constants, formulas by type, notes, conditional formats, data validation, visible cells only, the current region, the last cell, row or column differences, precedents or dependents, one range at a time.', false, () => this.tools.goToDialog(), 'F5');
+    cmd('nav.namebox', 'Name Box', 'Move the cursor to the Name Box to type a cell, a range or a new name.', false, () => { this.p.nameBox.focus(); this.p.nameBox.select(); });
     cmd('format.menu', 'Number format', 'Choose how the selected cells show numbers, dates and times.', true, () => this.formatMenu());
     cmd('format.decimals-more', 'Increase decimal places', 'Show one more decimal place in the selected cells.', true, () => this.bumpDecimals(1));
     cmd('format.decimals-less', 'Decrease decimal places', 'Show one fewer decimal place in the selected cells.', true, () => this.bumpDecimals(-1));
+    cmd('format.number-dialog', 'Format Cells: Number', 'Open the Number tab with every category (General, Number, Currency, Accounting, Date, Time, Percentage, Fraction, Scientific, Text, Special, Custom), a live sample and formats that follow the workbook locale.', true, () => this.numberDialog(), 'Mod+1');
     cmd('format.custom', 'Custom number format', 'Type a number format code for the selected cells.', true, () => this.customFormat());
     for (const f of NUMBER_FORMATS) cmd(`format.${f.id}`, f.label, f.description, true, () => g.setFormat(f.code), f.keys);
     cmd('format.bold', 'Bold', 'Make the selected cells bold, or not bold.', true, () => g.toggle('b'), 'Mod+B');
@@ -560,6 +595,7 @@ export class App {
       await g.setFormat('');
       if (this.open) await e.undoGroup(this.open.book, mark);
     });
+    cmd('view.formula-bar', 'Expand or collapse formula bar', 'Show the formula bar several lines tall with wrapped text and a drag handle to resize it, or fold it back to one line.', false, () => this.toggleFormulaBar(), 'Mod+Shift+U');
     cmd('edit.link', 'Insert link', 'Link the active cell to a web page, an email address or a place in the workbook, or change its link.', true, () => this.linkBox(), 'Mod+K');
     cmd('edit.link-open', 'Open link', 'Open the link in the active cell. Ctrl+click a linked cell does the same.', false, () => this.grid.linkTarget().then((t) => this.followLink(t)));
     cmd('edit.link-remove', 'Remove link', 'Remove the links from the selected cells and keep their text.', true, () => this.grid.removeLinks());
@@ -605,6 +641,7 @@ export class App {
     cmd('data.consolidate', 'Consolidate', 'Combine ranges from one or more sheets with sum, count, average, max or min, by position or by their row and column labels.', true, () => T().consolidate());
     cmd('data.subtotal', 'Subtotal', 'Insert SUBTOTAL rows at each change in a column, group the detail rows in an outline and add a grand total, or remove them all.', true, () => T().subtotal());
     cmd('data.advanced-filter', 'Advanced filter', 'Filter a list in place or copy the matching records elsewhere using a criteria range, with unique records only if you want.', true, () => T().advancedFilter());
+    cmd('data.flash-auto', 'Automatically Flash Fill', 'Turn on or off the grey Flash Fill suggestion that appears under an example you type next to your data; Enter accepts it, Esc or any other key dismisses it.', false, () => this.toggleFlashAuto());
     cmd('data.flash-fill', 'Flash Fill', 'Fill the cells next to your data by following the pattern of the examples you typed.', true, () => T().flashFill(), 'Mod+E');
     cmd('data.checkbox-insert', 'Insert checkboxes', 'Turn the selected cells into checkboxes that hold TRUE or FALSE. Click one or press Space to toggle it.', true, () => T().checkboxes(true));
     cmd('data.checkbox-remove', 'Remove checkboxes', 'Turn the selected checkbox cells back into plain cells.', true, () => T().checkboxes(false));
@@ -615,8 +652,10 @@ export class App {
     cmd('edit.replace', 'Find and replace', 'Replace text or numbers in the sheet or the workbook as one undo step.', true, () => T().openFind(true), 'Mod+H');
     cmd('edit.paste-ops', 'Paste special options', 'Paste values, formulas or formats with add, subtract, multiply or divide, skipping blanks or transposing.', true, () => T().pasteOps());
     cmd('edit.autocomplete', 'AutoComplete', 'Turn on or off suggesting a completion from other text in the same column while you type.', false, () => this.toggleAutoComplete());
+    cmd('edit.series', 'Fill series', 'Fill the selection with a linear, growth, date or AutoFill series with a step and stop value, or fit a linear or growth trend to the numbers already there.', true, () => T().series());
     cmd('edit.insert-cells', 'Insert cells', 'Insert blank cells in the selection and shift the cells below them down or the cells to their right over.', true, () => this.cellsMenu(true));
     cmd('edit.delete-cells', 'Delete cells', 'Delete the selected cells and shift the cells below up or the cells to the right left.', true, () => this.cellsMenu(false));
+    cmd('file.properties', 'Document properties', 'Edit the title, subject, author, manager, company, categories, tags, status and comments saved with the workbook and written to .xlsx, and see its dates and statistics.', false, () => T().docProps());
     cmd('file.save-template', 'Save as template', 'Save a copy of this workbook in your personal templates.', false, () => this.saveTemplate());
     cmd('sheet.hide', 'Hide sheet', 'Hide the active sheet tab. The sheet and its data stay in the workbook.', true, () => this.hideSheet(this.grid.sheetIndex, true));
     cmd('sheet.ungroup', 'Ungroup sheets', 'Stop editing several sheets together.', false, () => {
@@ -718,16 +757,92 @@ export class App {
       p.nameBox.removeAttribute('aria-invalid');
       p.nameBox.value = this.currentRef;
     });
+    p.formulaToggle.addEventListener('click', () => this.toggleFormulaBar());
+    p.formulaGrip.addEventListener('pointerdown', (e) => {
+      e.preventDefault();
+      const y0 = e.clientY;
+      const h0 = p.formulaBar.offsetHeight;
+      const move = (m: PointerEvent) => p.formulaBox.style.setProperty('--fbar-h', `${Math.max(52, Math.min(360, h0 + m.clientY - y0))}px`);
+      const up = () => {
+        window.removeEventListener('pointermove', move);
+        window.removeEventListener('pointerup', up);
+        try {
+          localStorage.setItem('fc-fbar-h', String(p.formulaBar.offsetHeight));
+        } catch {
+          return;
+        }
+      };
+      window.addEventListener('pointermove', move);
+      window.addEventListener('pointerup', up);
+    });
+    try {
+      const h = Number(localStorage.getItem('fc-fbar-h'));
+      if (h >= 52 && h <= 360) p.formulaBox.style.setProperty('--fbar-h', `${h}px`);
+    } catch {
+      p.formulaBox.style.removeProperty('--fbar-h');
+    }
     p.formulaBar.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') {
+      if (e.key === 'Enter' && e.altKey) {
+        e.preventDefault();
+        const f = p.formulaBar;
+        f.setRangeText('\n', f.selectionStart, f.selectionEnd, 'end');
+        f.dispatchEvent(new Event('input'));
+        if (!this.fbarOpen()) this.toggleFormulaBar(true);
+      } else if (e.key === 'Enter') {
         e.preventDefault();
         void this.grid.setActive(p.formulaBar.value).then(() => this.grid.focus());
       } else if (e.key === 'Escape') {
         e.preventDefault();
         p.formulaBar.value = this.current;
+        void this.grid.localise(this.current, true).then((v) => (p.formulaBar.value = v));
         this.grid.focus();
       }
     });
+  }
+
+  private flashAuto = ((): boolean => {
+    try {
+      return localStorage.getItem('fc-flash-auto') !== '0';
+    } catch {
+      return true;
+    }
+  })();
+
+  private autoFlash(changes: Changed[]): void {
+    const at = this.grid.sheetIndex;
+    if (!this.flashAuto || this.grid.replaying || changes.length !== 1) return;
+    const [s, r, c, t, f] = changes[0];
+    if (s !== at || f || !t) return;
+    void this.grid.flashPreview(r, c);
+  }
+
+  private toggleFlashAuto(): void {
+    this.flashAuto = !this.flashAuto;
+    if (!this.flashAuto) this.grid.clearGhost();
+    try {
+      localStorage.setItem('fc-flash-auto', this.flashAuto ? '1' : '0');
+    } catch {
+      this.status('Flash Fill setting changed for this session only');
+      return;
+    }
+    this.status(`Automatically Flash Fill ${this.flashAuto ? 'on: suggestions appear in grey, press Enter to accept' : 'off: use Ctrl+E'}`);
+  }
+
+  private fbarOpen(): boolean {
+    return this.p.formulaBox.dataset.open === 'true';
+  }
+
+  private toggleFormulaBar(force?: boolean): void {
+    const p = this.p;
+    const on = force ?? !this.fbarOpen();
+    p.formulaBox.dataset.open = String(on);
+    p.formulaBar.wrap = on ? 'soft' : 'off';
+    p.formulaGrip.hidden = !on;
+    p.formulaToggle.setAttribute('aria-expanded', String(on));
+    const label = on ? 'Collapse formula bar (Ctrl+Shift+U)' : 'Expand formula bar (Ctrl+Shift+U)';
+    p.formulaToggle.title = label;
+    p.formulaToggle.setAttribute('aria-label', label.replace(' (Ctrl+Shift+U)', ''));
+    p.formulaBar.focus();
   }
 
   private async route(): Promise<void> {
@@ -752,6 +867,7 @@ export class App {
     p.home.hidden = false;
     p.homeBtn.hidden = true;
     p.title.hidden = true;
+    p.groupBadge.hidden = true;
     p.save.hidden = true;
     document.title = 'FormCel';
     void this.refresh();
@@ -1721,6 +1837,7 @@ export class App {
     this.whatIf.load(doc.whatif ?? []);
     const names = doc.names?.length ? await e.names(book) : [];
     this.grouped.clear();
+    this.grid.localForms = ((doc as { locale?: string }).locale ?? 'en-US') !== 'en-US';
     this.open = { id, book, title: doc.title, sheets: doc.sheets, views: doc.sheets.map((_, i) => doc.views?.[i] ?? {}), names, macros: !!doc.macros, pages: doc.sheets.map((_, i) => cleanPage((doc.views?.[i] as { page?: unknown } | undefined)?.page)), locale: (doc as { locale?: string }).locale ?? 'en-US' };
     this.preview = false;
     this.grid.setBreakView(null);
@@ -1766,6 +1883,17 @@ export class App {
     const box = this.p.nameBox;
     box.setAttribute('aria-invalid', String(problem !== null));
     box.title = problem ?? '';
+  }
+
+  private jumpTo(text: string): boolean {
+    const o = this.open;
+    if (this.grid.goTo(text)) return true;
+    const hit = o?.names.find(([n]) => n.toLowerCase() === text.toLowerCase());
+    const m = hit ? /^=(?:'((?:[^']|'')+)'|([^!']+))!([$A-Za-z0-9:]+)$/.exec(hit[1]) : null;
+    const sheet = o && m ? o.sheets.findIndex((s) => s.toLowerCase() === (m[1] ?? m[2]).replace(/''/g, "'").toLowerCase()) : -1;
+    if (!m || sheet < 0) return false;
+    if (sheet !== this.grid.sheetIndex) this.showSheet(sheet);
+    return this.grid.goTo(m[3].replace(/\$/g, ''));
   }
 
   private async nameBoxEnter(text: string): Promise<void> {
@@ -1819,6 +1947,11 @@ export class App {
       else t.style.removeProperty('--tab');
     });
     for (const t of have.slice(o.sheets.length)) t.remove();
+    const group = this.grouped.size > 1;
+    const title = `${o.title}${group ? ' [Group]' : ''} · FormCel`;
+    if (document.title !== title) document.title = title;
+    this.p.groupBadge.hidden = false;
+    this.p.groupBadge.dataset.on = String(group);
   }
 
   private showSheet(i: number): void {
@@ -2562,7 +2695,8 @@ export class App {
       { label: 'Transpose', run: run('all', true) },
       { label: 'Values, transposed', run: run('values', true) },
       { sep: true },
-      { label: 'Operations and skip blanks', run: () => void runCommand('edit.paste-ops') },
+      { label: 'Paste link', run: () => void g.pasteLayers('link', false).then(done) },
+      { label: 'Paste special dialog (validation, notes, operations, skip blanks)', run: () => void runCommand('edit.paste-ops') },
     ], done);
   }
 
@@ -2756,7 +2890,7 @@ export class App {
         keys: f.keys?.replace('Mod', 'Ctrl'),
         run: run(`format.${f.id}`),
       }));
-      items.push({ sep: true }, { label: 'Custom format...', run: run('format.custom') });
+      items.push({ sep: true }, { label: 'More number formats...', keys: 'Ctrl+1', run: run('format.number-dialog') }, { label: 'Custom format...', run: run('format.custom') });
       this.menu.show(b.left, b.bottom + 4, items, () => g.focus());
     });
   }
@@ -2766,6 +2900,29 @@ export class App {
     const code = await g.formatAtActive();
     const next = bumpCode(code, this.current, dir);
     if (next !== code) await g.setFormat(next);
+  }
+
+  private numberBox: NumberFormatDialog | null = null;
+
+  private numberDialog(): void {
+    const box = this.numberBox ??= new NumberFormatDialog({
+      current: async () => {
+        const raw = this.current.trim();
+        return { code: await this.grid.formatAtActive(), sample: raw && !raw.startsWith('=') && !Number.isNaN(Number(raw.replace(/,/g, ''))) ? raw : '1234.5678' };
+      },
+      preview: async (code, sample) => {
+        const o = this.open;
+        return o ? (await engine().tool(o.book, this.grid.sheetIndex, 'fmtpreview', code, sample)).message ?? '' : '';
+      },
+      specials: async () => {
+        const o = this.open;
+        const text = o ? (await engine().tool(o.book, this.grid.sheetIndex, 'fmtspecials')).message ?? '' : '';
+        return text.split('\n').filter(Boolean).map((l) => l.split('\t') as [string, string]);
+      },
+      apply: (code) => this.grid.setFormat(code),
+      locale: () => this.open?.locale ?? 'en-US',
+    });
+    void box.open();
   }
 
   private customFormat(): void {
@@ -2826,9 +2983,13 @@ export class App {
       { label: 'Trim whitespace', run: run('data.trim') },
       { label: 'Data cleanup', run: run('data.cleanup') },
       { label: 'Flash Fill', keys: 'Ctrl+E', run: run('data.flash-fill') },
+      { label: this.flashAuto ? 'Automatically Flash Fill: on' : 'Automatically Flash Fill: off', run: run('data.flash-auto') },
       { sep: true },
       { label: 'Consolidate', run: run('data.consolidate') },
       { label: 'Subtotal', run: run('data.subtotal') },
+      { label: 'Auto Outline', run: run('data.auto-outline') },
+      { label: 'Clear Outline', run: run('data.clear-outline') },
+      { label: 'Outline settings...', run: run('data.outline-settings') },
       { label: 'Advanced filter', run: run('data.advanced-filter') },
       { label: 'Filter views', run: run('data.filter-views') },
       { label: 'Insert slicer', run: run('data.slicer') },
@@ -2841,9 +3002,11 @@ export class App {
       { label: 'Find and replace', keys: 'Ctrl+H', run: run('edit.replace') },
       { label: 'Insert cells', run: run('edit.insert-cells') },
       { label: 'Delete cells', run: run('edit.delete-cells') },
+      { label: 'Fill series', run: run('edit.series') },
       { label: 'Paste special options', run: run('edit.paste-ops') },
       { label: auto ? 'AutoComplete: on' : 'AutoComplete: off', run: run('edit.autocomplete') },
       { sep: true },
+      { label: 'Document properties', run: run('file.properties') },
       { label: 'Save as template', run: run('file.save-template') },
     ], () => this.grid.focus());
   }
@@ -2859,11 +3022,7 @@ export class App {
   }
 
   private cellsMenu(insert: boolean): void {
-    const r = this.grid.cellRect();
-    const go = (dir: string) => () => void this.grid.runTool('shiftcells', `${this.grid.selection().r0},${this.grid.selection().c0},${this.grid.selection().r1},${this.grid.selection().c1}`, dir, insert ? '1' : '0').then((m) => this.status(m.split('\n', 1)[0]));
-    this.menu.show(r.left + 20, r.bottom, insert
-      ? [{ label: 'Insert cells, shift cells right', run: go('right') }, { label: 'Insert cells, shift cells down', run: go('down') }]
-      : [{ label: 'Delete cells, shift cells left', run: go('left') }, { label: 'Delete cells, shift cells up', run: go('up') }], () => this.grid.focus());
+    this.tools.cellsDialog(insert);
   }
 
   private async saveTemplate(): Promise<void> {
@@ -2916,6 +3075,9 @@ export class App {
     items.push({ label: 'Clear contents', keys: 'Delete', run: run('edit.clear') }, { label: 'Paste special', keys: 'Ctrl+Alt+V', disabled: !g.canPasteSpecial(), run: () => this.pasteMenu(x, y) }, { sep: true });
     if (kind === 'rows' || kind === 'cells') items.push({ label: 'Hide rows', keys: 'Ctrl+9', run: run('rows.hide') }, { label: 'Unhide rows', keys: 'Ctrl+Shift+9', run: run('rows.unhide') });
     if (kind === 'cols' || kind === 'cells') items.push({ label: 'Hide columns', keys: 'Ctrl+0', run: run('cols.hide') }, { label: 'Unhide columns', keys: 'Ctrl+Shift+0', run: run('cols.unhide') });
+    items.push({ sep: true });
+    if (kind !== 'cols') items.push({ label: 'Row height...', run: run('rows.height') }, { label: 'AutoFit row height', run: run('rows.autofit') });
+    if (kind !== 'rows') items.push({ label: 'Column width...', run: run('cols.width') }, { label: 'AutoFit column width', run: run('cols.autofit') }, { label: 'Standard width...', run: run('cols.standard') });
     if (kind === 'rows') items.push({ sep: true }, { label: 'Group rows', keys: 'Alt+Shift+Right', run: run('rows.group') }, { label: 'Ungroup rows', keys: 'Alt+Shift+Left', run: run('rows.ungroup') });
     if (kind === 'cols') items.push({ sep: true }, { label: 'Group columns', keys: 'Alt+Shift+Right', run: run('cols.group') }, { label: 'Ungroup columns', keys: 'Alt+Shift+Left', run: run('cols.ungroup') });
     this.menu.show(x, y, items, () => g.focus());
@@ -2928,6 +3090,8 @@ export class App {
       { label: 'Rename', run: () => this.renameTab(i) },
       { label: 'Move left', disabled: i === 0, run: () => this.moveSheet(i, i - 1) },
       { label: 'Move right', disabled: i === o.sheets.length - 1, run: () => this.moveSheet(i, i + 1) },
+      { label: 'Copy sheet', run: () => void this.moveCopySheet(i, o.id, '', i + 1, true).then((m) => this.status(m)).catch((err: unknown) => this.status(err instanceof Error ? err.message : 'Could not copy the sheet', true)) },
+      { label: 'Move or copy...', run: () => void this.tools.moveCopy(i) },
       { sep: true },
       { label: 'Hide sheet', disabled: o.sheets.filter((_, k) => !o.views[k]?.hidden).length < 2, run: () => this.hideSheet(i, true) },
       ...o.sheets.map((n, k) => ({ n, k })).filter(({ k }) => o.views[k]?.hidden).map(({ n, k }): MenuItem => ({ label: `Unhide ${n}`, run: () => this.hideSheet(k, false) })),
@@ -2996,6 +3160,49 @@ export class App {
     this.showSheet(to);
     this.button('edit.undo').disabled = true;
     this.button('edit.redo').disabled = true;
+  }
+
+  private async moveCopySheet(i: number, dest: string, name: string, before: number | null, copy: boolean): Promise<string> {
+    const o = this.open;
+    if (!o) return '';
+    this.flush();
+    await this.saving;
+    const same = !dest || dest === o.id;
+    if (same && !copy) {
+      const to = before === null ? o.sheets.length - 1 : before > i ? before - 1 : before;
+      if (to !== i) await this.moveSheet(i, to);
+      return `Moved ${o.sheets[to]}.`;
+    }
+    const r = await api<{ dest: string; index: number; name: string; sheets: string[] }>('POST', `/api/workbooks/${o.id}/sheets/${i}/copy`, { dest: same ? null : dest, name: name || null, to: before });
+    if (!same) {
+      if (!copy) await this.deleteSheet(i);
+      return `${copy ? 'Copied' : 'Moved'} ${o.sheets[i] ?? r.name} to ${r.name} in the other workbook.`;
+    }
+    const doc = await api<{ cells: [number, number, string][][]; formats?: [number, number, string][][]; styles?: [number, number, string][][]; merges?: Area[][]; rules?: string[][]; filters?: string[]; validations?: string[][]; links?: [number, number, string][][]; views?: SheetView[]; sheets: string[]; collab?: Parameters<Collab['attach']>[3]; protection?: Parameters<Collab['attach']>[4] }>('GET', `/api/workbooks/${o.id}`);
+    const e = engine();
+    const k = r.index;
+    const last = await e.addSheet(o.book, r.name);
+    await e.loadFormats(o.book, last, doc.formats?.[k] ?? []);
+    await e.loadStyles(o.book, last, doc.styles?.[k] ?? []);
+    await e.loadMerges(o.book, last, doc.merges?.[k] ?? []);
+    await e.loadRules(o.book, last, doc.rules?.[k] ?? []);
+    await e.loadFilter(o.book, last, doc.filters?.[k] ?? '');
+    await e.loadValidations(o.book, last, doc.validations?.[k] ?? []);
+    await e.loadLinks(o.book, last, doc.links?.[k] ?? []);
+    if (doc.cells[k]?.length) await e.load(o.book, doc.cells[k], last);
+    if (k !== last) await e.moveSheet(o.book, last, k);
+    o.sheets = doc.sheets;
+    o.views = doc.sheets.map((_, n) => doc.views?.[n] ?? {});
+    o.pages = doc.sheets.map((_, n) => cleanPage((doc.views?.[n] as { page?: unknown } | undefined)?.page));
+    this.grouped.clear();
+    this.collab.detach();
+    this.collab.attach(o.id, o.book, doc.sheets, doc.collab, doc.protection);
+    await this.charts.layer.open();
+    this.renderTabs();
+    this.showSheet(k);
+    this.button('edit.undo').disabled = true;
+    this.button('edit.redo').disabled = true;
+    return `Copied to ${r.name}.`;
   }
 
   private colourSheet(i: number, colour: string): void {

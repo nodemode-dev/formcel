@@ -605,15 +605,22 @@ export class Grid {
         for (const r of this.rows.runs()) {
           const cx = OUTLINE_PAD + (r.level - 1) * OUTLINE_STEP + OUTLINE_STEP / 2;
           const top = gh + this.y(r.a, pane) * z;
-          const end = r.b + 1 < MAX_ROWS ? r.b + 1 : r.b;
+          const end = this.rows.summaryAt(r);
           const by = gh + (this.y(end, pane) + this.rows.size(end) / 2) * z;
           if (by < gh || top > H) continue;
           if (!this.rows.isFolded(r)) {
             o.strokeStyle = pal.headFg;
             o.beginPath();
-            o.moveTo(cx - 4, top + 2.5);
-            o.lineTo(cx + 0.5, top + 2.5);
-            o.lineTo(cx + 0.5, by - 7);
+            if (this.rows.before) {
+              const bottom = gh + this.y(r.b + 1, pane) * z - 2.5;
+              o.moveTo(cx - 4, bottom);
+              o.lineTo(cx + 0.5, bottom);
+              o.lineTo(cx + 0.5, by + 7);
+            } else {
+              o.moveTo(cx - 4, top + 2.5);
+              o.lineTo(cx + 0.5, top + 2.5);
+              o.lineTo(cx + 0.5, by - 7);
+            }
             o.stroke();
           }
           button(cx, by, this.rows.isFolded(r) ? '+' : '−');
@@ -633,15 +640,22 @@ export class Grid {
         for (const r of this.cols.runs()) {
           const cy = OUTLINE_PAD + (r.level - 1) * OUTLINE_STEP + OUTLINE_STEP / 2;
           const left = gw + this.x(r.a, pane) * z;
-          const end = r.b + 1 < MAX_COLS ? r.b + 1 : r.b;
+          const end = this.cols.summaryAt(r);
           const bx = gw + (this.x(end, pane) + this.cols.size(end) / 2) * z;
           if (bx < gw || left > W) continue;
           if (!this.cols.isFolded(r)) {
             o.strokeStyle = pal.headFg;
             o.beginPath();
-            o.moveTo(left + 2.5, cy - 4);
-            o.lineTo(left + 2.5, cy + 0.5);
-            o.lineTo(bx - 7, cy + 0.5);
+            if (this.cols.before) {
+              const right = gw + this.x(r.b + 1, pane) * z - 2.5;
+              o.moveTo(right, cy - 4);
+              o.lineTo(right, cy + 0.5);
+              o.lineTo(bx + 7, cy + 0.5);
+            } else {
+              o.moveTo(left + 2.5, cy - 4);
+              o.lineTo(left + 2.5, cy + 0.5);
+              o.lineTo(bx - 7, cy + 0.5);
+            }
             o.stroke();
           }
           button(bx, cy, this.cols.isFolded(r) ? '+' : '−');
@@ -676,7 +690,7 @@ export class Grid {
       const pane = this.hit(HEAD_W, (py - gh) / z).pr;
       for (const r of this.rows.runs()) {
         if (r.level !== level) continue;
-        const end = r.b + 1 < MAX_ROWS ? r.b + 1 : r.b;
+        const end = this.rows.summaryAt(r);
         if (near(py, gh + (this.y(end, pane) + this.rows.size(end) / 2) * z)) {
           this.rows.fold(r, !this.rows.isFolded(r));
           axis = this.rows;
@@ -689,7 +703,7 @@ export class Grid {
       const pane = this.hit((px - gw) / z, HEAD_H).pc;
       for (const r of this.cols.runs()) {
         if (r.level !== level) continue;
-        const end = r.b + 1 < MAX_COLS ? r.b + 1 : r.b;
+        const end = this.cols.summaryAt(r);
         if (near(px, gw + (this.x(end, pane) + this.cols.size(end) / 2) * z)) {
           this.cols.fold(r, !this.cols.isFolded(r));
           axis = this.cols;
@@ -795,6 +809,21 @@ export class Grid {
         const rh = this.rows.size(r);
         if (cw && rh) this.decor.paint(ctx, r, c, this.x(c), this.y(r), cw, rh);
       }
+    }
+    for (const [k, text] of this.ghost) {
+      const r = Math.floor(k / MAX_COLS);
+      const c = k % MAX_COLS;
+      if (r < r0 || r > r1 || c < ca || c > cb || this.cache.get(k) || !this.cols.size(c) || !this.rows.size(r)) continue;
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(this.x(c) + 1, this.y(r), this.cols.size(c) - 2, this.rows.size(r));
+      ctx.clip();
+      ctx.globalAlpha = 0.5;
+      ctx.fillStyle = pal.fg;
+      ctx.font = 'italic 13px Inter, system-ui, -apple-system, "Segoe UI", sans-serif';
+      ctx.textAlign = 'left';
+      ctx.fillText(text.split('\n', 1)[0], this.x(c) + 5, this.y(r) + this.rows.size(r) - 6);
+      ctx.restore();
     }
     ctx.textBaseline = 'middle';
     ctx.font = '13px Inter, system-ui, -apple-system, "Segoe UI", sans-serif';
@@ -1555,6 +1584,95 @@ export class Grid {
     return this.runTool('pastespecial', area, String(this.ar), String(this.ac), what, op, skip ? '1' : '0', transpose ? '1' : '0', String(src.sheet));
   }
 
+  async visibleAreas(): Promise<Range[]> {
+    let s = this.sel();
+    if (s.r0 === s.r1 && s.c0 === s.c1) {
+      const ext = await this.engine.extent(this.book, this.sheet);
+      if (!ext) return [];
+      s = { r0: 0, c0: 0, r1: ext[0], c1: ext[1] };
+    }
+    const runs = (a: number, b: number, hidden: (i: number) => boolean) => {
+      const out: [number, number][] = [];
+      for (let i = a; i <= b; i++) {
+        if (hidden(i)) continue;
+        const last = out[out.length - 1];
+        if (last && last[1] === i - 1) last[1] = i;
+        else out.push([i, i]);
+      }
+      return out;
+    };
+    const rows = runs(s.r0, Math.min(s.r1, s.r0 + 100000), (i) => this.rows.isHidden(i));
+    const cols = runs(s.c0, Math.min(s.c1, s.c0 + 2000), (i) => this.cols.isHidden(i));
+    return rows.flatMap(([r0, r1]) => cols.map(([c0, c1]) => ({ r0, c0, r1, c1 })));
+  }
+
+  private ghost = new Map<number, string>();
+
+  clearGhost(): void {
+    if (!this.ghost.size) return;
+    this.ghost.clear();
+    this.paint();
+  }
+
+  async flashPreview(row: number, col: number): Promise<void> {
+    this.ghost.clear();
+    if (this.book >= 0) {
+      try {
+        const e = await this.engine.tool(this.book, this.sheet, 'flash', String(row), String(col), '1');
+        for (const line of (e.message ?? '').split('\n').slice(1)) {
+          const [r, c, ...rest] = line.split('\t');
+          if (rest.length) this.ghost.set(KEY(Number(r), Number(c)), rest.join('\t'));
+        }
+      } catch {
+        this.ghost.clear();
+      }
+    }
+    this.paint();
+  }
+
+  async acceptGhost(): Promise<void> {
+    const edits: [number, number, string][] = [...this.ghost].map(([k, v]) => [Math.floor(k / MAX_COLS), k % MAX_COLS, v]);
+    this.ghost.clear();
+    if (edits.length) await this.commitEdits(await this.engine.apply(this.book, edits, this.sheet));
+    this.paint();
+  }
+
+  copiedSource(): { sheet: number; r0: number; c0: number; r1: number; c1: number } | null {
+    const s = this.copied;
+    return s ? { sheet: s.sheet, r0: s.r0, c0: s.c0, r1: s.r0 + s.h - 1, c1: s.c0 + s.w - 1 } : null;
+  }
+
+  async pasteLayers(layers: string, transpose: boolean): Promise<string> {
+    const s = this.copiedSource();
+    if (!s || this.book < 0) return '';
+    return this.runTool('pastelayers', `${s.r0},${s.c0},${s.r1},${s.c1}`, String(this.ar), String(this.ac), transpose ? '1' : '0', String(s.sheet), layers);
+  }
+
+  autoOutline(rows: [number, number][], cols: [number, number][]): void {
+    this.rows.clearOutline();
+    this.cols.clearOutline();
+    for (const [a, b] of rows) this.rows.group(a, b, 1);
+    for (const [a, b] of cols) this.cols.group(a, b, 1);
+    this.resize();
+    this.emitView();
+    this.paint();
+  }
+
+  clearOutline(): void {
+    this.autoOutline([], []);
+  }
+
+  summary(): { rowsBelow: boolean; colsRight: boolean } {
+    return { rowsBelow: !this.rows.before, colsRight: !this.cols.before };
+  }
+
+  setSummary(rowsBelow: boolean, colsRight: boolean): void {
+    this.rows.before = !rowsBelow;
+    this.cols.before = !colsRight;
+    this.emitView();
+    this.paint();
+  }
+
   outlineRows(groups: [number, number][], clear: [number, number] | null): void {
     if (clear) for (let n = 0; n < 7; n++) if (!this.rows.group(clear[0], clear[1], -1)) break;
     for (const [a, b] of groups) this.rows.group(a, b, 1);
@@ -1717,6 +1835,7 @@ export class Grid {
     }
     this.book = book;
     this.sheet = sheet;
+    this.ghost.clear();
     this.dropWindows();
     this.merges = [];
     this.ruleLines = [];
@@ -1899,8 +2018,17 @@ export class Grid {
   async setStyles(ops: StyleOp[]): Promise<void> {
     if (this.book < 0 || !ops.length) return;
     this.recorder?.({ k: 'style', sheet: this.sheet, ops });
+    const peers = this.peers();
+    const mark = peers.length ? await this.engine.undoMark(this.book) : -1;
     await this.applyEffect(await this.engine.setStyles(this.book, this.sheet, ops));
+    for (const p of peers) {
+      const e = await this.engine.setStyles(this.book, p, ops);
+      if (e.styles.length) this.events.onStyles(e.styles.map(([s, r, c, raw]) => [s, r, c, raw]));
+    }
+    if (mark >= 0) await this.engine.undoGroup(this.book, mark);
   }
+
+  peers: () => number[] = () => [];
 
   async toggle(flag: 'b' | 'i' | 'u' | 's' | 'wrap'): Promise<void> {
     await this.styleSelection(this.activeStyle()[flag] ? `!${flag}` : flag);
@@ -2032,8 +2160,15 @@ export class Grid {
   async setFormat(code: string): Promise<void> {
     const s = this.sel();
     this.recorder?.({ k: 'format', sheet: this.sheet, r0: s.r0, c0: s.c0, r1: s.r1, c1: s.c1, code });
+    const peers = this.peers();
+    const mark = peers.length ? await this.engine.undoMark(this.book) : -1;
     const e = await this.engine.setFormat(this.book, this.sheet, s.r0, s.c0, s.r1, s.c1, code);
     await this.applyEffect(e);
+    for (const p of peers) {
+      const f = await this.engine.setFormat(this.book, p, s.r0, s.c0, s.r1, s.c1, code);
+      if (f.formats.length) this.events.onFormats(f.formats);
+    }
+    if (mark >= 0) await this.engine.undoGroup(this.book, mark);
   }
 
   async formatAtActive(): Promise<string> {
@@ -2051,6 +2186,14 @@ export class Grid {
       const st = this.styles.get(KEY(r, c));
       if (st && (st.wrap || st.size || st.rot || st.vertical)) fit.add(r);
     }
+    if (!this.replaying) {
+      const broken: StyleOp[] = [];
+      for (const [s, r, c, t, f] of changed) if (s === this.sheet && !f && t.includes('\n') && !this.styles.get(KEY(r, c))?.wrap) broken.push([r, c, r, c, 'wrap']);
+      if (broken.length) {
+        await this.setStyles(broken);
+        for (const op of broken) fit.add(op[0]);
+      }
+    }
     this.fitRows(fit);
     if (changed.length) this.events.onChanged(changed);
     if (changed.length && this.ruleLines.length) void this.refreshCf();
@@ -2063,13 +2206,21 @@ export class Grid {
     if (changed.length) this.objectsHook?.data();
   }
 
-  async setActive(raw: string): Promise<boolean> {
+  localForms = false;
+
+  async localise(text: string, toLocal: boolean): Promise<string> {
+    if (!this.localForms || this.book < 0 || !text.trimStart().startsWith('=')) return text;
+    return (await this.engine.tool(this.book, this.sheet, 'localform', toLocal ? 'to' : 'from', text)).message ?? text;
+  }
+
+  async setActive(entered: string): Promise<boolean> {
+    const raw = await this.localise(entered, false);
     if (this.validLines.length && raw !== '') {
       const line = await this.engine.checkInput(this.book, this.sheet, this.ar, this.ac, raw);
       if (line) {
         const choice = await this.events.onInvalid(line.split('\t').map(unescapeField));
         if (choice === 'retry') {
-          this.startEdit(raw);
+          this.startEdit(entered);
           this.editor.select();
           return false;
         }
@@ -2084,7 +2235,7 @@ export class Grid {
       if (typed.message) {
         const choice = await this.events.onInvalid(['', 'custom', '', '', '', 'e', 'warning', '', '', 'Column type', typed.message]);
         if (choice === 'retry') {
-          this.startEdit(raw);
+          this.startEdit(entered);
           this.editor.select();
           return false;
         }
@@ -2225,16 +2376,24 @@ export class Grid {
     const n = rows ? s.r1 - s.r0 + 1 : s.c1 - s.c0 + 1;
     const at = rows ? (after ? s.r1 + 1 : s.r0) : (after ? s.c1 + 1 : s.c0);
     if (n > 10000) return;
+    const peers = this.peers();
+    const mark = peers.length ? await this.engine.undoMark(this.book) : -1;
     const sh = await this.engine.shift(this.book, this.sheet, rows, Math.min(at, rows ? MAX_ROWS - 1 : MAX_COLS - 1), n, true);
     this.afterShift(sh);
+    for (const p of peers) this.events.onShift(await this.engine.shift(this.book, p, rows, sh.at, n, true));
+    if (mark >= 0) await this.engine.undoGroup(this.book, mark);
     await this.refreshHistory();
   }
 
   async remove(rows: boolean): Promise<void> {
     const s = this.sel();
     const n = rows ? s.r1 - s.r0 + 1 : s.c1 - s.c0 + 1;
+    const peers = this.peers();
+    const mark = peers.length ? await this.engine.undoMark(this.book) : -1;
     const sh = await this.engine.shift(this.book, this.sheet, rows, rows ? s.r0 : s.c0, n, false);
     this.afterShift(sh);
+    for (const p of peers) this.events.onShift(await this.engine.shift(this.book, p, rows, sh.at, n, false));
+    if (mark >= 0) await this.engine.undoGroup(this.book, mark);
     await this.refreshHistory();
   }
 
@@ -2453,6 +2612,42 @@ export class Grid {
     this.paint();
   }
 
+  sizeAtActive(): { row: number; col: number; base: number } {
+    return { row: this.rows.size(this.ar), col: this.cols.size(this.ac), base: this.cols.base };
+  }
+
+  setSelectionSize(rows: boolean, px: number): void {
+    const s = this.sel();
+    const axis = rows ? this.rows : this.cols;
+    const [a, b] = rows ? [s.r0, Math.min(s.r1, s.r0 + 10000)] : [s.c0, Math.min(s.c1, s.c0 + 2000)];
+    for (let i = a; i <= b; i++) axis.setSize(i, px);
+    this.resize();
+    this.emitView();
+    this.paint();
+  }
+
+  setStandardWidth(px: number): void {
+    this.cols.setBase(px);
+    this.resize();
+    this.emitView();
+    this.paint();
+  }
+
+  async autofitSelection(rows: boolean): Promise<void> {
+    const s = this.sel();
+    if (rows) {
+      const set = new Set<number>();
+      for (let r = s.r0; r <= Math.min(s.r1, s.r0 + 2000); r++) set.add(r);
+      for (const r of set) if (!this.rows.isHidden(r)) this.rows.setSize(r, this.rows.base);
+      this.fitRows(set);
+      this.emitView();
+      this.paint();
+      return;
+    }
+    for (let c = s.c0; c <= Math.min(s.c1, s.c0 + 200); c++) await this.autofit(c);
+    this.emitView();
+  }
+
   private async autofit(col: number): Promise<void> {
     const ext = await this.engine.extent(this.book, this.sheet);
     if (!ext) return;
@@ -2476,6 +2671,15 @@ export class Grid {
     const end = this.editor.value.length;
     this.editor.setSelectionRange(end, end);
     this.editor.dispatchEvent(new Event('input'));
+    if (initial === undefined && this.localForms && this.editor.value.startsWith('=')) {
+      const shown = this.editor.value;
+      void this.localise(shown, true).then((v) => {
+        if (!this.editing || this.editor.value !== shown || v === shown) return;
+        this.editor.value = v;
+        this.editor.setSelectionRange(v.length, v.length);
+        this.editor.dispatchEvent(new Event('input'));
+      });
+    }
     this.paint();
   }
 
@@ -2730,6 +2934,7 @@ export class Grid {
       if (b?.kind === 'col') void this.autofit(b.index).then(() => this.emitView());
       else if (b?.kind === 'row') {
         this.rows.setSize(b.index, this.rows.base);
+        this.fitRows(new Set([b.index]));
         this.emitView();
         this.paint();
       } else if (p.x > HEAD_W && p.y > HEAD_H) this.startEdit();
@@ -2923,6 +3128,14 @@ export class Grid {
   private async gridKey(e: KeyboardEvent): Promise<void> {
     const mod = e.ctrlKey || e.metaKey;
     const dir = ARROWS[e.key];
+    if (this.ghost.size && !this.editing) {
+      if (e.key === 'Enter' && !mod) {
+        await this.acceptGhost();
+        return;
+      }
+      this.clearGhost();
+      if (e.key === 'Escape') return;
+    }
     if (this.editing) {
       if (this.editorHook?.(e)) return;
       const before = this.editor.value;

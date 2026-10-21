@@ -1,4 +1,4 @@
-import type { Grid, SheetView } from '../grid/grid';
+import type { Grid, PasteKind, SheetView } from '../grid/grid';
 import { colName, parseRef, rangeText, type Range } from '../grid/a1';
 import type { Menu, MenuItem } from './menu';
 
@@ -28,6 +28,14 @@ interface Dlg {
   run: ((v: Values, button: string) => Promise<string>) | null;
 }
 
+export interface DocProps {
+  props: Record<string, string>;
+  title: string;
+  created: string;
+  modified: string;
+  stats: { sheets: number; cells: number; formulas: number; names: number; tables: number; notes: number };
+}
+
 export interface DataCtx {
   grid: Grid;
   menu: Menu;
@@ -38,6 +46,15 @@ export interface DataCtx {
   headers(range: Range): Promise<string[]>;
   filterValues(col: number): Promise<{ values: string[]; blanks: boolean }>;
   goTo(sheet: number, row: number, col: number): void;
+  names(): [string, string][];
+  workbooks(): Promise<{ id: string; title: string; sheets: string[] }[]>;
+  workbookId(): string;
+  moveCopy(sheet: number, dest: string, name: string, before: number | null, copy: boolean): Promise<string>;
+  properties(): Promise<DocProps | null>;
+  saveProperties(props: Record<string, string>): Promise<void>;
+  jump(text: string): boolean;
+  noteCells(sheet: number): [number, number][];
+  pasteNotes(src: { sheet: number; r0: number; c0: number; r1: number; c1: number }, dr: number, dc: number, transpose: boolean): Promise<number>;
   tableAt(): { name: string; area: [number, number, number, number]; cols: string[]; types: string[] } | null;
 }
 
@@ -111,13 +128,125 @@ const SPECS: Spec[] = [
     id: 'pasteops',
     title: 'Paste special',
     ok: 'Paste',
+    extra: [['link', 'Paste link']],
     fields: [
-      { k: 'what', label: 'Paste', kind: 'select', options: [['all', 'All'], ['values', 'Values'], ['formulas', 'Formulas'], ['formats', 'Formats']] },
+      {
+        k: 'what',
+        label: 'Paste',
+        kind: 'select',
+        options: [
+          ['all', 'All'],
+          ['formulas', 'Formulas'],
+          ['values', 'Values'],
+          ['formats', 'Formats'],
+          ['comments', 'Comments and notes'],
+          ['validation', 'Validation'],
+          ['theme', 'All using source theme'],
+          ['no-borders', 'All except borders'],
+          ['widths', 'Column widths'],
+          ['formulas-formats', 'Formulas and number formats'],
+          ['values-formats', 'Values and number formats'],
+          ['all-cf', 'All merging conditional formats'],
+        ],
+      },
       { k: 'op', label: 'Operation', kind: 'select', options: [['none', 'None'], ['add', 'Add'], ['subtract', 'Subtract'], ['multiply', 'Multiply'], ['divide', 'Divide']] },
       { k: 'skip', label: 'Skip blanks', kind: 'check' },
       { k: 'transpose', label: 'Transpose', kind: 'check' },
     ],
   },
+  { id: 'rowheight', title: 'Row height', ok: 'OK', fields: [{ k: 'size', label: 'Row height (points, 3 to 409)', kind: 'text' }] },
+  { id: 'colwidth', title: 'Column width', ok: 'OK', fields: [{ k: 'size', label: 'Column width (characters, 0.5 to 255)', kind: 'text' }] },
+  { id: 'stdwidth', title: 'Standard width', ok: 'OK', fields: [{ k: 'size', label: 'Standard column width (characters)', kind: 'text' }] },
+  {
+    id: 'outlineset',
+    title: 'Outline settings',
+    ok: 'OK',
+    fields: [
+      { k: 'below', label: 'Summary rows below detail', kind: 'check' },
+      { k: 'right', label: 'Summary columns to right of detail', kind: 'check' },
+    ],
+  },
+  {
+    id: 'movecopy',
+    title: 'Move or Copy',
+    ok: 'OK',
+    fields: [
+      { k: 'book', label: 'To book', kind: 'select' },
+      { k: 'before', label: 'Before sheet', kind: 'select' },
+      { k: 'name', label: 'Name for the copy (blank keeps the name)', kind: 'text' },
+      { k: 'copy', label: 'Create a copy', kind: 'check' },
+    ],
+  },
+  {
+    id: 'docprops',
+    title: 'Document properties',
+    ok: 'Save',
+    width: 440,
+    fields: [
+      { k: 'title', label: 'Title', kind: 'text' },
+      { k: 'subject', label: 'Subject', kind: 'text' },
+      { k: 'author', label: 'Author', kind: 'text' },
+      { k: 'manager', label: 'Manager', kind: 'text' },
+      { k: 'company', label: 'Company', kind: 'text' },
+      { k: 'categories', label: 'Categories', kind: 'text' },
+      { k: 'tags', label: 'Tags (keywords)', kind: 'text' },
+      { k: 'status', label: 'Status', kind: 'text' },
+      { k: 'comments', label: 'Comments', kind: 'area' },
+    ],
+  },
+  {
+    id: 'goto',
+    title: 'Go To',
+    ok: 'OK',
+    extra: [['next', 'Next match']],
+    width: 420,
+    fields: [
+      { k: 'ref', label: 'Reference', kind: 'text' },
+      { k: 'name', label: 'Go to (defined names)', kind: 'select' },
+      {
+        k: 'special',
+        label: 'Special',
+        kind: 'select',
+        options: [
+          ['', '(none)'],
+          ['comments', 'Comments and notes'],
+          ['constants', 'Constants'],
+          ['formulas', 'Formulas'],
+          ['blanks', 'Blanks'],
+          ['region', 'Current region'],
+          ['array', 'Current array'],
+          ['rowdiff', 'Row differences'],
+          ['coldiff', 'Column differences'],
+          ['precedents:direct', 'Precedents, direct only'],
+          ['precedents:all', 'Precedents, all levels'],
+          ['dependents:direct', 'Dependents, direct only'],
+          ['dependents:all', 'Dependents, all levels'],
+          ['lastcell', 'Last cell'],
+          ['visible', 'Visible cells only'],
+          ['cf:all', 'Conditional formats, all'],
+          ['cf:same', 'Conditional formats, same as active cell'],
+          ['validation:all', 'Data validation, all'],
+          ['validation:same', 'Data validation, same as active cell'],
+        ],
+      },
+      { k: 'types', label: 'Constants and formulas that give', kind: 'group' },
+    ],
+  },
+  {
+    id: 'series',
+    title: 'Series',
+    ok: 'OK',
+    fields: [
+      { k: 'dir', label: 'Series in', kind: 'select', options: [['cols', 'Columns'], ['rows', 'Rows']] },
+      { k: 'type', label: 'Type', kind: 'select', options: [['linear', 'Linear'], ['growth', 'Growth'], ['date', 'Date'], ['auto', 'AutoFill']] },
+      { k: 'unit', label: 'Date unit', kind: 'select', options: [['day', 'Day'], ['weekday', 'Weekday'], ['month', 'Month'], ['year', 'Year']] },
+      { k: 'trend', label: 'Trend (fit the numbers already selected)', kind: 'check' },
+      { k: 'step', label: 'Step value', kind: 'text' },
+      { k: 'stop', label: 'Stop value', kind: 'text' },
+    ],
+  },
+  { id: 'inscells', title: 'Insert', ok: 'OK', fields: [{ k: 'how', label: 'Insert', kind: 'select', options: [['right', 'Shift cells right'], ['down', 'Shift cells down'], ['row', 'Entire row'], ['col', 'Entire column']] }] },
+  { id: 'delcells', title: 'Delete', ok: 'OK', fields: [{ k: 'how', label: 'Delete', kind: 'select', options: [['left', 'Shift cells left'], ['up', 'Shift cells up'], ['row', 'Entire row'], ['col', 'Entire column']] }] },
   { id: 'template', title: 'Save as template', ok: 'Save', fields: [{ k: 'name', label: 'Template name', kind: 'text' }, { k: 'desc', label: 'Description', kind: 'text' }] },
   { id: 'fview', title: 'Save filter view', ok: 'Save', fields: [{ k: 'name', label: 'Name', kind: 'text' }] },
   { id: 'slicer', title: 'Insert slicer', ok: 'Insert', fields: [{ k: 'col', label: 'Column', kind: 'select' }] },
@@ -161,7 +290,7 @@ export class DataTools {
     const ok = form.querySelector<HTMLButtonElement>('[data-a="ok"]')!;
     const go = (button: string) => {
       if (!d.run) return;
-      if (form.dataset.state === 'done') return close();
+      if (form.dataset.state === 'done' && button === 'ok') return close();
       d.form.dataset.state = '';
       d.run(this.read(spec, form), button).then(
         (msg) => {
@@ -440,6 +569,7 @@ export class DataTools {
   async flashFill(): Promise<void> {
     const g = this.c.grid;
     const sel = g.selection();
+    g.clearGhost();
     try {
       this.c.status(this.line(await g.runTool('flash', String(sel.r0), String(sel.c0))));
     } catch (err) {
@@ -490,10 +620,205 @@ export class DataTools {
     this.put('pasteops', 'op', 'none');
     this.put('pasteops', 'skip', false);
     this.put('pasteops', 'transpose', false);
-    this.show('pasteops', async (v) => this.line(await this.c.grid.pasteWith(v.what as string, v.op as string, v.skip as boolean, v.transpose as boolean)));
+    this.show('pasteops', async (v, button) => {
+      const g = this.c.grid;
+      const t = v.transpose as boolean;
+      const op = v.op as string;
+      const skip = v.skip as boolean;
+      const done = () => g.focus();
+      if (button === 'link') return this.line(await g.pasteLayers('link', t));
+      const what = v.what as string;
+      if (what === 'comments') {
+        const s = g.copiedSource();
+        const [row, col] = g.activeCell();
+        const n = s ? await this.c.pasteNotes(s, row, col, t) : 0;
+        done();
+        return `Pasted ${n} notes.`;
+      }
+      if (what === 'validation') return this.line(await g.pasteLayers('validation', t));
+      if (what === 'all-cf') {
+        await g.pasteWith('all', op, skip, t);
+        return this.line(await g.pasteLayers('cf', t));
+      }
+      if (['all', 'formulas', 'values', 'formats', 'theme'].includes(what)) return this.line(await g.pasteWith(what === 'theme' ? 'all' : what, op, skip, t));
+      if (op !== 'none' || skip) throw new Error('Operations and skip blanks work with All, Formulas, Values and Formats.');
+      await g.pasteSpecial(what as PasteKind, t);
+      return '';
+    });
   }
 
-  askTemplate(save: (name: string, desc: string) => Promise<string>, title: string): void {
+  async autoOutline(): Promise<void> {
+    const msg = await this.c.grid.runTool('autooutline');
+    const lines = msg.split('\n').slice(1).filter(Boolean).map((l) => l.split('\t'));
+    const pick = (k: string) => lines.filter((p) => p[0] === k).map((p) => [Number(p[1]), Number(p[2])] as [number, number]);
+    if (!lines.length) {
+      this.c.status(this.line(msg), true);
+      return;
+    }
+    this.c.grid.autoOutline(pick('r'), pick('c'));
+    this.c.status(this.line(msg));
+  }
+
+  outlineSettings(): void {
+    const s = this.c.grid.summary();
+    this.prepare('outlineset');
+    this.put('outlineset', 'below', s.rowsBelow);
+    this.put('outlineset', 'right', s.colsRight);
+    this.show('outlineset', async (v) => {
+      this.c.grid.setSummary(v.below as boolean, v.right as boolean);
+      return '';
+    });
+  }
+
+  sizeDialog(kind: 'rowheight' | 'colwidth' | 'stdwidth'): void {
+    const g = this.c.grid;
+    const now = g.sizeAtActive();
+    const round = (n: number) => String(Math.round(n * 100) / 100);
+    this.prepare(kind);
+    this.put(kind, 'size', kind === 'rowheight' ? round(now.row * 0.75) : round((kind === 'colwidth' ? now.col : now.base) / 7));
+    this.show(kind, async (v) => {
+      const n = Number((v.size as string).trim());
+      if (!Number.isFinite(n)) throw new Error('Type a number.');
+      if (kind === 'rowheight') {
+        if (n < 3 || n > 409) throw new Error('A row height is between 3 and 409 points.');
+        g.setSelectionSize(true, n / 0.75);
+      } else {
+        if (n < 0.5 || n > 255) throw new Error('A column width is between 0.5 and 255 characters.');
+        if (kind === 'colwidth') g.setSelectionSize(false, n * 7);
+        else g.setStandardWidth(n * 7);
+      }
+      return '';
+    });
+  }
+
+  async moveCopy(sheet: number): Promise<void> {
+    const here = this.c.workbookId();
+    const books = await this.c.workbooks();
+    const sheets = (id: string) => (id === here ? this.c.sheetNames() : books.find((b) => b.id === id)?.sheets ?? []);
+    const d = this.prepare('movecopy');
+    this.options('movecopy', 'book', [[here, '(this book)'], ...books.filter((b) => b.id !== here).map((b) => [b.id, b.title] as [string, string])], 'none');
+    const refill = () => {
+      const id = d.form.querySelector<HTMLSelectElement>('[data-k="book"]')!.value;
+      this.options('movecopy', 'before', [...sheets(id).map((n, i) => [String(i), n] as [string, string]), ['end', '(move to end)']], 'none');
+      this.put('movecopy', 'before', 'end');
+    };
+    d.form.querySelector<HTMLSelectElement>('[data-k="book"]')!.onchange = refill;
+    this.put('movecopy', 'book', here);
+    refill();
+    this.put('movecopy', 'name', '');
+    this.put('movecopy', 'copy', false);
+    this.show('movecopy', async (v) => {
+      const before = v.before === 'end' ? null : Number(v.before);
+      return this.c.moveCopy(sheet, v.book as string, (v.name as string).trim(), before, v.copy as boolean);
+    });
+  }
+
+  async docProps(): Promise<void> {
+    const doc = await this.c.properties();
+    if (!doc) return;
+    this.prepare('docprops');
+    for (const k of ['title', 'subject', 'author', 'manager', 'company', 'categories', 'tags', 'status', 'comments']) this.put('docprops', k, doc.props[k] ?? '');
+    this.show('docprops', async (v) => {
+      const out: Record<string, string> = {};
+      for (const [k, val] of Object.entries(v)) out[k] = String(val);
+      await this.c.saveProperties(out);
+      return 'Saved the document properties.';
+    });
+    const s = doc.stats;
+    const when = (t: string) => new Date(t).toLocaleString();
+    this.dlgs.get('docprops')!.hint.textContent = `File ${doc.title}. Created ${when(doc.created)}. Modified ${when(doc.modified)}. ${s.sheets} sheets, ${s.cells} cells, ${s.formulas} formulas, ${s.names} names, ${s.tables} tables, ${s.notes} notes.`;
+  }
+
+  private goStops: Range[] = [];
+  private goAt = 0;
+
+  private goStop(i: number): string {
+    const n = this.goStops.length;
+    this.goAt = ((i % n) + n) % n;
+    const r = this.goStops[this.goAt];
+    this.c.grid.select(r.r0, r.c0, r.r1, r.c1);
+    return `${n} ranges. Showing ${this.goAt + 1} of ${n}: ${rangeText(r)}`;
+  }
+
+  goToDialog(): void {
+    const g = this.c.grid;
+    this.prepare('goto');
+    this.put('goto', 'ref', '');
+    this.put('goto', 'special', '');
+    this.options('goto', 'name', [['', '(choose a name)'], ...this.c.names().map(([n]) => [n, n] as [string, string])], 'none');
+    this.options('goto', 'types', [['n', 'Numbers'], ['t', 'Text'], ['l', 'Logicals'], ['e', 'Errors']], 'all');
+    const form = this.dlgs.get('goto')!.form;
+    form.querySelector<HTMLSelectElement>('[data-k="name"]')!.onchange = () => this.put('goto', 'ref', form.querySelector<HTMLSelectElement>('[data-k="name"]')!.value);
+    this.goStops = [];
+    this.show('goto', async (v, button) => {
+      if (button === 'next' && this.goStops.length) return this.goStop(this.goAt + 1);
+      const special = v.special as string;
+      if (!special) {
+        const text = (v.ref as string).trim();
+        if (!text) throw new Error('Type a cell, a range or a name.');
+        if (!this.c.jump(text)) throw new Error(`${text} is not a cell, a range or a name in this workbook.`);
+        return '';
+      }
+      const [kind, flag] = special.split(':');
+      const sel = g.selection();
+      const [row, col] = g.activeCell();
+      let found: Range[] = [];
+      let said = '';
+      if (kind === 'comments') {
+        found = this.c.noteCells(g.sheetIndex).map(([r, c]) => ({ r0: r, c0: c, r1: r, c1: c }));
+        said = found.length ? `Found ${found.length} cells with notes.` : 'No cells were found.';
+      } else if (kind === 'visible') {
+        found = await g.visibleAreas();
+        said = found.length ? `Found ${found.length} visible ranges.` : 'No cells were found.';
+      } else {
+        const types = (v.types as string[]).join(',');
+        const msg = await g.runTool('gotospecial', kind, this.area(sel), `${row},${col}`, [flag ?? '', types].filter(Boolean).join(','));
+        const lines = msg.split('\n');
+        said = lines[0];
+        found = lines.slice(1).filter(Boolean).map((l) => {
+          const [r0, c0, r1, c1] = l.split('\t').map(Number);
+          return { r0, c0, r1, c1 };
+        });
+      }
+      if (!found.length) return said || 'No cells were found.';
+      this.goStops = found;
+      return `${said} ${this.goStop(0)}`;
+    });
+  }
+
+  series(): void {
+    const s = this.c.grid.selection();
+    const single = s.r0 === s.r1 && s.c0 === s.c1;
+    this.prepare('series');
+    this.put('series', 'dir', s.c1 - s.c0 > s.r1 - s.r0 ? 'rows' : 'cols');
+    this.put('series', 'type', 'linear');
+    this.put('series', 'unit', 'day');
+    this.put('series', 'trend', false);
+    this.put('series', 'step', '1');
+    this.put('series', 'stop', '');
+    this.show('series', async (v) => {
+      if (single && !(v.stop as string).trim()) throw new Error('Select the cells to fill, or type a stop value.');
+      return this.line(await this.c.grid.runTool('series', this.area(s), v.dir as string, v.type as string, v.unit as string, (v.step as string).trim(), (v.stop as string).trim(), v.trend ? '1' : '0'));
+    });
+  }
+
+  cellsDialog(insert: boolean): void {
+    const id = insert ? 'inscells' : 'delcells';
+    this.prepare(id);
+    this.put(id, 'how', insert ? 'down' : 'up');
+    this.show(id, async (v) => {
+      const g = this.c.grid;
+      const how = v.how as string;
+      if (how === 'row' || how === 'col') {
+        await (insert ? g.insert(how === 'row') : g.remove(how === 'row'));
+        return '';
+      }
+      const s = g.selection();
+      return this.line(await g.runTool('shiftcells', this.area(s), how, insert ? '1' : '0'));
+    });
+  }
+
+  askTemplate(save:(name: string, desc: string) => Promise<string>, title: string): void {
     this.prepare('template');
     this.put('template', 'name', title);
     this.put('template', 'desc', '');
