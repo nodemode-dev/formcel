@@ -118,6 +118,8 @@ def write(eng, views: list[dict], vba: dict[str, bytes] | None = None) -> bytes:
             ws.freeze_panes = f"{get_column_letter(fc + 1)}{fr + 1}"
         if view.get("zoom") and view["zoom"] != 1:
             ws.sheet_view.zoomScale = round(view["zoom"] * 100)
+        if view.get("hidden") and any(not (v or {}).get("hidden") for j, v in enumerate(views) if j != i):
+            ws.sheet_state = "hidden"
         if view.get("color"):
             ws.sheet_properties.tabColor = "FF" + view["color"].lstrip("#").upper()
     for name, refers in eng.names():

@@ -60,6 +60,7 @@ interface Exports {
   fc_set_filter(book: number, sheet: number, t: number, len: number): number;
   fc_load_filter(book: number, sheet: number, t: number, len: number): number;
   fc_reapply_filter(book: number, sheet: number): number;
+  fc_tool(book: number, sheet: number, cmd: number, len: number): number;
   fc_filter_values(book: number, sheet: number, col: number): number;
   fc_cf_in(book: number, sheet: number, r0: number, c0: number, r1: number, c1: number): number;
   fc_link_at(book: number, sheet: number, row: number, col: number): number;
@@ -122,13 +123,14 @@ function shiftOf(line: string): Shift {
 }
 
 function effect(s: string): Effect {
-  const shift = s.startsWith('#') ? shiftOf(s.slice(0, s.indexOf('\n'))) : null;
+  const shifts = s.split('\n').filter((l) => l.startsWith('#\t')).map(shiftOf);
+  const shift = shifts.length ? shifts[shifts.length - 1] : null;
   const m = /^=\t(\d+)$/m.exec(s);
   const rl = /^!\t(\d+)$/m.exec(s);
   const fl = /^~\t(\d+)$/m.exec(s);
   const vl = /^\?\t(\d+)$/m.exec(s);
   const styles = lines(s).filter((l) => l[0] === '&').map(([, sh, r, c, raw, shown]) => [Number(sh), Number(r), Number(c), unescape(raw ?? ''), unescape(shown ?? raw ?? '')] as StyleChange);
-  return { shift, changes: changed(s).filter((l) => !Number.isNaN(l[0])), formats: formatsOf(s), styles, merges: m ? Number(m[1]) : null, theme: /^\^$/m.test(s), named: /^@$/m.test(s), rules: rl ? Number(rl[1]) : null, filter: fl ? Number(fl[1]) : null, valid: vl ? Number(vl[1]) : null, tables: /^\*$/m.test(s) };
+  return { shift, more: shifts.slice(0, -1), changes: changed(s).filter((l) => !Number.isNaN(l[0])), formats: formatsOf(s), styles, merges: m ? Number(m[1]) : null, theme: /^\^$/m.test(s), named: /^@$/m.test(s), rules: rl ? Number(rl[1]) : null, filter: fl ? Number(fl[1]) : null, valid: vl ? Number(vl[1]) : null, tables: /^\*$/m.test(s) };
 }
 
 const MERGE_MODES = { center: 0, across: 1, cells: 2, unmerge: 3 } as const;
@@ -360,6 +362,13 @@ function run(x: Exports, req: Request): Value {
       return withStrings(x, [req.text], ([p, l]) => ok(x.fc_load_filter(req.book, req.sheet, p, l), 'The engine refused that filter.'));
     case 'filter.reapply':
       return effect(out(x, x.fc_reapply_filter(req.book, req.sheet)));
+    case 'tool':
+      return withStrings(x, [req.cmd], ([p, l]) => {
+        const text = out(x, x.fc_tool(req.book, req.sheet, p, l));
+        if (text.startsWith('ERR\t')) throw new Error(text.slice(4));
+        const cut = text.indexOf('\n');
+        return { ...effect(text.slice(cut + 1)), message: unescape(text.slice(0, cut)) };
+      });
     case 'filter.values': {
       const list: FilterList = { values: [], blanks: false, more: false, fills: [], fonts: [] };
       for (const [k, v] of lines(out(x, x.fc_filter_values(req.book, req.sheet, req.col)))) {

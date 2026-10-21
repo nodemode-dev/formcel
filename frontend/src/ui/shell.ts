@@ -47,7 +47,7 @@ export function mountShell(root: HTMLElement): ShellParts {
         <span class="fc-tool-sep" aria-hidden="true"></span>
         ${tool('view.freeze-top-row', 'freezeRow', 'Freeze top row')}${tool('view.freeze-first-column', 'freezeCol', 'Freeze first column')}${tool('view.freeze-panes', 'freezePanes', 'Freeze panes above and left of the active cell')}${tool('view.unfreeze', 'unfreeze', 'Unfreeze panes')}${tool('view.split', 'split', 'Split into panes at the active cell')}
         <span class="fc-tool-sep" aria-hidden="true"></span>
-        ${tool('data.sort-asc', 'sortAsc', 'Sort A to Z by the active column')}${tool('data.sort-desc', 'sortDesc', 'Sort Z to A by the active column')}${tool('data.sort', 'sort', 'Sort by several columns')}${tool('data.filter', 'filter', 'Filter (Ctrl+Shift+L)')}${tool('table.create', 'table', 'Table (Ctrl+T)')}${tool('data.validation', 'validation', 'Data validation')}
+        ${tool('data.sort-asc', 'sortAsc', 'Sort A to Z by the active column')}${tool('data.sort-desc', 'sortDesc', 'Sort Z to A by the active column')}${tool('data.sort', 'sort', 'Sort by several columns')}${tool('data.filter', 'filter', 'Filter (Ctrl+Shift+L)')}${tool('table.create', 'table', 'Table (Ctrl+T)')}${tool('data.validation', 'validation', 'Data validation')}${tool('data.tools', 'dataTools', 'Data tools')}
         <span class="fc-tool-sep" aria-hidden="true"></span>
         ${tool('file.download', 'download', 'Download as .xlsx, .csv or .tsv')}
       </div>
@@ -57,7 +57,7 @@ export function mountShell(root: HTMLElement): ShellParts {
         <input class="fc-fbar" aria-label="Formula bar" spellcheck="false" autocomplete="off">
       </div>
       <div class="fc-grid" role="grid" aria-label="Sheet1"></div>
-      <div class="fc-sheetbar"><div class="fc-tabs" role="tablist" aria-label="Sheets"></div><button type="button" class="fc-tool fc-add-sheet" title="Add a sheet" aria-label="Add a sheet">${icon('plus')}</button><div class="fc-zoom" role="group" aria-label="Zoom"><button type="button" class="fc-tool" data-zoom="-1" title="Zoom out (Ctrl and scroll)" aria-label="Zoom out">${icon('minus')}</button><span class="fc-zoom-val">100%</span><button type="button" class="fc-tool" data-zoom="1" title="Zoom in (Ctrl and scroll)" aria-label="Zoom in">${icon('plus')}</button></div></div>
+      <div class="fc-sheetbar"><div class="fc-tabs" role="tablist" aria-label="Sheets"></div><button type="button" class="fc-tool fc-add-sheet" title="Add a sheet" aria-label="Add a sheet">${icon('plus')}</button><div class="fc-zoom" role="group" aria-label="Zoom"><button type="button" class="fc-tool" data-zoom="-1" title="Zoom out (Ctrl and scroll)" aria-label="Zoom out">${icon('minus')}</button><input type="range" class="fc-zoom-slider" min="50" max="200" step="5" value="100" aria-label="Zoom level"><span class="fc-zoom-val">100%</span><button type="button" class="fc-tool" data-zoom="1" title="Zoom in (Ctrl and scroll)" aria-label="Zoom in">${icon('plus')}</button></div></div>
     </main>`;
   const status = root.querySelector<HTMLElement>('.fc-status')!;
   const statusText = document.createTextNode('Engine starting');

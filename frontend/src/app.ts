@@ -7,6 +7,7 @@ import { TABLE_STYLES } from './grid/tables';
 import { listCommands, registerCommand, runCommand } from './ui/commands';
 import { Home, type TemplateMeta, type WorkbookMeta } from './ui/home';
 import { Menu, type MenuItem } from './ui/menu';
+import { DataTools } from './ui/datatools';
 import type { ShellParts } from './ui/shell';
 import { icon } from './ui/icons';
 import { DATE_PERIODS, describe, parseRule, PRESETS, rangeText, ruleLine, withStop } from './ui/rules';
@@ -221,6 +222,8 @@ export class App {
   private readonly menu = new Menu();
   private viewTimers = new Map<number, number>();
   private importNotes: string[] = [];
+  private tools!: DataTools;
+  private grouped = new Set<number>();
 
   constructor(private readonly p: ShellParts) {
     this.home = new Home(p.home, {
@@ -245,9 +248,13 @@ export class App {
         this.button('edit.undo').disabled = !undo;
         this.button('edit.redo').disabled = !redo;
       },
-      onChanged: (changes) => this.queueSave(changes),
+      onChanged: (changes) => {
+        this.queueSave(changes);
+        void this.mirror(changes);
+      },
       onSheet: (sheet) => {
         this.markTab(sheet);
+        queueMicrotask(() => this.tools.syncSlicers());
         queueMicrotask(() => this.zoomLabel());
         return this.open?.views[sheet] ?? {};
       },
@@ -258,7 +265,10 @@ export class App {
       onLook: () => this.sendLook(),
       onPasteMenu: (x, y) => this.pasteMenu(x, y),
       onRules: (sheet, lines) => this.sendRules(sheet, lines),
-      onFilter: (sheet, text) => this.sendFilter(sheet, text),
+      onFilter: (sheet, text) => {
+        this.sendFilter(sheet, text);
+        void this.tools.refreshSlicers();
+      },
       onFilterMenu: (col) => void this.filterBox(col),
       onFilterKey: () => void runCommand('data.filter'),
       onValid: (sheet, lines) => this.sendValid(sheet, lines),
@@ -278,6 +288,42 @@ export class App {
         p.nameBox.select();
       },
     });
+    this.tools = new DataTools({
+      grid: this.grid,
+      menu: this.menu,
+      status: (t, e) => this.status(t, e),
+      sheetNames: () => this.open?.sheets ?? [],
+      views: () => this.open?.views ?? [],
+      patchView: (s, part) => this.patchView(s, part),
+      headers: async (r) => {
+        const o = this.open;
+        const out: string[] = Array.from({ length: r.c1 - r.c0 + 1 }, () => '');
+        if (!o) return out;
+        for (const [, c, t] of await engine().readValues(o.book, this.grid.sheetIndex, r.r0, r.c0, r.r0, r.c1)) out[c - r.c0] = t.replace(/^'/, '');
+        return out;
+      },
+      filterValues: async (col) => {
+        const o = this.open;
+        const l = o ? await engine().filterValues(o.book, this.grid.sheetIndex, col) : { values: [], blanks: false };
+        return { values: l.values, blanks: l.blanks };
+      },
+      goTo: (s, r, c) => {
+        if (s !== this.grid.sheetIndex) this.showSheet(s);
+        this.grid.goTo(`${colName(c)}${r + 1}`);
+      },
+      tableAt: () => {
+        const t = this.grid.activeTable();
+        if (!t) return null;
+        const p = t.line.split('\t');
+        const n = t.cols.length;
+        return { name: t.name, area: t.area, cols: t.cols, types: p.length >= 6 + 4 * n ? p.slice(6 + 3 * n, 6 + 4 * n).map((s) => s.replace(/\\(.)/g, '$1')) : [] };
+      },
+    });
+    try {
+      if (localStorage.getItem('fc-autocomplete') === '0') this.grid.autoComplete = false;
+    } catch {
+      /* private window */
+    }
     const suggestions = (): Suggestion[] => [...FUNCTIONS, ...(this.open?.names ?? []).map(([name, refers]): Suggestion => ({ name, kind: 'name', summary: refers }))];
     new Autocomplete(p.formulaBar, suggestions);
     const cellAc = new Autocomplete(this.grid.editor, suggestions);
@@ -380,6 +426,33 @@ export class App {
     cmd('data.filter', 'Filter', 'Add filter buttons to the header row of the data around the active cell, or take them off.', true, () => this.toggleFilter(), 'Mod+Shift+L');
     cmd('table.create', 'Table', 'Turn the data around the active cell into a table with a header row, banded rows and filter buttons, or change the table the active cell is in.', true, () => (g.activeTable() ? this.designBox() : this.tableBox()), 'Mod+T');
     cmd('data.validation', 'Data validation', 'Limit what can be typed in the selected cells, offer a dropdown list, show a message when a cell is selected and an alert when a value is not allowed.', true, () => this.validBox());
+    const T = () => this.tools;
+    cmd('data.tools', 'Data tools', 'Open the list of data tools: remove duplicates, text to columns, cleanup, consolidate, subtotals, advanced filter, flash fill, checkboxes, filter views and slicers.', false, () => this.dataMenu());
+    cmd('data.dedupe', 'Remove duplicates', 'Delete rows that repeat the values of the columns you choose, keeping the first, and report how many were removed.', true, () => T().dedupe());
+    cmd('data.text-to-columns', 'Text to columns', 'Split the text of a column into several columns at tabs, commas, semicolons, spaces or another delimiter, or at fixed positions.', true, () => T().textToColumns());
+    cmd('data.trim', 'Trim whitespace', 'Remove leading, trailing and repeated spaces from the text in the selected cells.', true, () => T().trim());
+    cmd('data.cleanup', 'Data cleanup', 'Find extra spaces, inconsistent letter case, numbers stored as text and duplicate rows, and fix the ones you pick.', true, () => T().cleanup());
+    cmd('data.consolidate', 'Consolidate', 'Combine ranges from one or more sheets with sum, count, average, max or min, by position or by their row and column labels.', true, () => T().consolidate());
+    cmd('data.subtotal', 'Subtotal', 'Insert SUBTOTAL rows at each change in a column, group the detail rows in an outline and add a grand total, or remove them all.', true, () => T().subtotal());
+    cmd('data.advanced-filter', 'Advanced filter', 'Filter a list in place or copy the matching records elsewhere using a criteria range, with unique records only if you want.', true, () => T().advancedFilter());
+    cmd('data.flash-fill', 'Flash Fill', 'Fill the cells next to your data by following the pattern of the examples you typed.', true, () => T().flashFill(), 'Mod+E');
+    cmd('data.checkbox-insert', 'Insert checkboxes', 'Turn the selected cells into checkboxes that hold TRUE or FALSE. Click one or press Space to toggle it.', true, () => T().checkboxes(true));
+    cmd('data.checkbox-remove', 'Remove checkboxes', 'Turn the selected checkbox cells back into plain cells.', true, () => T().checkboxes(false));
+    cmd('data.column-type', 'Table column type', 'Set a type for a table column: text, number, date, dropdown or checkbox. Entries of another type ask before they are kept.', true, () => T().columnType());
+    cmd('data.filter-views', 'Filter views', 'Save the current filter as a named view and switch between saved views.', false, () => this.tools.filterViewsMenu(...this.below('data.tools')));
+    cmd('data.slicer', 'Insert slicer', 'Add a floating panel with a button for each value of a filter column; clicking buttons filters that column.', false, () => T().insertSlicer());
+    cmd('edit.find', 'Find', 'Search the sheet or the workbook for text or numbers, with match case, entire cell and values or formulas options.', false, () => T().openFind(false), 'Mod+F');
+    cmd('edit.replace', 'Find and replace', 'Replace text or numbers in the sheet or the workbook as one undo step.', true, () => T().openFind(true), 'Mod+H');
+    cmd('edit.paste-ops', 'Paste special options', 'Paste values, formulas or formats with add, subtract, multiply or divide, skipping blanks or transposing.', true, () => T().pasteOps());
+    cmd('edit.autocomplete', 'AutoComplete', 'Turn on or off suggesting a completion from other text in the same column while you type.', false, () => this.toggleAutoComplete());
+    cmd('edit.insert-cells', 'Insert cells', 'Insert blank cells in the selection and shift the cells below them down or the cells to their right over.', true, () => this.cellsMenu(true));
+    cmd('edit.delete-cells', 'Delete cells', 'Delete the selected cells and shift the cells below up or the cells to the right left.', true, () => this.cellsMenu(false));
+    cmd('file.save-template', 'Save as template', 'Save a copy of this workbook in your personal templates.', false, () => this.saveTemplate());
+    cmd('sheet.hide', 'Hide sheet', 'Hide the active sheet tab. The sheet and its data stay in the workbook.', true, () => this.hideSheet(this.grid.sheetIndex, true));
+    cmd('sheet.ungroup', 'Ungroup sheets', 'Stop editing several sheets together.', false, () => {
+      this.grouped.clear();
+      this.renderTabs();
+    });
     cmd('data.filter-clear', 'Clear filter', 'Show every row again and keep the filter buttons.', true, () => this.filterWith(null));
     cmd('data.filter-reapply', 'Reapply filter', 'Run the filter again over the current values, taking in rows added below it.', true, () => g.reapplyFilter());
     cmd('format.merge', 'Merge cells', 'Merge the selected cells into one, or split a merged cell.', true, () => this.mergeMenu());
@@ -412,7 +485,26 @@ export class App {
     p.addSheet.addEventListener('click', () => void runCommand('sheet.add'));
     p.tabs.addEventListener('click', (e) => {
       const t = (e.target as HTMLElement).closest<HTMLElement>('[data-sheet]');
-      if (t && this.open && t.contentEditable !== 'true') this.showSheet(Number(t.dataset.sheet));
+      if (!t || !this.open || t.contentEditable === 'true') return;
+      const i = Number(t.dataset.sheet);
+      const at = this.grid.sheetIndex;
+      if (e.ctrlKey || e.metaKey || e.shiftKey) {
+        if (!this.grouped.size) this.grouped.add(at);
+        if (e.shiftKey) {
+          for (let k = Math.min(at, i); k <= Math.max(at, i); k++) if (!this.open.views[k]?.hidden) this.grouped.add(k);
+        } else if (this.grouped.has(i) && i !== at) this.grouped.delete(i);
+        else this.grouped.add(i);
+        if (this.grouped.size < 2) this.grouped.clear();
+        this.renderTabs();
+        this.status(this.grouped.size ? `Group mode: ${this.grouped.size} sheets edit together` : 'Sheets ungrouped');
+        return;
+      }
+      if (this.grouped.size && !this.grouped.has(i)) {
+        this.grouped.clear();
+        this.status('Sheets ungrouped');
+      }
+      this.showSheet(i);
+      this.renderTabs();
     });
     p.tabs.addEventListener('dblclick', (e) => {
       const t = (e.target as HTMLElement).closest<HTMLElement>('[data-sheet]');
@@ -426,6 +518,7 @@ export class App {
       this.showSheet(i);
       this.tabMenu(i, e.clientX, e.clientY);
     });
+    p.zoom.querySelector<HTMLInputElement>('.fc-zoom-slider')!.addEventListener('input', (e) => this.grid.setZoom(Number((e.target as HTMLInputElement).value) / 100));
     p.zoom.addEventListener('click', (e) => {
       const b = (e.target as HTMLElement).closest<HTMLElement>('[data-zoom]');
       if (b) this.grid.zoomStep(Number(b.dataset.zoom) as 1 | -1);
@@ -481,6 +574,8 @@ export class App {
   private showHome(): void {
     const p = this.p;
     this.open = null;
+    this.grouped.clear();
+    this.tools.syncSlicers();
     p.sheet.hidden = true;
     p.home.hidden = false;
     p.homeBtn.hidden = true;
@@ -1303,6 +1398,7 @@ export class App {
     for (const [n, f] of doc.names ?? []) await e.defineName(book, n, f).catch(() => []);
     await e.loadTables(book, doc.tables ?? []);
     const names = doc.names?.length ? await e.names(book) : [];
+    this.grouped.clear();
     this.open = { id, book, title: doc.title, sheets: doc.sheets, views: doc.sheets.map((_, i) => doc.views?.[i] ?? {}), names, macros: !!doc.macros };
     const p = this.p;
     p.home.hidden = true;
@@ -1379,6 +1475,8 @@ export class App {
         host.appendChild(t);
       }
       t.dataset.sheet = String(i);
+      t.hidden = !!o.views[i]?.hidden;
+      t.classList.toggle('is-grouped', this.grouped.has(i));
       if (t.textContent !== name) t.textContent = name;
       const colour = o.views[i]?.color;
       if (colour) t.style.setProperty('--tab', colour);
@@ -1392,6 +1490,7 @@ export class App {
     if (!o) return;
     this.grid.show(o.book, i, o.views[i] ?? {});
     this.markTab(i);
+    this.tools.syncSlicers();
     this.zoomLabel();
     this.grid.focus();
   }
@@ -1399,12 +1498,38 @@ export class App {
   private zoomLabel(): void {
     const v = `${Math.round(this.grid.zoom * 100)}%`;
     if (this.p.zoomVal.textContent !== v) this.p.zoomVal.textContent = v;
+    const slider = this.p.zoom.querySelector<HTMLInputElement>('.fc-zoom-slider');
+    if (slider && slider.value !== String(Math.round(this.grid.zoom * 100))) slider.value = String(Math.round(this.grid.zoom * 100));
+  }
+
+  private patchView(sheet: number, part: Partial<SheetView>): void {
+    const o = this.open;
+    if (!o) return;
+    o.views[sheet] = { ...(o.views[sheet] ?? {}), ...part };
+    this.renderTabs();
+    void api('PATCH', `/api/workbooks/${o.id}/sheets/${sheet}`, { view: Object.fromEntries(Object.entries(part).map(([k, v]) => [k, v ?? null])) }).catch(() => this.status('View not saved', true));
+  }
+
+  private async mirror(changes: Changed[]): Promise<void> {
+    const o = this.open;
+    const at = this.grid.sheetIndex;
+    if (!o || this.grid.replaying || this.grouped.size < 2 || !this.grouped.has(at)) return;
+    const edits: [number, number, string][] = changes.filter(([s]) => s === at).map(([, r, c, t, f]) => [r, c, f ?? t]);
+    if (!edits.length) return;
+    const e = engine();
+    const end = await e.undoMark(o.book);
+    for (const s of this.grouped) {
+      if (s === at) continue;
+      this.queueSave(await e.apply(o.book, edits, s));
+    }
+    if (end > 0) await e.undoGroup(o.book, end - 1);
   }
 
   private saveView(sheet: number, view: SheetView): void {
     const o = this.open;
     if (!o) return;
-    o.views[sheet] = view;
+    const old = o.views[sheet] ?? {};
+    o.views[sheet] = { ...view, hidden: old.hidden, fviews: old.fviews, slicers: old.slicers };
     this.zoomLabel();
     window.clearTimeout(this.viewTimers.get(sheet));
     this.viewTimers.set(sheet, window.setTimeout(() => {
@@ -1908,6 +2033,8 @@ export class App {
       { sep: true },
       { label: 'Transpose', run: run('all', true) },
       { label: 'Values, transposed', run: run('values', true) },
+      { sep: true },
+      { label: 'Operations and skip blanks', run: () => void runCommand('edit.paste-ops') },
     ], done);
   }
 
@@ -2161,6 +2288,84 @@ export class App {
     return { form, input, hint };
   }
 
+  private dataMenu(): void {
+    const [x, y] = this.below('data.tools');
+    const run = (id: string) => () => runCommand(id).then(() => undefined);
+    const auto = this.grid.autoComplete;
+    this.menu.show(x, y, [
+      { label: 'Remove duplicates', run: run('data.dedupe') },
+      { label: 'Text to columns', run: run('data.text-to-columns') },
+      { label: 'Trim whitespace', run: run('data.trim') },
+      { label: 'Data cleanup', run: run('data.cleanup') },
+      { label: 'Flash Fill', keys: 'Ctrl+E', run: run('data.flash-fill') },
+      { sep: true },
+      { label: 'Consolidate', run: run('data.consolidate') },
+      { label: 'Subtotal', run: run('data.subtotal') },
+      { label: 'Advanced filter', run: run('data.advanced-filter') },
+      { label: 'Filter views', run: run('data.filter-views') },
+      { label: 'Insert slicer', run: run('data.slicer') },
+      { sep: true },
+      { label: 'Insert checkboxes', run: run('data.checkbox-insert') },
+      { label: 'Remove checkboxes', run: run('data.checkbox-remove') },
+      { label: 'Table column type', run: run('data.column-type') },
+      { sep: true },
+      { label: 'Find', keys: 'Ctrl+F', run: run('edit.find') },
+      { label: 'Find and replace', keys: 'Ctrl+H', run: run('edit.replace') },
+      { label: 'Insert cells', run: run('edit.insert-cells') },
+      { label: 'Delete cells', run: run('edit.delete-cells') },
+      { label: 'Paste special options', run: run('edit.paste-ops') },
+      { label: auto ? 'AutoComplete: on' : 'AutoComplete: off', run: run('edit.autocomplete') },
+      { sep: true },
+      { label: 'Save as template', run: run('file.save-template') },
+    ], () => this.grid.focus());
+  }
+
+  private toggleAutoComplete(): void {
+    this.grid.autoComplete = !this.grid.autoComplete;
+    try {
+      localStorage.setItem('fc-autocomplete', this.grid.autoComplete ? '1' : '0');
+    } catch {
+      /* private window */
+    }
+    this.status(`AutoComplete ${this.grid.autoComplete ? 'on' : 'off'}`);
+  }
+
+  private cellsMenu(insert: boolean): void {
+    const r = this.grid.cellRect();
+    const go = (dir: string) => () => void this.grid.runTool('shiftcells', `${this.grid.selection().r0},${this.grid.selection().c0},${this.grid.selection().r1},${this.grid.selection().c1}`, dir, insert ? '1' : '0').then((m) => this.status(m.split('\n', 1)[0]));
+    this.menu.show(r.left + 20, r.bottom, insert
+      ? [{ label: 'Insert cells, shift cells right', run: go('right') }, { label: 'Insert cells, shift cells down', run: go('down') }]
+      : [{ label: 'Delete cells, shift cells left', run: go('left') }, { label: 'Delete cells, shift cells up', run: go('up') }], () => this.grid.focus());
+  }
+
+  private async saveTemplate(): Promise<void> {
+    const o = this.open;
+    if (!o) return;
+    this.flush();
+    await this.saving;
+    this.tools.askTemplate(async (name, description) => {
+      await api('POST', `/api/workbooks/${o.id}/template`, { name, description });
+      return `Saved ${name} in your personal templates.`;
+    }, o.title);
+  }
+
+  private hideSheet(i: number, on: boolean): void {
+    const o = this.open;
+    if (!o) return;
+    if (on && o.sheets.filter((_, k) => k !== i && !o.views[k]?.hidden).length === 0) {
+      this.status('A workbook keeps at least one visible sheet.', true);
+      return;
+    }
+    this.grouped.delete(i);
+    this.patchView(i, { hidden: on || null });
+    if (on && this.grid.sheetIndex === i) {
+      const next = o.sheets.findIndex((_, k) => k > i && !o.views[k]?.hidden);
+      let prev = i - 1;
+      while (prev > 0 && o.views[prev]?.hidden) prev--;
+      this.showSheet(next >= 0 ? next : Math.max(0, prev));
+    }
+  }
+
   private cellMenu(kind: MenuKind, x: number, y: number): void {
     const g = this.grid;
     const run = (id: string) => () => runCommand(id).then(() => g.focus());
@@ -2179,6 +2384,7 @@ export class App {
       items.push({ label: linked ? 'Edit link' : 'Insert link', keys: 'Ctrl+K', run: run('edit.link') });
       if (linked) items.push({ label: 'Open link', run: run('edit.link-open') }, { label: 'Remove link', run: run('edit.link-remove') });
     }
+    if (kind === 'cells') items.push({ label: 'Insert cells', run: run('edit.insert-cells') }, { label: 'Delete cells', run: run('edit.delete-cells') });
     items.push({ label: 'Clear contents', keys: 'Delete', run: run('edit.clear') }, { label: 'Paste special', keys: 'Ctrl+Alt+V', disabled: !g.canPasteSpecial(), run: () => this.pasteMenu(x, y) }, { sep: true });
     if (kind === 'rows' || kind === 'cells') items.push({ label: 'Hide rows', keys: 'Ctrl+9', run: run('rows.hide') }, { label: 'Unhide rows', keys: 'Ctrl+Shift+9', run: run('rows.unhide') });
     if (kind === 'cols' || kind === 'cells') items.push({ label: 'Hide columns', keys: 'Ctrl+0', run: run('cols.hide') }, { label: 'Unhide columns', keys: 'Ctrl+Shift+0', run: run('cols.unhide') });
@@ -2194,6 +2400,10 @@ export class App {
       { label: 'Rename', run: () => this.renameTab(i) },
       { label: 'Move left', disabled: i === 0, run: () => this.moveSheet(i, i - 1) },
       { label: 'Move right', disabled: i === o.sheets.length - 1, run: () => this.moveSheet(i, i + 1) },
+      { sep: true },
+      { label: 'Hide sheet', disabled: o.sheets.filter((_, k) => !o.views[k]?.hidden).length < 2, run: () => this.hideSheet(i, true) },
+      ...o.sheets.map((n, k) => ({ n, k })).filter(({ k }) => o.views[k]?.hidden).map(({ n, k }): MenuItem => ({ label: `Unhide ${n}`, run: () => this.hideSheet(k, false) })),
+      { label: 'Ungroup sheets', disabled: !this.grouped.size, run: () => { this.grouped.clear(); this.renderTabs(); } },
       { sep: true },
       { swatches: TAB_COLOURS, current: o.views[i]?.color ?? '', pick: (c) => this.colourSheet(i, c) },
       { sep: true },

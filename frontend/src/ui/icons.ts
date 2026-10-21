@@ -53,6 +53,7 @@ export const icons = {
   filter: svg('<path d="M4 5h16l-6 7.5V19l-4-1.5v-5z"/>'),
   table: svg('<rect x="3.5" y="4.5" width="17" height="15" rx="2"/><path d="M3.5 9.5h17M3.5 14.5h17M9.5 9.5v10"/><path d="M3.5 7h17" stroke-width="3.5"/>'),
   validation: svg('<rect x="3.5" y="4.5" width="17" height="15" rx="2"/><path d="M7.5 12l3 3 6-6"/>'),
+  dataTools: svg('<rect x="3.5" y="4.5" width="17" height="15" rx="2"/><path d="M3.5 9.5h17M9.5 9.5v10M13 14l2 2 3-3.5"/>'),
   download: svg('<path d="M12 4v11M7.5 10.5L12 15l4.5-4.5M5 19.5h14"/>'),
   upload: svg('<path d="M12 15V4M7.5 8.5L12 4l4.5 4.5M5 19.5h14"/>'),
 } as const;

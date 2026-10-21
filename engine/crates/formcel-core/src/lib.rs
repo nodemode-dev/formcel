@@ -11,6 +11,8 @@ mod graph;
 pub mod fmtcode;
 pub mod numfmt;
 pub mod sort;
+mod datatools;
+mod flash;
 pub use numfmt::Fmt;
 mod store;
 pub mod style;
@@ -323,6 +325,7 @@ pub struct Shift {
 pub struct Effect {
     pub cells: Changed,
     pub shift: Option<Shift>,
+    pub more: Vec<Shift>,
     pub formats: Vec<(usize, Addr, String)>,
     pub styles: Vec<(usize, Addr, String)>,
     pub merges: Option<usize>,
@@ -334,6 +337,26 @@ pub struct Effect {
     pub tables: bool,
 }
 
+fn moved_addr(sheet: usize, a: Addr, s: &Shift) -> Option<Addr> {
+    if sheet != s.sheet {
+        return Some(a);
+    }
+    let idx = if s.rows { a.row } else { a.col };
+    let to = if s.delta >= 0 {
+        if idx >= s.at { idx + s.delta as u32 } else { idx }
+    } else {
+        let n = (-s.delta) as u32;
+        if idx < s.at {
+            idx
+        } else if idx < s.at + n {
+            return None;
+        } else {
+            idx - n
+        }
+    };
+    Some(if s.rows { Addr { row: to, ..a } } else { Addr { col: to, ..a } })
+}
+
 impl Effect {
     fn join(mut self, o: Effect) -> Effect {
         self.rules = o.rules.or(self.rules);
@@ -342,8 +365,17 @@ impl Effect {
         self.filter = o.filter.or(self.filter);
         self.theme |= o.theme;
         self.named |= o.named;
+        for s in o.more.iter().chain(o.shift.iter()) {
+            self.cells = std::mem::take(&mut self.cells).into_iter().filter_map(|(sh, ad, v)| moved_addr(sh, ad, s).map(|ad| (sh, ad, v))).collect();
+            self.formats = std::mem::take(&mut self.formats).into_iter().filter_map(|(sh, ad, v)| moved_addr(sh, ad, s).map(|ad| (sh, ad, v))).collect();
+            self.styles = std::mem::take(&mut self.styles).into_iter().filter_map(|(sh, ad, v)| moved_addr(sh, ad, s).map(|ad| (sh, ad, v))).collect();
+        }
         self.cells.extend(o.cells);
-        self.shift = o.shift.or(self.shift);
+        self.more.extend(o.more);
+        if o.shift.is_some() {
+            self.more.extend(self.shift);
+            self.shift = o.shift;
+        }
         self.formats.extend(o.formats);
         self.styles.extend(o.styles);
         self.merges = o.merges.or(self.merges);

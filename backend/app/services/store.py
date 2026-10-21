@@ -144,7 +144,57 @@ class Store:
         out.sort(key=lambda d: d["modified"], reverse=True)
         return out
 
+    def template_path(self, tid: str) -> Path:
+        if not tid.startswith("my-") or not tid[3:].isalnum():
+            raise KeyError(tid)
+        return self.dir.parent / "Templates" / f"{tid[3:]}.fcel"
+
+    def save_template(self, wid: str, name: str, description: str) -> dict:
+        b = self._load(wid)
+        with b.lock:
+            self._write(b)
+            tid = uuid.uuid4().hex[:12]
+            target = self.template_path(f"my-{tid}")
+            target.parent.mkdir(parents=True, exist_ok=True)
+            doc = self._read(self.path(wid))
+            doc.update({"title": name[:120], "templateDescription": description[:300], "templateName": name[:120]})
+            with zipfile.ZipFile(target, "w", zipfile.ZIP_DEFLATED) as z:
+                z.writestr("mimetype", "application/vnd.formcel+zip")
+                z.writestr("workbook.json", json.dumps(doc, ensure_ascii=False, separators=(",", ":")))
+        return self.personal_summary(f"my-{tid}")
+
+    def personal_summary(self, tid: str) -> dict:
+        doc = self._read(self.template_path(tid))
+        return {"id": tid, "name": doc.get("templateName") or doc["title"], "description": doc.get("templateDescription") or "Saved from one of your workbooks.", "category": "Personal", "tags": ["personal"], "featured": False,
+                "source": "personal", "sheets": [s["name"] for s in doc["sheets"]], "rows": sum(len(s["cells"]) for s in doc["sheets"]), "preview": doc.get("preview", [])}
+
+    def personal_templates(self) -> list[dict]:
+        out = []
+        folder = self.dir.parent / "Templates"
+        for p in sorted(folder.glob("*.fcel"), key=lambda q: q.stat().st_mtime, reverse=True):
+            try:
+                out.append(self.personal_summary(f"my-{p.stem}"))
+            except (OSError, ValueError, KeyError, zipfile.BadZipFile):
+                continue
+        return out
+
+    def delete_template(self, tid: str) -> None:
+        self.template_path(tid).unlink()
+
+    def create_from_personal(self, title: str | None, tid: str) -> dict:
+        doc = self._read(self.template_path(tid))
+        stamp = now()
+        wid = uuid.uuid4().hex[:12]
+        doc.update({"id": wid, "title": (title or doc.get("templateName") or doc["title"])[:120], "created": stamp, "modified": stamp, "template": None})
+        target = self.path(wid)
+        with zipfile.ZipFile(target, "w", zipfile.ZIP_DEFLATED) as z:
+            z.writestr("mimetype", "application/vnd.formcel+zip")
+            z.writestr("workbook.json", json.dumps(doc, ensure_ascii=False, separators=(",", ":")))
+        return self._load(wid).meta()
+
     def create(self, title: str | None, template_id: str | None) -> dict:
+        if template_id and template_id.startswith("my-"):
+            return self.create_from_personal(title, template_id)
         eng = formcel_engine.Workbook()
         name = title
         if template_id:

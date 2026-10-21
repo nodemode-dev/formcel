@@ -393,4 +393,32 @@ def purge_workbook(wid: str) -> None:
 
 @router.get("/templates")
 def list_templates() -> dict:
-    return templates.listing()
+    out = templates.listing()
+    mine = store().personal_templates()
+    if mine:
+        out["categories"].append({"name": "Personal", "count": len(mine)})
+        out["templates"] = mine + out["templates"]
+    return out
+
+
+class TemplateIn(BaseModel):
+    name: str
+    description: str = ""
+
+
+@router.post("/workbooks/{wid}/template", status_code=201)
+def save_as_template(wid: str, body: TemplateIn) -> dict:
+    if not body.name.strip():
+        raise HTTPException(422, "Give the template a name.")
+    try:
+        return store().save_template(wid, body.name.strip(), body.description.strip())
+    except (KeyError, FileNotFoundError):
+        raise missing(wid)
+
+
+@router.delete("/templates/{tid}", status_code=204)
+def delete_template(tid: str) -> None:
+    try:
+        store().delete_template(tid)
+    except (KeyError, FileNotFoundError):
+        raise HTTPException(404, f"No personal template {tid}.")

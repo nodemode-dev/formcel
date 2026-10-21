@@ -20,6 +20,7 @@ pub struct Table {
     pub first_col: bool,
     pub last_col: bool,
     pub button: bool,
+    pub types: Vec<String>,
 }
 
 fn hit(a: Area, at: Addr) -> bool {
@@ -58,6 +59,12 @@ impl Table {
                 escape(s, &mut out);
             }
         }
+        if self.types.iter().any(|t| !t.is_empty()) {
+            for j in 0..self.cols.len() {
+                out.push('\t');
+                escape(self.types.get(j).map_or("", String::as_str), &mut out);
+            }
+        }
         out
     }
 
@@ -93,6 +100,7 @@ impl Table {
             first_col: flags.contains('f'),
             last_col: flags.contains('l'),
             button: flags.contains('b'),
+            types: if p.len() >= 6 + 4 * count { (0..count).map(|i| p[6 + 3 * count + i].clone()).collect() } else { Vec::new() },
         };
         (t.data().0 <= t.data().1).then_some(t)
     }
@@ -306,6 +314,7 @@ impl Workbook {
             first_col: false,
             last_col: false,
             button: true,
+            types: Vec::new(),
         });
         let t = self.tables.last().cloned().unwrap();
         let e = self.put_tables(before);
@@ -343,6 +352,9 @@ impl Workbook {
         t.first_col = want.first_col;
         t.last_col = want.last_col;
         t.button = want.button;
+        if !want.types.is_empty() {
+            t.types = want.types.clone();
+        }
         let body_end = old.data().1;
         if want.area.r1 != old.area.r1 || want.area.c1 != old.area.c1 {
             let w = (want.area.c1 - want.area.c0 + 1) as usize;
@@ -359,6 +371,9 @@ impl Workbook {
             t.cols = names;
             t.calc.resize(w, String::new());
             t.kept.resize(w, String::new());
+            if !t.types.is_empty() {
+                t.types.resize(w, String::new());
+            }
             t.area = want.area;
             if t.data().0 > t.data().1 {
                 self.undo_group(mark);
