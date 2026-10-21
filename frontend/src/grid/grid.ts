@@ -20,6 +20,8 @@ const HEAD_H = 24;
 const HEAD_W = 60;
 const KEY = (r: number, c: number) => r * MAX_COLS + c;
 const NUMERIC = /^-?(\d+\.?\d*|\.\d+)(e[+-]?\d+)?$/i;
+const OUTLINE_PAD = 3;
+const OUTLINE_STEP = 16;
 
 interface Palette {
   bg: string;
@@ -37,7 +39,7 @@ export interface GridEvents {
   onActive(text: string, ref: string, range: Range): void;
   onHistory(undo: boolean, redo: boolean): void;
   onChanged(changes: Changed[]): void;
-  onSheet(sheet: number): void;
+  onSheet(sheet: number): SheetView;
   onShift(shift: Shift): void;
   onView(sheet: number, view: SheetView): void;
   onMenu(kind: MenuKind, x: number, y: number): void;
@@ -50,6 +52,10 @@ export class Grid {
   readonly el: HTMLElement;
   private readonly canvas: HTMLCanvasElement;
   private readonly ctx: CanvasRenderingContext2D;
+  private readonly og: HTMLCanvasElement;
+  private readonly octx: CanvasRenderingContext2D;
+  private gw = 0;
+  private gh = 0;
   private readonly editor: HTMLTextAreaElement;
   private readonly cache = new Map<number, string>();
   private win: Range = { r0: 0, c0: 0, r1: -1, c1: -1 };
@@ -82,8 +88,10 @@ export class Grid {
     private readonly events: GridEvents,
   ) {
     this.el = host;
-    this.el.innerHTML = '<canvas class="fc-grid-canvas"></canvas><textarea class="fc-editor" spellcheck="false" hidden aria-label="Cell editor"></textarea>';
-    this.canvas = this.el.querySelector('canvas')!;
+    this.el.innerHTML = '<canvas class="fc-outline" aria-hidden="true"></canvas><canvas class="fc-grid-canvas"></canvas><textarea class="fc-editor" spellcheck="false" hidden aria-label="Cell editor"></textarea>';
+    this.og = this.el.querySelector('.fc-outline')!;
+    this.octx = this.og.getContext('2d')!;
+    this.canvas = this.el.querySelector('.fc-grid-canvas')!;
     this.ctx = this.canvas.getContext('2d', { alpha: false })!;
     this.editor = this.el.querySelector('textarea')!;
     this.readPalette();
@@ -116,14 +124,27 @@ export class Grid {
   private resize(): void {
     const r = this.el.getBoundingClientRect();
     this.dpr = window.devicePixelRatio || 1;
-    const cw = Math.max(1, Math.floor(r.width));
-    const ch = Math.max(1, Math.floor(r.height));
+    this.gw = gutter(this.rows);
+    this.gh = gutter(this.cols);
+    const fw = Math.max(1, Math.floor(r.width));
+    const fh = Math.max(1, Math.floor(r.height));
+    const cw = Math.max(1, fw - this.gw);
+    const ch = Math.max(1, fh - this.gh);
     this.w = cw / this.z;
     this.h = ch / this.z;
     this.canvas.width = Math.floor(cw * this.dpr);
     this.canvas.height = Math.floor(ch * this.dpr);
     this.canvas.style.width = `${cw}px`;
     this.canvas.style.height = `${ch}px`;
+    this.canvas.style.left = `${this.gw}px`;
+    this.canvas.style.top = `${this.gh}px`;
+    this.og.hidden = !this.gw && !this.gh;
+    if (!this.og.hidden) {
+      this.og.width = Math.floor(fw * this.dpr);
+      this.og.height = Math.floor(fh * this.dpr);
+      this.og.style.width = `${fw}px`;
+      this.og.style.height = `${fh}px`;
+    }
     this.clampScroll();
     this.paintNow();
   }
@@ -224,7 +245,164 @@ export class Grid {
     ctx.lineWidth = 2;
     if (this.fr) this.line(HEAD_W, HEAD_H + fh, w, HEAD_H + fh);
     if (this.fc) this.line(HEAD_W + fw, HEAD_H, HEAD_W + fw, h);
+    if (!this.og.hidden) this.paintOutline();
     if (this.editing) this.placeEditor();
+  }
+
+  private paintOutline(): void {
+    const { octx: o, pal, gw, gh, z } = this;
+    const W = this.og.width / this.dpr;
+    const H = this.og.height / this.dpr;
+    o.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
+    o.fillStyle = pal.headBg;
+    o.fillRect(0, 0, W, H);
+    o.strokeStyle = pal.grid;
+    o.lineWidth = 1;
+    o.beginPath();
+    if (gw) {
+      o.moveTo(gw - 0.5, 0);
+      o.lineTo(gw - 0.5, H);
+    }
+    if (gh) {
+      o.moveTo(0, gh - 0.5);
+      o.lineTo(W, gh - 0.5);
+    }
+    o.stroke();
+    o.font = '600 10px Inter, system-ui, sans-serif';
+    o.textAlign = 'center';
+    o.textBaseline = 'middle';
+    const button = (cx: number, cy: number, label: string) => {
+      o.fillStyle = pal.bg;
+      o.fillRect(cx - 6.5, cy - 6.5, 13, 13);
+      o.strokeStyle = pal.headFg;
+      o.strokeRect(cx - 6.5, cy - 6.5, 13, 13);
+      o.fillStyle = pal.headFg;
+      o.fillText(label, cx, cy + 0.5);
+    };
+    const levels = (axis: Axis, along: 'x' | 'y') => {
+      const n = axis.maxLevel() + 1;
+      for (let i = 0; i < n; i++) {
+        const p = OUTLINE_PAD + i * OUTLINE_STEP + OUTLINE_STEP / 2;
+        if (along === 'x') button(p, gh + (HEAD_H * z) / 2, String(i + 1));
+        else button(gw + (HEAD_W * z) / 2, p, String(i + 1));
+      }
+    };
+    if (gw) {
+      levels(this.rows, 'x');
+      o.save();
+      o.beginPath();
+      o.rect(0, gh + HEAD_H * z, gw, H);
+      o.clip();
+      for (const r of this.rows.runs()) {
+        const cx = OUTLINE_PAD + (r.level - 1) * OUTLINE_STEP + OUTLINE_STEP / 2;
+        const top = gh + this.y(r.a) * z;
+        const end = r.b + 1 < MAX_ROWS ? r.b + 1 : r.b;
+        const by = gh + (this.y(end) + this.rows.size(end) / 2) * z;
+        if (by < gh || top > H) continue;
+        if (!this.rows.isFolded(r)) {
+          o.strokeStyle = pal.headFg;
+          o.beginPath();
+          o.moveTo(cx - 4, top + 2.5);
+          o.lineTo(cx + 0.5, top + 2.5);
+          o.lineTo(cx + 0.5, by - 7);
+          o.stroke();
+        }
+        button(cx, by, this.rows.isFolded(r) ? '+' : '−');
+      }
+      o.restore();
+    }
+    if (gh) {
+      levels(this.cols, 'y');
+      o.save();
+      o.beginPath();
+      o.rect(gw + HEAD_W * z, 0, W, gh);
+      o.clip();
+      for (const r of this.cols.runs()) {
+        const cy = OUTLINE_PAD + (r.level - 1) * OUTLINE_STEP + OUTLINE_STEP / 2;
+        const left = gw + this.x(r.a) * z;
+        const end = r.b + 1 < MAX_COLS ? r.b + 1 : r.b;
+        const bx = gw + (this.x(end) + this.cols.size(end) / 2) * z;
+        if (bx < gw || left > W) continue;
+        if (!this.cols.isFolded(r)) {
+          o.strokeStyle = pal.headFg;
+          o.beginPath();
+          o.moveTo(left + 2.5, cy - 4);
+          o.lineTo(left + 2.5, cy + 0.5);
+          o.lineTo(bx - 7, cy + 0.5);
+          o.stroke();
+        }
+        button(bx, cy, this.cols.isFolded(r) ? '+' : '−');
+      }
+      o.restore();
+    }
+  }
+
+  private outlineHit(px: number, py: number): void {
+    const { gw, gh, z } = this;
+    const slot = (p: number) => Math.floor((p - OUTLINE_PAD) / OUTLINE_STEP);
+    const near = (a: number, b: number) => Math.abs(a - b) <= 8;
+    let axis: Axis | null = null;
+    let done = false;
+    if (px < gw && py >= gh && py < gh + HEAD_H * z) {
+      const n = slot(px);
+      if (n >= 0 && n <= this.rows.maxLevel()) {
+        this.rows.showLevel(n + 1);
+        axis = this.rows;
+        done = true;
+      }
+    } else if (py < gh && px >= gw && px < gw + HEAD_W * z) {
+      const n = slot(py);
+      if (n >= 0 && n <= this.cols.maxLevel()) {
+        this.cols.showLevel(n + 1);
+        axis = this.cols;
+        done = true;
+      }
+    } else if (px < gw && py > gh) {
+      const level = slot(px) + 1;
+      for (const r of this.rows.runs()) {
+        if (r.level !== level) continue;
+        const end = r.b + 1 < MAX_ROWS ? r.b + 1 : r.b;
+        if (near(py, gh + (this.y(end) + this.rows.size(end) / 2) * z)) {
+          this.rows.fold(r, !this.rows.isFolded(r));
+          axis = this.rows;
+          done = true;
+          break;
+        }
+      }
+    } else if (py < gh && px > gw) {
+      const level = slot(py) + 1;
+      for (const r of this.cols.runs()) {
+        if (r.level !== level) continue;
+        const end = r.b + 1 < MAX_COLS ? r.b + 1 : r.b;
+        if (near(px, gw + (this.x(end) + this.cols.size(end) / 2) * z)) {
+          this.cols.fold(r, !this.cols.isFolded(r));
+          axis = this.cols;
+          done = true;
+          break;
+        }
+      }
+    }
+    if (!done || !axis) return;
+    if (axis === this.rows) this.ar = this.fr2 = this.rows.nextVisible(this.ar, 1);
+    else this.ac = this.fc2 = this.cols.nextVisible(this.ac, 1);
+    this.clampScroll();
+    this.emitView();
+    this.announce();
+    this.paint();
+  }
+
+  group(rows: boolean, d: 1 | -1): void {
+    const s = this.sel();
+    const changed = rows
+      ? this.rows.group(s.r0, Math.min(s.r1, s.r0 + 100000), d)
+      : this.cols.group(s.c0, Math.min(s.c1, s.c0 + 16384), d);
+    if (!changed) return;
+    this.resize();
+    this.emitView();
+  }
+
+  groupAuto(d: 1 | -1): void {
+    this.group(!this.wholeCols(), d);
   }
 
   private line(x0: number, y0: number, x1: number, y1: number): void {
@@ -435,7 +613,9 @@ export class Grid {
   private extendTo(r: number, c: number): void {
     this.fr2 = clampR(r);
     this.fc2 = clampC(c);
-    this.reveal(this.fr2, this.fc2);
+    const allRows = this.ar === 0 && this.fr2 === MAX_ROWS - 1;
+    const allCols = this.ac === 0 && this.fc2 === MAX_COLS - 1;
+    this.reveal(allRows ? -1 : this.fr2, allCols ? -1 : this.fc2);
     this.announce();
     this.paint();
   }
@@ -443,13 +623,13 @@ export class Grid {
   reveal(r: number, c: number): void {
     const viewH = this.h - HEAD_H - this.frozenH();
     const viewW = this.w - HEAD_W - this.frozenW();
-    if (r >= this.fr) {
+    if (r >= this.fr && r >= 0) {
       const top = this.rows.offsetOf(r) - this.frozenH();
       const bottom = top + this.rows.size(r);
       if (top < this.sy) this.sy = top;
       else if (bottom > this.sy + viewH) this.sy = bottom - viewH;
     }
-    if (c >= this.fc) {
+    if (c >= this.fc && c >= 0) {
       const left = this.cols.offsetOf(c) - this.frozenW();
       const right = left + this.cols.size(c);
       if (left < this.sx) this.sx = left;
@@ -520,8 +700,7 @@ export class Grid {
 
   private async commitEdits(changed: Changed[]): Promise<void> {
     if (changed.length && changed.every(([s]) => s !== this.sheet)) {
-      this.events.onSheet(changed[0][0]);
-      this.show(this.book, changed[0][0]);
+      this.show(this.book, changed[0][0], this.events.onSheet(changed[0][0]));
     }
     for (const [s, r, c, t] of changed) {
       if (s !== this.sheet) continue;
@@ -567,10 +746,12 @@ export class Grid {
 
   private afterShift(s: Shift): void {
     if (s.sheet !== this.sheet) {
-      this.events.onSheet(s.sheet);
-      this.show(this.book, s.sheet);
+      this.show(this.book, s.sheet, this.events.onSheet(s.sheet));
     }
-    (s.rows ? this.rows : this.cols).shift(s.at, s.delta);
+    const axis = s.rows ? this.rows : this.cols;
+    const before = gutter(axis);
+    axis.shift(s.at, s.delta);
+    if (gutter(axis) !== before) this.resize();
     this.cache.clear();
     this.win = { r0: 0, c0: 0, r1: -1, c1: -1 };
     this.pendingWin = null;
@@ -780,8 +961,8 @@ export class Grid {
   private placeEditor(): void {
     const st = this.editor.style;
     const z = this.z;
-    st.left = `${this.x(this.ac) * z}px`;
-    st.top = `${this.y(this.ar) * z}px`;
+    st.left = `${this.gw + this.x(this.ac) * z}px`;
+    st.top = `${this.gh + this.y(this.ar) * z}px`;
     st.width = `${Math.max(this.cols.size(this.ac), 60) * z}px`;
     st.height = `${Math.max(this.rows.size(this.ar), 16) * z}px`;
     st.fontSize = `${13 * z}px`;
@@ -863,13 +1044,26 @@ export class Grid {
       }
       if (this.drag) {
         const { row, col } = this.hit(p.x, p.y);
-        if (this.drag.kind === 'cols') this.extendTo(MAX_ROWS - 1, col);
-        else if (this.drag.kind === 'rows') this.extendTo(row, MAX_COLS - 1);
-        else this.extendTo(row, col);
+        const kind = this.drag.kind;
+        this.enqueue(() => {
+          if (kind === 'cols') this.extendTo(MAX_ROWS - 1, col);
+          else if (kind === 'rows') this.extendTo(row, MAX_COLS - 1);
+          else this.extendTo(row, col);
+        });
         return;
       }
       const b = this.boundary(p.x, p.y);
       this.canvas.style.cursor = this.onFillHandle(p.x, p.y) ? 'crosshair' : b ? (b.kind === 'col' ? 'col-resize' : 'row-resize') : 'cell';
+    });
+
+    this.og.addEventListener('pointerdown', (e) => {
+      if (e.button !== 0) return;
+      e.preventDefault();
+      this.focus();
+      const r = this.og.getBoundingClientRect();
+      const x = e.clientX - r.left;
+      const y = e.clientY - r.top;
+      this.enqueue(() => this.outlineHit(x, y));
     });
 
     el.addEventListener('pointerdown', (e) => {
@@ -892,20 +1086,18 @@ export class Grid {
         return;
       }
       const { row, col } = this.hit(p.x, p.y);
+      const shift = e.shiftKey;
       if (p.y < HEAD_H && p.x < HEAD_W) {
-        this.select(0, 0, MAX_ROWS - 1, MAX_COLS - 1, false);
+        this.enqueue(() => this.select(0, 0, MAX_ROWS - 1, MAX_COLS - 1, false));
       } else if (p.y < HEAD_H) {
         this.drag = { kind: 'cols' };
-        if (e.shiftKey) this.extendTo(MAX_ROWS - 1, col);
-        else this.select(0, col, MAX_ROWS - 1, col, false);
+        this.enqueue(() => (shift ? this.extendTo(MAX_ROWS - 1, col) : this.select(0, col, MAX_ROWS - 1, col, false)));
       } else if (p.x < HEAD_W) {
         this.drag = { kind: 'rows' };
-        if (e.shiftKey) this.extendTo(row, MAX_COLS - 1);
-        else this.select(row, 0, row, MAX_COLS - 1, false);
+        this.enqueue(() => (shift ? this.extendTo(row, MAX_COLS - 1) : this.select(row, 0, row, MAX_COLS - 1, false)));
       } else {
         this.drag = { kind: 'cells' };
-        if (e.shiftKey) this.extendTo(row, col);
-        else this.select(row, col);
+        this.enqueue(() => (shift ? this.extendTo(row, col) : this.select(row, col)));
       }
     });
 
@@ -1048,6 +1240,10 @@ export class Grid {
       else if (e.key.length === 1 && !mod) this.editor.value += e.key;
       return;
     }
+    if (dir && e.altKey && e.shiftKey && !mod && (dir === 'left' || dir === 'right')) {
+      this.groupAuto(dir === 'right' ? 1 : -1);
+      return;
+    }
     if (dir) {
       if (mod) await this.jump(dir, e.shiftKey);
       else this.move(dir, e.shiftKey);
@@ -1111,6 +1307,11 @@ function wants(e: KeyboardEvent): boolean {
   if (mod) return !e.altKey && (['z', 'y', 'a', 'home', 'end', '+', '=', '-', '_', 'g'].includes(e.key.toLowerCase()) || e.code === 'Digit9' || e.code === 'Digit0');
   if (['Enter', 'Tab', 'Escape', 'Home', 'PageDown', 'PageUp', 'F2', 'F5', 'Delete', 'Backspace'].includes(e.key)) return true;
   return e.key.length === 1 && !e.altKey;
+}
+
+function gutter(axis: Axis): number {
+  const n = axis.maxLevel();
+  return n ? OUTLINE_PAD * 2 + OUTLINE_STEP * (n + 1) : 0;
 }
 
 function clampR(r: number): number {

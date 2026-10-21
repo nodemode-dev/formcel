@@ -121,7 +121,7 @@ Alignment is guessed from the display text (numbers right, TRUE and FALSE centre
 - kind: todo
 - logged: v0.2.0 · 2026-10-21
 
-Text overflow into empty neighbours, wrapped display and row autofit (Phase 3); grouping and outlines, split panes (later in Phase 1); touch input. Done in v0.4.0: the fill handle, insert and delete shifting cells, hide and unhide, zoom, Go To (F5 and Ctrl+G focus the Name Box, as Excel's Go To box does for a reference).
+Text overflow into empty neighbours, wrapped display and row autofit (Phase 3); split panes (later in Phase 1); touch input. Done in v0.5.0: grouping and outlines. Done in v0.4.0: the fill handle, insert and delete shifting cells, hide and unhide, zoom, Go To (F5 and Ctrl+G focus the Name Box, as Excel's Go To box does for a reference).
 
 ### Zoom
 - refers-to: src/grid/grid.ts :: Grid.setZoom, local, placeEditor
@@ -150,6 +150,36 @@ The engine moves the cells; the grid moves its own row and column sizes and hidd
 - logged: v0.4.0 · 2026-10-21
 
 axis.ts was replaced whole with the Write tool in v0.4.0 rather than edited region by region, against the repo's surgical-edit rule. The public parts (`size`, `setSize`, `offset`, `indexAt`, `count`) keep their signatures; added are the hidden set, `shift`, `state`/`restore` and `nextVisible`. Review the file as new.
+
+### Outline groups
+- refers-to: src/grid/axis.ts :: group, runs, fold, showLevel; src/grid/grid.ts :: paintOutline, outlineHit, group
+- kind: explainer
+- logged: v0.5.0 · 2026-10-21
+
+Each axis keeps an outline level per row or column (1 to 7, `MAX_LEVEL`) and, per summary row, a bit for each level that is collapsed. Microsoft's outline page (MS-OUTLINE in the research kit) allows "an outline of up to eight levels"; FormCel reads that as 8 level buttons, the first showing only ungrouped rows, which leaves 7 nested groups. If Excel turns out to nest 8 groups, raise `MAX_LEVEL`. A group is a run of neighbours at a level or deeper; its button sits on the row below the run (or the column to its right), because "by default, Excel looks for summary rows below the details they summarize" (same page). Summary rows above detail are not offered yet. Collapsing hides the run through the same hidden set as Ctrl+9, so arrow keys, paint and saving need nothing new; expanding shows the run again except rows inside an inner group that is still collapsed. The level buttons show every row whose level is below the number pressed. Levels and collapsed bits move with inserted and deleted rows (`Axis.shift`) and are saved in the sheet view as `levels` and `folded`.
+
+The gutters are a second canvas (`.fc-outline`) behind the grid canvas, which is moved right and down by the gutter sizes; all cell and header maths keep their header-relative coordinates. A gutter appears when the first group is made and goes when the last is removed, as Excel's outline symbols do; on open the grid is laid out with its gutters before the first frame (checked at 4x CPU and a slow network: one canvas position seen, layout shift 0). Grouping is a view change, like hiding, and is not on the undo stack yet.
+
+### Pointer input joins the key queue
+- refers-to: src/grid/grid.ts :: bind (pointerdown, pointermove, outline pointerdown)
+- kind: warning-context
+- logged: v0.5.0 · 2026-10-21
+
+Keys are processed in order through `enqueue`, but a click selected at once. Typing ten values and clicking a row header straight after put the queued keys in the clicked rows: r8 to r10 landed in rows 4 to 6 and r4 to r6 were lost. Click, drag and outline-gutter selections now go through the same queue, so they take effect after every key pressed before them. Checked: typing then grouping with no pause keeps every value in place.
+
+### Undo that changes sheet keeps the sheet's view
+- refers-to: src/grid/grid.ts :: commitEdits, afterShift; GridEvents.onSheet
+- kind: warning-context
+- logged: v0.5.0 · 2026-10-21
+
+When undo or redo touched another sheet, the grid showed that sheet with an empty view and then saved it, wiping its sizes, hidden rows and columns, frozen panes, zoom and outline (since v0.3.0). `onSheet` now returns the stored view and the grid shows the sheet with it. Checked: zoom 125% and a hidden column survive an undo that jumps back to their sheet, on screen and on disk.
+
+### Selecting whole rows does not scroll sideways
+- refers-to: src/grid/grid.ts :: extendTo, reveal
+- kind: warning-context
+- logged: v0.5.0 · 2026-10-21
+
+Shift-clicking a row header extended the selection to column XFD and scrolled the sheet out to it. A selection that spans every column (or every row) now leaves that direction's scroll where it was; `reveal` takes -1 for a direction to leave alone.
 
 ### Context menus
 - refers-to: src/ui/menu.ts :: Menu

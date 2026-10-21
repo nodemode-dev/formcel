@@ -82,6 +82,14 @@
 
 .fc-grid:focus-visible { box-shadow: inset 0 0 0 1px var(--accent-color-dim); }
 
+.fc-outline {
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: block;
+  cursor: pointer;
+}
+
 .fc-grid-canvas {
   position: absolute;
   inset: 0;

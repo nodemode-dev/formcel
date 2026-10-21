@@ -60,7 +60,11 @@ export class App {
         this.button('edit.redo').disabled = !redo;
       },
       onChanged: (changes) => this.queueSave(changes),
-      onSheet: (sheet) => this.markTab(sheet),
+      onSheet: (sheet) => {
+        this.markTab(sheet);
+        queueMicrotask(() => this.zoomLabel());
+        return this.open?.views[sheet] ?? {};
+      },
       onShift: (s) => this.sendShift(s),
       onView: (sheet, view) => this.saveView(sheet, view),
       onMenu: (kind, x, y) => this.cellMenu(kind, x, y),
@@ -106,6 +110,10 @@ export class App {
     cmd('rows.unhide', 'Unhide rows', 'Show hidden rows inside the selection.', false, () => g.hide(true, false), 'Mod+Shift+9');
     cmd('cols.hide', 'Hide columns', 'Hide the selected columns.', false, () => g.hide(false, true), 'Mod+0');
     cmd('cols.unhide', 'Unhide columns', 'Show hidden columns inside the selection.', false, () => g.hide(false, false), 'Mod+Shift+0');
+    cmd('rows.group', 'Group rows', 'Add the selected rows to an outline group one level deeper, up to 7 levels.', false, () => g.group(true, 1), 'Alt+Shift+Right');
+    cmd('rows.ungroup', 'Ungroup rows', 'Take the selected rows out of one outline level.', false, () => g.group(true, -1), 'Alt+Shift+Left');
+    cmd('cols.group', 'Group columns', 'Add the selected columns to an outline group one level deeper, up to 7 levels.', false, () => g.group(false, 1));
+    cmd('cols.ungroup', 'Ungroup columns', 'Take the selected columns out of one outline level.', false, () => g.group(false, -1));
     cmd('view.zoom-in', 'Zoom in', 'Make the sheet bigger, up to 200%.', false, () => g.zoomStep(1));
     cmd('view.zoom-out', 'Zoom out', 'Make the sheet smaller, down to 50%.', false, () => g.zoomStep(-1));
     cmd('view.zoom-reset', 'Zoom to 100%', 'Show the sheet at its normal size.', false, () => g.setZoom(1));
@@ -339,6 +347,8 @@ export class App {
     items.push({ label: 'Clear contents', keys: 'Delete', run: run('edit.clear') }, { sep: true });
     if (kind === 'rows' || kind === 'cells') items.push({ label: 'Hide rows', keys: 'Ctrl+9', run: run('rows.hide') }, { label: 'Unhide rows', keys: 'Ctrl+Shift+9', run: run('rows.unhide') });
     if (kind === 'cols' || kind === 'cells') items.push({ label: 'Hide columns', keys: 'Ctrl+0', run: run('cols.hide') }, { label: 'Unhide columns', keys: 'Ctrl+Shift+0', run: run('cols.unhide') });
+    if (kind === 'rows') items.push({ sep: true }, { label: 'Group rows', keys: 'Alt+Shift+Right', run: run('rows.group') }, { label: 'Ungroup rows', keys: 'Alt+Shift+Left', run: run('rows.ungroup') });
+    if (kind === 'cols') items.push({ sep: true }, { label: 'Group columns', keys: 'Alt+Shift+Right', run: run('cols.group') }, { label: 'Ungroup columns', keys: 'Alt+Shift+Left', run: run('cols.ungroup') });
     this.menu.show(x, y, items, () => g.focus());
   }
 

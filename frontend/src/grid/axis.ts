@@ -1,11 +1,24 @@
 export interface AxisState {
   sizes: [number, number][];
   hidden: number[];
+  levels?: [number, number][];
+  folded?: [number, number][];
 }
+
+export interface OutlineRun {
+  a: number;
+  b: number;
+  level: number;
+}
+
+export const MAX_LEVEL = 7;
 
 export class Axis {
   private readonly sizes = new Map<number, number>();
   private readonly hidden = new Set<number>();
+  private readonly levels = new Map<number, number>();
+  private readonly folded = new Map<number, number>();
+  private runCache: OutlineRun[] | null = null;
   private keys: number[] = [];
   private deltas: number[] = [];
 
@@ -66,19 +79,115 @@ export class Axis {
     };
     move(this.sizes);
     move(this.hidden);
+    move(this.levels);
+    move(this.folded);
+    this.runCache = null;
+    this.prune();
     this.rebuild();
   }
 
   state(): AxisState {
-    return { sizes: [...this.sizes.entries()], hidden: [...this.hidden] };
+    const s: AxisState = { sizes: [...this.sizes.entries()], hidden: [...this.hidden] };
+    if (this.levels.size) s.levels = [...this.levels.entries()];
+    if (this.folded.size) s.folded = [...this.folded.entries()];
+    return s;
   }
 
   restore(s: AxisState | undefined): void {
     this.sizes.clear();
     this.hidden.clear();
+    this.levels.clear();
+    this.folded.clear();
+    this.runCache = null;
     for (const [k, v] of s?.sizes ?? []) this.sizes.set(k, v);
     for (const k of s?.hidden ?? []) this.hidden.add(k);
+    for (const [k, v] of s?.levels ?? []) this.levels.set(k, v);
+    for (const [k, v] of s?.folded ?? []) this.folded.set(k, v);
     this.rebuild();
+  }
+
+  level(i: number): number {
+    return this.levels.get(i) ?? 0;
+  }
+
+  maxLevel(): number {
+    let m = 0;
+    for (const l of this.levels.values()) if (l > m) m = l;
+    return m;
+  }
+
+  group(a: number, b: number, d: 1 | -1): boolean {
+    let changed = false;
+    for (let i = a; i <= b; i++) {
+      const l = this.level(i) + d;
+      if (l < 0 || l > MAX_LEVEL) continue;
+      if (l) this.levels.set(i, l);
+      else this.levels.delete(i);
+      changed = true;
+    }
+    this.runCache = null;
+    this.prune();
+    return changed;
+  }
+
+  runs(): OutlineRun[] {
+    if (this.runCache) return this.runCache;
+    const keys = [...this.levels.keys()].sort((x, y) => x - y);
+    const out: OutlineRun[] = [];
+    const max = this.maxLevel();
+    for (let level = 1; level <= max; level++) {
+      let a = -1;
+      let prev = -2;
+      for (const k of keys) {
+        if (this.levels.get(k)! < level) continue;
+        if (k !== prev + 1) {
+          if (a >= 0) out.push({ a, b: prev, level });
+          a = k;
+        }
+        prev = k;
+      }
+      if (a >= 0) out.push({ a, b: prev, level });
+    }
+    return (this.runCache = out);
+  }
+
+  isFolded(r: OutlineRun): boolean {
+    return ((this.folded.get(r.b) ?? 0) & (1 << r.level)) !== 0;
+  }
+
+  fold(r: OutlineRun, on: boolean): void {
+    const bit = 1 << r.level;
+    const m = this.folded.get(r.b) ?? 0;
+    const next = on ? m | bit : m & ~bit;
+    if (next) this.folded.set(r.b, next);
+    else this.folded.delete(r.b);
+    if (on) {
+      for (let i = r.a; i <= r.b; i++) this.hidden.add(i);
+    } else {
+      const inner = this.runs().filter((x) => x.level > r.level && x.a >= r.a && x.b <= r.b && this.isFolded(x));
+      for (let i = r.a; i <= r.b; i++) if (!inner.some((x) => i >= x.a && i <= x.b)) this.hidden.delete(i);
+    }
+    this.rebuild();
+  }
+
+  showLevel(n: number): void {
+    this.folded.clear();
+    for (const [i, l] of this.levels) {
+      if (l >= n) this.hidden.add(i);
+      else this.hidden.delete(i);
+    }
+    for (const r of this.runs()) if (r.level >= n) this.folded.set(r.b, (this.folded.get(r.b) ?? 0) | (1 << r.level));
+    this.rebuild();
+  }
+
+  private prune(): void {
+    const live = new Map<number, number>();
+    for (const r of this.runs()) live.set(r.b, (live.get(r.b) ?? 0) | (1 << r.level));
+    for (const [b, m] of [...this.folded]) {
+      const keep = m & (live.get(b) ?? 0);
+      if (keep) this.folded.set(b, keep);
+      else this.folded.delete(b);
+    }
   }
 
   offsetOf(i: number): number {
