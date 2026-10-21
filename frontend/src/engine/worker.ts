@@ -238,7 +238,7 @@ function changed(s: string): Changed[] {
 }
 
 function formatsOf(s: string, tag = '%'): FormatChange[] {
-  return lines(s).filter((l) => l[0] === tag).map(([, sh, r, c, code]) => [Number(sh), Number(r), Number(c), unescape(code ?? '')]);
+  return lines(s).filter((l) => l[0] === tag && l.length > 2).map(([, sh, r, c, code]) => [Number(sh), Number(r), Number(c), unescape(code ?? '')]);
 }
 
 function shiftOf(line: string): Shift {
