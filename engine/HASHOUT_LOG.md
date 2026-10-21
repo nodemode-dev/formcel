@@ -2,8 +2,8 @@
 
 Living log of comment content and rationale for the Rust engine. Source stays near comment-free; it lives here.
 
-Current build version: v0.13.0
-Last updated: 2026-10-21 · FILTER, SORT, UNIQUE, LAMBDA helpers
+Current build version: v0.15.0
+Last updated: 2026-10-21 · array shaping, TEXTSPLIT
 
 ### Workbook::load, clear_history, rename_sheet (v0.3.0)
 - refers-to: crates/formcel-core/src/lib.rs :: load, clear_history, rename_sheet; formcel-wasm fc_load, fc_add_sheet, fc_sheet_names; formcel-py load, cells, rename_sheet
@@ -208,6 +208,32 @@ Every example table on Microsoft's page for each function (data pasted at A1 as 
 `Graph` holds each formula's resolved areas, an index from single cells to the formulas that read them, and 64-row by 16-column buckets for ranges; a range spanning more than 256 buckets (a whole column, say) goes in a short list checked on every change. `set_raw` updates it in place. Anything that can change what a reference points at (adding, renaming, deleting or moving a sheet, a shift) marks it stale and the next recalculation rebuilds it. Maps on this path use `Fx`, a small multiply-rotate hasher, because the standard hasher dominated the profile.
 
 Measured (scratch harness and the window's engine, not shipped): one precedent in a sheet of 100,000 row formulas plus one SUM over them went from 47 ms to 1 to 2 ms native and 2.5 to 6 ms through the window's worker, against the Phase 2 target of 100 ms. A 100,000-step chain (each cell adds 1 to the one above) recalculates all 100,000 cells in 130 ms native and 306 ms through the worker, including sending every changed cell back; that worst case is over the target.
+
+### Array shaping and TEXTSPLIT
+- refers-to: src/eval.rs :: call_arg (VSTACK, HSTACK, TOCOL, TOROW, TAKE, DROP, CHOOSECOLS, CHOOSEROWS, WRAPROWS, WRAPCOLS, EXPAND, TEXTSPLIT), split_on; src/formula.rs :: FUNCTIONS (104)
+- kind: explainer
+- logged: v0.15.0 · 2026-10-21
+
+Rules from each function's Microsoft page:
+- VSTACK and HSTACK pad narrower or shorter arrays with `#N/A`.
+- TOCOL and TOROW take ignore 0 to 3 (blanks, errors, both) and scan_by_column.
+- TAKE and DROP count from the end for negative numbers. Either one with rows or columns of 0 gives `#CALC!`. DROP's page says this too, though it reads as if copied from TAKE's; FormCel follows the page.
+- CHOOSECOLS and CHOOSEROWS give `#VALUE!` for 0 or beyond the size, and count from the end for negatives. The numbers may be arrays (`{1,3}`).
+- WRAPROWS and WRAPCOLS give `#VALUE!` for a two-dimensional vector and `#NUM!` for wrap_count below 1, and pad with pad_with or `#N/A`.
+- EXPAND gives `#VALUE!` when asked to shrink, and pads with pad_with or `#N/A`.
+- TEXTSPLIT takes column and row delimiters (text or array constants), ignore_empty, match_mode 1 for case-insensitive, and pad_with (`#N/A` by default). The longest delimiter wins at each position, and results are text.
+
+FormCel's own choices, where the pages say nothing:
+- TOCOL and TOROW with ignore outside 0 to 3 give `#VALUE!`; when everything is ignored they give `#CALC!`.
+- TAKE beyond the size returns the whole array.
+- DROP of everything gives `#CALC!`.
+- TEXTSPLIT with an empty delimiter, or neither delimiter given, gives `#VALUE!`.
+
+The pages show results as pictures, so the conformance run gains no cases. Instead, all 44 examples on the twelve pages were run on the page's own data with its formula (`stackexamples.py` in the sidecar's tools), and each result was compared with the sentence describing it. 41 agree. Three contradict their own pages:
+- VSTACK and HSTACK example 1 reference `E2:G3` while the data sits in D:F.
+- WRAPCOLS example 1 wraps `A2:F2` (six values) while the description speaks of two `#N/A` pads, which seven values would give.
+
+18 error cases from the pages' Errors sections pass (`stackerrors.py`).
 
 ### FILTER, SORT, SORTBY, UNIQUE and the LAMBDA helpers
 - refers-to: src/eval.rs :: call_arg (FILTER, SORT, SORTBY, UNIQUE, MAP, REDUCE, SCAN, BYROW, BYCOL, MAKEARRAY), lambda, apply, transposed, pick_rows, sort_key; SUMSQ in call

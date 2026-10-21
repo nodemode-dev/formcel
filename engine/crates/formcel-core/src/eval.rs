@@ -93,7 +93,34 @@ fn hull(a: Area, b: Area) -> Area {
     Area { r0: a.r0.min(b.r0), c0: a.c0.min(b.c0), r1: a.r1.max(b.r1), c1: a.c1.max(b.c1) }
 }
 
-const ARRAY_FNS: [&str; 15] = ["INDEX", "CHOOSE", "SEQUENCE", "TRANSPOSE", "IF", "FILTER", "SORT", "SORTBY", "UNIQUE", "MAP", "REDUCE", "SCAN", "BYROW", "BYCOL", "MAKEARRAY"];
+const ARRAY_FNS: [&str; 27] = [
+    "INDEX", "CHOOSE", "SEQUENCE", "TRANSPOSE", "IF", "FILTER", "SORT", "SORTBY", "UNIQUE", "MAP", "REDUCE", "SCAN", "BYROW", "BYCOL", "MAKEARRAY", "VSTACK", "HSTACK", "TOCOL", "TOROW", "TAKE",
+    "DROP", "CHOOSECOLS", "CHOOSEROWS", "WRAPROWS", "WRAPCOLS", "EXPAND", "TEXTSPLIT",
+];
+
+fn split_on(s: &str, delims: &[String], fold: bool) -> Vec<String> {
+    let cs: Vec<char> = s.chars().collect();
+    let ds: Vec<Vec<char>> = delims.iter().map(|d| d.chars().collect()).collect();
+    let same = |a: char, b: char| a == b || (fold && a.to_lowercase().eq(b.to_lowercase()));
+    let mut out = vec![String::new()];
+    let mut i = 0;
+    while i < cs.len() {
+        let hit = ds.iter().filter(|d| !d.is_empty() && i + d.len() <= cs.len() && d.iter().enumerate().all(|(k, &c)| same(cs[i + k], c))).map(Vec::len).max();
+        match hit {
+            Some(n) => {
+                out.push(String::new());
+                i += n;
+            }
+            None => {
+                if let Some(x) = out.last_mut() {
+                    x.push(cs[i]);
+                }
+                i += 1;
+            }
+        }
+    }
+    out
+}
 
 fn transposed(g: &Array) -> Array {
     let mut data = Vec::with_capacity(g.data.len());
@@ -1290,6 +1317,182 @@ impl Eval<'_> {
                     }
                 }
                 Ok(Arg::A(Array { rows, cols, data }))
+            }
+            "VSTACK" | "HSTACK" => {
+                if a.is_empty() {
+                    return Err(ErrKind::Na);
+                }
+                let gs = a.iter().map(|e| self.grid(self.arg(e))).collect::<Result<Vec<_>, _>>()?;
+                let gs: Vec<Array> = if name == "HSTACK" { gs.iter().map(transposed).collect() } else { gs };
+                let cols = gs.iter().map(|g| g.cols).max().unwrap_or(0);
+                let rows: usize = gs.iter().map(|g| g.rows).sum();
+                let mut data = Vec::with_capacity(rows * cols);
+                for g in &gs {
+                    for r in 0..g.rows {
+                        for c in 0..cols {
+                            data.push(if c < g.cols { g.get(r, c).clone() } else { err(ErrKind::Na) });
+                        }
+                    }
+                }
+                let out = Array { rows, cols, data };
+                Ok(Arg::A(if name == "HSTACK" { transposed(&out) } else { out }))
+            }
+            "TOCOL" | "TOROW" => {
+                if a.is_empty() || a.len() > 3 {
+                    return Err(ErrKind::Na);
+                }
+                let g = self.grid(self.arg(&a[0]))?;
+                let ignore = if a.len() > 1 && !matches!(a[1], Expr::Missing) { self.n(a, 1)?.trunc() as i64 } else { 0 };
+                if !(0..=3).contains(&ignore) {
+                    return Err(ErrKind::Value);
+                }
+                let by_col = a.len() > 2 && !matches!(a[2], Expr::Missing) && bool_of(&self.scalar(&a[2]))?;
+                let t = if by_col { transposed(&g) } else { g };
+                let data: Vec<Value> = t.data.into_iter().filter(|v| !((ignore & 1 == 1 && *v == Value::Empty) || (ignore & 2 == 2 && matches!(v, Value::Error(_))))).collect();
+                if data.is_empty() {
+                    return Err(ErrKind::Calc);
+                }
+                let n = data.len();
+                Ok(Arg::A(if name == "TOCOL" { Array { rows: n, cols: 1, data } } else { Array { rows: 1, cols: n, data } }))
+            }
+            "TAKE" | "DROP" => {
+                if a.len() < 2 || a.len() > 3 {
+                    return Err(ErrKind::Na);
+                }
+                let g = self.grid(self.arg(&a[0]))?;
+                let count = |i: usize| -> Result<Option<i64>, ErrKind> { if a.len() > i && !matches!(a[i], Expr::Missing) { Ok(Some(self.n(a, i)?.trunc() as i64)) } else { Ok(None) } };
+                let span = |k: Option<i64>, len: usize| -> Result<(usize, usize), ErrKind> {
+                    let len = len as i64;
+                    let Some(k) = k else { return Ok((0, len as usize)) };
+                    if k == 0 {
+                        return Err(ErrKind::Calc);
+                    }
+                    let (lo, hi) = match (name == "TAKE", k >= 0) {
+                        (true, true) => (0, k.min(len)),
+                        (true, false) => ((len + k).max(0), len),
+                        (false, true) => (k.min(len), len),
+                        (false, false) => (0, (len + k).max(0)),
+                    };
+                    if hi <= lo {
+                        return Err(ErrKind::Calc);
+                    }
+                    Ok((lo as usize, hi as usize))
+                };
+                let (r0, r1) = span(count(1)?, g.rows)?;
+                let (c0, c1) = span(count(2)?, g.cols)?;
+                let mut data = Vec::with_capacity((r1 - r0) * (c1 - c0));
+                for r in r0..r1 {
+                    for c in c0..c1 {
+                        data.push(g.get(r, c).clone());
+                    }
+                }
+                Ok(Arg::A(Array { rows: r1 - r0, cols: c1 - c0, data }))
+            }
+            "CHOOSECOLS" | "CHOOSEROWS" => {
+                if a.len() < 2 {
+                    return Err(ErrKind::Na);
+                }
+                let g = self.grid(self.arg(&a[0]))?;
+                let t = if name == "CHOOSECOLS" { transposed(&g) } else { g };
+                let mut keep = Vec::new();
+                for e in &a[1..] {
+                    for v in self.grid(self.arg(e))?.data {
+                        let k = number_of(&v)?.trunc() as i64;
+                        let len = t.rows as i64;
+                        if k == 0 || k.abs() > len {
+                            return Err(ErrKind::Value);
+                        }
+                        keep.push(if k > 0 { k - 1 } else { len + k } as usize);
+                    }
+                }
+                let out = pick_rows(&t, &keep);
+                Ok(Arg::A(if name == "CHOOSECOLS" { transposed(&out) } else { out }))
+            }
+            "WRAPROWS" | "WRAPCOLS" => {
+                if a.len() < 2 || a.len() > 3 {
+                    return Err(ErrKind::Na);
+                }
+                let g = self.grid(self.arg(&a[0]))?;
+                if g.rows != 1 && g.cols != 1 {
+                    return Err(ErrKind::Value);
+                }
+                let w = self.n(a, 1)?.trunc();
+                if w < 1.0 {
+                    return Err(ErrKind::Num);
+                }
+                let pad = if a.len() > 2 && !matches!(a[2], Expr::Missing) { self.scalar(&a[2]) } else { err(ErrKind::Na) };
+                let n = g.data.len();
+                let w = (w as usize).min(n.max(1));
+                let lines = n.div_ceil(w);
+                let mut data: Vec<Value> = g.data;
+                data.resize(lines * w, pad);
+                let out = Array { rows: lines, cols: w, data };
+                Ok(Arg::A(if name == "WRAPCOLS" { transposed(&out) } else { out }))
+            }
+            "EXPAND" => {
+                if a.len() < 2 || a.len() > 4 {
+                    return Err(ErrKind::Na);
+                }
+                let g = self.grid(self.arg(&a[0]))?;
+                let size = |i: usize, d: usize| -> Result<usize, ErrKind> {
+                    if a.len() > i && !matches!(a[i], Expr::Missing) {
+                        let k = self.n(a, i)?.trunc();
+                        if k < d as f64 {
+                            return Err(ErrKind::Value);
+                        }
+                        Ok(k as usize)
+                    } else {
+                        Ok(d)
+                    }
+                };
+                let (rows, cols) = (size(1, g.rows)?, size(2, g.cols)?);
+                if (rows as u64) * (cols as u64) > MAX_ARRAY {
+                    return Err(ErrKind::Num);
+                }
+                let pad = if a.len() > 3 && !matches!(a[3], Expr::Missing) { self.scalar(&a[3]) } else { err(ErrKind::Na) };
+                let mut data = Vec::with_capacity(rows * cols);
+                for r in 0..rows {
+                    for c in 0..cols {
+                        data.push(if r < g.rows && c < g.cols { g.get(r, c).clone() } else { pad.clone() });
+                    }
+                }
+                Ok(Arg::A(Array { rows, cols, data }))
+            }
+            "TEXTSPLIT" => {
+                if a.len() < 2 || a.len() > 6 {
+                    return Err(ErrKind::Na);
+                }
+                let text = self.t(a, 0)?;
+                let delims = |i: usize| -> Result<Vec<String>, ErrKind> {
+                    if a.len() <= i || matches!(a[i], Expr::Missing) {
+                        return Ok(Vec::new());
+                    }
+                    let ds = self.grid(self.arg(&a[i]))?.data.iter().map(text_of).collect::<Result<Vec<_>, _>>()?;
+                    if ds.iter().any(String::is_empty) {
+                        return Err(ErrKind::Value);
+                    }
+                    Ok(ds)
+                };
+                let (cd, rd) = (delims(1)?, delims(2)?);
+                if cd.is_empty() && rd.is_empty() {
+                    return Err(ErrKind::Value);
+                }
+                let skip = a.len() > 3 && !matches!(a[3], Expr::Missing) && bool_of(&self.scalar(&a[3]))?;
+                let fold = a.len() > 4 && !matches!(a[4], Expr::Missing) && self.n(a, 4)? == 1.0;
+                let pad = if a.len() > 5 && !matches!(a[5], Expr::Missing) { self.scalar(&a[5]) } else { err(ErrKind::Na) };
+                let lines: Vec<String> = split_on(&text, &rd, fold).into_iter().filter(|l| !(skip && l.is_empty())).collect();
+                let cells: Vec<Vec<String>> = lines.iter().map(|l| split_on(l, &cd, fold).into_iter().filter(|p| !(skip && p.is_empty())).collect()).collect();
+                let cols = cells.iter().map(Vec::len).max().unwrap_or(0);
+                if cells.is_empty() || cols == 0 {
+                    return Err(ErrKind::Calc);
+                }
+                let mut data = Vec::with_capacity(cells.len() * cols);
+                for row in &cells {
+                    for c in 0..cols {
+                        data.push(row.get(c).map_or_else(|| pad.clone(), |p| Value::Text(p.clone())));
+                    }
+                }
+                Ok(Arg::A(Array { rows: cells.len(), cols, data }))
             }
             _ => Err(ErrKind::Name),
         }
