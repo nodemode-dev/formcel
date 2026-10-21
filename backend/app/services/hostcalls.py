@@ -87,8 +87,14 @@ def resolve(key: str, books, fresh: bool = False) -> tuple[str, str]:
     try:
         if name == "WEBSERVICE":
             need(args, 1)
-            body, ctype = webdata.fetch(text_arg(args[0]), fresh)
-            return "t:" + esc(webdata.decode(body, ctype)[:32767]), ""
+            url = text_arg(args[0])
+            if len(url) > 2048:
+                raise ValueError("the address is over 2048 characters")
+            body, ctype = webdata.fetch(url, fresh)
+            text = webdata.decode(body, ctype)
+            if len(text) > 32767:
+                raise ValueError("the response is over 32767 characters")
+            return "t:" + esc(text), ""
         if name == "IMPORTDATA":
             need(args, 1, 2)
             delim = text_arg(args[1]) if len(args) > 1 and args[1] != "" else None
