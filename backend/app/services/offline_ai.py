@@ -1,0 +1,225 @@
+import re
+from collections import Counter
+
+from . import ranges
+
+NUM_TEXT = re.compile(r"^\s*[-+(]?\s*[$€£¥]?\s*[-+]?\d[\d,]*(\.\d+)?\s*%?\s*\)?\s*$")
+DATE_FORMS = [
+    (re.compile(r"^(\d{1,2})/(\d{1,2})/(\d{4})$"), "mdy"),
+    (re.compile(r"^(\d{4})-(\d{1,2})-(\d{1,2})$"), "ymd"),
+    (re.compile(r"^(\d{4})/(\d{1,2})/(\d{1,2})$"), "ymd"),
+    (re.compile(r"^(\d{1,2})\.(\d{1,2})\.(\d{4})$"), "dmy"),
+]
+
+
+def is_blank(v) -> bool:
+    return v is None or (isinstance(v, str) and v.strip() == "")
+
+
+def text_to_number(s: str):
+    if not NUM_TEXT.match(s):
+        return None
+    neg = s.strip().startswith("(") or "-" in s
+    pct = s.strip().rstrip(")").endswith("%")
+    t = re.sub(r"[^\d.]", "", s)
+    if not t or t.count(".") > 1:
+        return None
+    n = float(t)
+    n = -n if neg else n
+    return n / 100 if pct else n
+
+
+def fmt(n: float) -> str:
+    return str(int(n)) if float(n).is_integer() and abs(n) < 1e15 else repr(n)
+
+
+def parse_date(s: str, order: str):
+    for rx, form in DATE_FORMS:
+        m = rx.match(s.strip())
+        if not m:
+            continue
+        a, b, c = (int(x) for x in m.groups())
+        if form == "ymd":
+            y, mo, d = a, b, c
+        elif form == "dmy":
+            d, mo, y = a, b, c
+        elif order == "dmy":
+            d, mo, y = a, b, c
+        else:
+            mo, d, y = a, b, c
+        if 1 <= mo <= 12 and 1 <= d <= 31:
+            return f"{y:04d}-{mo:02d}-{d:02d}"
+    return None
+
+
+def suggestions(rows: list[list], header: bool = True) -> list[dict]:
+    out: list[dict] = []
+    if not rows:
+        return out
+    head = [str(v) if not is_blank(v) else f"Column {i + 1}" for i, v in enumerate(rows[0])] if header else [f"Column {i + 1}" for i in range(len(rows[0]))]
+    body_at = 1 if header else 0
+    body = rows[body_at:]
+    ncol = len(head)
+
+    def sug(kind: str, label: str, col: int | None, edits: list[list]):
+        out.append({"id": f"s{len(out) + 1}", "kind": kind, "label": label, "column": None if col is None else head[col], "count": len(edits), "edits": edits})
+
+    for c in range(ncol):
+        cells = [(body_at + r, row[c] if c < len(row) else None) for r, row in enumerate(body)]
+        strs = [(r, v) for r, v in cells if isinstance(v, str) and v.strip() != ""]
+        trim = [[r, c, re.sub(r"\s+", " ", v).strip()] for r, v in strs if re.sub(r"\s+", " ", v).strip() != v]
+        if trim:
+            sug("trim", f"Trim extra spaces in {head[c]}", c, trim)
+        hidden = [[r, c, "".join(ch for ch in v if ch.isprintable())] for r, v in strs if any(not ch.isprintable() for ch in v)]
+        if hidden:
+            sug("clean", f"Remove non-printing characters in {head[c]}", c, hidden)
+        groups: dict[str, Counter] = {}
+        for r, v in strs:
+            groups.setdefault(re.sub(r"\s+", " ", v).strip().lower(), Counter())[re.sub(r"\s+", " ", v).strip()] += 1
+        case = []
+        for key, cnt in groups.items():
+            if len(cnt) > 1:
+                best = cnt.most_common(1)[0][0]
+                for r, v in strs:
+                    nv = re.sub(r"\s+", " ", v).strip()
+                    if nv.lower() == key and nv != best:
+                        case.append([r, c, best])
+        if case:
+            sug("case", f"Make spelling and case consistent in {head[c]}", c, case)
+        nums = [(r, text_to_number(v)) for r, v in strs]
+        conv = [(r, n) for r, n in nums if n is not None]
+        real = [v for _, v in cells if isinstance(v, (int, float)) and not isinstance(v, bool)]
+        if conv and len(conv) >= max(1, (len(conv) + len(real)) // 2) and len(conv) + len(real) >= len(strs):
+            sug("numbers", f"Turn text into numbers in {head[c]}", c, [[r, c, fmt(n)] for r, n in conv])
+        orders = Counter()
+        found = []
+        for r, v in strs:
+            for rx, form in DATE_FORMS:
+                m = rx.match(v.strip())
+                if m:
+                    found.append((r, v))
+                    if form == "mdy" and int(m.group(1)) > 12:
+                        orders["dmy"] += 1
+                    elif form == "mdy" and int(m.group(2)) > 12:
+                        orders["mdy"] += 1
+                    break
+        if found and len(found) >= len(strs) * 0.6:
+            order = orders.most_common(1)[0][0] if orders else "mdy"
+            edits = []
+            for r, v in found:
+                d = parse_date(v, order)
+                if d and d != v.strip():
+                    edits.append([r, c, d])
+            if edits:
+                sug("dates", f"Write dates in {head[c]} as year-month-day", c, edits)
+    seen: dict[tuple, int] = {}
+    dup_rows = []
+    for r, row in enumerate(body):
+        key = tuple(re.sub(r"\s+", " ", str(v)).strip().lower() if not is_blank(v) else "" for v in row)
+        if not any(key):
+            continue
+        if key in seen:
+            dup_rows.append(body_at + r)
+        else:
+            seen[key] = r
+    if dup_rows:
+        drop = set(dup_rows)
+        kept = [row for r, row in enumerate(rows) if r not in drop]
+        edits = []
+        for r in range(len(rows)):
+            for c in range(ncol):
+                new = kept[r][c] if r < len(kept) and c < len(kept[r]) else None
+                old = rows[r][c] if c < len(rows[r]) else None
+                if (r >= len(kept) or new != old) and not (is_blank(new) and is_blank(old)):
+                    edits.append([r, c, "" if is_blank(new) else str(new)])
+        sug("duplicates", f"Remove {len(dup_rows)} duplicate row{'s' if len(dup_rows) != 1 else ''}", None, edits)
+    blank_rows = [body_at + r for r, row in enumerate(body) if all(is_blank(v) for v in row)]
+    inner = [r for r in blank_rows if r < len(rows) - 1 and any(not is_blank(v) for rr in rows[r + 1:] for v in rr)]
+    if inner:
+        drop = set(inner)
+        kept = [row for r, row in enumerate(rows) if r not in drop]
+        edits = []
+        for r in range(len(rows)):
+            for c in range(ncol):
+                new = kept[r][c] if r < len(kept) and c < len(kept[r]) else None
+                old = rows[r][c] if c < len(rows[r]) else None
+                if (r >= len(kept) or new != old) and not (is_blank(new) and is_blank(old)):
+                    edits.append([r, c, "" if is_blank(new) else str(new)])
+        sug("blank_rows", f"Close {len(inner)} blank row{'s' if len(inner) != 1 else ''}", None, edits)
+    return out
+
+
+CHART_WORDS = [
+    ("doughnut", "doughnut"), ("donut", "doughnut"), ("pie", "pie"), ("stacked column", "column-stacked"), ("stacked bar", "bar-stacked"),
+    ("scatter", "scatter"), ("histogram", "histogram"), ("waterfall", "waterfall"), ("funnel", "funnel"), ("radar", "radar"),
+    ("area", "area"), ("line", "line"), ("trend", "line"), ("over time", "line"), ("bar", "bar"), ("column", "column"),
+]
+
+
+def pick_chart(prompt: str) -> str:
+    p = prompt.lower()
+    for w, t in CHART_WORDS:
+        if w in p:
+            return t
+    return "column"
+
+
+def plan(prompt: str, ctx: dict, read_range) -> dict:
+    p = prompt.lower()
+    selection = ctx.get("selection", "")
+    sheet = ctx.get("sheet", "")
+    want_pivot = bool(re.search(r"\bpivot", p))
+    want_chart = bool(re.search(r"\b(chart|graph|plot|visuali[sz]e)\b", p))
+    out = {"text": "", "proposals": [], "charts": [], "pivots": []}
+    if not (want_pivot or want_chart):
+        out["text"] = "No model is set, so the assistant works offline. Ask for a chart or a pivot table, for example \"column chart of the selection\" or \"pivot of Sales by Region\", or use Clean data. Add an endpoint under Endpoint settings for open questions."
+        return out
+    area = selection.rpartition("!")[2] if selection else ""
+    try:
+        a = ranges.parse_area(area) if area and (":" in area) else None
+    except ValueError:
+        a = None
+    text = read_range(f"{sheet}!{area}") if a else ""
+    rows = [r.split("\t") for r in text.split("\n")] if text else []
+    if not rows:
+        out["text"] = "Select the data first (a header row and the rows under it), then ask again."
+        return out
+    head = rows[0]
+    if want_pivot:
+        low = [h.lower() for h in head]
+        mentioned = [(p.find(h), i) for i, h in enumerate(low) if h and h in p]
+        mentioned.sort()
+        names = [head[i] for _, i in mentioned]
+        by = p.find(" by ")
+        row_f, val_f = None, None
+        if by >= 0:
+            after = [head[i] for pos, i in mentioned if pos > by]
+            before = [head[i] for pos, i in mentioned if pos < by]
+            row_f = after[0] if after else None
+            val_f = before[0] if before else None
+        if row_f is None and names:
+            row_f = names[-1] if len(names) > 1 else names[0]
+        if val_f is None:
+            for i, h in enumerate(head):
+                col = [r[i] for r in rows[1:] if i < len(r) and r[i].strip()]
+                if col and all(re.fullmatch(r"-?[\d,.]+", x.strip()) for x in col) and h != row_f:
+                    val_f = h
+                    break
+        if row_f is None:
+            for i, h in enumerate(head):
+                col = [r[i] for r in rows[1:] if i < len(r) and r[i].strip()]
+                if col and not all(re.fullmatch(r"-?[\d,.]+", x.strip()) for x in col) and h != val_f:
+                    row_f = h
+                    break
+        func = next((f for w, f in (("average", "average"), ("mean", "average"), ("count", "count"), ("max", "max"), ("min", "min"), ("sum", "sum"), ("total", "sum")) if w in p), "sum")
+        if row_f is None:
+            out["text"] = "I could not tell which column to group by. Name it, for example \"pivot of Sales by Region\"."
+            return out
+        out["pivots"].append({"source": f"{sheet}!{area}", "rows": [row_f], "cols": [], "values": [{"field": val_f or row_f, "func": func if val_f else "count"}], "note": f"{func if val_f else 'count'} of {val_f or row_f} by {row_f}"})
+        out["text"] = f"Proposed a PivotTable: {out['pivots'][0]['note']}."
+    if want_chart:
+        t = pick_chart(prompt)
+        title = re.sub(r"\s+", " ", re.sub(r"(?i)\b(make|create|build|draw|show|me|a|an|the|of|chart|graph|plot)\b", " ", prompt)).strip().capitalize()[:60]
+        out["charts"].append({"sheet": sheet, "range": area, "type": t, "title": title, "byRows": False, "note": f"{t} chart of {area}"})
+        out["text"] = (out["text"] + " " if out["text"] else "") + f"Proposed a {t} chart of {area}."
+    return out

@@ -8,6 +8,7 @@ export interface Script {
   name: string;
   code: string;
   triggers?: { open?: boolean; edit?: boolean; every?: number };
+  js?: string;
 }
 
 export interface Step {
@@ -22,6 +23,10 @@ export interface Query {
   steps: Step[];
   target: { sheet: string; cell: string };
   every: number;
+  daily?: string;
+  onOpen?: boolean;
+  asTable?: boolean;
+  tabled?: boolean;
   last?: { rows: number; cols: number };
   refreshed?: number;
 }

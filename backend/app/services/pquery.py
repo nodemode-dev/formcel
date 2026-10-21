@@ -104,7 +104,12 @@ def source(src: dict, books, fresh: bool = False) -> Table:
         return blank(data)
     if kind == "sqlite":
         return sqlite_table(src.get("path", ""), src.get("sql", ""))
-    raise QueryError("choose a source")
+    from . import pqx
+
+    t = pqx.source(kind, src)
+    if t is None:
+        raise QueryError("choose a source")
+    return t
 
 
 def sqlite_table(path: str, sql: str) -> Table:
@@ -181,7 +186,7 @@ def convert(v, kind: str):
     raise QueryError(f"unknown type {kind}")
 
 
-def step(t: Table, s: dict) -> Table:
+def step(t: Table, s: dict, ctx=None) -> Table:
     op = s.get("op")
     if op == "promote_headers":
         if not t.rows:
@@ -257,13 +262,18 @@ def step(t: Table, s: dict) -> Table:
                 v = {"sum": sum(vals), "average": sum(vals) / len(vals), "min": min(vals), "max": max(vals)}[agg]
             rows.append([first[i] for i in by] + [v])
         return Table([t.cols[i] for i in by] + [name], rows)
-    raise QueryError(f"unknown step {op}")
+    from . import pqx
+
+    return pqx.step(t, s, ctx or pqx.Ctx(None, False))
 
 
-def run(q: dict, books, fresh: bool = False) -> dict:
+def run(q: dict, books, fresh: bool = False, library: dict | None = None) -> dict:
+    from . import pqx
+
     t = source(q.get("source") or {}, books, fresh)
+    ctx = pqx.Ctx(books, fresh, library or {})
     for s in q.get("steps") or []:
-        t = step(t, s)
+        t = step(t, s, ctx)
     out = [list(t.cols)] + t.rows
     return {"columns": t.cols, "rows": [[raw(v) for v in r] for r in out]}
 

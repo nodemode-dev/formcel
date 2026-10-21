@@ -128,6 +128,8 @@ def cell_answer(prompt: str, data: str) -> str:
 
 TOOLS = [
     {"name": "read_range", "description": "Read the values and formulas of a range in the open workbook, for example Sheet1!A1:D20.", "parameters": {"type": "object", "properties": {"range": {"type": "string"}}, "required": ["range"]}},
+    {"name": "create_chart", "description": "Propose a chart of a range, for example Sheet1!A1:C12 with a header row. The user decides whether to insert it. Types: column, column-stacked, bar, bar-stacked, line, area, pie, doughnut, scatter, histogram, waterfall, funnel, radar.", "parameters": {"type": "object", "properties": {"sheet": {"type": "string"}, "range": {"type": "string"}, "type": {"type": "string"}, "title": {"type": "string"}, "byRows": {"type": "boolean"}}, "required": ["range", "type"]}},
+    {"name": "create_pivot", "description": "Propose a PivotTable over a source range with a header row, for example Sheet1!A1:D200. rows and cols are field names, values lists {field, func} with func one of sum, count, average, max, min. The user decides whether to build it on a new sheet.", "parameters": {"type": "object", "properties": {"source": {"type": "string"}, "rows": {"type": "array", "items": {"type": "string"}}, "cols": {"type": "array", "items": {"type": "string"}}, "values": {"type": "array", "items": {"type": "object", "properties": {"field": {"type": "string"}, "func": {"type": "string"}}, "required": ["field"]}}, "note": {"type": "string"}}, "required": ["source", "values"]}},
     {"name": "propose_cells", "description": "Propose writing cells starting at a top-left cell. Each value is text, a number, or a formula starting with =. The user decides whether to apply it.", "parameters": {"type": "object", "properties": {"sheet": {"type": "string"}, "start": {"type": "string"}, "rows": {"type": "array", "items": {"type": "array", "items": {"type": ["string", "number"]}}}, "note": {"type": "string"}}, "required": ["start", "rows"]}},
 ]
 
@@ -136,7 +138,7 @@ def assist(prompt: str, context: dict, read_range) -> dict:
     ai = endpoint()
     system = (
         "You are the assistant inside FormCel, a spreadsheet app. The user has a workbook open. "
-        "Use read_range to look at cells and propose_cells to suggest formulas, generated tables, or filled columns; the user applies proposals themselves. "
+        "Use read_range to look at cells and propose_cells to suggest formulas, generated tables, or filled columns; use create_chart and create_pivot when asked for a chart or a PivotTable; the user applies proposals themselves. "
         "Formulas use Excel syntax. Keep replies short. "
         f"Workbook sheets: {', '.join(context.get('sheets', []))}. Active sheet: {context.get('sheet', '')}. Selection: {context.get('selection', '')}."
     )
@@ -145,6 +147,8 @@ def assist(prompt: str, context: dict, read_range) -> dict:
         system += "\nSelected cells (formulas or values, tab separated rows):\n" + selection
     messages: list = [{"role": "user", "content": prompt}]
     proposals: list[dict] = []
+    charts: list[dict] = []
+    pivots: list[dict] = []
     text = ""
     for _ in range(MAX_TURNS):
         reply = turn(ai, system, messages, TOOLS)
@@ -162,7 +166,15 @@ def assist(prompt: str, context: dict, read_range) -> dict:
                 a = c["args"]
                 proposals.append({"sheet": a.get("sheet") or context.get("sheet", ""), "start": a.get("start", "A1"), "rows": a.get("rows", []), "note": a.get("note", "")})
                 results.append((c["id"], "recorded; the user will decide whether to apply it"))
+            elif c["name"] == "create_chart":
+                a = c["args"]
+                charts.append({"sheet": a.get("sheet") or context.get("sheet", ""), "range": str(a.get("range", "")), "type": str(a.get("type", "column")), "title": str(a.get("title", "")), "byRows": bool(a.get("byRows")), "note": str(a.get("title") or a.get("type") or "chart")})
+                results.append((c["id"], "recorded; the user will decide whether to insert it"))
+            elif c["name"] == "create_pivot":
+                a = c["args"]
+                pivots.append({"source": str(a.get("source", "")), "rows": [str(x) for x in a.get("rows", [])], "cols": [str(x) for x in a.get("cols", [])], "values": [{"field": str(v.get("field", "")), "func": str(v.get("func", "sum"))} for v in a.get("values", []) if isinstance(v, dict)], "note": str(a.get("note", ""))})
+                results.append((c["id"], "recorded; the user will decide whether to build it"))
             else:
                 results.append((c["id"], "unknown tool"))
         add_results(ai, messages, reply, results)
-    return {"text": text, "proposals": proposals}
+    return {"text": text, "proposals": proposals, "charts": charts, "pivots": pivots}

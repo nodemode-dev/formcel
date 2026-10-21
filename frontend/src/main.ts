@@ -2,6 +2,9 @@ import { engine } from './engine';
 import { activateAll } from './extensions/registry';
 import { App } from './app';
 import { mountShell, setStatus } from './ui/shell';
+import { registerPwa } from './pwa';
+
+registerPwa();
 
 interface Health {
   ok: boolean;
