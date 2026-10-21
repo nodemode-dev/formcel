@@ -4,6 +4,7 @@ use crate::wire::{escape, unescape};
 use crate::{col_name, Addr, Effect, EngineError, Shift, Tx, Value, Workbook};
 use std::collections::{HashMap, HashSet};
 
+mod gotospecial;
 mod pastex;
 mod series;
 
@@ -297,6 +298,7 @@ impl Workbook {
             "mirror" => self.t_mirror(sheet, &p),
             "series" => self.t_series(sheet, &p),
             "pastelayers" => self.t_pastelayers(sheet, &p),
+            "gotospecial" => self.t_gotospecial(sheet, &p),
             _ => bad("unknown tool"),
         };
         self.undo_group(mark);

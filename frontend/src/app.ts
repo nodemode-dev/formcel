@@ -333,10 +333,7 @@ export class App {
       onPainter: (state) => this.button('format.painter').setAttribute('aria-pressed', String(state !== 'off')),
       onView: (sheet, view) => this.saveView(sheet, view),
       onMenu: (kind, x, y) => this.cellMenu(kind, x, y),
-      onGoto: () => {
-        p.nameBox.focus();
-        p.nameBox.select();
-      },
+      onGoto: () => this.tools.goToDialog(),
     });
     this.whatIf = new WhatIf({
       grid: this.grid,
@@ -364,6 +361,9 @@ export class App {
         const l = o ? await engine().filterValues(o.book, this.grid.sheetIndex, col) : { values: [], blanks: false };
         return { values: l.values, blanks: l.blanks };
       },
+      names: () => this.open?.names ?? [],
+      jump: (text) => this.jumpTo(text),
+      noteCells: (sheet) => this.collab.noteCells(sheet),
       pasteNotes: (src, dr, dc, t) => this.collab.pasteNotes(src, dr, dc, t),
       goTo: (s, r, c) => {
         if (s !== this.grid.sheetIndex) this.showSheet(s);
@@ -494,7 +494,8 @@ export class App {
     cmd('view.zoom-in', 'Zoom in', 'Make the sheet bigger, up to 200%.', false, () => g.zoomStep(1));
     cmd('view.zoom-out', 'Zoom out', 'Make the sheet smaller, down to 50%.', false, () => g.zoomStep(-1));
     cmd('view.zoom-reset', 'Zoom to 100%', 'Show the sheet at its normal size.', false, () => g.setZoom(1));
-    cmd('nav.goto', 'Go to', 'Type a cell or range to jump to it.', false, () => { this.p.nameBox.focus(); this.p.nameBox.select(); }, 'F5');
+    cmd('nav.goto', 'Go To and Go To Special', 'Jump to a cell, range or defined name from a list, or select blanks, constants, formulas by type, notes, conditional formats, data validation, visible cells only, the current region, the last cell, row or column differences, precedents or dependents, one range at a time.', false, () => this.tools.goToDialog(), 'F5');
+    cmd('nav.namebox', 'Name Box', 'Move the cursor to the Name Box to type a cell, a range or a new name.', false, () => { this.p.nameBox.focus(); this.p.nameBox.select(); });
     cmd('format.menu', 'Number format', 'Choose how the selected cells show numbers, dates and times.', true, () => this.formatMenu());
     cmd('format.decimals-more', 'Increase decimal places', 'Show one more decimal place in the selected cells.', true, () => this.bumpDecimals(1));
     cmd('format.decimals-less', 'Decrease decimal places', 'Show one fewer decimal place in the selected cells.', true, () => this.bumpDecimals(-1));
@@ -1761,6 +1762,17 @@ export class App {
     const box = this.p.nameBox;
     box.setAttribute('aria-invalid', String(problem !== null));
     box.title = problem ?? '';
+  }
+
+  private jumpTo(text: string): boolean {
+    const o = this.open;
+    if (this.grid.goTo(text)) return true;
+    const hit = o?.names.find(([n]) => n.toLowerCase() === text.toLowerCase());
+    const m = hit ? /^=(?:'((?:[^']|'')+)'|([^!']+))!([$A-Za-z0-9:]+)$/.exec(hit[1]) : null;
+    const sheet = o && m ? o.sheets.findIndex((s) => s.toLowerCase() === (m[1] ?? m[2]).replace(/''/g, "'").toLowerCase()) : -1;
+    if (!m || sheet < 0) return false;
+    if (sheet !== this.grid.sheetIndex) this.showSheet(sheet);
+    return this.grid.goTo(m[3].replace(/\$/g, ''));
   }
 
   private async nameBoxEnter(text: string): Promise<void> {

@@ -560,6 +560,15 @@ export class Collab {
     await this.apply(call<Snapshot>('PATCH', `/api/workbooks/${this.id}/threads/${t.id}`, body));
   }
 
+  noteCells(sheet: number): [number, number][] {
+    const out: [number, number][] = [];
+    for (const key of Object.keys(this.snap.notes)) {
+      const [s, r, c] = key.split(':').map(Number);
+      if (s === sheet) out.push([r, c]);
+    }
+    return out;
+  }
+
   async pasteNotes(src: { sheet: number; r0: number; c0: number; r1: number; c1: number }, dr: number, dc: number, transpose: boolean): Promise<number> {
     if (!this.id) return 0;
     const sheet = this.host.grid.sheetIndex;

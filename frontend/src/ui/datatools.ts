@@ -38,6 +38,9 @@ export interface DataCtx {
   headers(range: Range): Promise<string[]>;
   filterValues(col: number): Promise<{ values: string[]; blanks: boolean }>;
   goTo(sheet: number, row: number, col: number): void;
+  names(): [string, string][];
+  jump(text: string): boolean;
+  noteCells(sheet: number): [number, number][];
   pasteNotes(src: { sheet: number; r0: number; c0: number; r1: number; c1: number }, dr: number, dc: number, transpose: boolean): Promise<number>;
   tableAt(): { name: string; area: [number, number, number, number]; cols: string[]; types: string[] } | null;
 }
@@ -139,6 +142,44 @@ const SPECS: Spec[] = [
     ],
   },
   {
+    id: 'goto',
+    title: 'Go To',
+    ok: 'OK',
+    extra: [['next', 'Next match']],
+    width: 420,
+    fields: [
+      { k: 'ref', label: 'Reference', kind: 'text' },
+      { k: 'name', label: 'Go to (defined names)', kind: 'select' },
+      {
+        k: 'special',
+        label: 'Special',
+        kind: 'select',
+        options: [
+          ['', '(none)'],
+          ['comments', 'Comments and notes'],
+          ['constants', 'Constants'],
+          ['formulas', 'Formulas'],
+          ['blanks', 'Blanks'],
+          ['region', 'Current region'],
+          ['array', 'Current array'],
+          ['rowdiff', 'Row differences'],
+          ['coldiff', 'Column differences'],
+          ['precedents:direct', 'Precedents, direct only'],
+          ['precedents:all', 'Precedents, all levels'],
+          ['dependents:direct', 'Dependents, direct only'],
+          ['dependents:all', 'Dependents, all levels'],
+          ['lastcell', 'Last cell'],
+          ['visible', 'Visible cells only'],
+          ['cf:all', 'Conditional formats, all'],
+          ['cf:same', 'Conditional formats, same as active cell'],
+          ['validation:all', 'Data validation, all'],
+          ['validation:same', 'Data validation, same as active cell'],
+        ],
+      },
+      { k: 'types', label: 'Constants and formulas that give', kind: 'group' },
+    ],
+  },
+  {
     id: 'series',
     title: 'Series',
     ok: 'OK',
@@ -196,7 +237,7 @@ export class DataTools {
     const ok = form.querySelector<HTMLButtonElement>('[data-a="ok"]')!;
     const go = (button: string) => {
       if (!d.run) return;
-      if (form.dataset.state === 'done') return close();
+      if (form.dataset.state === 'done' && button === 'ok') return close();
       d.form.dataset.state = '';
       d.run(this.read(spec, form), button).then(
         (msg) => {
@@ -549,6 +590,63 @@ export class DataTools {
       if (op !== 'none' || skip) throw new Error('Operations and skip blanks work with All, Formulas, Values and Formats.');
       await g.pasteSpecial(what as PasteKind, t);
       return '';
+    });
+  }
+
+  private goStops: Range[] = [];
+  private goAt = 0;
+
+  private goStop(i: number): string {
+    const n = this.goStops.length;
+    this.goAt = ((i % n) + n) % n;
+    const r = this.goStops[this.goAt];
+    this.c.grid.select(r.r0, r.c0, r.r1, r.c1);
+    return `${n} ranges. Showing ${this.goAt + 1} of ${n}: ${rangeText(r)}`;
+  }
+
+  goToDialog(): void {
+    const g = this.c.grid;
+    this.prepare('goto');
+    this.put('goto', 'ref', '');
+    this.put('goto', 'special', '');
+    this.options('goto', 'name', [['', '(choose a name)'], ...this.c.names().map(([n]) => [n, n] as [string, string])], 'none');
+    this.options('goto', 'types', [['n', 'Numbers'], ['t', 'Text'], ['l', 'Logicals'], ['e', 'Errors']], 'all');
+    const form = this.dlgs.get('goto')!.form;
+    form.querySelector<HTMLSelectElement>('[data-k="name"]')!.onchange = () => this.put('goto', 'ref', form.querySelector<HTMLSelectElement>('[data-k="name"]')!.value);
+    this.goStops = [];
+    this.show('goto', async (v, button) => {
+      if (button === 'next' && this.goStops.length) return this.goStop(this.goAt + 1);
+      const special = v.special as string;
+      if (!special) {
+        const text = (v.ref as string).trim();
+        if (!text) throw new Error('Type a cell, a range or a name.');
+        if (!this.c.jump(text)) throw new Error(`${text} is not a cell, a range or a name in this workbook.`);
+        return '';
+      }
+      const [kind, flag] = special.split(':');
+      const sel = g.selection();
+      const [row, col] = g.activeCell();
+      let found: Range[] = [];
+      let said = '';
+      if (kind === 'comments') {
+        found = this.c.noteCells(g.sheetIndex).map(([r, c]) => ({ r0: r, c0: c, r1: r, c1: c }));
+        said = found.length ? `Found ${found.length} cells with notes.` : 'No cells were found.';
+      } else if (kind === 'visible') {
+        found = await g.visibleAreas();
+        said = found.length ? `Found ${found.length} visible ranges.` : 'No cells were found.';
+      } else {
+        const types = (v.types as string[]).join(',');
+        const msg = await g.runTool('gotospecial', kind, this.area(sel), `${row},${col}`, [flag ?? '', types].filter(Boolean).join(','));
+        const lines = msg.split('\n');
+        said = lines[0];
+        found = lines.slice(1).filter(Boolean).map((l) => {
+          const [r0, c0, r1, c1] = l.split('\t').map(Number);
+          return { r0, c0, r1, c1 };
+        });
+      }
+      if (!found.length) return said || 'No cells were found.';
+      this.goStops = found;
+      return `${said} ${this.goStop(0)}`;
     });
   }
 

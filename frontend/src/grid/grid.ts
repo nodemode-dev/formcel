@@ -1512,6 +1512,28 @@ export class Grid {
     return this.runTool('pastespecial', area, String(this.ar), String(this.ac), what, op, skip ? '1' : '0', transpose ? '1' : '0', String(src.sheet));
   }
 
+  async visibleAreas(): Promise<Range[]> {
+    let s = this.sel();
+    if (s.r0 === s.r1 && s.c0 === s.c1) {
+      const ext = await this.engine.extent(this.book, this.sheet);
+      if (!ext) return [];
+      s = { r0: 0, c0: 0, r1: ext[0], c1: ext[1] };
+    }
+    const runs = (a: number, b: number, hidden: (i: number) => boolean) => {
+      const out: [number, number][] = [];
+      for (let i = a; i <= b; i++) {
+        if (hidden(i)) continue;
+        const last = out[out.length - 1];
+        if (last && last[1] === i - 1) last[1] = i;
+        else out.push([i, i]);
+      }
+      return out;
+    };
+    const rows = runs(s.r0, Math.min(s.r1, s.r0 + 100000), (i) => this.rows.isHidden(i));
+    const cols = runs(s.c0, Math.min(s.c1, s.c0 + 2000), (i) => this.cols.isHidden(i));
+    return rows.flatMap(([r0, r1]) => cols.map(([c0, c1]) => ({ r0, c0, r1, c1 })));
+  }
+
   copiedSource(): { sheet: number; r0: number; c0: number; r1: number; c1: number } | null {
     const s = this.copied;
     return s ? { sheet: s.sheet, r0: s.r0, c0: s.c0, r1: s.r0 + s.h - 1, c1: s.c0 + s.w - 1 } : null;
