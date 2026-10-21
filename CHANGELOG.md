@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.10.1 · 2026-10-21
+
+- DATEVALUE and TIMEVALUE return plain serial numbers, as Microsoft's pages show (they were shown as a date and a time).
+- A day and month without a year (`5-Jul`) is read as a date in the current year.
+- Conformance, now including the 16 date and time pages: 153 pass, 6 need unbuilt features, 2 are inconsistent on the page itself, 9 depend on the day they run (TODAY and NOW), 5 have their data only in a picture.
+
 ## 0.10.0 · 2026-10-21
 
 - Dates and times: type `2026-10-21`, `10/21/2026`, `12/8/08`, `October 21, 2026`, `21-Oct-2026`, `13:45`, `1:30 PM` or a date with a time, and the cell holds a date serial (Excel's 1900 system) shown as a date or time. Date arithmetic works (`=A1+30`).
