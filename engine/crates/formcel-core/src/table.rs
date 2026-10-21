@@ -21,6 +21,7 @@ pub struct Table {
     pub name: String,
     pub area: Area,
     pub totals: bool,
+    pub header: bool,
     pub cols: Vec<String>,
     pub calc: Vec<String>,
     pub kept: Vec<String>,
@@ -43,7 +44,7 @@ fn overlaps(a: Area, b: Area) -> bool {
 
 impl Table {
     pub fn data(&self) -> (u32, u32) {
-        (self.area.r0 + 1, self.area.r1 - u32::from(self.totals))
+        (self.area.r0 + u32::from(self.header), self.area.r1 - u32::from(self.totals))
     }
 
     pub fn filter_area(&self) -> Area {
@@ -53,7 +54,7 @@ impl Table {
     pub fn line(&self) -> String {
         let a = self.area;
         let mut flags = String::new();
-        for (on, ch) in [(self.totals, 't'), (self.banded_rows, 'r'), (self.banded_cols, 'c'), (self.first_col, 'f'), (self.last_col, 'l'), (self.button, 'b')] {
+        for (on, ch) in [(!self.header, 'n'), (self.totals, 't'), (self.banded_rows, 'r'), (self.banded_cols, 'c'), (self.first_col, 'f'), (self.last_col, 'l'), (self.button, 'b')] {
             if on {
                 flags.push(ch);
             }
@@ -82,7 +83,7 @@ impl Table {
         let p: Vec<String> = line.split('\t').map(unescape).collect();
         let sheet = p.first()?.parse().ok()?;
         let n: Vec<u32> = p.get(2)?.split(',').filter_map(|x| x.parse().ok()).collect();
-        if n.len() != 4 || n[0] >= n[2] || n[1] > n[3] || n[2] >= crate::MAX_ROWS || n[3] >= crate::MAX_COLS {
+        if n.len() != 4 || n[0] > n[2] || n[1] > n[3] || n[2] >= crate::MAX_ROWS || n[3] >= crate::MAX_COLS {
             return None;
         }
         let area = Area { r0: n[0], c0: n[1], r1: n[2], c1: n[3] };
@@ -101,6 +102,7 @@ impl Table {
             name,
             area,
             totals: flags.contains('t'),
+            header: !flags.contains('n'),
             cols: list(0),
             calc: list(1),
             kept: list(2),
@@ -190,6 +192,9 @@ impl Workbook {
             }
             let mut parts: Vec<(u32, u32)> = Vec::new();
             if items & ITEM_HEADERS != 0 {
+                if !t.header {
+                    return Err(ErrKind::Ref);
+                }
                 parts.push((t.area.r0, t.area.r0));
             }
             if items & ITEM_DATA != 0 {
@@ -219,6 +224,28 @@ impl Workbook {
             }
         });
         Some(format!("={}", formula::to_text(&e)))
+    }
+
+    pub fn step_table_cols(&self, raw: &str, step: i64) -> String {
+        let body = raw.trim_start().strip_prefix('=').unwrap_or(raw);
+        let Some(mut e) = formula::parse(body) else { return raw.to_string() };
+        if step == 0 || !formula::has_table(&e) {
+            return raw.to_string();
+        }
+        formula::walk_mut(&mut e, &mut |node| {
+            let Expr::Table(Some(n), spec) = node else { return };
+            let Some((a, b)) = spec.cols.clone() else { return };
+            if spec.fixed || !a.eq_ignore_ascii_case(&b) {
+                return;
+            }
+            let Some(t) = self.tables.iter().find(|t| t.name.eq_ignore_ascii_case(n)) else { return };
+            let Some(j) = t.col_index(&a) else { return };
+            match usize::try_from(j as i64 + step).ok().and_then(|k| t.cols.get(k)) {
+                Some(next) => spec.cols = Some((next.clone(), next.clone())),
+                None => *node = Expr::Err(ErrKind::Ref),
+            }
+        });
+        format!("={}", formula::to_text(&e))
     }
 
     pub fn plain_formula(&self, sheet: usize, a: Addr) -> Option<String> {
@@ -315,6 +342,7 @@ impl Workbook {
             name: format!("Table{k}"),
             area,
             totals: false,
+            header: true,
             cols: names,
             calc: vec![String::new(); n],
             kept: vec![String::new(); n],
@@ -368,13 +396,13 @@ impl Workbook {
         let body_end = old.data().1;
         if want.area.r1 != old.area.r1 || want.area.c1 != old.area.c1 {
             let w = (want.area.c1 - want.area.c0 + 1) as usize;
-            let raw = self.header_texts(sheet, Area { r1: want.area.r0, ..want.area });
+            let raw = if old.header { self.header_texts(sheet, Area { r1: want.area.r0, ..want.area }) } else { vec![String::new(); w] };
             let mut keep: Vec<String> = old.cols.iter().take(w).cloned().collect();
             for r in raw.iter().skip(keep.len()) {
                 keep.push(r.clone());
             }
             let names = unique_names(&keep);
-            let edits = self.write_headers(sheet, want.area, &names);
+            let edits = if old.header { self.write_headers(sheet, want.area, &names) } else { Vec::new() };
             if !edits.is_empty() {
                 out.cells.extend(self.quiet_apply(sheet, &edits)?);
             }
@@ -429,14 +457,67 @@ impl Workbook {
         out = out.join(self.put_tables(before));
         let fa_old = Area { r1: body_end, ..old.area };
         match self.filter(sheet) {
-            Some(f) if f.area == fa_old && !t.button => out = out.join(self.set_filter(sheet, "")?),
+            Some(f) if f.area == fa_old && !(t.button && t.header) => out = out.join(self.set_filter(sheet, "")?),
             Some(f) if f.area == fa_old && t.filter_area() != fa_old => {
                 let fa = t.filter_area();
                 let mut text = f.text();
                 text = text.replacen(&format!("area\t{},{},{},{}", fa_old.r0, fa_old.c0, fa_old.r1, fa_old.c1), &format!("area\t{},{},{},{}", fa.r0, fa.c0, fa.r1, fa.c1), 1);
                 out = out.join(self.set_filter(sheet, &text)?);
             }
-            None if t.button => {
+            None if t.button && t.header => {
+                let fa = t.filter_area();
+                out = out.join(self.set_filter(sheet, &format!("area\t{},{},{},{}\n", fa.r0, fa.c0, fa.r1, fa.c1))?);
+            }
+            _ => {}
+        }
+        self.undo_group(mark);
+        Ok(out)
+    }
+
+    pub fn set_header(&mut self, name: &str, on: bool) -> Result<Effect, EngineError> {
+        let i = self.table_named(name).ok_or_else(|| EngineError::BadName(name.to_string()))?;
+        let old = self.tables[i].clone();
+        if old.header == on {
+            return Ok(Effect::default());
+        }
+        let sheet = old.sheet;
+        let mark = self.undo_mark();
+        let mut before = self.tables.clone();
+        let mut out = Effect::default();
+        let mut t = old.clone();
+        let blank =|wb: &Workbook, row: u32| (old.area.c0..=old.area.c1).all(|c| matches!(wb.sheets[sheet].cells.get(Addr { row, col: c }), None | Some(Value::Empty)));
+        if on {
+            let r = old.area.r0;
+            let clear = r > 0 && blank(self, r - 1) && !self.tables.iter().any(|o| o.sheet == sheet && overlaps(o.area, Area { r0: r - 1, r1: r - 1, ..old.area }));
+            if !clear {
+                out.shift = Some(self.insert(sheet, true, r, 1)?);
+                t = self.tables[i].clone();
+                before = self.tables.clone();
+            }
+            t.area.r0 -= 1;
+            t.header = true;
+            let names = unique_names(&t.cols);
+            let edits = self.write_headers(sheet, t.area, &names);
+            t.cols = names;
+            if !edits.is_empty() {
+                out.cells.extend(self.quiet_apply(sheet, &edits)?);
+            }
+        } else {
+            let edits: Vec<(Addr, String)> = (old.area.c0..=old.area.c1).map(|c| (Addr { row: old.area.r0, col: c }, String::new())).collect();
+            out.cells.extend(self.quiet_apply(sheet, &edits)?);
+            t.area.r0 += 1;
+            t.header = false;
+            if t.data().0 > t.data().1 {
+                self.undo_group(mark);
+                return Err(EngineError::BadStyle("a table needs a data row".into()));
+            }
+        }
+        self.tables[i] = t.clone();
+        out = out.join(self.put_tables(before));
+        let fa_old = old.filter_area();
+        match self.filter(sheet) {
+            Some(f) if f.area == fa_old && !on => out = out.join(self.set_filter(sheet, "")?),
+            None if on && t.button => {
                 let fa = t.filter_area();
                 out = out.join(self.set_filter(sheet, &format!("area\t{},{},{},{}\n", fa.r0, fa.c0, fa.r1, fa.c1))?);
             }
@@ -540,12 +621,12 @@ impl Workbook {
                     }
                 } else {
                     g.area.c1 += 1;
-                    let raw_name = if a.row == t.area.r0 { raw.trim_start_matches('\'').to_string() } else { String::new() };
+                    let raw_name = if t.header && a.row == t.area.r0 { raw.trim_start_matches('\'').to_string() } else { String::new() };
                     let mut names = g.cols.clone();
                     names.push(raw_name);
                     let names = unique_names(&names);
                     let last = names.last().cloned().unwrap_or_default();
-                    if a.row != t.area.r0 {
+                    if t.header && a.row != t.area.r0 {
                         let at = Addr { row: t.area.r0, col: g.area.c1 };
                         self.set_cell_logged(sheet, at, &last);
                         seeds.push((sheet, at));
@@ -560,12 +641,12 @@ impl Workbook {
                     f.area = g.filter_area();
                     let _ = self.load_filter(sheet, &f.text());
                 }
-                if a.row == g.area.r0 {
+                if g.header && a.row == g.area.r0 {
                     continue;
                 }
                 t = g;
             }
-            if a.row == t.area.r0 {
+            if t.header && a.row == t.area.r0 {
                 let raw_names = self.header_texts(sheet, t.area);
                 let names = unique_names(&raw_names);
                 if names != t.cols {
@@ -643,7 +724,7 @@ impl Workbook {
             }
             let (a0, a1) = if s.rows { (t.area.r0, t.area.r1) } else { (t.area.c0, t.area.c1) };
             let (at, d) = (i64::from(s.at), s.delta);
-            if s.rows && d < 0 && i64::from(t.area.r0) >= at && i64::from(t.area.r0) < at - d {
+            if t.header && s.rows && d < 0 && i64::from(t.area.r0) >= at && i64::from(t.area.r0) < at - d {
                 continue;
             }
             let Some(area) = crate::shift_span_pub(t.area, s) else { continue };
