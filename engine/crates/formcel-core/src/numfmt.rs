@@ -124,6 +124,12 @@ fn parse_date(s: &str) -> Option<f64> {
     let s = s.trim();
     for sep in ['-', '/'] {
         let p: Vec<&str> = s.split(sep).collect();
+        if p.len() == 2 && sep == '-' {
+            if let (Some(d), Some(m)) = (num(p[0]), month_of(p[1])) {
+                let (y, _, _) = ymd(now())?;
+                return valid(y, m, d);
+            }
+        }
         if p.len() == 3 {
             if p[0].len() == 4 && p[0].chars().all(|c| c.is_ascii_digit()) {
                 return valid(p[0].parse().ok()?, num(p[1])?, num(p[2])?);

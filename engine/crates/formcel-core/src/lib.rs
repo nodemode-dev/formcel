@@ -428,9 +428,9 @@ impl Workbook {
         use formula::{Op, RefKind};
         match e {
             Expr::Call(n, args) => match n.as_str() {
-                "DATE" | "TODAY" | "EDATE" | "EOMONTH" | "DATEVALUE" => Some(Fmt::Date),
+                "DATE" | "TODAY" | "EDATE" | "EOMONTH" => Some(Fmt::Date),
                 "NOW" => Some(Fmt::DateTime { secs: false, ampm: false }),
-                "TIME" | "TIMEVALUE" => Some(Fmt::Time { secs: false, ampm: true }),
+                "TIME" => Some(Fmt::Time { secs: false, ampm: true }),
                 "MIN" | "MAX" | "IF" | "IFERROR" => args.iter().skip(usize::from(n == "IF")).find_map(|x| self.infer(sheet, x)).filter(|f| f.is_date()),
                 _ => None,
             },
