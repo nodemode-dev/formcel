@@ -3,6 +3,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from . import config
+from .routers import commands, workbooks
 from .version import VERSION
 
 try:
@@ -18,6 +19,8 @@ async def lifespan(_: FastAPI):
 
 
 app = FastAPI(title="FormCel engine", version=VERSION, lifespan=lifespan)
+app.include_router(workbooks.router)
+app.include_router(commands.router)
 
 
 def engine_info() -> dict:
