@@ -26,6 +26,7 @@ export interface HomeHooks {
   open(id: string): void;
   create(template?: string): void;
   importFile(file: File): void;
+  pasteData(text?: string, html?: string): void;
   trash(id: string): void;
   restore(id: string): void;
   purge(id: string): void;
@@ -135,7 +136,7 @@ export class Home {
       </nav>
       <div class="fc-home-body">
         <div data-page="start">
-          <header class="fc-home-head"><div><h1 class="fc-home-title">Hello</h1><p class="fc-home-sub">Start a workbook, pick a template, or carry on where you left off.</p></div><div class="fc-home-actions"><button type="button" class="fc-btn" data-a="openfile">${icon('upload')}Open a file</button><button type="button" class="fc-btn fc-btn-primary" data-a="blank">${icon('plus')}Blank workbook</button><input type="file" class="fc-file" accept=".xlsx,.xlsm,.xls,.ods,.csv,.tsv,.txt" hidden></div></header>
+          <header class="fc-home-head"><div><h1 class="fc-home-title">Hello</h1><p class="fc-home-sub">Start a workbook, pick a template, or carry on where you left off.</p></div><div class="fc-home-actions"><button type="button" class="fc-btn" data-a="openfile">${icon('upload')}Open a file</button><button type="button" class="fc-btn" data-a="pastedata">${icon('clipboard')}Paste data</button><button type="button" class="fc-btn fc-btn-primary" data-a="blank">${icon('plus')}Blank workbook</button><input type="file" class="fc-file" accept=".xlsx,.xlsm,.xls,.ods,.csv,.tsv,.txt,.html,.htm,.pdf" hidden></div></header>
           <section class="fc-home-section"><div class="fc-home-section-head"><h2>Recent workbooks</h2><button type="button" class="fc-btn fc-btn-ghost" data-go="recent">See all</button></div><div class="fc-cards fc-one-row fc-start-recent">${skel(4)}</div><p class="fc-none fc-start-none" hidden>No workbooks yet. Start a blank one or pick a template.</p></section>
           <section class="fc-home-section"><div class="fc-home-section-head"><h2>Spreadsheet templates</h2><button type="button" class="fc-btn fc-btn-ghost" data-go="templates">See all 36</button></div><div class="fc-cards fc-two-rows fc-start-tpl">${skel(8)}</div></section>
         </div>
@@ -161,6 +162,15 @@ export class Home {
       const f = file.files?.[0];
       file.value = '';
       if (f) this.hooks.importFile(f);
+    });
+    document.addEventListener('paste', (e) => {
+      const t = e.target as HTMLElement | null;
+      if (root.hidden || t?.closest('input, textarea, select, [contenteditable="true"]')) return;
+      const text = e.clipboardData?.getData('text/plain') ?? '';
+      const html = e.clipboardData?.getData('text/html') ?? '';
+      if (!text.trim() && !html) return;
+      e.preventDefault();
+      this.hooks.pasteData(text, html);
     });
     let depth = 0;
     const carries = (e: DragEvent) => [...(e.dataTransfer?.types ?? [])].includes('Files');
@@ -206,6 +216,7 @@ export class Home {
     switch (act.dataset.a) {
       case 'blank': return this.hooks.create();
       case 'openfile': return this.root.querySelector<HTMLInputElement>('.fc-file')!.click();
+      case 'pastedata': return this.hooks.pasteData();
       case 'open': return this.hooks.open(id);
       case 'use': return this.hooks.create(id);
       case 'trash': return this.hooks.trash(id);

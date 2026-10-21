@@ -16,7 +16,8 @@ import { MAX_COLS, MAX_ROWS, a1, colName, parseRef, rangeText, type Range } from
 import { fillSeries } from './fill';
 import { runCommand } from '../ui/commands';
 import { markAction } from '../ui/action';
-import { parseTable, tablePaint, type TableInfo } from './tables';
+import { parseTable, tablePaint, type TableInfo, type TablePaint } from './tables';
+import { pastedTable } from './pastedata';
 import { drawImageCell, IMAGE_CODE } from '../charts/picture';
 import { drawSpark, SPARK_CODE } from '../charts/spark';
 
@@ -228,6 +229,7 @@ export class Grid {
   private z = 1;
   private viewColor: string | undefined;
   private fillTo: { r: number; c: number } | null = null;
+  private fillCtrl = false;
   private pal!: Palette;
   private drag: null | { kind: 'cells' | 'rows' | 'cols' | 'fill' | 'split-r' | 'split-c' } | { kind: 'resize-col' | 'resize-row'; index: number; start: number; size: number } | { kind: 'break'; axis: 'row' | 'col'; from: number; to: number } = null;
 
@@ -843,7 +845,7 @@ export class Grid {
     if (this.circles.size) this.paintCircles(r0, r1, c0, c1);
     ctx.textBaseline = 'middle';
     ctx.font = '13px Inter, system-ui, -apple-system, "Segoe UI", sans-serif';
-    if (!this.styles.size && !this.cfs.size) return;
+    if (!this.styles.size && !this.cfs.size && !this.tableList.length) return;
     for (let r = r0; r <= r1; r++) {
       const rh = this.rows.size(r);
       if (!rh) continue;
@@ -903,7 +905,7 @@ export class Grid {
       const p = tablePaint(t, r, c, this.look);
       if (!p) continue;
       const b = own ?? PLAIN;
-      return { ...b, b: b.b || p.b, bg: b.bg ?? p.bg, fc: b.fc ?? p.fc };
+      return { ...b, b: b.b || p.b, bg: b.bg ?? p.bg, fc: b.fc ?? p.fc, borders: p.borders ? b.borders.map((x, i) => x ?? p.borders![i]) : b.borders };
     }
     return own;
   }
@@ -963,7 +965,7 @@ export class Grid {
     await this.engine.undoGroup(this.book, mark);
   }
 
-  tablePaintAt(t: TableInfo, r: number, c: number): { bg?: string; fc?: string; b: boolean } | null {
+  tablePaintAt(t: TableInfo, r: number, c: number): TablePaint | null {
     return tablePaint(t, r, c, this.look);
   }
 
@@ -2691,6 +2693,12 @@ export class Grid {
     }
     const texts = await this.engine.offset(moves);
     texts.forEach((t, i) => (edits[moved[i]][2] = t));
+    for (let i = 0; i < moved.length; i++) {
+      const step = vertical ? (this.fillCtrl ? moves[i][1] : 0) : moves[i][2];
+      if (!step || !/[A-Za-z0-9_.]\[/.test(texts[i])) continue;
+      edits[moved[i]][2] = (await this.engine.tool(this.book, this.sheet, 'tablestep', texts[i], String(step))).message ?? texts[i];
+    }
+    this.fillCtrl = false;
     const mark = await this.engine.undoMark(this.book);
     const fmts = await this.formatsOf(s);
     if (edits.length) await this.commitEdits(await this.engine.apply(this.book, edits, this.sheet));
@@ -2961,6 +2969,7 @@ export class Grid {
         const dy = row > s.r1 ? row - s.r1 : row < s.r0 ? s.r0 - row : 0;
         const dx = col > s.c1 ? col - s.c1 : col < s.c0 ? s.c0 - col : 0;
         this.fillTo = dy >= dx ? { r: row, c: s.c0 } : { r: s.r0, c: col };
+        this.fillCtrl = e.ctrlKey || e.metaKey;
         if (!dy && !dx) this.fillTo = null;
         this.reveal(row, col);
         this.paint();
@@ -3150,8 +3159,14 @@ export class Grid {
     document.addEventListener('paste', (e) => {
       if (document.activeElement !== el) return;
       const text = e.clipboardData?.getData('text/plain');
+      const html = e.clipboardData?.getData('text/html') ?? '';
       e.preventDefault();
-      if (text) void this.paste(text);
+      if (!text && !html) return;
+      void this.engine.extent(this.book, this.sheet).then((ext) => {
+        const typed = pastedTable(text ?? '', html, !ext);
+        if (typed) return this.paste(typed);
+        if (text) return this.paste(text);
+      });
     });
   }
 
