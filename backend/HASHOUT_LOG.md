@@ -2,8 +2,16 @@
 
 Living log of comment content and rationale for the engine process. Source stays comment-free; it lives here.
 
-Current build version: v0.3.0
-Last updated: 2026-10-21 · store, templates, commands
+Current build version: v0.12.0
+Last updated: 2026-10-21 · names
+
+## v0.12.0 entries
+
+### services/store.py, routers/workbooks.py · workbook names
+- refers-to: Store._write, Store._load, Store.get, Store.set_name; PUT /api/workbooks/{id}/names
+- kind: explainer
+
+`workbook.json` gains a top-level `names` list of `[name, refers]` pairs, written from the engine's `names()`. A file without it opens as before. On open, each name is defined after every sheet's cells are loaded; a name the engine refuses is skipped rather than failing the whole file. `PUT /api/workbooks/{id}/names` with `{name, refers}` defines or replaces a name, and an empty `refers` removes it. A name the engine rejects is a 422 carrying the engine's reason. `GET` returns the list so the window can load it into its own engine.
 
 ---
 

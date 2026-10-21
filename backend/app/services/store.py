@@ -69,6 +69,7 @@ class Store:
     def _write(self, b: Book) -> None:
         doc = {"format": FORMAT, "version": FORMAT_VERSION, "id": b.id, "title": b.title, "created": b.created,
                "modified": b.modified, "template": b.template, "preview": b.preview(),
+               "names": [list(n) for n in b.engine.names()],
                "sheets": [{"name": n, "view": b.views[i] if i < len(b.views) else {}, "cells": b.engine.cells(i)} for i, n in enumerate(b.sheet_names())]}
         target = self.path(b.id)
         tmp = target.with_suffix(".fcel.tmp")
@@ -97,6 +98,11 @@ class Store:
                 else:
                     eng.rename_sheet(0, s["name"])
                 eng.load([tuple(c) for c in s["cells"]], i)
+            for name, refers in doc.get("names", []):
+                try:
+                    eng.define_name(name, refers)
+                except ValueError:
+                    continue
             b = Book(wid, doc["title"], doc["created"], doc["modified"], eng, doc.get("template"), [s.get("view") or {} for s in doc["sheets"]])
             self.open[wid] = b
             return b
@@ -138,7 +144,15 @@ class Store:
     def get(self, wid: str) -> dict:
         b = self._load(wid)
         with b.lock:
-            return {**b.meta(), "cells": [b.engine.cells(i) for i in range(len(b.sheet_names()))]}
+            return {**b.meta(), "names": [list(n) for n in b.engine.names()], "cells": [b.engine.cells(i) for i in range(len(b.sheet_names()))]}
+
+    def set_name(self, wid: str, name: str, refers: str) -> dict:
+        b = self._load(wid)
+        with b.lock:
+            b.engine.define_name(name, refers)
+            b.modified = now()
+            self._write(b)
+            return {"names": [list(n) for n in b.engine.names()]}
 
     def edit(self, wid: str, sheet: int, cells: list[tuple[int, int, str]]) -> dict:
         b = self._load(wid)

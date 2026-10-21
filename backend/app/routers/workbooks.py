@@ -44,6 +44,11 @@ class SheetMoveIn(BaseModel):
     to: int = Field(ge=0)
 
 
+class NameIn(BaseModel):
+    name: str = Field(min_length=1, max_length=255)
+    refers: str = ""
+
+
 def missing(wid: str) -> HTTPException:
     return HTTPException(404, f"No workbook {wid}. It may have been moved to the Trash.")
 
@@ -95,6 +100,16 @@ def shift_cells(wid: str, body: ShiftIn) -> dict:
         raise missing(wid)
     except ValueError as e:
         raise HTTPException(422, f"Rows or columns could not be shifted: {e}")
+
+
+@router.put("/workbooks/{wid}/names")
+def set_name(wid: str, body: NameIn) -> dict:
+    try:
+        return store().set_name(wid, body.name, body.refers)
+    except (KeyError, FileNotFoundError):
+        raise missing(wid)
+    except ValueError as e:
+        raise HTTPException(422, f"That name could not be saved: {e}")
 
 
 def sheet_call(wid: str, *args, **kw) -> dict:
