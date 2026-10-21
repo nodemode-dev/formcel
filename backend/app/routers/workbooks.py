@@ -137,8 +137,39 @@ def export_locked(wid: str, body: LockIn) -> Response:
                     headers={"Content-Disposition": f"attachment; filename*=UTF-8''{quote(fname)}.xlsx"})
 
 
+@router.get("/workbooks/{wid}/accessibility")
+def accessibility(wid: str) -> list[dict]:
+    try:
+        return store().accessibility(wid)
+    except (KeyError, FileNotFoundError):
+        raise missing(wid)
+
+
+class LocaleIn(BaseModel):
+    locale: str = Field(max_length=10)
+
+
+@router.put("/workbooks/{wid}/locale")
+def set_locale(wid: str, body: LocaleIn) -> dict:
+    try:
+        return store().set_locale(wid, body.locale)
+    except (KeyError, FileNotFoundError):
+        raise missing(wid)
+    except ValueError as e:
+        raise HTTPException(422, str(e))
+
+
 @router.get("/workbooks/{wid}/export.{kind}")
 def export_text(wid: str, kind: str, sheet: int = 0, scope: str = "sheet") -> Response:
+    if kind in ("html", "htm"):
+        try:
+            title, text = store().export_html(wid, None if scope == "all" else sheet)
+        except (KeyError, FileNotFoundError):
+            raise missing(wid)
+        except IndexError:
+            raise HTTPException(404, f"No sheet {sheet}.")
+        fname = "".join(ch for ch in title if ch not in '\\/:*?"<>|').strip() or "Workbook"
+        return Response(text.encode("utf-8"), media_type="text/html; charset=utf-8", headers={"Content-Disposition": f"attachment; filename*=UTF-8''{quote(fname)}.html"})
     if kind == "pdf":
         try:
             title, data = store().export_pdf(wid, None if scope == "all" else sheet)

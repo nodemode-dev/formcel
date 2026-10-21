@@ -1,0 +1,38 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "FormCel",
+  "version": "0.33.0",
+  "identifier": "ai.nodemode.formcel",
+  "build": {
+    "frontendDist": "../frontend/dist",
+    "devUrl": "http://localhost:5199",
+    "beforeBuildCommand": "cd ../frontend && npm run build",
+    "beforeDevCommand": ""
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "FormCel",
+        "url": "http://127.0.0.1:8199/",
+        "width": 1440,
+        "height": 900,
+        "minWidth": 800,
+        "minHeight": 520,
+        "visible": false
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["msi", "nsis", "dmg", "app", "deb", "appimage"],
+    "icon": [],
+    "resources": {
+      "../backend/app": "engine/app",
+      "../frontend/dist": "engine/window"
+    }
+  }
+}

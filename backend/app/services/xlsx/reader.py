@@ -8,6 +8,7 @@ from openpyxl import load_workbook
 from openpyxl.utils.datetime import to_excel
 from openpyxl.worksheet.formula import ArrayFormula, DataTableFormula
 
+from .. import page
 from .autofilter import filter_in
 from .cf import rules_in
 from .drawings import objects_in
@@ -170,6 +171,9 @@ def read(data: bytes) -> dict:
         view["rows"] = _axis(ws.row_dimensions, lambda d: round(d.ht / 0.75) if d.ht and d.customHeight else None, None, 0, notes)
         z = (ws.sheet_view.zoomScale or 100) / 100
         view["zoom"] = min(ZOOMS, key=lambda x: abs(x - z))
+        setup = page.from_xlsx(ws)
+        if setup:
+            view["page"] = setup
         tab = ws.sheet_properties.tabColor
         if tab is not None and isinstance(tab.rgb, str) and len(tab.rgb) >= 6:
             view["color"] = "#" + tab.rgb[-6:].lower()

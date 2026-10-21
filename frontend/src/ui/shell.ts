@@ -51,8 +51,9 @@ export function mountShell(root: HTMLElement): ShellParts {
         <span class="fc-tool-sep" aria-hidden="true"></span>
         ${tool('insert.chart', 'chart', 'Insert chart')}${tool('insert.picture', 'picture', 'Insert picture')}${tool('insert.shape-rect', 'shapeRect', 'Insert rectangle')}${tool('insert.shape-ellipse', 'shapeEllipse', 'Insert ellipse')}${tool('insert.shape-arrow', 'shapeArrow', 'Insert arrow')}${tool('insert.textbox', 'textBox', 'Insert text box')}
         ${tool('review.note', 'note', 'Notes on the active cell')}${tool('review.comment', 'comment', 'Comment on the active cell')}${tool('review.panel', 'clock', 'Comments, changes, version history and sharing')}${tool('protect.menu', 'lock', 'Protection')}${tool('share.panel', 'share', 'Share, publish and embed')}
+        ${tool('page.menu', 'page', 'Page layout, print area and page breaks')}${tool('view.access', 'access', 'Accessibility, theme, text size and locale')}
         <span class="fc-tool-sep" aria-hidden="true"></span>
-        ${tool('file.download', 'download', 'Download as .xlsx, .csv or .tsv')}
+        ${tool('file.download', 'download', 'Download as .xlsx, .csv, .pdf or .html')}
       </div>
       <div class="fc-formula">
         <input class="fc-namebox" aria-label="Name Box" spellcheck="false" autocomplete="off">

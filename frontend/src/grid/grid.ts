@@ -43,6 +43,15 @@ export interface SheetView {
 
 export type MenuKind = 'rows' | 'cols' | 'cells';
 
+export interface BreakView {
+  area: [number, number, number, number];
+  rowBreaks: number[];
+  colBreaks: number[];
+  manualRows: Set<number>;
+  manualCols: Set<number>;
+  pages: { r0: number; r1: number; c0: number; c1: number; n: number }[];
+}
+
 type Pane = 0 | 1;
 type Band = [number, number, number, number, Pane];
 
@@ -203,7 +212,7 @@ export class Grid {
     private readonly events: GridEvents,
   ) {
     this.el = host;
-    this.el.innerHTML = '<canvas class="fc-outline" aria-hidden="true"></canvas><canvas class="fc-grid-canvas"></canvas><textarea class="fc-editor" spellcheck="false" hidden aria-label="Cell editor"></textarea>';
+    this.el.innerHTML = '<canvas class="fc-outline" aria-hidden="true"></canvas><canvas class="fc-grid-canvas"></canvas><textarea class="fc-editor" spellcheck="true" hidden aria-label="Cell editor"></textarea>';
     this.og = this.el.querySelector('.fc-outline')!;
     this.octx = this.og.getContext('2d')!;
     this.canvas = this.el.querySelector('.fc-grid-canvas')!;
@@ -440,6 +449,7 @@ export class Grid {
         ctx.restore();
       }
     }
+    this.paintBreaks(rowSets, colSets);
     this.paintSelection(rowSets, colSets);
     this.paintHeaders(rowSets, colSets);
     this.pr = this.apr;
@@ -1640,6 +1650,61 @@ export class Grid {
 
   activeCell(): [number, number] {
     return [this.ar, this.ac];
+  }
+
+  shownAt(r: number, c: number): string {
+    return this.cache.get(KEY(r, c)) ?? '';
+  }
+
+  breakView: BreakView | null = null;
+
+  setBreakView(v: BreakView | null): void {
+    this.breakView = v;
+    this.paint();
+  }
+
+  private paintBreaks(rowSets: Band[], colSets: Band[]): void {
+    const v = this.breakView;
+    if (!v) return;
+    const { ctx } = this;
+    const [ar0, ac0, ar1, ac1] = v.area;
+    for (const [, , ytop, ybot, pr] of rowSets) {
+      for (const [, , xl, xr, pc] of colSets) {
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(xl, ytop, xr - xl, ybot - ytop);
+        ctx.clip();
+        const left = this.x(ac0, pc);
+        const right = this.x(ac1 + 1, pc);
+        const top = this.y(ar0, pr);
+        const bottom = this.y(ar1 + 1, pr);
+        ctx.fillStyle = 'rgba(37, 99, 235, 0.07)';
+        ctx.fillRect(left, top, right - left, bottom - top);
+        ctx.font = '600 44px Inter, system-ui, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillStyle = 'rgba(37, 99, 235, 0.28)';
+        for (const p of v.pages) {
+          const x0 = this.x(p.c0, pc);
+          const x1 = this.x(p.c1 + 1, pc);
+          const y0 = this.y(p.r0, pr);
+          const y1 = this.y(p.r1 + 1, pr);
+          if (x1 < xl || x0 > xr || y1 < ytop || y0 > ybot) continue;
+          ctx.fillText(`Page ${p.n}`, (Math.max(x0, xl) + Math.min(x1, xr)) / 2, (Math.max(y0, ytop) + Math.min(y1, ybot)) / 2);
+        }
+        ctx.textAlign = 'start';
+        ctx.strokeStyle = '#2563eb';
+        ctx.lineWidth = 2;
+        const edges: [number, number, number, number, boolean][] = [[left, top, right, top, false], [left, bottom, right, bottom, false], [left, top, left, bottom, false], [right, top, right, bottom, false]];
+        for (const r of v.rowBreaks) edges.push([left, this.y(r, pr), right, this.y(r, pr), v.manualRows.has(r)]);
+        for (const c of v.colBreaks) edges.push([this.x(c, pc), top, this.x(c, pc), bottom, v.manualCols.has(c)]);
+        for (const [x0, y0, x1, y1, manual] of edges) {
+          ctx.setLineDash(manual || x0 === x1 && (x0 === left || x0 === right) || y0 === y1 && (y0 === top || y0 === bottom) ? [] : [6, 4]);
+          this.line(x0, y0, x1, y1);
+        }
+        ctx.setLineDash([]);
+        ctx.restore();
+      }
+    }
   }
 
   async linkTarget(): Promise<string> {

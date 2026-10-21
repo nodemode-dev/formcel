@@ -24,6 +24,23 @@ def now() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
+ENGINE = threading.RLock()
+LOCALES = ("en-US", "en-GB", "de-DE", "fr-FR", "ja-JP")
+
+
+class BookLock:
+    def __init__(self, book: "Book"):
+        self.book = book
+
+    def __enter__(self):
+        ENGINE.acquire()
+        formcel_engine.set_locale(self.book.locale)
+        return self
+
+    def __exit__(self, *exc):
+        ENGINE.release()
+
+
 @dataclass
 class Book:
     id: str
@@ -33,7 +50,6 @@ class Book:
     engine: "formcel_engine.Workbook"
     template: str | None = None
     views: list[dict] = field(default_factory=list)
-    lock: threading.Lock = field(default_factory=threading.Lock)
     vba: dict[str, bytes] | None = None
     objects: list[list[dict]] = field(default_factory=list)
 
@@ -47,6 +63,12 @@ class Book:
     def protection(self) -> dict:
         n = len(self.sheet_names())
         return {"book": self.engine.protection(), "sheets": [self.engine.protection(i) for i in range(n)]}
+
+    locale: str = "en-US"
+
+    @property
+    def lock(self) -> BookLock:
+        return BookLock(self)
 
     def fit_views(self) -> None:
         n = len(self.sheet_names())
@@ -64,8 +86,17 @@ class Book:
 
     def meta(self) -> dict:
         self.fit_views()
-        return {"id": self.id, "title": self.title, "created": self.created, "modified": self.modified,
+        return {"id": self.id, "title": self.title, "created": self.created, "modified": self.modified, "locale": self.locale,
                 "sheets": self.sheet_names(), "views": self.views, "template": self.template, "preview": self.preview(), "macros": bool(self.vba)}
+
+
+def neutral(fn):
+    def run(*a, **k):
+        with ENGINE:
+            formcel_engine.set_locale("en-US")
+            return fn(*a, **k)
+
+    return run
 
 
 class Store:
@@ -84,7 +115,7 @@ class Store:
 
     def _write(self, b: Book) -> None:
         doc = {"format": FORMAT, "version": FORMAT_VERSION, "id": b.id, "title": b.title, "created": b.created,
-               "modified": b.modified, "template": b.template, "preview": b.preview(),
+               "modified": b.modified, "template": b.template, "locale": b.locale, "preview": b.preview(),
                "names": [list(n) for n in b.engine.names()], "tables": b.engine.tables(),
                "theme": b.engine.theme(), "cellStyles": b.engine.cell_styles(), "collab": b.collab, "protection": b.protection(),
                "sheets": [{"name": n, "view": b.views[i] if i < len(b.views) else {}, "cells": b.engine.cells(i), "formats": b.engine.formats(i), "styles": b.engine.styles(i), "merges": [list(m) for m in b.engine.merges(i)], "rules": b.engine.rules(i), "filter": b.engine.filter(i), "validations": b.engine.validations(i), "links": b.engine.links(i), "objects": b.fit_objects()[i]} for i, n in enumerate(b.sheet_names())]}
@@ -120,6 +151,15 @@ class Store:
             if wid in self.open:
                 return self.open[wid]
             doc = self._read(self.path(wid))
+            ENGINE.acquire()
+            formcel_engine.set_locale(doc.get("locale") or "en-US")
+            try:
+                return self._build(wid, doc)
+            finally:
+                ENGINE.release()
+
+    def _build(self, wid: str, doc: dict) -> Book:
+        if True:
             eng = formcel_engine.Workbook()
             if doc.get("theme"):
                 eng.load_theme(doc["theme"])
@@ -154,6 +194,7 @@ class Store:
             for i, lines in enumerate(prot.get("sheets") or []):
                 if i < len(doc["sheets"]):
                     eng.load_protection(lines, i)
+            b.locale = doc.get("locale") or "en-US"
             self.open[wid] = b
             return b
 
@@ -170,6 +211,7 @@ class Store:
         out.sort(key=lambda d: d["modified"], reverse=True)
         return out
 
+    @neutral
     def create(self, title: str | None, template_id: str | None) -> dict:
         eng = formcel_engine.Workbook()
         name = title
@@ -200,6 +242,7 @@ class Store:
         self._write(b)
         return b.meta()
 
+    @neutral
     def import_xlsx(self, data: bytes, title: str, kind: str = "xlsx") -> dict:
         from . import ods, xls, xlsx
 
@@ -260,6 +303,7 @@ class Store:
         self._write(b)
         return {**b.meta(), "notes": notes}
 
+    @neutral
     def import_csv(self, data: bytes, title: str, delimiter: str | None, text_cols: set[int]) -> dict:
         from . import csvio
 
@@ -338,6 +382,36 @@ class Store:
             b.modified = now()
             self._write(b)
             return {"id": b.id, "modified": b.modified}
+
+    def set_locale(self, wid: str, tag: str) -> dict:
+        if tag not in LOCALES:
+            raise ValueError(f"FormCel has no {tag} locale")
+        b = self._load(wid)
+        with b.lock:
+            b.locale = tag
+            formcel_engine.set_locale(tag)
+            b.modified = now()
+            self._write(b)
+            return {"id": b.id, "modified": b.modified, "locale": tag}
+
+    def accessibility(self, wid: str) -> list[dict]:
+        from . import a11y
+
+        b = self._load(wid)
+        with b.lock:
+            b.fit_views()
+            return a11y.check(b.engine, b.views)
+
+    def export_html(self, wid: str, sheet: int | None) -> tuple[str, str]:
+        from . import html
+
+        b = self._load(wid)
+        with b.lock:
+            b.fit_views()
+            n = len(b.sheet_names())
+            if sheet is not None and not 0 <= sheet < n:
+                raise IndexError(sheet)
+            return b.title, html.write(b.engine, b.views, [sheet] if sheet is not None else list(range(n)), b.title)
 
     def set_links(self, wid: str, sheet: int, cells: list[tuple[int, int, str]]) -> dict:
         b = self._load(wid)

@@ -64,6 +64,8 @@ export const icons = {
   comment: svg('<path d="M4.5 5.5h15v10h-8l-4.5 3.5v-3.5h-2.5z"/><path d="M8.5 9.5h7M8.5 12h4"/>'),
   lock: svg('<rect x="5.5" y="10.5" width="13" height="9.5" rx="2"/><path d="M8.5 10.5V8a3.5 3.5 0 017 0v2.5M12 14.5v2"/>'),
   share: svg('<circle cx="6.5" cy="12" r="2.3"/><circle cx="17.5" cy="6.5" r="2.3"/><circle cx="17.5" cy="17.5" r="2.3"/><path d="M8.5 10.9l7-3.3M8.5 13.1l7 3.3"/>'),
+  page: svg('<path d="M7 3.5h7l4 4v13H7z"/><path d="M14 3.5v4h4M9.5 12h5M9.5 15.5h5"/>'),
+  access: svg('<circle cx="12" cy="5.5" r="1.75"/><path d="M5 9l7 1.5L19 9M12 10.5v4M9 20l3-5.5 3 5.5"/>'),
   upload: svg('<path d="M12 15V4M7.5 8.5L12 4l4.5 4.5M5 19.5h14"/>'),
 } as const;
 
