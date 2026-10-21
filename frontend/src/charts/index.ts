@@ -2,9 +2,11 @@ import type { EngineClient } from '../engine';
 import type { Range } from '../grid/a1';
 import type { Grid } from '../grid/grid';
 import { registerCommand } from '../ui/commands';
+import type { PivotDef } from '../ui/pivot';
 import { recommend, readMatrix, rangeLabel } from './data';
 import { ChartEditor } from './editor';
 import { ObjectLayer } from './layer';
+import { pivotChartData } from './pivotchart';
 import { blankChart, type ChartSpec, type FloatObject } from './types';
 
 export interface ChartsHost {
@@ -13,6 +15,11 @@ export interface ChartsHost {
   active(): boolean;
   load(): Promise<FloatObject[][]>;
   save(sheet: number, list: FloatObject[]): void;
+  pivots?(): PivotDef[];
+  pivotHere?(): string | null;
+  pivotItems?(name: string, field: string): Promise<string[]>;
+  pivotFilter?(name: string, field: string, items: string[]): Promise<void>;
+  say?(text: string): void;
 }
 
 const MAX_PICTURE = 6 * 1024 * 1024;
@@ -24,7 +31,16 @@ export class Charts {
 
   constructor(private readonly grid: Grid, private readonly eng: EngineClient, private readonly host: ChartsHost) {
     this.layer = new ObjectLayer(grid, eng, host);
-    this.editor = new ChartEditor({ eng, book: () => host.book(), sheet: () => grid.sheetIndex, sheetNames: () => host.sheetNames() }, () => grid.focus());
+    this.editor = new ChartEditor({
+      eng,
+      book: () => host.book(),
+      sheet: () => grid.sheetIndex,
+      sheetNames: () => host.sheetNames(),
+      pivotData: async (name) => {
+        const def = host.pivots?.().find((p) => p.name === name);
+        return def ? pivotChartData(eng, host.book(), def) : null;
+      },
+    }, () => grid.focus());
     this.layer.onEdit = (o) => void this.edit(o);
     this.file = document.createElement('input');
     this.file.type = 'file';
@@ -42,6 +58,8 @@ export class Charts {
   private commands(): void {
     const cmd = (id: string, title: string, description: string, run: () => void | Promise<void>) => registerCommand({ id, title, description, changes: false, run });
     cmd('insert.chart', 'Insert chart', 'Make a chart from the selected cells, or the data around the active cell, and float it over the sheet. Pick the type, titles, axes, legend and labels in the editor. Drag it to move it, drag its handles to resize it, press Delete to remove it.', () => this.insertChart());
+    cmd('insert.chart-recommended', 'Recommended charts', 'Rank chart types for the selected cells, or the data around the active cell, with a small preview of each, as Excel does. Click a preview to see it large, then press OK to float it over the sheet.', () => this.insertChart('Recommended charts'));
+    cmd('insert.pivot-chart', 'PivotChart', 'Make a chart from the PivotTable under the active cell, or the only PivotTable in the workbook. It redraws whenever the PivotTable changes, and the PivotTable filters appear as buttons on the chart.', () => this.insertPivotChart());
     cmd('insert.picture', 'Insert picture', 'Choose an image file and float it over the sheet. Drag it to move it, drag its handles to resize it.', () => this.file.click());
     cmd('insert.shape-rect', 'Insert rectangle', 'Float a rectangle over the sheet. Double-click it to type text in it.', () => this.shape('rect'));
     cmd('insert.shape-ellipse', 'Insert ellipse', 'Float an ellipse over the sheet. Double-click it to type text in it.', () => this.shape('ellipse'));
@@ -57,7 +75,21 @@ export class Charts {
     return { r0: area[0], c0: area[1], r1: area[2], c1: area[3] };
   }
 
-  private async insertChart(): Promise<void> {
+  private async insertPivotChart(): Promise<void> {
+    if (!this.host.active()) return;
+    const name = this.host.pivotHere?.() ?? null;
+    if (!name) {
+      this.host.say?.('Select a cell inside a PivotTable first, or create a PivotTable.');
+      return;
+    }
+    const spec: ChartSpec = { ...blankChart('column', ''), pivot: name };
+    const got = await this.editor.open(spec, 'Insert PivotChart');
+    if (!got) return;
+    const o = this.layer.viewOrigin();
+    this.layer.add({ kind: 'chart', x: o.x, y: o.y, w: 520, h: 330, chart: got });
+  }
+
+  private async insertChart(title = 'Insert chart'): Promise<void> {
     if (!this.host.active()) return;
     const r = await this.target();
     const range = r ? rangeLabel(r) : '';
@@ -67,7 +99,7 @@ export class Charts {
       type = recommend(m)[0] ?? 'column';
     }
     const spec = blankChart(type, range);
-    const got = await this.editor.open(spec, 'Insert chart');
+    const got = await this.editor.open(spec, title);
     if (!got) return;
     const o = this.layer.viewOrigin();
     this.layer.add({ kind: 'chart', x: o.x, y: o.y, w: 480, h: 300, chart: got });

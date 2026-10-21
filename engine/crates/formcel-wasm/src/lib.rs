@@ -1324,6 +1324,16 @@ pub unsafe extern "C" fn fc_host_custom(id: u32, names: *const u8, len: u32) -> 
     }
 }
 
+/// Formats newline separated numbers with one number format code; the out buffer gets one line per number.
+///
+/// # Safety
+/// `code` and `nums` must point at `code_len` and `nums_len` readable bytes.
+#[no_mangle]
+pub unsafe extern "C" fn fc_format_numbers(code: *const u8, code_len: u32, nums: *const u8, nums_len: u32) -> i32 {
+    let list: Vec<f64> = text(nums, nums_len).lines().map(|l| l.trim().parse().unwrap_or(0.0)).collect();
+    emit(&formcel_core::fmtcode::render_numbers(text(code, code_len), &list).join("\n")) as i32
+}
+
 /// Forgets every cached host result and recalculates; the out buffer gets the changed cells.
 #[no_mangle]
 pub extern "C" fn fc_host_clear(id: u32) -> i32 {

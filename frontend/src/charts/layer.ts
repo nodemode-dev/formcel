@@ -1,7 +1,9 @@
 import type { EngineClient } from '../engine';
 import type { Grid, ObjectsHook } from '../grid/grid';
+import type { PivotDef } from '../ui/pivot';
 import { build, parseRangeText, readMatrix } from './data';
-import { renderChart } from './svg';
+import { FILTER_BAR, pivotChartData, pivotLabel } from './pivotchart';
+import { renderChartAsync } from './svg';
 import { newId, type FloatObject } from './types';
 
 export interface LayerIo {
@@ -9,6 +11,9 @@ export interface LayerIo {
   sheetNames(): string[];
   load(): Promise<FloatObject[][]>;
   save(sheet: number, list: FloatObject[]): void;
+  pivots?(): PivotDef[];
+  pivotItems?(name: string, field: string): Promise<string[]>;
+  pivotFilter?(name: string, field: string, items: string[]): Promise<void>;
 }
 
 interface Node {
@@ -16,6 +21,8 @@ interface Node {
   el: HTMLElement;
   body: HTMLElement;
   html: string;
+  bar: HTMLElement | null;
+  barKey: string;
 }
 
 type Handle = 'n' | 's' | 'e' | 'w' | 'ne' | 'nw' | 'se' | 'sw';
@@ -207,7 +214,7 @@ export class ObjectLayer implements ObjectsHook {
       s.dataset.h = h;
       el.appendChild(s);
     }
-    const n: Node = { obj: o, el, body, html: '' };
+    const n: Node = { obj: o, el, body, html: '', bar: null, barKey: '' };
     el.addEventListener('pointerdown', (e) => this.down(e, n));
     el.addEventListener('dblclick', (e) => {
       e.stopPropagation();
@@ -309,6 +316,11 @@ export class ObjectLayer implements ObjectsHook {
 
   private down(e: PointerEvent, n: Node): void {
     if (e.button !== 0 || (e.target as HTMLElement).isContentEditable) return;
+    if ((e.target as HTMLElement).closest('.fc-chart-filters')) {
+      e.stopPropagation();
+      this.select(n.obj.id);
+      return;
+    }
     e.stopPropagation();
     this.select(n.obj.id);
     const h = (e.target as HTMLElement).dataset.h as Handle | undefined;
@@ -372,20 +384,103 @@ export class ObjectLayer implements ObjectsHook {
   private async draw(n: Node): Promise<void> {
     const spec = n.obj.chart;
     if (!spec) return;
-    const ref = parseRangeText(spec.range);
     let html: string;
-    if (!ref) html = `<div class="fc-chart-empty">The data range ${spec.range ? `"${spec.range}"` : ''} is not a range. Edit the chart to pick one.</div>`;
-    else {
-      const sheet = ref.sheet ? this.io.sheetNames().indexOf(ref.sheet) : this.sheetNo;
-      if (sheet < 0) html = `<div class="fc-chart-empty">There is no sheet named ${ref.sheet}.</div>`;
+    let def: PivotDef | null = null;
+    if (spec.pivot) {
+      def = this.io.pivots?.().find((p) => p.name === spec.pivot) ?? null;
+      const data = def ? await pivotChartData(this.eng, this.io.book(), def) : null;
+      if (!def) html = `<div class="fc-chart-empty">The PivotTable ${spec.pivot} no longer exists. Delete this chart or edit it to pick another source.</div>`;
+      else if (!data) html = '<div class="fc-chart-empty">The PivotTable has no values to chart yet. Add fields to its Rows and Values.</div>';
+      else html = await renderChartAsync(this.eng, spec, data, n.obj.w, Math.max(40, n.obj.h - FILTER_BAR));
+    } else {
+      const ref = parseRangeText(spec.range);
+      if (!ref) html = `<div class="fc-chart-empty">The data range ${spec.range ? `"${spec.range}"` : ''} is not a range. Edit the chart to pick one.</div>`;
       else {
-        const m = await readMatrix(this.eng, this.io.book(), sheet, ref.range);
-        html = renderChart(spec, build(m, spec.byRows, spec.type), n.obj.w, n.obj.h);
+        const sheet = ref.sheet ? this.io.sheetNames().indexOf(ref.sheet) : this.sheetNo;
+        if (sheet < 0) html = `<div class="fc-chart-empty">There is no sheet named ${ref.sheet}.</div>`;
+        else {
+          const m = await readMatrix(this.eng, this.io.book(), sheet, ref.range);
+          html = await renderChartAsync(this.eng, spec, build(m, spec.byRows, spec.type), n.obj.w, n.obj.h);
+        }
       }
     }
-    if (html !== n.html && this.nodes.get(n.obj.id) === n) {
+    if (this.nodes.get(n.obj.id) !== n) return;
+    this.filters(n, def);
+    if (html !== n.html) {
       n.html = html;
       n.body.innerHTML = html;
     }
+  }
+
+  private filters(n: Node, def: PivotDef | null): void {
+    if (!def) {
+      if (n.bar) {
+        n.bar.remove();
+        n.bar = null;
+        n.barKey = '';
+        n.body.style.top = '';
+      }
+      return;
+    }
+    const key = JSON.stringify([def.name, def.rows, def.cols, def.filters]);
+    if (!n.bar) {
+      const bar = document.createElement('div');
+      bar.className = 'fc-chart-filters';
+      bar.addEventListener('change', (e) => {
+        const sel = e.target as HTMLSelectElement;
+        const field = sel.dataset.field;
+        if (!field || !n.obj.chart?.pivot || sel.value.startsWith('\u0000')) return;
+        void this.io.pivotFilter?.(n.obj.chart.pivot, field, sel.value === '' ? [] : [sel.value]);
+      });
+      n.el.insertBefore(bar, n.body);
+      n.bar = bar;
+      n.body.style.top = `${FILTER_BAR}px`;
+    }
+    if (key === n.barKey) return;
+    n.barKey = key;
+    const bar = n.bar;
+    const have = new Map<string, HTMLSelectElement>();
+    bar.querySelectorAll<HTMLSelectElement>('select').forEach((s) => have.set(s.dataset.field ?? '', s));
+    const wanted = def.filters.map((f) => f.field);
+    for (const [field, el] of have) if (!wanted.includes(field)) el.parentElement?.remove();
+    for (const f of def.filters) {
+      let sel = have.get(f.field);
+      if (!sel) {
+        const wrap = document.createElement('label');
+        wrap.className = 'fc-chart-filter';
+        const cap = document.createElement('span');
+        cap.textContent = f.field;
+        sel = document.createElement('select');
+        sel.dataset.field = f.field;
+        sel.setAttribute('aria-label', `Filter ${f.field}`);
+        wrap.append(cap, sel);
+        bar.appendChild(wrap);
+      }
+      const current = f.items.length === 1 ? f.items[0] : '';
+      const label = pivotLabel(def, f.field);
+      const target = sel;
+      const fill = (items: string[]) => {
+        const opts = [['', '(All)'], ...items.map((i) => [i, i])];
+        if (f.items.length > 1) opts.push(['\u0000multi', '(Multiple Items)']);
+        target.replaceChildren(...opts.map(([v, t]) => new Option(t, v)));
+        target.value = f.items.length > 1 ? '\u0000multi' : current;
+      };
+      fill(f.items.length === 1 ? [f.items[0]] : []);
+      target.title = label;
+      void this.io.pivotItems?.(def.name, f.field).then((items) => {
+        if (n.barKey === key) fill(items);
+      });
+    }
+    for (const t of [...def.rows, ...def.cols]) {
+      if (bar.querySelector(`[data-axis="${CSS.escape(t)}"]`)) continue;
+      const chip = document.createElement('span');
+      chip.className = 'fc-chart-axis-chip';
+      chip.dataset.axis = t;
+      chip.textContent = t;
+      bar.appendChild(chip);
+    }
+    bar.querySelectorAll<HTMLElement>('[data-axis]').forEach((c) => {
+      if (![...def.rows, ...def.cols].includes(c.dataset.axis ?? '')) c.remove();
+    });
   }
 }

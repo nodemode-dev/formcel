@@ -391,6 +391,18 @@ export class App {
       active: () => !!this.open,
       load: async () => (this.open ? (await api<{ objects: FloatObject[][] }>('GET', `/api/workbooks/${this.open.id}/objects`)).objects : []),
       save: (sheet, list) => this.sendObjects(sheet, list),
+      pivots: () => this.pivotDefs(),
+      pivotHere: () => {
+        const s = this.grid.selection();
+        const defs = this.pivotDefs();
+        return (this.pivotAt(this.grid.sheetIndex, s.r0, s.c0) ?? (defs.length === 1 ? defs[0] : null))?.name ?? null;
+      },
+      pivotItems: (name, field) => engine().pivotItems(this.open?.book ?? -1, name, field),
+      pivotFilter: async (name, field, items) => {
+        const d = this.pivotDefs().find((x) => x.name === name);
+        if (d) await this.pivotApply((book) => engine().setPivot(book, name, formatPivot({ ...d, filters: d.filters.map((f) => (f.field === field ? { field, items } : f)) })));
+      },
+      say: (t) => this.status(t),
     });
     this.audit = new Audit({
       grid: this.grid,

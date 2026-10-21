@@ -1,4 +1,8 @@
+import type { EngineClient } from '../engine';
+import { FORMATS, errAmount, fitTrend } from './chartfx';
+import { countryFor, ramp } from './map';
 import { PALETTE, type ChartData, type ChartSpec, type Series } from './types';
+import { WORLD, WORLD_H, WORLD_W } from './world';
 
 interface Box {
   x: number;
@@ -9,7 +13,30 @@ interface Box {
 
 const esc = (s: string): string => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
 const r1 = (n: number): string => String(Math.round(n * 10) / 10);
-const color = (i: number): string => PALETTE[i % PALETTE.length];
+let COLORS: string[] | undefined;
+const color = (i: number): string => COLORS?.[i] || PALETTE[i % PALETTE.length];
+const shown = (code: string | undefined, n: number): string => FORMATS.text(code, n, fmt);
+
+interface Axis {
+  min: number;
+  max: number;
+  ticks: number[];
+  log: boolean;
+}
+
+function frac(a: Axis, v: number): number {
+  if (!a.log) return (v - a.min) / (a.max - a.min);
+  const lo = Math.log10(a.min);
+  return (Math.log10(Math.max(v, a.min)) - lo) / (Math.log10(a.max) - lo || 1);
+}
+
+function logAxis(lo: number, hi: number): Axis {
+  const floor = Math.pow(10, Math.floor(Math.log10(Math.max(lo, 1e-9))));
+  const ceil = Math.pow(10, Math.ceil(Math.log10(Math.max(hi, floor * 10))));
+  const ticks: number[] = [];
+  for (let v = floor; v <= ceil * 1.0001; v *= 10) ticks.push(v);
+  return { min: floor, max: ceil, ticks, log: true };
+}
 
 export function fmt(n: number): string {
   const a = Math.abs(n);
@@ -45,6 +72,50 @@ const text = (x: number, y: number, s: string, o: { size?: number; anchor?: stri
 const line = (x1: number, y1: number, x2: number, y2: number, o = 'stroke-opacity="0.15"', w = 1): string =>
   `<line x1="${r1(x1)}" y1="${r1(y1)}" x2="${r1(x2)}" y2="${r1(y2)}" stroke="currentColor" ${o} stroke-width="${w}"/>`;
 
+function errV(x: number, c: number, a: number, b: number): string {
+  const cap = (y: number) => (Math.abs(y - c) > 0.01 ? line(x - 4, y, x + 4, y, 'stroke-opacity="0.85"', 1.25) : '');
+  return line(x, a, x, b, 'stroke-opacity="0.85"', 1.25) + cap(a) + cap(b);
+}
+
+function errH(y: number, c: number, a: number, b: number): string {
+  const cap = (x: number) => (Math.abs(x - c) > 0.01 ? line(x, y - 4, x, y + 4, 'stroke-opacity="0.85"', 1.25) : '');
+  return line(a, y, b, y, 'stroke-opacity="0.85"', 1.25) + cap(a) + cap(b);
+}
+
+function trendSvg(out: string[], spec: ChartSpec, d: ChartData, kind: 'cat' | 'xy', xs: number[][], px: (x: number, i: number) => number, py: (y: number, i: number) => number, plot: Box): void {
+  let note = 0;
+  for (const t of spec.trends ?? []) {
+    d.series.forEach((s, i) => {
+      if (t.series !== i && t.series >= 0) return;
+      if (kind === 'xy' && spec.type === 'bubble' && i > 0) return;
+      const X = xs[i] ?? xs[0];
+      const pairs = X.map((x, k) => [x, s.vals[k]] as const).filter((q): q is readonly [number, number] => num(q[1]) && Number.isFinite(q[0]));
+      const fit = fitTrend(t, pairs.map((q) => q[0]), pairs.map((q) => q[1]));
+      if (!fit) return;
+      const col = color(i);
+      if (fit.line) {
+        out.push(`<path d="${fit.line.map(([x, y], k) => `${k ? 'L' : 'M'}${r1(px(x, i))} ${r1(py(y, i))}`).join('')}" fill="none" stroke="${col}" stroke-width="2" stroke-dasharray="6 4"/>`);
+        return;
+      }
+      const lo = Math.min(...pairs.map((q) => q[0]));
+      const hi = Math.max(...pairs.map((q) => q[0]));
+      const steps = 48;
+      const pts: string[] = [];
+      for (let k = 0; k <= steps; k++) {
+        const x = lo + ((hi - lo) * k) / steps;
+        const y = fit.at(x);
+        if (Number.isFinite(y)) pts.push(`${pts.length ? 'L' : 'M'}${r1(px(x, i))} ${r1(py(y, i))}`);
+      }
+      out.push(`<path d="${pts.join('')}" fill="none" stroke="${col}" stroke-width="2" stroke-dasharray="6 4"/>`);
+      const lines = [t.eq ? fit.eq : '', t.r2 && fit.r2 !== null ? `R² = ${Math.round(fit.r2 * 10000) / 10000}` : ''].filter(Boolean);
+      lines.forEach((s2) => {
+        out.push(text(plot.x + plot.w - 6, plot.y + 14 + note * 14, s2, { anchor: 'end', size: 10, fill: col }));
+        note++;
+      });
+    });
+  }
+}
+
 function arc(cx: number, cy: number, r0: number, r: number, a0: number, a1: number): string {
   const full = a1 - a0 >= Math.PI * 2 - 1e-6;
   const b1 = full ? a0 + Math.PI * 2 - 1e-4 : a1;
@@ -71,7 +142,7 @@ type Gen = (spec: ChartSpec, d: ChartData, b: Box) => string;
 function legendItems(spec: ChartSpec, d: ChartData): string[] {
   const t = spec.type;
   if (['pie', 'doughnut', 'funnel', 'treemap', 'sunburst'].includes(t)) return d.cats;
-  if (['histogram', 'waterfall', 'gauge', 'scorecard', 'org', 'timeline', 'box'].includes(t)) return [];
+  if (['histogram', 'waterfall', 'gauge', 'scorecard', 'org', 'timeline', 'box', 'map'].includes(t)) return [];
   if (t === 'candlestick') return [];
   if (t === 'radar' || d.series.length > 1) return d.series.map((s) => s.name);
   return [];
@@ -81,6 +152,8 @@ export function renderChart(spec: ChartSpec, d: ChartData, w: number, h: number)
   w = Math.max(60, Math.round(w));
   h = Math.max(40, Math.round(h));
   const parts: string[] = [];
+  COLORS = spec.colors;
+  if (spec.fill) parts.push(`<rect x="0" y="0" width="${w}" height="${h}" fill="${esc(spec.fill)}"/>`);
   let top = 8;
   let bottom = h - 8;
   let left = 8;
@@ -137,6 +210,15 @@ export function renderChart(spec: ChartSpec, d: ChartData, w: number, h: number)
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${w} ${h}" width="${w}" height="${h}" role="img" aria-label="${esc(spec.title || spec.type)}" font-family="Inter, system-ui, -apple-system, 'Segoe UI', sans-serif">${parts.join('')}${body}</svg>`;
 }
 
+export async function renderChartAsync(eng: EngineClient, spec: ChartSpec, d: ChartData, w: number, h: number): Promise<string> {
+  let html = renderChart(spec, d, w, h);
+  if (FORMATS.pending()) {
+    await FORMATS.prime(eng);
+    html = renderChart(spec, d, w, h);
+  }
+  return html;
+}
+
 function labelWidth(ticks: string[]): number {
   return Math.max(...ticks.map((t) => t.length)) * 6.4 + 10;
 }
@@ -152,7 +234,7 @@ function cartesian(spec: ChartSpec, d: ChartData, b: Box): string {
   const secIdx = new Set(combo ? (spec.secondary.length ? spec.secondary : d.series.length > 1 ? [d.series.length - 1] : []) : []);
   const left = d.series.map((s, i) => ({ s, i })).filter(({ i }) => !secIdx.has(i));
   const sec = d.series.map((s, i) => ({ s, i })).filter(({ i }) => secIdx.has(i));
-  const range = (list: { s: Series }[], stack: boolean, zero: boolean): [number, number] => {
+  const range = (list: { s: Series; i: number }[], stack: boolean, zero: boolean): [number, number] => {
     let lo = Infinity;
     let hi = -Infinity;
     if (stack) {
@@ -167,35 +249,48 @@ function cartesian(spec: ChartSpec, d: ChartData, b: Box): string {
         hi = Math.max(hi, pos);
       }
     } else {
-      for (const { s } of list) for (const v of s.vals) if (num(v)) { lo = Math.min(lo, v); hi = Math.max(hi, v); }
+      for (const { s, i } of list) {
+        const eb = (spec.errBars ?? []).find((e) => e.series === i || e.series < 0);
+        const all = eb ? s.vals.filter(num) : [];
+        for (const v of s.vals) {
+          if (!num(v) || (spec.logY && v <= 0)) continue;
+          const [dn, up] = eb ? errAmount(eb, v, all) : [0, 0];
+          lo = Math.min(lo, v - dn);
+          hi = Math.max(hi, v + up);
+        }
+      }
     }
     if (!Number.isFinite(lo)) return [0, 1];
-    if (zero) { lo = Math.min(lo, 0); hi = Math.max(hi, 0); }
+    if (zero && !spec.logY) { lo = Math.min(lo, 0); hi = Math.max(hi, 0); }
     if (spec.min !== undefined) lo = spec.min;
     if (spec.max !== undefined) hi = spec.max;
     return [lo, hi];
   };
   const zero = !(isLine && !area);
   const [lo, hi] = range(left, stacked, zero || combo);
-  const scale = nice(lo, hi);
-  const tickText = scale.ticks.map(fmt);
-  const sscale = sec.length ? nice(...range(sec, false, false)) : null;
-  const catLabels = d.cats.map((c) => ellipsis(c, 14));
+  const linear = (r: [number, number]): Axis => ({ ...nice(r[0], r[1]), log: false });
+  const scale: Axis = spec.logY && !stacked ? logAxis(lo, hi) : linear([lo, hi]);
+  const tickText = scale.ticks.map((v) => shown(spec.yFmt, v));
+  const sscale = sec.length ? linear(range(sec, false, false)) : null;
+  const catLabels = d.cats.map((c, k) => ellipsis(spec.xFmt && num(d.catNums[k]) ? shown(spec.xFmt, d.catNums[k] as number) : c, 14));
   const lw = horizontal ? Math.min(100, labelWidth(catLabels)) : labelWidth(tickText);
   const rw = sscale ? labelWidth(sscale.ticks.map(fmt)) : 0;
   const padL = lw + (spec.yTitle ? 18 : 0);
   const padB = (horizontal ? labelWidth(tickText) * 0 + 22 : 22) + (spec.xTitle ? 18 : 0);
   const p: Box = { x: b.x + padL, y: b.y + 6, w: Math.max(10, b.w - padL - rw - 6), h: Math.max(10, b.h - padB - 6) };
   const out: string[] = [];
-  const toPx = (v: number) => (horizontal ? p.x + ((v - scale.min) / (scale.max - scale.min)) * p.w : p.y + p.h - ((v - scale.min) / (scale.max - scale.min)) * p.h);
-  const toSec = (v: number) => p.y + p.h - ((v - sscale!.min) / (sscale!.max - sscale!.min)) * p.h;
+  if (spec.plotFill) out.push(`<rect x="${r1(p.x)}" y="${r1(p.y)}" width="${r1(p.w)}" height="${r1(p.h)}" fill="${esc(spec.plotFill)}"/>`);
+  const toPx = (v: number) => (horizontal ? p.x + frac(scale, v) * p.w : p.y + p.h - frac(scale, v) * p.h);
+  const toSec = (v: number) => p.y + p.h - frac(sscale!, v) * p.h;
+  const gridOn = spec.grid !== false;
   scale.ticks.forEach((v, i) => {
     const q = toPx(v);
-    if (horizontal) out.push(line(q, p.y, q, p.y + p.h), text(q, p.y + p.h + 14, tickText[i]));
-    else out.push(line(p.x, q, p.x + p.w, q), text(p.x - 6, q, tickText[i], { anchor: 'end', base: 'central' }));
+    if (horizontal) out.push(gridOn ? line(q, p.y, q, p.y + p.h) : '', text(q, p.y + p.h + 14, tickText[i]));
+    else out.push(gridOn ? line(p.x, q, p.x + p.w, q) : '', text(p.x - 6, q, tickText[i], { anchor: 'end', base: 'central' }));
   });
-  if (sscale) sscale.ticks.forEach((v) => out.push(text(p.x + p.w + 6, toSec(v), fmt(v), { anchor: 'start', base: 'central' })));
+  if (sscale) sscale.ticks.forEach((v) => out.push(text(p.x + p.w + 6, toSec(v), shown(spec.yFmt, v), { anchor: 'start', base: 'central' })));
   const band = (horizontal ? p.h : p.w) / Math.max(1, n);
+  if (spec.xGrid) for (let k = 0; k <= n; k++) out.push(horizontal ? line(p.x, p.y + band * k, p.x + p.w, p.y + band * k) : line(p.x + band * k, p.y, p.x + band * k, p.y + p.h));
   const every = Math.max(1, Math.ceil((n * (horizontal ? 14 : 62)) / (horizontal ? p.h : p.w)));
   const rotate = !horizontal && band < 46 && Math.max(...catLabels.map((c) => c.length)) > 4;
   d.cats.forEach((_, k) => {
@@ -231,7 +326,15 @@ function cartesian(spec: ChartSpec, d: ChartData, b: Box): string {
         const lo2 = Math.min(a, z);
         const len = Math.max(0.5, Math.abs(z - a));
         out.push(horizontal ? `<rect x="${r1(lo2)}" y="${r1(c)}" width="${r1(len)}" height="${r1(bw)}" fill="${color(i)}"/>` : `<rect x="${r1(c)}" y="${r1(lo2)}" width="${r1(bw)}" height="${r1(len)}" fill="${color(i)}"/>`);
-        if (spec.labels) out.push(horizontal ? text(Math.max(a, z) + 3, c + bw / 2, fmt(v), { anchor: 'start', base: 'central', size: 10 }) : text(c + bw / 2, lo2 - 3, fmt(v), { size: 10 }));
+        if (spec.labels) out.push(horizontal ? text(Math.max(a, z) + 3, c + bw / 2, shown(spec.labelFmt, v), { anchor: 'start', base: 'central', size: 10 }) : text(c + bw / 2, lo2 - 3, shown(spec.labelFmt, v), { size: 10 }));
+        const eb = stacked ? undefined : (spec.errBars ?? []).find((e) => e.series === i || e.series < 0);
+        if (eb) {
+          const [dn, up] = errAmount(eb, v, s.vals.filter(num));
+          const m = c + bw / 2;
+          const hi2 = toPx(v + up);
+          const lo3 = toPx(v - dn);
+          out.push(horizontal ? errH(m, toPx(v), lo3, hi2) : errV(m, toPx(v), lo3, hi2));
+        }
       });
     });
   }
@@ -245,11 +348,22 @@ function cartesian(spec: ChartSpec, d: ChartData, b: Box): string {
     const path = pts.map(([x, y], k) => `${k ? 'L' : 'M'}${r1(x)} ${r1(y)}`).join('');
     if (area) out.push(`<path d="${path}L${r1(pts[pts.length - 1][0])} ${r1(baseV)}L${r1(pts[0][0])} ${r1(baseV)}Z" fill="${color(i)}" fill-opacity="0.35"/>`);
     out.push(`<path d="${path}" fill="none" stroke="${color(i)}" stroke-width="2" stroke-linejoin="round"/>`);
+    const eb = (spec.errBars ?? []).find((e) => e.series === i || e.series < 0);
+    const yOf = (v: number) => (secIdx.has(i) && sscale ? toSec(v) : toPx(v));
+    const all = eb ? s.vals.filter(num) : [];
     for (const [x, y, v] of pts) {
+      if (eb) {
+        const [dn, up] = errAmount(eb, v, all);
+        out.push(errV(x, y, yOf(v - dn), yOf(v + up)));
+      }
       out.push(`<circle cx="${r1(x)}" cy="${r1(y)}" r="3" fill="${color(i)}"/>`);
-      if (spec.labels) out.push(text(x, y - 7, fmt(v), { size: 10 }));
+      if (spec.labels) out.push(text(x, y - 7, shown(spec.labelFmt, v), { size: 10 }));
     }
   });
+  if (spec.trends?.length && !horizontal && !stacked) {
+    const xs = [d.cats.map((_, k) => k + 1)];
+    trendSvg(out, spec, d, 'cat', xs, (x) => p.x + band * (x - 0.5), (y, i) => (secIdx.has(i) && sscale ? toSec(y) : toPx(y)), p);
+  }
   if (spec.xTitle) out.push(text(p.x + p.w / 2, b.y + b.h - 4, spec.xTitle, { size: 11, op: 0.8 }));
   if (spec.yTitle) out.push(text(b.x + 8, p.y + p.h / 2, spec.yTitle, { size: 11, rot: -90, op: 0.8 }));
   return out.join('');
@@ -261,25 +375,47 @@ function xy(spec: ChartSpec, d: ChartData, b: Box): string {
   const xs = d.catNums.map((v, i) => (num(v) ? v : i + 1));
   const xr = nice(Math.min(...xs), Math.max(...xs));
   const all = ys.flatMap((s) => s.vals).filter(num);
-  const yr = nice(Math.min(...all), Math.max(...all));
-  const lw = labelWidth(yr.ticks.map(fmt)) + (spec.yTitle ? 18 : 0);
+  let ylo = Math.min(...all);
+  let yhi = Math.max(...all);
+  ys.forEach((s, i) => {
+    const eb = (spec.errBars ?? []).find((e) => e.series === i || e.series < 0);
+    if (!eb) return;
+    for (const v of s.vals.filter(num)) {
+      const [dn, up] = errAmount(eb, v, all);
+      ylo = Math.min(ylo, v - dn);
+      yhi = Math.max(yhi, v + up);
+    }
+  });
+  if (spec.min !== undefined) ylo = spec.min;
+  if (spec.max !== undefined) yhi = spec.max;
+  const yr: Axis = spec.logY ? logAxis(Math.min(...all.filter((v) => v > 0), yhi), yhi) : { ...nice(ylo, yhi), log: false };
+  const lw = labelWidth(yr.ticks.map((v) => shown(spec.yFmt, v))) + (spec.yTitle ? 18 : 0);
   const p: Box = { x: b.x + lw, y: b.y + 6, w: Math.max(10, b.w - lw - 10), h: Math.max(10, b.h - 28 - (spec.xTitle ? 18 : 0)) };
   const px = (v: number) => p.x + ((v - xr.min) / (xr.max - xr.min)) * p.w;
-  const py = (v: number) => p.y + p.h - ((v - yr.min) / (yr.max - yr.min)) * p.h;
+  const py = (v: number) => p.y + p.h - frac(yr, v) * p.h;
   const out: string[] = [];
-  yr.ticks.forEach((v) => out.push(line(p.x, py(v), p.x + p.w, py(v)), text(p.x - 6, py(v), fmt(v), { anchor: 'end', base: 'central' })));
-  xr.ticks.forEach((v) => out.push(line(px(v), p.y, px(v), p.y + p.h), text(px(v), p.y + p.h + 14, fmt(v))));
+  if (spec.plotFill) out.push(`<rect x="${r1(p.x)}" y="${r1(p.y)}" width="${r1(p.w)}" height="${r1(p.h)}" fill="${esc(spec.plotFill)}"/>`);
+  const gridOn = spec.grid !== false;
+  yr.ticks.forEach((v) => out.push(gridOn ? line(p.x, py(v), p.x + p.w, py(v)) : '', text(p.x - 6, py(v), shown(spec.yFmt, v), { anchor: 'end', base: 'central' })));
+  xr.ticks.forEach((v) => out.push(gridOn || spec.xGrid ? line(px(v), p.y, px(v), p.y + p.h) : '', text(px(v), p.y + p.h + 14, shown(spec.xFmt, v))));
   out.push(line(p.x, p.y + p.h, p.x + p.w, p.y + p.h, 'stroke-opacity="0.4"'), line(p.x, p.y, p.x, p.y + p.h, 'stroke-opacity="0.4"'));
   const sizes = bubble && d.series[1] ? d.series[1].vals : [];
   const maxSize = Math.max(1, ...sizes.filter(num));
   ys.forEach((s, i) => {
+    const eb = (spec.errBars ?? []).find((e) => e.series === i || e.series < 0);
+    const own = eb ? s.vals.filter(num) : [];
     s.vals.forEach((v, k) => {
       if (!num(v)) return;
       const r = bubble ? 5 + 20 * Math.sqrt(Math.max(0, sizes[k] ?? 0) / maxSize) : 4;
+      if (eb) {
+        const [dn, up] = errAmount(eb, v, own);
+        out.push(errV(px(xs[k]), py(v), py(v - dn), py(v + up)));
+      }
       out.push(`<circle cx="${r1(px(xs[k]))}" cy="${r1(py(v))}" r="${r1(r)}" fill="${color(i)}" fill-opacity="${bubble ? 0.55 : 0.85}"/>`);
-      if (spec.labels) out.push(text(px(xs[k]), py(v) - r - 3, fmt(v), { size: 10 }));
+      if (spec.labels) out.push(text(px(xs[k]), py(v) - r - 3, shown(spec.labelFmt, v), { size: 10 }));
     });
   });
+  if (spec.trends?.length) trendSvg(out, spec, { ...d, series: ys }, 'xy', [xs], px, (y) => py(y), p);
   if (spec.xTitle) out.push(text(p.x + p.w / 2, b.y + b.h - 4, spec.xTitle, { size: 11, op: 0.8 }));
   if (spec.yTitle) out.push(text(b.x + 8, p.y + p.h / 2, spec.yTitle, { size: 11, rot: -90, op: 0.8 }));
   return out.join('');
@@ -313,7 +449,7 @@ function histogram(spec: ChartSpec, d: ChartData, b: Box): string {
   const v = d.series[0].vals.filter(num);
   const lo = Math.min(...v);
   const hi = Math.max(...v);
-  const bins = Math.max(1, Math.min(30, Math.ceil(Math.log2(v.length) + 1)));
+  const bins = spec.bins && spec.bins > 0 ? Math.min(100, Math.round(spec.bins)) : Math.max(1, Math.min(30, Math.ceil(Math.log2(v.length) + 1)));
   const sc = nice(lo, hi, bins);
   const width = (sc.max - sc.min) / Math.max(1, sc.ticks.length - 1);
   const nb = Math.max(1, Math.round((sc.max - sc.min) / width));
@@ -379,7 +515,7 @@ function waterfall(spec: ChartSpec, d: ChartData, b: Box): string {
   const steps: { a: number; z: number; total: boolean; v: number }[] = [];
   let run = 0;
   vals.forEach((v, i) => {
-    const total = /total|net|sum|end/i.test(d.cats[i]) && i > 0;
+    const total = spec.totals ? spec.totals.includes(i) : /total|net|sum|end/i.test(d.cats[i]) && i > 0;
     if (total) steps.push({ a: 0, z: run, total, v: run });
     else {
       steps.push({ a: run, z: run + v, total: false, v });
@@ -387,11 +523,12 @@ function waterfall(spec: ChartSpec, d: ChartData, b: Box): string {
     }
   });
   const sc = nice(Math.min(0, ...steps.flatMap((s) => [s.a, s.z])), Math.max(0, ...steps.flatMap((s) => [s.a, s.z])));
-  const lw = labelWidth(sc.ticks.map(fmt)) + (spec.yTitle ? 18 : 0);
+  const lw = labelWidth(sc.ticks.map((t) => shown(spec.yFmt, t))) + (spec.yTitle ? 18 : 0);
   const p: Box = { x: b.x + lw, y: b.y + 6, w: Math.max(10, b.w - lw - 10), h: Math.max(10, b.h - 28 - (spec.xTitle ? 18 : 0)) };
   const py = (v: number) => p.y + p.h - ((v - sc.min) / (sc.max - sc.min)) * p.h;
   const out: string[] = [];
-  sc.ticks.forEach((t) => out.push(line(p.x, py(t), p.x + p.w, py(t)), text(p.x - 6, py(t), fmt(t), { anchor: 'end', base: 'central' })));
+  if (spec.plotFill) out.push(`<rect x="${r1(p.x)}" y="${r1(p.y)}" width="${r1(p.w)}" height="${r1(p.h)}" fill="${esc(spec.plotFill)}"/>`);
+  sc.ticks.forEach((t) => out.push(spec.grid === false ? '' : line(p.x, py(t), p.x + p.w, py(t)), text(p.x - 6, py(t), shown(spec.yFmt, t), { anchor: 'end', base: 'central' })));
   const band = p.w / steps.length;
   steps.forEach((s, i) => {
     const x = p.x + band * i + band * 0.15;
@@ -399,7 +536,7 @@ function waterfall(spec: ChartSpec, d: ChartData, b: Box): string {
     out.push(`<rect x="${r1(x)}" y="${r1(Math.min(py(s.a), py(s.z)))}" width="${r1(band * 0.7)}" height="${r1(Math.max(1, Math.abs(py(s.a) - py(s.z))))}" fill="${fill}"/>`);
     if (i < steps.length - 1) out.push(line(x + band * 0.7, py(s.z), x + band * 1.15, py(s.z), 'stroke-opacity="0.4" stroke-dasharray="3 3"'));
     out.push(text(p.x + band * (i + 0.5), p.y + p.h + 15, ellipsis(d.cats[i], 12)));
-    if (spec.labels) out.push(text(p.x + band * (i + 0.5), Math.min(py(s.a), py(s.z)) - 4, (s.v > 0 && !s.total ? '+' : '') + fmt(s.v), { size: 10 }));
+    if (spec.labels) out.push(text(p.x + band * (i + 0.5), Math.min(py(s.a), py(s.z)) - 4, (s.v > 0 && !s.total ? '+' : '') + shown(spec.labelFmt, s.v), { size: 10 }));
   });
   out.push(line(p.x, py(0), p.x + p.w, py(0), 'stroke-opacity="0.4"'));
   if (spec.yTitle) out.push(text(b.x + 8, p.y + p.h / 2, spec.yTitle, { size: 11, rot: -90, op: 0.8 }));
@@ -436,7 +573,105 @@ function candlestick(spec: ChartSpec, d: ChartData, b: Box): string {
   return out.join('');
 }
 
+interface TNode {
+  name: string;
+  v: number;
+  kids: TNode[];
+  top: number;
+}
+
+function treeOf(d: ChartData): TNode[] {
+  const roots: TNode[] = [];
+  const vals = d.series[0]?.vals ?? [];
+  (d.paths ?? []).forEach((path, k) => {
+    const v = vals[k];
+    if (!num(v) || v <= 0) return;
+    let level = roots;
+    let top = -1;
+    path.forEach((name, depth) => {
+      let node = level.find((n) => n.name === name);
+      if (!node) {
+        if (depth === 0) top = roots.length;
+        node = { name, v: 0, kids: [], top: depth === 0 ? roots.length : top };
+        level.push(node);
+      }
+      top = node.top;
+      node.v += v;
+      level = node.kids;
+    });
+  });
+  return roots;
+}
+
+function depthOf(list: TNode[]): number {
+  return list.length ? 1 + Math.max(...list.map((n) => depthOf(n.kids))) : 0;
+}
+
+function treemapNested(spec: ChartSpec, d: ChartData, b: Box): string {
+  const out: string[] = [];
+  const place = (list: TNode[], x: number, y: number, w: number, h: number, depth: number) => {
+    const sorted = [...list].sort((a, c) => c.v - a.v);
+    const split = (nodes: TNode[], sx: number, sy: number, sw: number, sh: number) => {
+      if (!nodes.length) return;
+      if (nodes.length === 1) {
+        const n = nodes[0];
+        const parent = n.kids.length > 0 && sw > 36 && sh > 36;
+        out.push(`<rect x="${r1(sx)}" y="${r1(sy)}" width="${r1(sw)}" height="${r1(sh)}" fill="${color(n.top)}" fill-opacity="${parent ? 0.28 + depth * 0.1 : 0.95 - Math.min(0.3, depth * 0.1)}" stroke="var(--cell-bg, #fff)" stroke-width="2"><title>${esc(n.name)}: ${fmt(n.v)}</title></rect>`);
+        if (sw > 40 && sh > 16) out.push(text(sx + 5, sy + 13, ellipsis(n.name, Math.floor(sw / 6.5)), { anchor: 'start', fill: parent ? 'currentColor' : '#fff', size: 11, bold: true }));
+        if (!parent && sw > 40 && sh > 32 && spec.labels) out.push(text(sx + 5, sy + 27, shown(spec.labelFmt, n.v), { anchor: 'start', fill: '#fff', size: 10 }));
+        if (parent) place(n.kids, sx + 3, sy + 18, sw - 6, sh - 21, depth + 1);
+        return;
+      }
+      const total = nodes.reduce((a, n) => a + n.v, 0);
+      let acc = 0;
+      let k = 0;
+      while (k < nodes.length - 1 && acc + nodes[k].v <= total / 2) acc += nodes[k++].v;
+      if (k === 0) {
+        acc = nodes[0].v;
+        k = 1;
+      }
+      const f = acc / total;
+      if (sw >= sh) {
+        split(nodes.slice(0, k), sx, sy, sw * f, sh);
+        split(nodes.slice(k), sx + sw * f, sy, sw * (1 - f), sh);
+      } else {
+        split(nodes.slice(0, k), sx, sy, sw, sh * f);
+        split(nodes.slice(k), sx, sy + sh * f, sw, sh * (1 - f));
+      }
+    };
+    split(sorted, x, y, w, h);
+  };
+  place(treeOf(d), b.x, b.y, b.w, b.h, 0);
+  return out.join('');
+}
+
+function sunburstNested(d: ChartData, b: Box): string {
+  const roots = treeOf(d);
+  const levels = Math.max(1, depthOf(roots));
+  const cx = b.x + b.w / 2;
+  const cy = b.y + b.h / 2;
+  const R = Math.max(20, Math.min(b.w, b.h) / 2 - 8);
+  const ring = R / levels;
+  const out: string[] = [];
+  const walk = (list: TNode[], a0: number, a1: number, depth: number) => {
+    const sum = list.reduce((a, n) => a + n.v, 0) || 1;
+    let a = a0;
+    for (const n of list) {
+      const sweep = ((a1 - a0) * n.v) / sum;
+      out.push(`<path d="${arc(cx, cy, ring * depth + (depth ? 1 : 0), ring * (depth + 1), a, a + sweep)}" fill="${color(n.top)}" fill-opacity="${1 - Math.min(0.5, depth * 0.14)}" stroke="var(--cell-bg, #fff)" stroke-width="1.25"><title>${esc(n.name)}: ${fmt(n.v)}</title></path>`);
+      const mid = a + sweep / 2;
+      const rr = ring * (depth + 0.5);
+      if (sweep * rr > 24 && ring > 16) out.push(text(cx + rr * Math.cos(mid), cy + rr * Math.sin(mid), ellipsis(n.name, Math.max(3, Math.floor((sweep * rr) / 6))), { fill: '#fff', size: 10, base: 'central', bold: true }));
+      walk(n.kids, a, a + sweep, depth + 1);
+      a += sweep;
+    }
+  };
+  walk(roots, -Math.PI / 2, (Math.PI * 3) / 2, 0);
+  return out.join('');
+}
+
 function treemap(spec: ChartSpec, d: ChartData, b: Box): string {
+  if (d.paths?.length) return treemapNested(spec, d, b);
   const items = d.series[0].vals.map((v, i) => ({ v: num(v) && v > 0 ? v : 0, i })).filter((x) => x.v > 0).sort((a, c) => c.v - a.v);
   const out: string[] = [];
   const split = (list: typeof items, x: number, y: number, w: number, h: number) => {
@@ -468,6 +703,7 @@ function treemap(spec: ChartSpec, d: ChartData, b: Box): string {
 }
 
 function sunburst(spec: ChartSpec, d: ChartData, b: Box): string {
+  if (d.paths?.length) return sunburstNested(d, b);
   const cx = b.x + b.w / 2;
   const cy = b.y + b.h / 2;
   const R = Math.max(20, Math.min(b.w, b.h) / 2 - 8);
@@ -586,29 +822,37 @@ function radar(_spec: ChartSpec, d: ChartData, b: Box): string {
 }
 
 function timeline(_spec: ChartSpec, d: ChartData, b: Box): string {
-  const start = d.series[0]?.vals ?? [];
-  const second = d.series[1]?.vals ?? [];
-  const rows = d.cats.map((c, k) => {
+  const labeled = d.series.length >= 3 && !d.series[0].vals.some(num);
+  const start = d.series[labeled ? 1 : 0]?.vals ?? [];
+  const second = d.series[labeled ? 2 : 1]?.vals ?? [];
+  const bars = d.cats.map((c, k) => {
     const a = start[k];
     let z = second[k];
     if (!num(a)) return null;
     if (!num(z)) z = a + 1;
     if (z < a) z = a + z;
-    return { c, a, z };
-  }).filter((x): x is { c: string; a: number; z: number } => !!x);
-  if (!rows.length) return text(b.x + b.w / 2, b.y + b.h / 2, 'Timeline needs task, start and end columns', { op: 0.6 });
-  const sc = nice(Math.min(...rows.map((r) => r.a)), Math.max(...rows.map((r) => r.z)), 6);
+    return { c, a, z, name: labeled ? d.series[0].txt[k] || c : c };
+  }).filter((x): x is { c: string; a: number; z: number; name: string } => !!x);
+  if (!bars.length) return text(b.x + b.w / 2, b.y + b.h / 2, 'Timeline needs task, start and end columns', { op: 0.6 });
+  const order: string[] = [];
+  for (const r of bars) if (!order.includes(r.c)) order.push(r.c);
+  const row = (c: string) => order.indexOf(c);
+  const lanes = labeled ? order.length : bars.length;
+  const sc = nice(Math.min(...bars.map((r) => r.a)), Math.max(...bars.map((r) => r.z)), 6);
   const dates = sc.min > 20000;
   const fmtT = (v: number) => (dates ? serial(v) : fmt(v));
-  const lw = Math.min(110, labelWidth(rows.map((r) => ellipsis(r.c, 16))));
+  const lw = Math.min(110, labelWidth((labeled ? order : bars.map((r) => r.c)).map((s) => ellipsis(s, 16))));
   const p: Box = { x: b.x + lw, y: b.y + 6, w: Math.max(10, b.w - lw - 14), h: Math.max(10, b.h - 28) };
   const px = (v: number) => p.x + ((v - sc.min) / (sc.max - sc.min)) * p.w;
-  const rh = p.h / rows.length;
+  const rh = p.h / lanes;
   const out: string[] = [];
   sc.ticks.forEach((t) => out.push(line(px(t), p.y, px(t), p.y + p.h), text(px(t), p.y + p.h + 14, fmtT(t), { size: 10 })));
-  rows.forEach((r, i) => {
-    out.push(text(p.x - 6, p.y + rh * (i + 0.5), ellipsis(r.c, 16), { anchor: 'end', base: 'central' }));
-    out.push(`<rect x="${r1(px(r.a))}" y="${r1(p.y + rh * i + rh * 0.2)}" width="${r1(Math.max(3, px(r.z) - px(r.a)))}" height="${r1(rh * 0.6)}" rx="3" fill="${color(i)}"><title>${esc(r.c)}: ${fmtT(r.a)} to ${fmtT(r.z)}</title></rect>`);
+  (labeled ? order : bars.map((r) => r.c)).forEach((c, i) => out.push(text(p.x - 6, p.y + rh * (i + 0.5), ellipsis(c, 16), { anchor: 'end', base: 'central' })));
+  bars.forEach((r, i) => {
+    const lane = labeled ? row(r.c) : i;
+    const w = Math.max(3, px(r.z) - px(r.a));
+    out.push(`<rect x="${r1(px(r.a))}" y="${r1(p.y + rh * lane + rh * 0.2)}" width="${r1(w)}" height="${r1(rh * 0.6)}" rx="3" fill="${color(labeled ? i : lane)}"><title>${esc(r.name)}: ${fmtT(r.a)} to ${fmtT(r.z)}</title></rect>`);
+    if (labeled && w > 36 && rh > 14) out.push(text(px(r.a) + 4, p.y + rh * (lane + 0.5), ellipsis(r.name, Math.floor(w / 6.2)), { anchor: 'start', base: 'central', fill: '#fff', size: 10 }));
   });
   return out.join('');
 }
@@ -648,7 +892,8 @@ function org(_spec: ChartSpec, d: ChartData, b: Box): string {
   const bw = Math.min(110, b.w / Math.max(1, leaf) - 8);
   const colW = b.w / Math.max(1, leaf);
   const rowH = b.h / (maxDepth + 1);
-  const bh = Math.min(30, rowH - 14);
+  const sub = d.series[1]?.txt ?? [];
+  const bh = Math.min(sub.some(Boolean) ? 40 : 30, rowH - 14);
   const pos = (i: number) => [b.x + colW * ((xpos.get(i) ?? 0) + 0.5), b.y + rowH * (depth.get(i) ?? 0) + rowH / 2 - bh / 2] as const;
   const out: string[] = [];
   for (const [p, cs] of kids) {
@@ -663,12 +908,54 @@ function org(_spec: ChartSpec, d: ChartData, b: Box): string {
   }
   for (const i of depth.keys()) {
     const [x, y] = pos(i);
-    out.push(`<rect x="${r1(x - bw / 2)}" y="${r1(y)}" width="${r1(bw)}" height="${r1(bh)}" rx="4" fill="${color(depth.get(i) ?? 0)}"/>${text(x, y + bh / 2, ellipsis(names[i], Math.max(3, Math.floor(bw / 6.5))), { fill: '#fff', base: 'central', size: 11, bold: true })}`);
+    const two = !!sub[i] && bh >= 34;
+    out.push(`<rect x="${r1(x - bw / 2)}" y="${r1(y)}" width="${r1(bw)}" height="${r1(bh)}" rx="4" fill="${color(depth.get(i) ?? 0)}"><title>${esc(names[i])}${sub[i] ? `, ${esc(sub[i])}` : ''}</title></rect>${text(x, y + (two ? bh * 0.35 : bh / 2), ellipsis(names[i], Math.max(3, Math.floor(bw / 6.5))), { fill: '#fff', base: 'central', size: 11, bold: true })}${two ? text(x, y + bh * 0.72, ellipsis(sub[i], Math.max(3, Math.floor(bw / 5.5))), { fill: '#fff', base: 'central', size: 9, op: 0.9 }) : ''}`);
   }
   return out.join('');
 }
 
+let mapSeq = 0;
+
+function mapChart(spec: ChartSpec, d: ChartData, b: Box): string {
+  const vals = d.series[0]?.vals ?? [];
+  const by = new Map<string, number>();
+  let missed = 0;
+  d.cats.forEach((c, k) => {
+    const hit = countryFor(c);
+    const v = vals[k];
+    if (!num(v)) return;
+    if (!hit) missed++;
+    else by.set(hit[2], (by.get(hit[2]) ?? 0) + v);
+  });
+  const nums = [...by.values()];
+  const lo = nums.length ? Math.min(...nums) : 0;
+  const hi = nums.length ? Math.max(...nums) : 1;
+  const barH = 26;
+  const k = Math.min(b.w / WORLD_W, (b.h - barH) / WORLD_H);
+  const tx = b.x + (b.w - WORLD_W * k) / 2;
+  const ty = b.y + (b.h - barH - WORLD_H * k) / 2;
+  const id = `fcmap${mapSeq++}`;
+  const out: string[] = [];
+  const base = color(0);
+  out.push(`<defs><linearGradient id="${id}"><stop offset="0" stop-color="${ramp(0, base)}"/><stop offset="1" stop-color="${ramp(1, base)}"/></linearGradient></defs>`);
+  out.push(`<g transform="translate(${r1(tx)} ${r1(ty)}) scale(${Math.round(k * 1000) / 1000})">`);
+  for (const c of WORLD) {
+    const v = by.get(c[2]);
+    const fill = v === undefined ? 'currentColor' : ramp((v - lo) / (hi - lo || 1), base);
+    out.push(`<path d="${c[4]}" fill="${fill}"${v === undefined ? ' fill-opacity="0.08"' : ''} stroke="var(--cell-bg, #fff)" stroke-width="${r1(0.8 / Math.max(k, 0.05))}" stroke-linejoin="round"><title>${esc(c[0])}${v === undefined ? '' : `: ${shown(spec.labelFmt, v)}`}</title></path>`);
+  }
+  out.push('</g>');
+  const bw = Math.min(160, b.w * 0.5);
+  const by0 = b.y + b.h - barH + 6;
+  const bx = b.x + (b.w - bw) / 2;
+  out.push(`<rect x="${r1(bx)}" y="${r1(by0)}" width="${r1(bw)}" height="8" rx="2" fill="url(#${id})"/>`);
+  out.push(text(bx - 4, by0 + 4, shown(spec.labelFmt, lo), { anchor: 'end', base: 'central', size: 10 }), text(bx + bw + 4, by0 + 4, shown(spec.labelFmt, hi), { anchor: 'start', base: 'central', size: 10 }));
+  if (missed) out.push(text(b.x + b.w - 2, b.y + b.h - 4, `${missed} not on the map`, { anchor: 'end', size: 9, op: 0.6 }));
+  return out.join('');
+}
+
 const GENERATORS: Record<string, Gen> = {
+  map: mapChart,
   scatter: xy,
   bubble: xy,
   pie,
