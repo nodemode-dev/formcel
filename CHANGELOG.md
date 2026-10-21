@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.24.0 · 2026-10-21
+
+- New template, Formatting check (Example projects):
+  - 51 number format cases from Microsoft's format pages, each with the page's result, the cell shown with that format, and `TEXT` of the same code. All 51 match.
+  - Every cell style setting, the 24 built-in cell styles, a merge, one conditional formatting rule of each kind, and the link examples, each row saying what it should look like.
+- Templates can now carry number formats, styles, merges, conditional formatting and links.
+- Fixed: a time with a fraction of a second, such as `[ss].00`, lost the fraction when the workbook was saved.
+- Fixed: dark text colours from heading and title styles were unreadable on the dark grid; they are now lightened where the cell has no fill.
+- Formatting (Phase 3) is complete. Checking against a workbook made in Excel moves to Phase 4, which brings .xlsx import.
+
 ## 0.23.0 · 2026-10-21
 
 - Links in cells:

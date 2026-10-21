@@ -2,20 +2,20 @@
 
 Spreadsheets in the form family. An open alternative to Excel and Google Sheets, built so that Claude Code, Codex or Cursor can read and edit a live workbook while you watch.
 
-Version 0.23.0 · Apache-2.0 · macOS, Windows, Linux (browser now, Tauri desktop later)
+Version 0.24.0 · Apache-2.0 · macOS, Windows, Linux (browser now, Tauri desktop later)
 
 **Stack.** Vanilla TypeScript and Vite · Python 3.12 and FastAPI · one calculation engine in Rust, compiled to WebAssembly for the window and to a Python module for the engine process · Tauri 2 later.
 
 ## Status
 
-0.23.0 finishes the building work of Phase 3 (formatting) in `DEV_PLAN.md` with links in cells: HYPERLINK, links made by typing a web or email address, Insert link (Ctrl+K), and a link chip to open, edit or remove. Phase 3's exit check is still to run. Phase 2, the formula engine, closed at 0.16.0; FormCel now has 108 functions.
+0.24.0 closes Phase 3 (formatting) in `DEV_PLAN.md` with its exit check: the Formatting check template, where all 51 number format cases from Microsoft's format pages show as the pages say, and every style, rule and link example looks as its row describes. Checking against a workbook made in Excel moves to Phase 4, which brings .xlsx import. Phase 2, the formula engine, closed at 0.16.0; FormCel has 108 functions.
 
-| Area | In 0.23.0 |
+| Area | In 0.24.0 |
 | --- | --- |
 | Home | Start, Recent, Templates (category chips and search) and Trash, after formdeck; thumbnails of each workbook's first sheet |
 | Saving | `.fcel` files in `~/FormCel/Workbooks`, saved as you type; rename in the top bar; Trash with restore |
 | Sheets | Several per workbook, tabs to switch, a button to add one; double-click a tab to rename it; the tab menu moves, colours and deletes; each sheet keeps its sizes, hidden rows and columns, frozen panes and zoom |
-| Templates | 35: six made for FormCel, 28 from form.md 0.46.0 with their data, and Function conformance (Microsoft's function examples, checked live) |
+| Templates | 36: six made for FormCel, 28 from form.md 0.46.0 with their data, Function conformance (Microsoft's function examples, checked live) and Formatting check (number formats, styles, rules and links, checked live) |
 | Formulas | `=` formulas with cell, range, column, row and cross-sheet references, `$` anchors, arithmetic, text and comparison operators, dates and times typed in common forms, array constants such as `{1,2;3,4}`, results of several cells that spill into the cells beside them (`#SPILL!` when something is in the way), workbook names typed in the Name Box and used in formulas (`=SUM(Sales)`), LET for local names and LAMBDA for your own functions (`=LAMBDA(x,x*x)(4)`, or saved under a name and called as `=Square(4)`), 108 functions (HYPERLINK, math, date and time, aggregation, criteria such as SUMIFS and COUNTIFS, lookups such as VLOOKUP, INDEX, MATCH and XLOOKUP, arrays such as FILTER, SORT, UNIQUE, SEQUENCE, VSTACK, TAKE, DROP and WRAPROWS, LAMBDA helpers such as MAP, REDUCE and BYROW, logic, text including TEXTSPLIT, EXACT and TEXT with Excel's number format codes (`=TEXT(A1,"$#,##0.00")`, `"0.0%"`, `"# ?/?"`, `"mmmm d, yyyy"`, `"[h]:mm"`), information including ERROR.TYPE), recalculation of dependents through a kept dependency graph (one edit in a 100,000-formula sheet in a few milliseconds), `#REF!` for circular references, references kept right through insert, delete and sheet rename, and the fill handle moving relative references |
 | Engine | Rust core, one build for the window (WebAssembly) and one for the engine process (Python): a chunked cell store for 1,048,576 rows by 16,384 columns, typed input (numbers, text, TRUE and FALSE), undo and redo of 500 steps, batched edits, viewport reads, the used range, Ctrl+arrow data edges, and inserting and deleting rows and columns as one undo step |
 | Grid | Canvas grid with headers and selection of cells, ranges, rows, columns and the whole sheet; arrows, Ctrl+arrows, Ctrl+Home, Ctrl+End, Home, Page Up and Down; typing, F2 and Alt+Enter; Name Box and formula bar; formula autocomplete with argument tips in the cell and the formula bar; undo, redo, clear; copy, cut and paste of tab-separated text; resizing rows and columns, autofit columns; freeze top row, first column or panes at the active cell; insert, delete, hide and unhide rows and columns; the fill handle (copies, number and date steps, weekday and month names, numbered text) and double-click to fill down; zoom 50% to 200%; right-click menus on cells and headers; outline groups of rows and columns up to 7 levels, with collapse and expand buttons and level buttons; split panes at the active cell that scroll on their own, with draggable split bars |
