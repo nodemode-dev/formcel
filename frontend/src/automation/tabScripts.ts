@@ -1,4 +1,5 @@
 import { generate } from './recorder';
+import { check } from './scriptCheck';
 import type { Recorded } from '../grid/grid';
 import { el, esc, setText } from './dom';
 import { SAMPLE, uid, type Env, type Script } from './model';
@@ -18,6 +19,9 @@ export class ScriptsTab {
   private readonly tEvery: HTMLInputElement;
   private readonly fns: HTMLElement;
   private readonly hint: HTMLElement;
+  private readonly diag: HTMLElement;
+  private diagKey = '\u0000';
+  private diagTimer = 0;
   private recording: Recorded[] | null = null;
   private lineCount = 0;
   private timers = new Map<string, number>();
@@ -27,7 +31,8 @@ export class ScriptsTab {
       <div class="fc-auto-row"><select class="fc-auto-input fc-grow" aria-label="Script"></select><button type="button" class="fc-btn" data-a="new">New</button><button type="button" class="fc-btn fc-btn-danger" data-a="delete">Delete</button></div>
       <input class="fc-auto-input" data-f="name" aria-label="Script name" spellcheck="false" autocomplete="off">
       <div class="fc-code"><pre class="fc-code-lines" aria-hidden="true"></pre><textarea class="fc-code-text" aria-label="Script code" spellcheck="false" wrap="off" autocapitalize="off" autocomplete="off"></textarea></div>
-      <div class="fc-auto-row"><button type="button" class="fc-btn fc-btn-primary" data-a="run">Run</button><button type="button" class="fc-btn" data-a="stop" disabled>Stop</button><button type="button" class="fc-btn" data-a="record" aria-pressed="false">Record actions</button><button type="button" class="fc-btn fc-btn-ghost" data-a="button">Add button</button></div>
+      <ul class="fc-auto-diag" aria-label="Checks" aria-live="polite"></ul>
+      <div class="fc-auto-row"><button type="button" class="fc-btn fc-btn-primary" data-a="run">Run</button><button type="button" class="fc-btn" data-a="stop" disabled>Stop</button><button type="button" class="fc-btn" data-a="record" aria-pressed="false">Record actions</button><button type="button" class="fc-btn fc-btn-ghost" data-a="button">Add button</button><label class="fc-auto-small"><input type="checkbox" data-t="relative"> Record relative to the selected cell</label></div>
       <div class="fc-auto-row fc-auto-small"><label><input type="checkbox" data-t="open"> Run when the workbook opens</label><label><input type="checkbox" data-t="edit"> Run after an edit</label><label>Every <input class="fc-auto-num" type="number" min="0" max="1440" data-t="every"> min while open</label></div>
       <p class="fc-auto-hint fc-auto-fns"></p>
       <p class="fc-auto-hint fc-auto-msg" aria-live="polite"></p>
@@ -46,6 +51,7 @@ export class ScriptsTab {
     this.tEvery = q('[data-t="every"]');
     this.fns = q('.fc-auto-fns');
     this.hint = q('.fc-auto-msg');
+    this.diag = q('.fc-auto-diag');
     this.root.addEventListener('click', (e) => {
       const b = (e.target as HTMLElement).closest<HTMLElement>('[data-a]');
       if (!b) return;
@@ -73,6 +79,8 @@ export class ScriptsTab {
       this.gutter();
       this.env.changed();
       this.scanSoon();
+      window.clearTimeout(this.diagTimer);
+      this.diagTimer = window.setTimeout(() => this.diagnose(), 400);
     });
     this.text.addEventListener('scroll', () => {
       this.lines.scrollTop = this.text.scrollTop;
@@ -122,6 +130,17 @@ export class ScriptsTab {
     this.gutter();
     this.lines.scrollTop = 0;
     this.text.scrollTop = 0;
+    this.diagnose();
+  }
+
+  private diagnose(): void {
+    const s = this.current();
+    const found = s ? check(s.code) : [];
+    const key = found.map((d) => `${d.level}${d.line}${d.message}`).join('\n');
+    if (key === this.diagKey) return;
+    this.diagKey = key;
+    this.diag.replaceChildren(...found.map((d) => Object.assign(el('li', `fc-diag-${d.level}`), { textContent: `Line ${d.line}: ${d.message}` })));
+    this.diag.hidden = !found.length;
   }
 
   private gutter(): void {
@@ -197,7 +216,8 @@ export class ScriptsTab {
     }
     const names = this.env.sheets();
     const n = this.env.auto.scripts.filter((s) => s.name.startsWith('Recorded')).length + 1;
-    this.create(generate(acts, (i) => names[i] ?? names[0], `Recorded actions ${n}`), `Recorded actions ${n}`);
+    const relative = this.root.querySelector<HTMLInputElement>('[data-t="relative"]')?.checked ?? false;
+    this.create(generate(acts, (i) => names[i] ?? names[0], `Recorded actions ${n}`, relative), `Recorded actions ${n}`);
     setText(this.hint, `Recorded ${acts.length} action${acts.length === 1 ? '' : 's'}. Run it to replay them.`);
   }
 
