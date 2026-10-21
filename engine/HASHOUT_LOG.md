@@ -175,6 +175,20 @@ Criteria take a leading `<=`, `>=`, `<>`, `<`, `>` or `=`; the rest is read as a
 
 `find` is the one search behind VLOOKUP, HLOOKUP, MATCH, XMATCH and XLOOKUP. Modes: exact; exact with wildcards (VLOOKUP and MATCH exact, XLOOKUP and XMATCH mode 2); sorted ascending, largest at or below the key, stopping at the first larger value (VLOOKUP approximate, MATCH 1); sorted descending (MATCH -1); and exact or next smaller or larger by a full scan (XLOOKUP and XMATCH -1 and 1). Values of another type never match. XLOOKUP returns a single cell, so its return range must be one row or column of the lookup's length; spilling a multi-column result waits for dynamic arrays. Added with them: IFS, SWITCH, CHOOSE. As with the first tranche, results are FormCel's reading and are not yet checked against vendor function pages.
 
+### Typed input: currency, percent, errors
+- refers-to: src/lib.rs :: Value::parse_input
+- kind: explainer
+- logged: v0.9.0 · 2026-10-21
+
+Besides plain numbers with thousands commas, input now reads `$1,234.50`, `-$5` and `$-5` as numbers, `50%` as 0.5, and an error literal (`#N/A`, `#REF!` and the rest) as that error value. Microsoft's function pages give their example data in these forms and tell the reader to paste it into a sheet, so the conformance run depended on it. The cell keeps only the number: the currency or percent look returns with number formats in Phase 3, so until then a template cell typed as `$12.00` shows 12.
+
+### Conformance against Microsoft's function pages
+- refers-to: src/eval.rs (all functions); sidecar comparison/conformance/
+- kind: explainer
+- logged: v0.9.0 · 2026-10-21
+
+Every example table on Microsoft's page for each function (data pasted at A1 as the pages say, formula, stated result) was run through this engine: 123 pass, 6 fail, 8 skipped (3 need dates, 5 have their data only in a picture). The 6 failures all need features not built yet: array constants (2), a function returning a reference used as a range end (2), multi-area references (1), INDEX with row 0 (1). The run found two real gaps, both fixed in v0.9.0: typed error values stayed text, and ISNA, ISERR, ISLOGICAL, ISREF and ISNONTEXT were missing. The extraction and runner live in the sidecar (they are research tools, not repo tests); `CONFORMANCE.md` there lists every case.
+
 ### The dependency graph is kept between edits
 - refers-to: src/graph.rs :: Graph, Fx; src/lib.rs :: ensure_graph, set_raw, recalc_with, evaluate
 - kind: rationale

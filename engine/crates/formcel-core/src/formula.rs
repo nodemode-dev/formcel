@@ -26,7 +26,7 @@ impl ErrKind {
         }
     }
 
-    fn parse(s: &str) -> Option<ErrKind> {
+    pub fn parse(s: &str) -> Option<ErrKind> {
         [ErrKind::Div0, ErrKind::Value, ErrKind::Ref, ErrKind::Name, ErrKind::Na, ErrKind::Num, ErrKind::Null, ErrKind::Error]
             .into_iter()
             .find(|e| e.text().eq_ignore_ascii_case(s))

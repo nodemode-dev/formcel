@@ -37,10 +37,38 @@ impl Value {
             "FALSE" => return Value::Bool(false),
             _ => {}
         }
-        match t.replace(',', "").parse::<f64>() {
-            Ok(n) if n.is_finite() => Value::Number(n),
-            _ => Value::Text(raw.to_string()),
+        if t.starts_with('#') {
+            if let Some(e) = ErrKind::parse(t) {
+                return Value::Error(e);
+            }
         }
+        let plain = t.replace(',', "");
+        if let Ok(n) = plain.parse::<f64>() {
+            if n.is_finite() {
+                return Value::Number(n);
+            }
+        }
+        if let Some(p) = plain.strip_suffix('%') {
+            if let Ok(n) = p.trim().parse::<f64>() {
+                return Value::Number(n / 100.0);
+            }
+        }
+        let (neg, body) = match plain.strip_prefix('-') {
+            Some(b) => (true, b),
+            None => (false, plain.as_str()),
+        };
+        if let Some(m) = body.strip_prefix('$') {
+            let (neg2, m) = match m.strip_prefix('-') {
+                Some(b) => (true, b),
+                None => (false, m),
+            };
+            if let Ok(n) = m.parse::<f64>() {
+                if n.is_finite() && !m.starts_with('+') {
+                    return Value::Number(if neg != neg2 { -n } else { n });
+                }
+            }
+        }
+        Value::Text(raw.to_string())
     }
 }
 
