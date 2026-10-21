@@ -1,4 +1,5 @@
 use crate::formula::Area;
+use crate::numfmt;
 use crate::wire::{escape, unescape};
 use crate::{eval, Addr, Effect, EngineError, Tx, Value, Workbook};
 
@@ -10,6 +11,71 @@ pub enum Crit {
     Font(String),
     Top { bottom: bool, n: f64, percent: bool },
     Avg(bool),
+    Dates { keep: Vec<String>, blanks: bool },
+    Dyn(String),
+    Icon(String),
+}
+
+pub const DYNAMIC: [&str; 33] = [
+    "today", "yesterday", "tomorrow", "thisweek", "lastweek", "nextweek", "thismonth", "lastmonth", "nextmonth", "thisquarter", "lastquarter", "nextquarter", "thisyear", "lastyear", "nextyear", "yeartodate", "q1", "q2", "q3", "q4", "m1",
+    "m2", "m3", "m4", "m5", "m6", "m7", "m8", "m9", "m10", "m11", "m12", "null",
+];
+
+fn span_of(name: &str, today: f64) -> Option<(f64, f64)> {
+    let t = today.floor();
+    let (y, m, _) = numfmt::ymd(t)?;
+    let month = |shift: i64| -> Option<(f64, f64)> { Some((numfmt::serial(y, m + shift, 1)?, numfmt::serial(y, m + shift + 1, 1)? - 1.0)) };
+    let quarter = |shift: i64| -> Option<(f64, f64)> {
+        let q0 = (m - 1) / 3 * 3 + 1 + shift * 3;
+        Some((numfmt::serial(y, q0, 1)?, numfmt::serial(y, q0 + 3, 1)? - 1.0))
+    };
+    let week = |shift: f64| {
+        let start = t - (numfmt::weekday(t) - 1) as f64 + shift * 7.0;
+        Some((start, start + 6.0))
+    };
+    match name {
+        "today" => Some((t, t)),
+        "yesterday" => Some((t - 1.0, t - 1.0)),
+        "tomorrow" => Some((t + 1.0, t + 1.0)),
+        "thisweek" => week(0.0),
+        "lastweek" => week(-1.0),
+        "nextweek" => week(1.0),
+        "thismonth" => month(0),
+        "lastmonth" => month(-1),
+        "nextmonth" => month(1),
+        "thisquarter" => quarter(0),
+        "lastquarter" => quarter(-1),
+        "nextquarter" => quarter(1),
+        "thisyear" => Some((numfmt::serial(y, 1, 1)?, numfmt::serial(y + 1, 1, 1)? - 1.0)),
+        "lastyear" => Some((numfmt::serial(y - 1, 1, 1)?, numfmt::serial(y, 1, 1)? - 1.0)),
+        "nextyear" => Some((numfmt::serial(y + 1, 1, 1)?, numfmt::serial(y + 2, 1, 1)? - 1.0)),
+        "yeartodate" => Some((numfmt::serial(y, 1, 1)?, t)),
+        _ => None,
+    }
+}
+
+fn dynamic_hit(name: &str, n: f64, today: f64) -> bool {
+    let n = n.floor();
+    if let Some(q) = name.strip_prefix('q').and_then(|d| d.parse::<i64>().ok()) {
+        return numfmt::ymd(n).is_some_and(|(_, m, _)| (m - 1) / 3 + 1 == q);
+    }
+    if let Some(k) = name.strip_prefix('m').and_then(|d| d.parse::<i64>().ok()) {
+        return numfmt::ymd(n).is_some_and(|(_, m, _)| m == k);
+    }
+    span_of(name, today).is_some_and(|(lo, hi)| n >= lo && n <= hi)
+}
+
+fn date_kept(keep: &[String], n: f64) -> bool {
+    let Some((y, m, d)) = numfmt::ymd(n) else { return false };
+    keep.iter().any(|k| {
+        let p: Vec<i64> = k.split('-').filter_map(|x| x.parse().ok()).collect();
+        match p.as_slice() {
+            [a] => *a == y,
+            [a, b] => *a == y && *b == m,
+            [a, b, c] => *a == y && *b == m && *c == d,
+            _ => false,
+        }
+    })
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -91,6 +157,9 @@ impl Filter {
                         "font" => Crit::Font(arg(3)),
                         "top" => Crit::Top { bottom: arg(3) == "bottom", n: arg(4).parse::<f64>().ok().filter(|x| *x >= 1.0 && *x <= 500.0)?, percent: arg(5) == "%" },
                         "avg" => Crit::Avg(arg(3) != "below"),
+                        "dates" => Crit::Dates { blanks: arg(3) == "1", keep: p.iter().skip(4).cloned().collect() },
+                        "dyn" => Crit::Dyn(Some(arg(3).to_lowercase()).filter(|n| DYNAMIC.contains(&n.as_str()))?),
+                        "icon" => Crit::Icon(arg(3)),
                         _ => return None,
                     };
                     cols.retain(|(c, _)| *c != col);
@@ -128,6 +197,14 @@ impl Filter {
                 Crit::Font(p) => push_fields(&mut out, &["font", p]),
                 Crit::Top { bottom, n, percent } => push_fields(&mut out, &["top", if *bottom { "bottom" } else { "top" }, &n.to_string(), if *percent { "%" } else { "" }]),
                 Crit::Avg(above) => push_fields(&mut out, &["avg", if *above { "above" } else { "below" }]),
+                Crit::Dates { keep, blanks } => {
+                    push_fields(&mut out, &["dates", if *blanks { "1" } else { "0" }]);
+                    for k in keep {
+                        push_fields(&mut out, &[k]);
+                    }
+                }
+                Crit::Dyn(n) => push_fields(&mut out, &["dyn", n]),
+                Crit::Icon(i) => push_fields(&mut out, &["icon", i]),
             }
             out.push('\n');
         }
@@ -295,6 +372,22 @@ impl Workbook {
                 let cut = nums[count.clamp(1, nums.len()) - 1];
                 texts.iter().map(|(v, _)| matches!(v, Value::Number(x) if if *bottom { *x <= cut } else { *x >= cut })).collect()
             }
+            Crit::Dates { keep, blanks } => texts
+                .iter()
+                .map(|(v, s)| match v {
+                    Value::Number(n) => date_kept(keep, *n),
+                    _ if matches!(v, Value::Empty) || s.is_empty() => *blanks,
+                    _ => false,
+                })
+                .collect(),
+            Crit::Dyn(name) => {
+                let today = numfmt::now().floor();
+                texts.iter().map(|(v, _)| matches!(v, Value::Number(n) if dynamic_hit(name, *n, today))).collect()
+            }
+            Crit::Icon(want) => {
+                let cf: std::collections::HashMap<u32, crate::cf::Paint> = self.cf_in(sheet, Addr { row: area.r0 + 1, col }, Addr { row: area.r1, col }).into_iter().map(|(a, p)| (a.row, p)).collect();
+                rows.iter().map(|r| cf.get(r).and_then(|p| p.icon.as_ref()).map_or_else(|| want == "none", |(set, i)| format!("{set}:{i}") == *want)).collect()
+            }
             Crit::Avg(above) => {
                 let nums: Vec<f64> = texts.iter().filter_map(|(v, _)| if let Value::Number(x) = v { Some(*x) } else { None }).collect();
                 let mean = nums.iter().sum::<f64>() / nums.len().max(1) as f64;
@@ -346,6 +439,48 @@ impl Workbook {
         }
         items.sort_by(|a, b| crate::sort::order(&a.0, &b.0, false, false).then_with(|| a.1.to_lowercase().cmp(&b.1.to_lowercase())));
         (items.into_iter().map(|(_, s)| s).collect(), blanks, more)
+    }
+
+    pub fn filter_dates(&self, sheet: usize, col: u32) -> (Vec<(i64, i64, i64)>, bool) {
+        let Some(f) = self.filter(sheet) else { return (Vec::new(), false) };
+        let keep = self.shown_rows(sheet, &f, Some(col));
+        let mut days = std::collections::BTreeSet::new();
+        let mut blanks = false;
+        for (i, k) in keep.iter().enumerate() {
+            if !k {
+                continue;
+            }
+            let a = Addr { row: f.area.r0 + 1 + i as u32, col };
+            let (v, s) = self.cell_text(sheet, a);
+            match v {
+                Value::Number(n) if self.fmt(sheet, a).is_some_and(|f| f.is_date()) => match numfmt::ymd(n) {
+                    Some(d) => {
+                        days.insert(d);
+                    }
+                    None => return (Vec::new(), false),
+                },
+                Value::Empty => blanks = true,
+                _ if s.is_empty() => blanks = true,
+                _ => return (Vec::new(), false),
+            }
+        }
+        (days.into_iter().collect(), blanks)
+    }
+
+    pub fn filter_icons(&self, sheet: usize, col: u32) -> Vec<String> {
+        let Some(f) = self.filter(sheet) else { return Vec::new() };
+        let keep = self.shown_rows(sheet, &f, Some(col));
+        let cf: std::collections::HashMap<u32, crate::cf::Paint> = self.cf_in(sheet, Addr { row: f.area.r0 + 1, col }, Addr { row: f.area.r1, col }).into_iter().map(|(a, p)| (a.row, p)).collect();
+        let mut out: Vec<String> = Vec::new();
+        for (i, k) in keep.iter().enumerate() {
+            if let (true, Some((set, n))) = (*k, cf.get(&(f.area.r0 + 1 + i as u32)).and_then(|p| p.icon.as_ref())) {
+                let id = format!("{set}:{n}");
+                if !out.contains(&id) {
+                    out.push(id);
+                }
+            }
+        }
+        out
     }
 
     pub fn filter_colors(&self, sheet: usize, col: u32) -> (Vec<String>, Vec<String>) {

@@ -842,9 +842,15 @@ pub extern "C" fn fc_reapply_filter(id: u32, sheet: u32) -> i32 {
 /// The list a column's filter offers: `v` lines of shown text, a `b` line when blanks exist, `m` when the list stopped at its limit, then `f` and `t` lines for fill and font colours.
 #[no_mangle]
 pub extern "C" fn fc_filter_values(id: u32, sheet: u32, col: u32) -> i32 {
-    match with_book(id, |wb| (wb.filter_values(sheet as usize, col), wb.filter_colors(sheet as usize, col))) {
-        Some(((values, blanks, more), (fills, fonts))) => {
+    match with_book(id, |wb| (wb.filter_values(sheet as usize, col), wb.filter_colors(sheet as usize, col), wb.filter_dates(sheet as usize, col).0, wb.filter_icons(sheet as usize, col))) {
+        Some(((values, blanks, more), (fills, fonts), days, icons)) => {
             let mut s = String::new();
+            for (y, m, d) in days {
+                s.push_str(&format!("d\t{y}\t{m}\t{d}\n"));
+            }
+            for i in icons {
+                s.push_str(&format!("i\t{i}\n"));
+            }
             for v in values {
                 s.push_str("v\t");
                 wire::escape(&v, &mut s);

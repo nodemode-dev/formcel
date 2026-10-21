@@ -128,6 +128,8 @@ export interface FilterList {
   more: boolean;
   fills: string[];
   fonts: string[];
+  days: [number, number, number][];
+  icons: string[];
 }
 export type CfCell = [row: number, col: number, style: string, bar: string, icon: string];
 export type StyleChange = [sheet: number, row: number, col: number, raw: string, shown: string];

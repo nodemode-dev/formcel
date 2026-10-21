@@ -539,9 +539,11 @@ function run(x: Exports, req: Request): Value {
         return { ...effect(text.slice(cut + 1)), message: unescape(text.slice(0, cut)) };
       });
     case 'filter.values': {
-      const list: FilterList = { values: [], blanks: false, more: false, fills: [], fonts: [] };
-      for (const [k, v] of lines(out(x, x.fc_filter_values(req.book, req.sheet, req.col)))) {
-        if (k === 'v') list.values.push(unescape(v ?? ''));
+      const list: FilterList = { values: [], blanks: false, more: false, fills: [], fonts: [], days: [], icons: [] };
+      for (const [k, v, m, d] of lines(out(x, x.fc_filter_values(req.book, req.sheet, req.col)))) {
+        if (k === 'd') list.days.push([Number(v), Number(m), Number(d)]);
+        else if (k === 'i') list.icons.push(v ?? '');
+        else if (k === 'v') list.values.push(unescape(v ?? ''));
         else if (k === 'b') list.blanks = true;
         else if (k === 'm') list.more = true;
         else if (k === 'f') list.fills.push(v ?? '');

@@ -2960,7 +2960,7 @@ const ARROWS: Record<string, Dir> = { ArrowUp: 'up', ArrowDown: 'down', ArrowLef
 
 const ICON_COLOURS = ['#d9363e', '#e8a33d', '#e6c229', '#7cb342', '#2e9d58'];
 
-function drawIcon(ctx: CanvasRenderingContext2D, set: string, i: number, x: number, cy: number): void {
+export function drawIcon(ctx: CanvasRenderingContext2D, set: string, i: number, x: number, cy: number): void {
   const n = set.startsWith('5') ? 5 : set.startsWith('4') ? 4 : 3;
   const tone = n === 3 ? [0, 2, 4][i] : n === 4 ? [0, 1, 3, 4][i] : i;
   ctx.save();

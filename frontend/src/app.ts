@@ -1,5 +1,6 @@
 import { engine, type Area, type Changed, type Effect, type FormatChange, type LinkChange, type Name, type Shift, type SortKeySpec } from './engine';
 import { loadSortLists, saveSortList } from './ui/sortlists';
+import { cascadeDates, collectDates, dateTree, DATE_FILTERS, iconSwatch } from './ui/filterx';
 import { colName, parseRef, type Range } from './grid/a1';
 import { Autocomplete, FUNCTIONS, type Suggestion } from './ui/autocomplete';
 import { Charts } from './charts';
@@ -39,6 +40,7 @@ interface FilterForm {
   title: HTMLElement;
   colors: HTMLElement;
   op1: HTMLSelectElement;
+  dateOps: HTMLOptGroupElement;
   v1: HTMLInputElement;
   join: HTMLSelectElement;
   op2: HTMLSelectElement;
@@ -52,7 +54,7 @@ interface FilterForm {
 const FILTER_OPS: [string, string][] = [
   ['', 'None'], ['eq', 'Equals'], ['ne', 'Does not equal'], ['gt', 'Greater than'], ['ge', 'Greater than or equal to'], ['lt', 'Less than'], ['le', 'Less than or equal to'],
   ['begins', 'Begins with'], ['notbegins', 'Does not begin with'], ['ends', 'Ends with'], ['notends', 'Does not end with'], ['contains', 'Contains'], ['notcontains', 'Does not contain'],
-  ['top', 'Top N items'], ['bottom', 'Bottom N items'], ['top%', 'Top N percent'], ['bottom%', 'Bottom N percent'], ['above', 'Above average'], ['below', 'Below average'],
+  ['between', 'Between'], ['top', 'Top N items'], ['bottom', 'Bottom N items'], ['top%', 'Top N percent'], ['bottom%', 'Bottom N percent'], ['above', 'Above average'], ['below', 'Below average'],
 ];
 
 const fieldEsc = (s: string) => s.replace(/\\/g, '\\\\').replace(/\t/g, '\\t').replace(/\n/g, '\\n').replace(/\r/g, '\\r');
@@ -1243,10 +1245,17 @@ export class App {
     const head = (await engine().readValues(o.book, this.grid.sheetIndex, info.area.r0, col, info.area.r0, col))[0]?.[2].replace(/^'/, '');
     f.title.textContent = head ? `Filter ${head}` : `Filter column ${colName(col)}`;
     const keep = crit?.[0] === 'values' ? new Set(crit.slice(2).map((s) => s.toLowerCase())) : null;
-    const blanksOn = crit?.[0] === 'values' ? crit[1] === '1' : true;
-    const items = list.values.map((v) => `<label class="fc-filter-item"><input type="checkbox" value="${escapeHtml(v)}"${!keep || keep.has(v.toLowerCase()) ? ' checked' : ''}> <span>${escapeHtml(v)}</span></label>`);
-    if (list.blanks) items.push(`<label class="fc-filter-item"><input type="checkbox" data-blank="1"${blanksOn ? ' checked' : ''}> <span>(Blanks)</span></label>`);
-    f.list.innerHTML = items.join('');
+    const blanksOn = crit?.[0] === 'values' || crit?.[0] === 'dates' ? crit[1] === '1' : true;
+    const dated = list.days.length > 0;
+    f.list.dataset.mode = dated ? 'dates' : '';
+    f.dateOps.hidden = f.dateOps.disabled = !dated;
+    if (dated) {
+      f.list.innerHTML = dateTree(list.days, crit?.[0] === 'dates' ? new Set(crit.slice(2)) : null, list.blanks, blanksOn);
+    } else {
+      const items = list.values.map((v) => `<label class="fc-filter-item"><input type="checkbox" value="${escapeHtml(v)}"${!keep || keep.has(v.toLowerCase()) ? ' checked' : ''}> <span>${escapeHtml(v)}</span></label>`);
+      if (list.blanks) items.push(`<label class="fc-filter-item"><input type="checkbox" data-blank="1"${blanksOn ? ' checked' : ''}> <span>(Blanks)</span></label>`);
+      f.list.innerHTML = items.join('');
+    }
     f.hint.textContent = list.more ? 'Showing the first 10,000 different entries.' : '';
     f.search.value = '';
     const swatch = (kind: 'fill' | 'font', v: string) => {
@@ -1259,7 +1268,16 @@ export class App {
     if (list.fills.length > 1) rows.push(`<span class="fc-sort-by">By fill colour</span><div class="fc-filter-swatches">${list.fills.map((v) => swatch('fill', v)).join('')}</div>`);
     if (list.fonts.length > 1) rows.push(`<span class="fc-sort-by">By text colour</span><div class="fc-filter-swatches">${list.fonts.map((v) => swatch('font', v)).join('')}</div>`);
     f.colors.innerHTML = rows.join('');
-    f.colors.hidden = !rows.length;
+    if (list.icons.length > 1) {
+      const label = document.createElement('span');
+      label.className = 'fc-sort-by';
+      label.textContent = 'By icon';
+      const box = document.createElement('div');
+      box.className = 'fc-filter-swatches';
+      for (const id of list.icons) box.appendChild(iconSwatch(id, 'Cells with this icon'));
+      f.colors.append(label, box);
+    }
+    f.colors.hidden = !f.colors.childElementCount;
     f.op1.value = f.op2.value = '';
     f.v1.value = f.v2.value = '';
     f.join.value = 'and';
@@ -1269,7 +1287,12 @@ export class App {
       f.v1.value = crit[3] ?? '';
       f.op2.value = crit[4] ?? '';
       f.v2.value = crit[5] ?? '';
-    } else if (crit?.[0] === 'top') {
+      if (crit[1] !== 'or' && crit[2] === 'ge' && crit[4] === 'le') {
+        f.op1.value = 'between';
+        f.op2.value = '';
+      }
+    } else if (crit?.[0] === 'dyn') f.op1.value = `dyn:${crit[1] ?? ''}`;
+    else if (crit?.[0] === 'top') {
       f.op1.value = (crit[1] === 'bottom' ? 'bottom' : 'top') + (crit[3] === '%' ? '%' : '');
       f.v1.value = crit[2] ?? '10';
     } else if (crit?.[0] === 'avg') f.op1.value = crit[1] === 'below' ? 'below' : 'above';
@@ -1284,10 +1307,11 @@ export class App {
 
   private filterSync(f: FilterForm): void {
     const op = f.op1.value;
-    const single = !op || ['top', 'bottom', 'top%', 'bottom%', 'above', 'below'].includes(op);
-    f.v1.disabled = !op || op === 'above' || op === 'below';
+    const between = op === 'between';
+    const single = !op || between || op.startsWith('dyn:') || ['top', 'bottom', 'top%', 'bottom%', 'above', 'below'].includes(op);
+    f.v1.disabled = !op || op === 'above' || op === 'below' || op.startsWith('dyn:');
     f.join.disabled = f.op2.disabled = single;
-    f.v2.disabled = single || !f.op2.value;
+    f.v2.disabled = between ? false : single || !f.op2.value;
     const boxes = [...f.list.querySelectorAll<HTMLInputElement>('.fc-filter-item:not([hidden]) input')];
     const on = boxes.filter((b) => b.checked).length;
     f.all.checked = on === boxes.length && on > 0;
@@ -1299,7 +1323,7 @@ export class App {
     form.className = 'fc-fmt-custom fc-filter';
     form.hidden = true;
     form.setAttribute('role', 'dialog');
-    const ops = FILTER_OPS.map(([v, l]) => `<option value="${v}">${l}</option>`).join('');
+    const ops = FILTER_OPS.map(([v, l]) => `<option value="${v}">${l}</option>`).join('') + `<optgroup label="Date filters" data-dates hidden disabled>${DATE_FILTERS.map(([v, l]) => `<option value="${v}">${l}</option>`).join('')}</optgroup>`;
     const ops2 = FILTER_OPS.slice(0, 13).map(([v, l]) => `<option value="${v}">${l}</option>`).join('');
     form.innerHTML = `<span class="fc-fmt-title"></span><div class="fc-filter-sorts"><button type="button" class="fc-btn" data-a="asc">${icon('sortAsc')} Sort A to Z</button><button type="button" class="fc-btn" data-a="desc">${icon('sortDesc')} Sort Z to A</button></div><div class="fc-filter-colors" hidden></div><span class="fc-sort-by">By condition</span><div class="fc-filter-cond"><select class="fc-fmt-input" data-k="op1" aria-label="Condition">${ops}</select><input class="fc-fmt-input" data-k="v1" aria-label="Value" spellcheck="false" autocomplete="off"><select class="fc-fmt-input" data-k="join" aria-label="Join"><option value="and">And</option><option value="or">Or</option></select><select class="fc-fmt-input" data-k="op2" aria-label="Second condition">${ops2}</select><input class="fc-fmt-input" data-k="v2" aria-label="Second value" spellcheck="false" autocomplete="off"></div><span class="fc-sort-by">By values</span><input type="search" class="fc-fmt-input fc-filter-search" placeholder="Search" aria-label="Search values" spellcheck="false" autocomplete="off"><label class="fc-sort-check"><input type="checkbox" class="fc-filter-all"> Select all</label><div class="fc-filter-list" role="group" aria-label="Values"></div><span class="fc-fmt-hint" aria-live="polite"></span><div class="fc-csv-actions"><button type="button" class="fc-btn" data-a="clear">Clear</button><button type="button" class="fc-btn" data-a="cancel">Cancel</button><button type="submit" class="fc-btn fc-btn-primary">OK</button></div>`;
     document.getElementById('overlay-root')!.appendChild(form);
@@ -1310,6 +1334,7 @@ export class App {
       title: q('.fc-fmt-title'),
       colors: q('.fc-filter-colors'),
       op1: q('[data-k="op1"]'),
+      dateOps: q('optgroup[data-dates]'),
       v1: q('[data-k="v1"]'),
       join: q('[data-k="join"]'),
       op2: q('[data-k="op2"]'),
@@ -1330,9 +1355,19 @@ export class App {
       if (a === 'cancel') close();
       if (a === 'clear') done(this.filterWith(f.col));
       if (a === 'asc' || a === 'desc') done(this.grid.sortFilterColumn(f.col, a === 'desc'));
-      if (a === 'fill' || a === 'font') done(this.filterWith(f.col, [a, b!.dataset.v ?? '']));
+      if (a === 'fill' || a === 'font' || a === 'icon') done(this.filterWith(f.col, [a, b!.dataset.v ?? '']));
+      if (a === 'twist') {
+        const kids = b!.closest('.fc-filter-node')?.querySelector<HTMLElement>(':scope > .fc-filter-kids');
+        if (kids) {
+          kids.hidden = !kids.hidden;
+          b!.setAttribute('aria-expanded', String(!kids.hidden));
+          b!.setAttribute('aria-label', kids.hidden ? 'Expand' : 'Collapse');
+        }
+      }
     });
     form.addEventListener('change', (e) => {
+      const t = e.target as HTMLInputElement;
+      if (f.list.dataset.mode === 'dates' && t.dataset.key) cascadeDates(t);
       if (e.target === f.all) {
         for (const box of f.list.querySelectorAll<HTMLInputElement>('.fc-filter-item:not([hidden]) input')) box.checked = f.all.checked;
       }
@@ -1358,10 +1393,17 @@ export class App {
         }
         return done(this.filterWith(f.col, ['top', op.startsWith('bottom') ? 'bottom' : 'top', String(n), op.endsWith('%') ? '%' : '']));
       }
+      if (op.startsWith('dyn:')) return done(this.filterWith(f.col, ['dyn', op.slice(4)]));
+      if (op === 'between') return done(this.filterWith(f.col, ['cond', 'and', 'ge', f.v1.value, 'le', f.v2.value]));
       if (op) {
         const parts = ['cond', f.join.value, op, f.v1.value];
         if (f.op2.value) parts.push(f.op2.value, f.v2.value);
         return done(this.filterWith(f.col, parts));
+      }
+      if (f.list.dataset.mode === 'dates' && !f.search.value.trim()) {
+        const got = collectDates(f.list);
+        if (got.all) return done(this.filterWith(f.col));
+        return done(this.filterWith(f.col, ['dates', got.blanks ? '1' : '0', ...got.keys]));
       }
       const boxes = [...f.list.querySelectorAll<HTMLInputElement>('.fc-filter-item input')];
       const searching = !!f.search.value.trim();

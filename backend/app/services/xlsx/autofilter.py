@@ -1,12 +1,42 @@
+import re
 from collections import Counter
+from datetime import date
 
 from openpyxl.styles import Font, PatternFill
 from openpyxl.styles.differential import DifferentialStyle
 from openpyxl.utils import get_column_letter, range_boundaries
-from openpyxl.worksheet.filters import ColorFilter, CustomFilter, CustomFilters, DynamicFilter, FilterColumn, Filters, Top10
+from openpyxl.worksheet.filters import ColorFilter, CustomFilter, CustomFilters, DateGroupItem, DynamicFilter, FilterColumn, Filters, IconFilter, Top10
 
-from .cf import esc
+from .cf import ICONS_IN, ICONS_OUT, esc
 from .styles import colour_in, colour_out
+
+DYN_NAMES = {"today": "today", "yesterday": "yesterday", "tomorrow": "tomorrow", "thisweek": "thisWeek", "lastweek": "lastWeek", "nextweek": "nextWeek",
+             "thismonth": "thisMonth", "lastmonth": "lastMonth", "nextmonth": "nextMonth", "thisquarter": "thisQuarter", "lastquarter": "lastQuarter",
+             "nextquarter": "nextQuarter", "thisyear": "thisYear", "lastyear": "lastYear", "nextyear": "nextYear", "yeartodate": "yearToDate",
+             **{f"q{i}": f"Q{i}" for i in range(1, 5)}, **{f"m{i}": f"M{i}" for i in range(1, 13)}}
+DYN_IN = {v: k for k, v in DYN_NAMES.items()}
+DATE_TEXT = re.compile(r"^(\d{4})-(\d{1,2})-(\d{1,2})$")
+
+
+def _serial(val: str) -> str:
+    m = DATE_TEXT.match(val.strip())
+    if not m:
+        return val
+    try:
+        return str((date(int(m[1]), int(m[2]), int(m[3])) - date(1899, 12, 30)).days)
+    except ValueError:
+        return val
+
+
+def _date_items(keys: list[str]) -> list[DateGroupItem]:
+    out = []
+    for k in keys:
+        p = [int(x) for x in k.split("-") if x.isdigit()]
+        if not p:
+            continue
+        names = ("year", "month", "day")
+        out.append(DateGroupItem(year=p[0], month=p[1] if len(p) > 1 else None, day=p[2] if len(p) > 2 else None, dateTimeGrouping=names[len(p) - 1]))
+    return out
 
 OPS_IN = {"equal": "eq", "notEqual": "ne", "greaterThan": "gt", "greaterThanOrEqual": "ge", "lessThan": "lt", "lessThanOrEqual": "le"}
 OPS_OUT = {v: k for k, v in OPS_IN.items()}
@@ -34,8 +64,13 @@ def _cond_in(op: str, val: str) -> tuple[str, str]:
 def _column_in(fc: FilterColumn, dxfs, notes: Counter) -> list[str] | None:
     if fc.filters is not None:
         if fc.filters.dateGroupItem:
-            notes["date group filters left out"] += 1
-            return None
+            keys = []
+            for g in fc.filters.dateGroupItem:
+                if g.dateTimeGrouping not in ("year", "month", "day") or g.year is None:
+                    notes["date group filters by hour, minute or second left out"] += 1
+                    return None
+                keys.append(f"{int(g.year)}" + (f"-{int(g.month):02d}" if g.dateTimeGrouping != "year" and g.month else "") + (f"-{int(g.day):02d}" if g.dateTimeGrouping == "day" and g.day else ""))
+            return ["dates", "1" if fc.filters.blank else "0", *keys]
         return ["values", "1" if fc.filters.blank else "0", *[str(f) for f in fc.filters.filter]]
     if fc.customFilters is not None:
         parts = fc.customFilters.customFilter[:2]
@@ -49,6 +84,10 @@ def _column_in(fc: FilterColumn, dxfs, notes: Counter) -> list[str] | None:
         return ["top", "top" if fc.top10.top is not False else "bottom", str(int(fc.top10.val or 10)), "%" if fc.top10.percent else ""]
     if fc.dynamicFilter is not None and fc.dynamicFilter.type in ("aboveAverage", "belowAverage"):
         return ["avg", "above" if fc.dynamicFilter.type == "aboveAverage" else "below"]
+    if fc.dynamicFilter is not None and fc.dynamicFilter.type in DYN_IN:
+        return ["dyn", DYN_IN[fc.dynamicFilter.type]]
+    if fc.iconFilter is not None and fc.iconFilter.iconSet in ICONS_IN:
+        return ["icon", f"{ICONS_IN[fc.iconFilter.iconSet]}:{fc.iconFilter.iconId}"]
     if fc.colorFilter is not None:
         dxf = dxfs[fc.colorFilter.dxfId] if fc.colorFilter.dxfId is not None and fc.colorFilter.dxfId < len(dxfs) else None
         if fc.colorFilter.cellColor is False:
@@ -136,10 +175,21 @@ def filter_out(ws, wb, text: str) -> list[int]:
                 if op in WILD_OUT:
                     op, pat = WILD_OUT[op]
                     val = pat.format(val)
+                else:
+                    val = _serial(val)
                 parts.append(CustomFilter(operator=OPS_OUT.get(op, "equal"), val=val))
             fc.customFilters = CustomFilters(_and=(p[1] == "and" and len(parts) > 1) or None, customFilter=parts)
         elif kind == "top":
             fc.top10 = Top10(top=p[1] != "bottom", percent=len(p) > 3 and p[3] == "%" or None, val=float(p[2]))
+        elif kind == "dates":
+            fc.filters = Filters(blank=p[1] == "1" or None, dateGroupItem=_date_items(p[2:]))
+        elif kind == "dyn" and len(p) > 1 and p[1] in DYN_NAMES:
+            fc.dynamicFilter = DynamicFilter(type=DYN_NAMES[p[1]])
+        elif kind == "icon" and ":" in p[1]:
+            name, _, idx = p[1].rpartition(":")
+            if name not in ICONS_OUT:
+                continue
+            fc.iconFilter = IconFilter(iconSet=ICONS_OUT[name], iconId=int(idx))
         elif kind == "avg":
             fc.dynamicFilter = DynamicFilter(type="aboveAverage" if p[1] == "above" else "belowAverage")
         elif kind in ("fill", "font"):

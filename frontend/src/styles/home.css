@@ -379,6 +379,12 @@
 .fc-filter-list { display: grid; align-content: start; height: 180px; overflow: auto; padding: var(--space-1); border: 1px solid var(--border-light); border-radius: var(--radius-sm); background: var(--bg-primary); }
 .fc-filter-item { display: flex; align-items: center; gap: var(--space-2); min-height: 24px; font-size: var(--text-sm); white-space: nowrap; }
 .fc-filter-item span { overflow: hidden; text-overflow: ellipsis; }
+.fc-filter-row { display: flex; align-items: center; gap: var(--space-1); }
+.fc-filter-kids { margin-left: var(--space-4); }
+.fc-filter-twist, .fc-filter-twist-gap { flex: none; width: 16px; height: 16px; }
+.fc-filter-twist { position: relative; padding: 0; border: 0; background: transparent; color: var(--text-secondary); cursor: pointer; }
+.fc-filter-twist::before { content: ''; position: absolute; left: 5px; top: 3px; border-style: solid; border-width: 5px 0 5px 6px; border-color: transparent transparent transparent currentColor; }
+.fc-filter-twist[aria-expanded="true"]::before { left: 3px; top: 5px; border-width: 6px 5px 0 5px; border-color: currentColor transparent transparent transparent; }
 .fc-filter .fc-csv-actions .fc-btn { flex: 1; }
 .fc-csv-head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-3); }
 .fc-csv-meta { font-size: var(--text-sm); color: var(--text-muted); }
