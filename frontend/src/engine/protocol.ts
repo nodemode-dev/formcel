@@ -52,6 +52,8 @@ export type Request =
   | { id: number; op: 'pivot.set'; book: number; name: string; line: string }
   | { id: number; op: 'pivot.refresh'; book: number; name: string }
   | { id: number; op: 'pivot.remove'; book: number; name: string }
+  | { id: number; op: 'whatif.run'; book: number; cmd: string }
+  | { id: number; op: 'whatif.load'; book: number; lines: string[] }
   | { id: number; op: 'valid.list'; book: number; sheet: number }
   | { id: number; op: 'valid.load'; book: number; sheet: number; lines: string[] }
   | { id: number; op: 'valid.set'; book: number; sheet: number; r0: number; c0: number; r1: number; c1: number; line: string }
@@ -121,7 +123,11 @@ export interface FilterList {
 export type CfCell = [row: number, col: number, style: string, bar: string, icon: string];
 export type StyleChange = [sheet: number, row: number, col: number, raw: string, shown: string];
 export type Name = [name: string, refers: string];
-export type Value = string | number | boolean | number[] | string[] | Cell[] | Changed[] | Name[] | Edit[] | Area[] | CfCell[] | LinkChange[] | [number, number] | Shift | Effect | FilterList | null;
+export interface WhatIfReply {
+  text: string;
+  effect: Effect;
+}
+export type Value = WhatIfReply | string | number | boolean | number[] | string[] | Cell[] | Changed[] | Name[] | Edit[] | Area[] | CfCell[] | LinkChange[] | [number, number] | Shift | Effect | FilterList | null;
 
 export type Response =
   | { id: number; ok: true; value: Value }

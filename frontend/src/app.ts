@@ -14,6 +14,7 @@ import { Collab, identityHeaders } from './ui/collab';
 import type { ShellParts } from './ui/shell';
 import { icon } from './ui/icons';
 import { emptyPivot, formatPivot, outArea, parseFields, parsePivot, PivotDialog, PivotPanel, type PivotDef } from './ui/pivot';
+import { WhatIf } from './ui/whatif';
 import { DATE_PERIODS, describe, parseRule, PRESETS, rangeText, ruleLine, withStop } from './ui/rules';
 import { bindShortcuts, Checker, initPrefs, liveRegion, setTextSize, setTheme, Shortcuts, textSize, theme, type TextSize, type ThemeName } from './ui/a11y';
 import { cleanPage, layoutOf, PageSetupDialog, type PageSetup } from './ui/pagesetup';
@@ -232,6 +233,7 @@ export class App {
   private currentRange: Range = { r0: 0, c0: 0, r1: 0, c1: 0 };
   private readonly menu = new Menu();
   private collab!: Collab;
+  private whatIf!: WhatIf;
   private viewTimers = new Map<number, number>();
   private importNotes: string[] = [];
   private preview = false;
@@ -280,11 +282,13 @@ export class App {
       onHistory: (undo, redo) => {
         this.button('edit.undo').disabled = !undo;
         this.button('edit.redo').disabled = !redo;
+        void this.whatIf?.sync();
       },
       onChanged: (changes) => {
         this.queueSave(changes);
         this.auto.edited(changes);
         this.pivotAuto(changes);
+        this.whatIf?.changed();
       },
       onSheet: (sheet) => {
         this.markTab(sheet);
@@ -321,6 +325,13 @@ export class App {
         p.nameBox.focus();
         p.nameBox.select();
       },
+    });
+    this.whatIf = new WhatIf({
+      grid: this.grid,
+      book: () => this.open?.book ?? -1,
+      sheetNames: () => this.open?.sheets ?? [],
+      makeSheet: (base) => this.makeSheet(base),
+      persist: (lines) => this.sendWhatif(lines),
     });
     const suggestions = (): Suggestion[] => [...FUNCTIONS, ...(this.open?.names ?? []).map(([name, refers]): Suggestion => ({ name, kind: 'name', summary: refers }))];
     new Autocomplete(p.formulaBar, suggestions);
@@ -464,6 +475,16 @@ export class App {
     cmd('pivot.fields', 'PivotTable fields', 'Choose which fields of the PivotTable under the active cell go in Rows, Columns, Values and Filters, how values are summarized and shown, and add calculated fields.', false, () => this.pivotFields());
     cmd('pivot.refresh', 'Refresh PivotTable', 'Recompute the PivotTable under the active cell from its current source data, or every PivotTable when the active cell is not in one.', true, () => this.pivotRefresh(false));
     cmd('pivot.refresh-all', 'Refresh all PivotTables', 'Recompute every PivotTable in the workbook from its current source data.', true, () => this.pivotRefresh(true));
+    cmd('data.whatif', 'What-If Analysis and data analysis', 'Open the menu of Goal Seek, Data Table, Scenario Manager, Solver, Forecast Sheet, Descriptive Statistics, Regression and Analyze Data.', false, () => this.whatIfMenu());
+    cmd('data.goal-seek', 'Goal Seek', 'Find the input value that makes a formula give the result you want, and apply it as one undo step.', true, () => this.whatIf.goalSeek());
+    cmd('data.data-table', 'Data Table', 'Fill a grid of results by putting a list of values into one or two input cells and recalculating a formula for each.', true, () => this.whatIf.dataTable());
+    cmd('data.scenarios', 'Scenario Manager', 'Save named sets of values for changing cells, show one on the sheet, or write a summary of them to a new sheet.', true, () => this.whatIf.scenarios());
+    cmd('data.solver', 'Solver', 'Find the maximum, minimum or a set value of an objective cell by changing variable cells within constraints.', true, () => this.whatIf.solver());
+    cmd('data.forecast-sheet', 'Forecast Sheet', 'Write a table of historical and forecast values, with confidence bounds, to a new sheet using FORECAST.ETS.', true, () => this.whatIf.forecast());
+    cmd('data.describe', 'Descriptive Statistics', 'Write the mean, median, spread and other statistics of the selected numbers to a new sheet.', true, () => this.whatIf.describe());
+    cmd('data.regression', 'Regression', 'Fit a least-squares line to selected Y and X columns and write the statistics and coefficients to a new sheet.', true, () => this.whatIf.regression());
+    cmd('data.analyze', 'Analyze Data', 'Open a panel of simple insights about the selected data: totals, top values, trends and unusual numbers.', false, () => this.whatIf.analyze());
+    cmd('data.datatable-refresh', 'Recalculate data tables', 'Recalculate every data table now.', true, () => this.whatIf.refresh());
     cmd('data.validation', 'Data validation', 'Limit what can be typed in the selected cells, offer a dropdown list, show a message when a cell is selected and an alert when a value is not allowed.', true, () => this.validBox());
     cmd('data.filter-clear', 'Clear filter', 'Show every row again and keep the filter buttons.', true, () => this.filterWith(null));
     cmd('data.filter-reapply', 'Reapply filter', 'Run the filter again over the current values, taking in rows added below it.', true, () => g.reapplyFilter());
@@ -1501,7 +1522,7 @@ export class App {
     this.flush();
     await this.saving;
     this.collab.detach();
-    let doc: WorkbookMeta & { collab?: { notes: Record<string, { text: string; author: string; time: string }>; threads: never[]; people: string[] }; protection?: { book: string[]; sheets: string[][] }; cells: [number, number, string][][]; formats?: [number, number, string][][]; styles?: [number, number, string][][]; merges?: Area[][]; rules?: string[][]; filters?: string[]; validations?: string[][]; tables?: string[]; pivots?: string[]; links?: [number, number, string][][]; theme?: string; cellStyles?: string[]; views?: SheetView[]; names?: Name[] };
+    let doc: WorkbookMeta & { collab?: { notes: Record<string, { text: string; author: string; time: string }>; threads: never[]; people: string[] }; protection?: { book: string[]; sheets: string[][] }; cells: [number, number, string][][]; formats?: [number, number, string][][]; styles?: [number, number, string][][]; merges?: Area[][]; rules?: string[][]; filters?: string[]; validations?: string[][]; tables?: string[]; pivots?: string[]; whatif?: string[]; links?: [number, number, string][][]; theme?: string; cellStyles?: string[]; views?: SheetView[]; names?: Name[] };
     try {
       doc = await api('GET', `/api/workbooks/${id}`);
     } catch {
@@ -1530,6 +1551,8 @@ export class App {
     await e.loadPivots(book, doc.pivots ?? []);
     this.pivotLines = doc.pivots ?? [];
     this.pivotPanel?.hide();
+    await e.loadWhatif(book, doc.whatif ?? []);
+    this.whatIf.load(doc.whatif ?? []);
     const names = doc.names?.length ? await e.names(book) : [];
     this.open = { id, book, title: doc.title, sheets: doc.sheets, views: doc.sheets.map((_, i) => doc.views?.[i] ?? {}), names, macros: !!doc.macros, pages: doc.sheets.map((_, i) => cleanPage((doc.views?.[i] as { page?: unknown } | undefined)?.page)), locale: (doc as { locale?: string }).locale ?? 'en-US' };
     this.preview = false;
@@ -2728,6 +2751,52 @@ export class App {
     o.views.push({});
     this.renderTabs();
     this.showSheet(i);
+  }
+
+  private async makeSheet(base: string): Promise<number> {
+    const o = this.open;
+    if (!o) throw new Error('No workbook is open.');
+    let name = base;
+    for (let n = 2; o.sheets.includes(name); n++) name = `${base} ${n}`;
+    await api('POST', `/api/workbooks/${o.id}/sheets`, { name });
+    const i = await engine().addSheet(o.book, name);
+    o.sheets.push(name);
+    o.views.push({});
+    this.renderTabs();
+    return i;
+  }
+
+  private whatIfMenu(): void {
+    const b = this.button('data.whatif').getBoundingClientRect();
+    const run = (id: string) => () => void runCommand(id);
+    this.menu.show(b.left, b.bottom + 4, [
+      { label: 'Goal Seek', run: run('data.goal-seek') },
+      { label: 'Data Table', run: run('data.data-table') },
+      { label: 'Scenario Manager', run: run('data.scenarios') },
+      { label: 'Solver', run: run('data.solver') },
+      { sep: true },
+      { label: 'Forecast Sheet', run: run('data.forecast-sheet') },
+      { label: 'Descriptive Statistics', run: run('data.describe') },
+      { label: 'Regression', run: run('data.regression') },
+      { label: 'Analyze Data', run: run('data.analyze') },
+      { sep: true },
+      { label: 'Recalculate data tables', run: run('data.datatable-refresh') },
+    ], () => this.grid.focus());
+  }
+
+  private sendWhatif(lines: string[]): void {
+    const o = this.open;
+    if (!o) return;
+    this.status('Saving');
+    this.saving = this.saving.then(async () => {
+      try {
+        await api('PUT', `/api/workbooks/${o.id}/whatif`, { lines });
+        if (!this.pending.size) this.status('Saved');
+      } catch (err) {
+        this.status('Not saved', true);
+        this.p.save.title = err instanceof Error ? err.message : '';
+      }
+    });
   }
 
   private status(text: string, error = false): void {

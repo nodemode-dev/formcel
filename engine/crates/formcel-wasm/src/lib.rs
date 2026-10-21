@@ -1057,6 +1057,36 @@ pub extern "C" fn fc_read(id: u32, sheet: u32, r0: u32, c0: u32, r1: u32, c1: u3
     }
 }
 
+/// Runs one what-if or analysis request (goal seek, data table, scenario, solver, forecast, report); the out buffer gets the reply text, a unit separator, then the encoded effect.
+///
+/// # Safety
+/// `cmd` must point at `len` readable bytes.
+#[no_mangle]
+pub unsafe extern "C" fn fc_whatif(id: u32, cmd: *const u8, len: u32) -> i32 {
+    let cmd = text(cmd, len).to_string();
+    match with_book(id, |wb| {
+        let (reply, fx) = wb.whatif_run(&cmd);
+        format!("{reply}\u{1f}{}", wb.encode(&fx))
+    }) {
+        Some(s) => emit(&s) as i32,
+        None => -1,
+    }
+}
+
+/// Loads the workbook's what-if definitions (data tables, scenarios, solver models) without an undo step.
+///
+/// # Safety
+/// `lines` must point at `len` readable bytes.
+#[no_mangle]
+pub unsafe extern "C" fn fc_load_whatif(id: u32, lines: *const u8, len: u32) -> i32 {
+    let list: Vec<String> = text(lines, len).split('\n').filter(|l| !l.is_empty()).map(String::from).collect();
+    with_book(id, |wb| {
+        wb.load_whatif(&list);
+        list.len() as i32
+    })
+    .unwrap_or(-1)
+}
+
 #[no_mangle]
 pub extern "C" fn fc_extent(id: u32, sheet: u32) -> i32 {
     match with_book(id, |wb| wb.extent(sheet as usize)) {

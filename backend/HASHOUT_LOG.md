@@ -390,3 +390,9 @@ The model endpoint and the API token live in `settings.json` in the data folder,
 - logged: v0.34.0 · 2026-10-21
 
 PivotTable definitions are workbook-wide in the .fcel file (`pivots`, the engine's lines, one per PivotTable) and PUT /api/workbooks/{id}/pivots stores the window's. The cells a PivotTable drew are ordinary cells, with the formatting the engine gave them, so they are saved by the usual cell routes. In .xlsx the PivotTable is written as plain values with that formatting (bold header band, bold totals, percent formats); no pivot cache or pivot table part is written, so Excel shows the numbers but not a PivotTable. Importing an .xlsx with PivotTables brings their cells in as plain values the same way. This is the first step: a real pivotCacheDefinition and pivotTableDefinition part is not written.
+### What-if definitions in the .fcel
+- refers-to: backend/app/services/store.py :: Book.whatif, set_whatif; backend/app/routers/workbooks.py :: set_whatif
+- kind: explainer
+- logged: v0.34.0 · 2026-10-21
+
+Data tables, scenarios and the saved Solver model are lines of text the engine writes and reads; the backend keeps them as `whatif` in `workbook.json` and returns them from the workbook read, without interpreting them. `PUT /api/workbooks/{id}/whatif` replaces the list. The Python engine does not need them, so xlsx export leaves them out: data table results go out as the plain numbers they are, and Scenario Manager and Solver models have no xlsx part written by FormCel. FORECAST.ETS and its siblings are written with the `_xlfn.` prefix already listed in future.json.

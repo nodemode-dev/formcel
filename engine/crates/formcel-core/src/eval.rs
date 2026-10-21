@@ -123,9 +123,12 @@ fn hull(a: Area, b: Area) -> Area {
 
 #[path = "fx_group.rs"]
 mod fx_group;
+#[path = "fx_forecast.rs"]
+mod fx_forecast;
 
-const ARRAY_FNS: [&str; 30] = [
-    "GROUPBY", "PIVOTBY", "ARRAYFORMULA", "INDEX", "CHOOSE", "SEQUENCE", "TRANSPOSE", "IF", "FILTER", "SORT", "SORTBY", "UNIQUE", "MAP", "REDUCE", "SCAN", "BYROW", "BYCOL", "MAKEARRAY", "VSTACK", "HSTACK", "TOCOL", "TOROW", "TAKE",
+const ARRAY_FNS: [&str; 32] = [
+    "GROUPBY", "PIVOTBY", "LINEST", "TREND",
+    "ARRAYFORMULA", "INDEX", "CHOOSE", "SEQUENCE", "TRANSPOSE", "IF", "FILTER", "SORT", "SORTBY", "UNIQUE", "MAP", "REDUCE", "SCAN", "BYROW", "BYCOL", "MAKEARRAY", "VSTACK", "HSTACK", "TOCOL", "TOROW", "TAKE",
     "DROP", "CHOOSECOLS", "CHOOSEROWS", "WRAPROWS", "WRAPCOLS", "EXPAND", "TEXTSPLIT",
 ];
 
@@ -1229,7 +1232,10 @@ impl<'a> Eval<'a> {
                 "PERCENTOF" => self.percentof(a)?,
                 _ => match self.call_chart(name, a) {
                     Some(r) => r?,
-                    None => return self.call_fx(name, a),
+                    None => match self.call_fx(name, a) {
+                        Err(ErrKind::Name) => return self.call_stat(name, a),
+                        r => return r,
+                    },
                 },
             })
         })();
@@ -1767,6 +1773,7 @@ impl Eval<'_> {
                 }
                 Ok(Arg::A(Array { rows: cells.len(), cols, data }))
             }
+            "LINEST" | "TREND" => self.call_stat_arr(name, a),
             _ => self.call_fx_arg(name, a),
         }
     }

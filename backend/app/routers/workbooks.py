@@ -325,6 +325,14 @@ def set_pivots(wid: str, body: RulesIn) -> dict:
         raise HTTPException(422, f"Those PivotTables could not be saved: {e}")
 
 
+@router.put("/workbooks/{wid}/whatif")
+def set_whatif(wid: str, body: RulesIn) -> dict:
+    try:
+        return store().set_whatif(wid, body.lines)
+    except (KeyError, FileNotFoundError):
+        raise missing(wid)
+
+
 @router.put("/workbooks/{wid}/validations")
 def set_validations(wid: str, body: RulesIn) -> dict:
     try:

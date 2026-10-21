@@ -14,6 +14,8 @@ pub mod locale;
 pub mod numfmt;
 pub mod protect;
 pub mod sort;
+pub mod stats;
+pub mod whatif;
 pub use numfmt::Fmt;
 mod store;
 pub mod style;
@@ -387,6 +389,7 @@ enum Tx {
     Tables { before: Vec<table::Table>, after: Vec<table::Table> },
     Pivots { before: Vec<pivot::Pivot>, after: Vec<pivot::Pivot> },
     Links(Vec<FormatChange>),
+    WhatIf { before: Vec<String>, after: Vec<String> },
 }
 
 #[derive(Debug)]
@@ -413,6 +416,7 @@ pub struct Workbook {
     wprot: protect::BookProt,
     host: host::Host,
     pivots: Vec<pivot::Pivot>,
+    whatif: whatif::State,
 }
 
 const SPILL_PASSES: usize = 8;
@@ -499,6 +503,7 @@ impl Workbook {
             wprot: protect::BookProt::default(),
             host: host::Host::default(),
             pivots: Vec::new(),
+            whatif: whatif::State::default(),
         }
         .with_named_codes()
     }
@@ -1867,6 +1872,10 @@ impl Workbook {
             Tx::Valid { sheet, before, after } => {
                 self.sheets[*sheet].valid = if forward { after.clone() } else { before.clone() };
                 Effect { valid: Some(*sheet), ..Effect::default() }
+            }
+            Tx::WhatIf { before, after } => {
+                self.whatif_replay(if forward { after } else { before });
+                Effect::default()
             }
             Tx::Tables { before, after } => {
                 self.tables = if forward { after.clone() } else { before.clone() };

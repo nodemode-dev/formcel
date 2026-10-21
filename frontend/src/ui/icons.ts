@@ -61,6 +61,7 @@ export const icons = {
   pivot: svg('<rect x="3.5" y="4.5" width="17" height="15" rx="2"/><path d="M3.5 10h17M10 4.5v15"/><path d="M13 13.5h4.5M13 16.5h4.5"/><path d="M5.5 13l2 2 2-2"/>'),
   refresh: svg('<path d="M19.5 12a7.5 7.5 0 1 1-2.2-5.3M19.5 4.5v4h-4"/>'),
   validation: svg('<rect x="3.5" y="4.5" width="17" height="15" rx="2"/><path d="M7.5 12l3 3 6-6"/>'),
+  whatIf: svg('<path d="M4.5 18.5l4.5-6 3.5 3 5-8"/><path d="M15 7.5h3.5V11"/><path d="M4.5 4.5v15h15"/>'),
   download: svg('<path d="M12 4v11M7.5 10.5L12 15l4.5-4.5M5 19.5h14"/>'),
   note: svg('<path d="M5 4.5h14v10.5l-4.5 4.5H5z"/><path d="M14.5 19.5V15H19M8.5 9h7M8.5 12.5h4"/>'),
   comment: svg('<path d="M4.5 5.5h15v10h-8l-4.5 3.5v-3.5h-2.5z"/><path d="M8.5 9.5h7M8.5 12h4"/>'),

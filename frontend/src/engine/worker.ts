@@ -61,6 +61,8 @@ interface Exports {
   fc_set_pivot(book: number, name: number, nameLen: number, line: number, len: number): number;
   fc_refresh_pivot(book: number, name: number, len: number): number;
   fc_remove_pivot(book: number, name: number, len: number): number;
+  fc_whatif(book: number, cmd: number, len: number): number;
+  fc_load_whatif(book: number, lines: number, len: number): number;
   fc_validations(book: number, sheet: number): number;
   fc_load_validations(book: number, sheet: number, lines: number, len: number): number;
   fc_set_validation(book: number, sheet: number, r0: number, c0: number, r1: number, c1: number, t: number, len: number): number;
@@ -474,6 +476,14 @@ function run(x: Exports, req: Request): Value {
       return withStrings(x, [req.name], ([p, l]) => effect(pivotOut(x, x.fc_refresh_pivot(req.book, p, l))));
     case 'pivot.remove':
       return withStrings(x, [req.name], ([p, l]) => effect(pivotOut(x, x.fc_remove_pivot(req.book, p, l))));
+    case 'whatif.run':
+      return withStrings(x, [req.cmd], ([p, l]) => {
+        const s = out(x, x.fc_whatif(req.book, p, l));
+        const i = s.indexOf('\u001f');
+        return { text: s.slice(0, i), effect: effect(s.slice(i + 1)) };
+      });
+    case 'whatif.load':
+      return withStrings(x, [req.lines.join('\n')], ([p, l]) => ok(x.fc_load_whatif(req.book, p, l), 'The engine refused those what-if definitions.'));
     case 'valid.list':
       return out(x, x.fc_validations(req.book, req.sheet)).split('\n').filter(Boolean);
     case 'valid.load':

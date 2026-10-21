@@ -1958,6 +1958,12 @@ export class Grid {
     }
   }
 
+  async whatif(cmd: string): Promise<string> {
+    const r = await this.engine.whatif(this.book, cmd);
+    await this.applyEffect(r.effect);
+    return r.text;
+  }
+
   async undo(): Promise<void> {
     await this.applyEffect(await this.engine.undo(this.book));
   }
