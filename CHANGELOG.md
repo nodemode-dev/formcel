@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.25.0 · 2026-10-21
+
+- Open Excel workbooks: Open a file on Home, or drop a .xlsx or .xlsm file onto Home. The workbook opens as a new FormCel workbook; the save indicator says if anything was left out, and its tooltip lists what.
+- Download as .xlsx, from the end of the toolbar.
+- Both ways keep values, formulas, number formats, fonts, fills, borders, alignment, indent, wrap, rotation, cell styles, the theme, merges, links, names, frozen panes, column widths, row heights, hidden and grouped rows and columns, zoom and tab colours. Newer functions such as XLOOKUP, FILTER, LET and LAMBDA are written the way Excel files store them.
+- Not yet: conditional formatting, data validation, comments, pictures, charts and pivot tables from a file; names that belong to one sheet; .xls, .ods and CSV.
+- Fixed: a formula pointing at the first sheet by its name, such as `=Data!B2`, showed #REF! after reopening a workbook whose first sheet was not called Sheet1.
+- Fixed: the version in the top bar had stayed at 0.10.1.
+
 ## 0.24.0 · 2026-10-21
 
 - New template, Formatting check (Example projects):

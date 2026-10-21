@@ -26,5 +26,5 @@ cd frontend && npx tsc --noEmit           typecheck
 - Every z-index is a token from `frontend/src/styles/z-layers.css`.
 - No emoji, no icon libraries (inline `currentColor` SVG in `src/ui/icons.ts`), no em dashes in markdown.
 - Near-zero comments in code; explanations go in the side's `HASHOUT_LOG.md`.
-- Commits as `nodemode-ai <mackin@nodemode.ai>`. Versions read `v` digit dot digit dot digit and match across `frontend/package.json`, `backend/app/version.py` and `engine/Cargo.toml`.
+- Commits as `nodemode-ai <mackin@nodemode.ai>`. Versions read `v` digit dot digit dot digit and match across `frontend/package.json` (and its lockfile), `frontend/src/version.ts`, `backend/app/version.py` and `engine/Cargo.toml`.
 - No tests unless the owner asks for them; describe them in `TEST_PLAN.md` instead.
