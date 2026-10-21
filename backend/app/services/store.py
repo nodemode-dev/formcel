@@ -133,6 +133,8 @@ class Store:
                 else:
                     eng.rename_sheet(0, sname)
                 eng.load(cells, i)
+            for n, refers in templates.names_of(template_id):
+                eng.define_name(n, refers)
             name = name or templates.catalog()[template_id]["name"]
         stamp = now()
         b = Book(uuid.uuid4().hex[:12], (name or "Untitled workbook")[:120], stamp, stamp, eng, template_id)

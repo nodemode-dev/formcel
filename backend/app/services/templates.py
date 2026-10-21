@@ -3,7 +3,7 @@ from functools import lru_cache
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent.parent / "templates"
-SOURCES = ("native.json", "formmd.json")
+SOURCES = ("native.json", "formmd.json", "conformance.json")
 ORDER = ("Spreadsheets", "Data & charts", "Example projects")
 PREVIEW_ROWS = 8
 PREVIEW_COLS = 6
@@ -28,6 +28,30 @@ def preview(sheet: dict) -> list[list[str]]:
     return [row[:PREVIEW_COLS] for row in grid_of(sheet)[:PREVIEW_ROWS]]
 
 
+@lru_cache(maxsize=64)
+def computed_preview(template_id: str) -> list[list[str]]:
+    import formcel_engine
+
+    t = catalog()[template_id]
+    raw = preview(t["sheets"][0])
+    if not any(v.startswith("=") for row in raw for v in row):
+        return raw
+    eng = formcel_engine.Workbook()
+    for i, (name, cells) in enumerate(sheets_of(template_id) or []):
+        if i:
+            eng.add_sheet(name)
+        else:
+            eng.rename_sheet(0, name)
+        eng.load(cells, i)
+    for n, refers in names_of(template_id):
+        eng.define_name(n, refers)
+    out = [["" for _ in row] for row in raw]
+    for r, c, v in eng.values(0):
+        if r < len(out) and c < len(out[r]):
+            out[r][c] = v
+    return out
+
+
 def summary(t: dict) -> dict:
     return {
         "id": t["id"],
@@ -39,7 +63,7 @@ def summary(t: dict) -> dict:
         "source": t["source"],
         "sheets": [s["name"] for s in t["sheets"]],
         "rows": sum(len(s["rows"]) for s in t["sheets"]),
-        "preview": preview(t["sheets"][0]),
+        "preview": computed_preview(t["id"]),
     }
 
 
@@ -47,6 +71,11 @@ def listing() -> dict:
     items = sorted(catalog().values(), key=lambda t: (ORDER.index(t["category"]) if t["category"] in ORDER else len(ORDER), not t.get("featured"), t["name"]))
     cats = [{"name": c, "count": sum(1 for t in items if t["category"] == c)} for c in ORDER]
     return {"categories": cats, "templates": [summary(t) for t in items]}
+
+
+def names_of(template_id: str) -> list[tuple[str, str]]:
+    t = catalog().get(template_id)
+    return [(n, r) for n, r in t.get("names", [])] if t else []
 
 
 def sheets_of(template_id: str) -> list[tuple[str, list[tuple[int, int, str]]]] | None:
