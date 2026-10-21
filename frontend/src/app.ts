@@ -19,6 +19,9 @@ import { icon } from './ui/icons';
 import { emptyPivot, formatPivot, outArea, parseFields, parsePivot, PivotDialog, PivotPanel, type PivotDef } from './ui/pivot';
 import { WhatIf } from './ui/whatif';
 import { Audit } from './ui/audit';
+import { Names, wireArgs } from './ui/names';
+import { Functions } from './ui/functions';
+import { lambdaOf, NamedFunctions } from './ui/namedfn';
 import { DATE_PERIODS, describe, parseRule, PRESETS, rangeText, ruleLine, withStop } from './ui/rules';
 import { ScreenReaderGrid } from './ui/srgrid';
 import { bindShortcuts, Checker, initPrefs, liveRegion, setTextSize, setTheme, Shortcuts, textSize, theme, type TextSize, type ThemeName } from './ui/a11y';
@@ -231,6 +234,10 @@ export class App {
   private readonly grid: Grid;
   private readonly charts: Charts;
   private readonly audit: Audit;
+  private readonly nameTools: Names;
+  private readonly fnTools: Functions;
+  private readonly namedFns: NamedFunctions;
+  private nameNoteMap = new Map<string, string>();
   private open: Opened | null = null;
   private pending = new Map<number, Map<string, [number, number, string]>>();
   private timer = 0;
@@ -430,9 +437,17 @@ export class App {
     } catch {
       this.grid.autoComplete = true;
     }
-    const suggestions = (): Suggestion[] => [...FUNCTIONS, ...(this.open?.names ?? []).map(([name, refers]): Suggestion => ({ name, kind: 'name', summary: refers }))];
-    new Autocomplete(p.formulaBar, suggestions);
-    const cellAc = new Autocomplete(this.grid.editor, suggestions);
+    const suggestions = (): Suggestion[] => [
+      ...FUNCTIONS,
+      ...(this.open?.names ?? []).filter(([name]) => !name.includes('!')).map(([name, refers]): Suggestion => {
+        const f = lambdaOf(name, refers, this.nameNoteMap.get(name) ?? '');
+        return f ? { name, kind: 'function', summary: f.comment || refers, args: f.params.length ? f.params : [] } : { name, kind: 'name', summary: this.nameNoteMap.get(name) || refers };
+      }),
+      ...this.grid.tables().map((t): Suggestion => ({ name: t.name, kind: 'table', summary: `Table, ${t.cols.length} columns` })),
+    ];
+    const tableHints = () => this.grid.tables().map((t) => ({ name: t.name, cols: t.cols }));
+    new Autocomplete(p.formulaBar, suggestions, tableHints);
+    const cellAc = new Autocomplete(this.grid.editor, suggestions, tableHints);
     this.grid.editorHook = (e) => cellAc.take(e);
     this.charts = new Charts(this.grid, engine(), {
       book: () => this.open?.book ?? -1,
@@ -473,6 +488,62 @@ export class App {
         if (sheet !== this.grid.sheetIndex) this.showSheet(sheet);
         this.grid.goTo(`${colName(col)}${row + 1}`);
       },
+    });
+    this.nameTools = new Names({
+      grid: this.grid,
+      engine: engine(),
+      book: () => this.open?.book ?? null,
+      sheets: () => this.open?.sheets ?? [],
+      selection: () => this.currentRange,
+      sheet: () => this.grid.sheetIndex,
+      refreshNames: async () => {
+        const o = this.open;
+        if (o) {
+          o.names = await engine().names(o.book);
+          this.nameNoteMap = new Map(await engine().nameNotes(o.book));
+        }
+      },
+      sync: async (op, args) => {
+        const id = this.open?.id;
+        if (id) await api('PUT', `/api/workbooks/${id}/names/tool`, { op, args: wireArgs(args) });
+      },
+      syncName: async (name, refers) => {
+        const id = this.open?.id;
+        if (id) await api('PUT', `/api/workbooks/${id}/names`, { name, refers });
+      },
+      say: (t, bad) => this.status(t, !!bad),
+    });
+    this.namedFns = new NamedFunctions({
+      engine: engine(),
+      book: () => this.open?.book ?? null,
+      id: () => this.open?.id ?? null,
+      refreshNames: async () => {
+        const o = this.open;
+        if (o) {
+          o.names = await engine().names(o.book);
+          this.nameNoteMap = new Map(await engine().nameNotes(o.book));
+        }
+      },
+      sync: async (op, args) => {
+        const id = this.open?.id;
+        if (id) await api('PUT', `/api/workbooks/${id}/names/tool`, { op, args: wireArgs(args) });
+      },
+      syncName: async (name, refers) => {
+        const id = this.open?.id;
+        if (id) await api('PUT', `/api/workbooks/${id}/names`, { name, refers });
+      },
+      workbooks: async () => (await api<WorkbookMeta[]>('GET', '/api/workbooks')).map((w) => ({ id: w.id, title: w.title })),
+      workbook: async (wid) => {
+        const d = await api<{ names?: [string, string][]; nameNotes?: [string, string][] }>('GET', `/api/workbooks/${wid}`);
+        return { names: d.names ?? [], nameNotes: d.nameNotes ?? [] };
+      },
+      say: (t, bad) => this.status(t, !!bad),
+    });
+    this.fnTools = new Functions({
+      grid: this.grid,
+      engine: engine(),
+      book: () => this.open?.book ?? null,
+      say: (t, bad) => this.status(t, !!bad),
     });
     this.button('edit.undo').disabled = true;
     this.button('edit.redo').disabled = true;
@@ -603,6 +674,13 @@ export class App {
     cmd('audit.dependents', 'Trace dependents', 'Draw arrows from the active cell to the formulas that read it. Click again to go one level further out.', false, () => this.audit.trace('d'));
     cmd('audit.remove-arrows', 'Remove arrows', 'Take the trace arrows off the sheet.', false, () => this.audit.removeArrows());
     cmd('audit.evaluate', 'Evaluate formula', 'Step through the active formula one part at a time and see each result.', false, () => this.audit.evaluate());
+    cmd('names.manager', 'Name Manager', 'Create, edit, filter and delete names, set their scope and comments, and change what they refer to.', true, () => this.nameTools.open(), 'Mod+F3');
+    cmd('names.create', 'Create names from selection', 'Name cells after the labels in the top row, left column, bottom row or right column of the selection.', true, () => this.nameTools.createFromSelection(), 'Mod+Shift+F3');
+    cmd('names.functions', 'Named functions', 'Save a LAMBDA under a name with a description and argument placeholders, or import named functions from another workbook.', true, () => this.namedFns.open());
+    cmd('names.apply', 'Apply names', 'Replace cell references in formulas with the names that point at them.', true, () => this.nameTools.applyDialog());
+    cmd('names.paste', 'Paste name', 'Paste a name into the formula you are editing, or list every name on the sheet.', false, () => this.nameTools.pasteName(), 'F3');
+    cmd('formula.insert-function', 'Insert function', 'Search every function by name or category and fill in its arguments with a preview of each value and the result.', true, () => this.fnTools.insertFunction(), 'Shift+F3');
+    cmd('formula.arguments', 'Function arguments', 'Open the arguments of the function at the caret in the formula you are editing.', true, () => this.fnArguments(), 'Ctrl+A');
     cmd('audit.watch', 'Watch window', 'Show or hide a panel that lists watched cells with their value and formula, and keeps them current.', false, () => this.audit.toggleWatch());
     cmd('format.cf', 'Conditional formatting', 'Format cells by rules on their values: highlights, top and bottom, data bars, colour scales, icons and formulas.', true, () => this.cfMenu());
     cmd('format.cf-manage', 'Manage conditional formatting rules', 'See, reorder, stop and delete the rules on this sheet.', false, () => this.openPanel());
@@ -690,6 +768,24 @@ export class App {
       });
     });
     p.homeBtn.addEventListener('click', () => void runCommand('file.home'));
+    p.formulaBar.parentElement?.querySelector('.fc-fx')?.addEventListener('mousedown', (e) => e.preventDefault());
+    p.formulaBar.parentElement?.querySelector('.fc-fx')?.addEventListener('click', () => void runCommand('formula.arguments'));
+    document.addEventListener('keydown', (e) => {
+      if (!this.open || document.querySelector('.fc-modal:not([hidden])')) return;
+      const mod = e.ctrlKey || e.metaKey;
+      const sheetUp = !!document.querySelector('.fc-sheet:not([hidden])');
+      if (!sheetUp) return;
+      let id = '';
+      if (e.key === 'F3' && mod && e.shiftKey) id = 'names.create';
+      else if (e.key === 'F3' && mod) id = 'names.manager';
+      else if (e.key === 'F3' && e.shiftKey) id = 'formula.insert-function';
+      else if (e.key === 'F3' && !e.altKey) id = 'names.paste';
+      else if (mod && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'a' && (e.target === p.formulaBar || e.target === this.grid.editor) && String((e.target as HTMLInputElement).value).startsWith('=')) id = 'formula.arguments';
+      if (!id) return;
+      e.preventDefault();
+      e.stopPropagation();
+      void runCommand(id);
+    }, true);
     this.button('format.painter').addEventListener('dblclick', () => void this.grid.startPainter(true).then(() => this.grid.focus()));
     p.addSheet.addEventListener('click', () => void runCommand('sheet.add'));
     p.tabs.addEventListener('click', (e) => {
@@ -1804,7 +1900,7 @@ export class App {
     this.flush();
     await this.saving;
     this.collab.detach();
-    let doc: WorkbookMeta & { collab?: { notes: Record<string, { text: string; author: string; time: string }>; threads: never[]; people: string[] }; protection?: { book: string[]; sheets: string[][] }; cells: [number, number, string][][]; formats?: [number, number, string][][]; styles?: [number, number, string][][]; merges?: Area[][]; rules?: string[][]; filters?: string[]; validations?: string[][]; tables?: string[]; pivots?: string[]; whatif?: string[]; links?: [number, number, string][][]; theme?: string; cellStyles?: string[]; views?: SheetView[]; names?: Name[]; watches?: [number, number, number][] };
+    let doc: WorkbookMeta & { collab?: { notes: Record<string, { text: string; author: string; time: string }>; threads: never[]; people: string[] }; protection?: { book: string[]; sheets: string[][] }; cells: [number, number, string][][]; formats?: [number, number, string][][]; styles?: [number, number, string][][]; merges?: Area[][]; rules?: string[][]; filters?: string[]; validations?: string[][]; tables?: string[]; pivots?: string[]; whatif?: string[]; links?: [number, number, string][][]; theme?: string; cellStyles?: string[]; views?: SheetView[]; names?: Name[]; nameNotes?: [string, string][]; watches?: [number, number, number][] };
     try {
       doc = await api('GET', `/api/workbooks/${id}`);
     } catch {
@@ -1829,6 +1925,8 @@ export class App {
       if (doc.cells[i]?.length) await e.load(book, doc.cells[i], i);
     }
     for (const [n, f] of doc.names ?? []) await e.defineName(book, n, f).catch(() => []);
+    for (const [n, c] of doc.nameNotes ?? []) await e.nameComment(book, n, c).catch(() => undefined);
+    this.nameNoteMap = new Map(doc.nameNotes ?? []);
     await e.loadTables(book, doc.tables ?? []);
     await e.loadPivots(book, doc.pivots ?? []);
     this.pivotLines = doc.pivots ?? [];
@@ -1877,6 +1975,10 @@ export class App {
     if (!o?.names.length) return null;
     const refers = `=${sheetPrefix(o.sheets[this.grid.sheetIndex] ?? '')}${absRange(r)}`.toLowerCase();
     return o.names.find(([, f]) => f.toLowerCase() === refers)?.[0] ?? null;
+  }
+
+  private fnArguments(): void {
+    this.fnTools.argumentsAtCaret();
   }
 
   private nameBoxResult(problem: string | null): void {

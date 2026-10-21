@@ -71,6 +71,8 @@ export const icons = {
   traceDep: svg('<rect x="3.5" y="4.5" width="6" height="6" rx="1"/><rect x="14.5" y="13.5" width="6" height="6" rx="1"/><circle cx="6.5" cy="7.5" r="1" fill="currentColor" stroke="none"/><path d="M9.5 9.5l5 3.5M12 13h2.5v-2.5"/>'),
   removeArrows: svg('<path d="M4 18l9-9M13 9H8.5M13 9v4.5"/><path d="M14.5 14.5l6 6M20.5 14.5l-6 6"/>'),
   evalFormula: svg('<path d="M5 6.5h14M5 12h8M5 17.5h5"/><path d="M15 15.5l2.2 2.2 3.8-4.2"/>'),
+  names: svg('<path d="M4 4.5h8l8 8-7 7-8-8z"/><circle cx="8.5" cy="9" r="1.2"/>'),
+  insertFn: svg('<path d="M14.5 4.5c-2.5 0-3 1.6-3.4 3.8L10 15.5c-.4 2.2-1 3.5-3.5 3.5"/><path d="M7 10h7"/><path d="M15 13l5 5M20 13l-5 5"/>'),
   watch: svg('<path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z"/><circle cx="12" cy="12" r="2.8"/>'),
   dataTools: svg('<rect x="3.5" y="4.5" width="17" height="15" rx="2"/><path d="M3.5 9.5h17M9.5 9.5v10M13 14l2 2 3-3.5"/>'),
   download: svg('<path d="M12 4v11M7.5 10.5L12 15l4.5-4.5M5 19.5h14"/>'),

@@ -18,7 +18,9 @@ pub mod protect;
 pub mod sort;
 pub mod stats;
 pub mod whatif;
+mod cellinfo;
 mod cellshift;
+pub mod names;
 mod datatools;
 mod formlocale;
 mod flash;
@@ -458,6 +460,8 @@ pub struct Workbook {
     host: host::Host,
     pivots: Vec<pivot::Pivot>,
     whatif: whatif::State,
+    file: String,
+    name_notes: FastMap<String, String>,
 }
 
 const SPILL_PASSES: usize = 8;
@@ -488,6 +492,10 @@ impl eval::Ctx for Workbook {
         self.names.get(&name.to_ascii_uppercase()).map(|n| &n.1)
     }
 
+    fn name_in(&self, sheet: usize, name: &str) -> Option<&Expr> {
+        self.lookup_name(sheet, name).map(|n| &n.1)
+    }
+
     fn table_ref(&self, sheet: usize, name: Option<&str>, spec: &formula::TableSpec, at: Option<Addr>) -> Result<(usize, Area), ErrKind> {
         self.resolve_table(sheet, name, spec, at)
     }
@@ -510,6 +518,10 @@ impl eval::Ctx for Workbook {
 
     fn host_fn(&self, name: &str) -> bool {
         self.host.is_fn(name)
+    }
+
+    fn cell_prop(&self, sheet: usize, a: Addr, what: &str) -> Option<Value> {
+        self.prop_of(sheet, a, what)
     }
 
     fn host_get(&self, key: &str) -> Option<eval::Array> {
@@ -553,6 +565,8 @@ impl Workbook {
             host: host::Host::default(),
             pivots: Vec::new(),
             whatif: whatif::State::default(),
+            file: String::new(),
+            name_notes: FastMap::default(),
         }
         .with_named_codes()
     }
@@ -748,6 +762,7 @@ impl Workbook {
         for (_, e) in self.names.values_mut() {
             formula::rename_refs(e, &old, name);
         }
+        self.rekey_sheet_names(&old, name);
         self.graph.built = false;
         self.recalc_all();
         Ok(())
@@ -1283,7 +1298,7 @@ impl Workbook {
             if seen.contains(&n) {
                 continue;
             }
-            if let Some((_, x)) = self.names.get(&n) {
+            if let Some((_, x)) = self.lookup_name(sheet, &n) {
                 seen.push(n);
                 self.expr_areas(sheet, x, out, seen);
             }
@@ -1291,16 +1306,14 @@ impl Workbook {
     }
 
     pub fn define_name(&mut self, name: &str, refers: &str) -> Result<Changed, EngineError> {
-        let key = name.to_ascii_uppercase();
+        let (key, display, _) = self.name_key(name)?;
         if refers.trim().is_empty() {
             self.names.remove(&key);
+            self.name_notes.remove(&key);
         } else {
-            if !formula::valid_name(name) {
-                return Err(EngineError::BadName(name.to_string()));
-            }
             let src = refers.strip_prefix('=').unwrap_or(refers);
             let e = formula::parse(src).ok_or_else(|| EngineError::BadFormula(refers.to_string()))?;
-            self.names.insert(key, (name.to_string(), e));
+            self.names.insert(key, (display, e));
         }
         self.graph.built = false;
         let changed = self.recalc_all();
@@ -1847,7 +1860,9 @@ impl Workbook {
         }
         self.guard("structure", sheet, formula::Area::default()).map_err(EngineError::Protected)?;
         self.unspill_all();
+        let gone = self.sheets[sheet].name.clone();
         self.sheets.remove(sheet);
+        self.drop_sheet_names(&gone);
         self.graph.built = false;
         self.rekey(|s| match s.cmp(&sheet) {
             std::cmp::Ordering::Less => Some(s),

@@ -37,12 +37,8 @@ impl Eval<'_> {
                 }
                 .to_string(),
             ),
-            "filename" => Value::Text(String::new()),
-            "prefix" => Value::Text(if matches!(v, Value::Text(ref s) if !s.is_empty()) { "'".to_string() } else { String::new() }),
-            "protect" => Value::Number(1.0),
             "width" => Value::Number(9.0),
-            "format" => Value::Text("G".to_string()),
-            "color" | "parentheses" => Value::Number(0.0),
+            "filename" | "prefix" | "protect" | "format" | "color" | "parentheses" => self.ctx.cell_prop(sheet, at, &kind).ok_or(ErrKind::Value)?,
             _ => return Err(ErrKind::Value),
         })
     }
@@ -52,7 +48,7 @@ impl Eval<'_> {
             return Err(ErrKind::Na);
         }
         Ok(match self.t(a, 0)?.to_ascii_lowercase().as_str() {
-            "directory" => Value::Text(String::new()),
+            "directory" => self.ctx.cell_prop(0, Addr { row: 0, col: 0 }, "directory").unwrap_or(Value::Text(String::new())),
             "numfile" => Value::Number(self.ctx.sheet_total() as f64),
             "origin" => Value::Text("$A:$A$1".to_string()),
             "osversion" => Value::Text("FormCel".to_string()),

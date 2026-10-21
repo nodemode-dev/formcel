@@ -21,6 +21,8 @@ mod fx_eng;
 mod fx_hub;
 #[path = "fx_info.rs"]
 mod fx_info;
+#[path = "fx_info2.rs"]
+mod fx_info2;
 #[path = "fx_lookup.rs"]
 mod fx_lookup;
 #[path = "fx_query.rs"]
@@ -29,6 +31,8 @@ mod fx_query;
 mod fx_regex;
 #[path = "fx_text.rs"]
 mod fx_text;
+#[path = "fx_xl.rs"]
+mod fx_xl;
 
 pub trait Ctx {
     fn formula_at(&self, _sheet: usize, _a: Addr) -> Option<String> {
@@ -41,6 +45,9 @@ pub trait Ctx {
     fn cell(&self, sheet: usize, a: Addr) -> Value;
     fn each(&self, sheet: usize, area: Area, f: &mut dyn FnMut(Addr, &Value));
     fn name(&self, name: &str) -> Option<&Expr>;
+    fn name_in(&self, _sheet: usize, name: &str) -> Option<&Expr> {
+        self.name(name)
+    }
     fn spill(&self, _sheet: usize, _a: Addr) -> Option<(u32, u32)> {
         None
     }
@@ -60,11 +67,15 @@ pub trait Ctx {
         None
     }
     fn host_want(&self, _key: &str) {}
+    fn cell_prop(&self, _sheet: usize, _a: Addr, _what: &str) -> Option<Value> {
+        None
+    }
 }
 
 #[derive(Debug)]
 pub struct Lambda {
     params: Vec<String>,
+    required: usize,
     body: Expr,
     env: Vec<(String, Arg)>,
 }
@@ -294,7 +305,7 @@ impl<'a> Eval<'a> {
     }
 
     fn user(&self, name: &str) -> bool {
-        crate::formula::FUNCTIONS.binary_search(&name).is_err() && (self.local(name).is_some() || self.ctx.name(name).is_some())
+        crate::formula::FUNCTIONS.binary_search(&name).is_err() && (self.local(name).is_some() || self.ctx.name_in(self.sheet, name).is_some())
     }
 
     fn routed(&self, name: &str) -> bool {
@@ -342,7 +353,7 @@ impl<'a> Eval<'a> {
         if let Some(a) = self.local(name) {
             return Ok(a);
         }
-        let e = self.ctx.name(name).ok_or(ErrKind::Name)?;
+        let e = self.ctx.name_in(self.sheet, name).ok_or(ErrKind::Name)?;
         self.deeper(|| {
             let saved = std::mem::take(&mut *self.env.borrow_mut());
             let a = self.arg(e);
@@ -357,11 +368,12 @@ impl<'a> Eval<'a> {
             Arg::V(Value::Error(k)) => return Err(k),
             _ => return Err(ErrKind::Value),
         };
-        if f.params.len() != args.len() {
+        if args.len() > f.params.len() || args.len() < f.required {
             return Err(ErrKind::Value);
         }
+        let omitted: Vec<usize> = args.iter().enumerate().filter(|(i, a)| *i >= f.required && matches!(a, Expr::Missing)).map(|(i, _)| i).collect();
         let vals: Vec<Arg> = args.iter().map(|a| self.arg(a)).collect();
-        self.apply(&f, vals)
+        self.apply_with(&f, vals, &omitted)
     }
 
     fn lambda(&self, e: &Expr, params: usize) -> Result<Rc<Lambda>, ErrKind> {
@@ -373,9 +385,20 @@ impl<'a> Eval<'a> {
     }
 
     fn apply(&self, f: &Rc<Lambda>, vals: Vec<Arg>) -> Result<Arg, ErrKind> {
+        self.apply_with(f, vals, &[])
+    }
+
+    fn apply_with(&self, f: &Rc<Lambda>, mut vals: Vec<Arg>, omitted: &[usize]) -> Result<Arg, ErrKind> {
         self.deeper(|| {
             let mut env = f.env.clone();
+            let given = vals.len();
+            vals.resize(f.params.len(), Arg::V(Value::Empty));
             env.extend(f.params.iter().cloned().zip(vals));
+            for (i, p) in f.params.iter().enumerate() {
+                if i >= given || omitted.contains(&i) {
+                    env.push((format!("\u{1}{p}"), Arg::V(Value::Bool(true))));
+                }
+            }
             let saved = std::mem::replace(&mut *self.env.borrow_mut(), env);
             let a = self.arg(&f.body);
             *self.env.borrow_mut() = saved;
@@ -393,8 +416,25 @@ impl<'a> Eval<'a> {
             if params.len() > 253 {
                 return Err(ErrKind::Value);
             }
-            let params = params.iter().map(ident).collect::<Result<Vec<_>, _>>()?;
-            return Ok(Arg::F(Rc::new(Lambda { params, body: body.clone(), env: self.env.borrow().clone() })));
+            let mut required = params.len();
+            let mut names = Vec::with_capacity(params.len());
+            for (i, p) in params.iter().enumerate() {
+                match p {
+                    Expr::Table(None, spec) if spec.items == 0 && matches!(&spec.cols, Some((a, b)) if a == b) => {
+                        if required == params.len() {
+                            required = i;
+                        }
+                        names.push(ident(&Expr::Name(spec.cols.clone().map(|c| c.0).unwrap_or_default()))?);
+                    }
+                    other => {
+                        if required != params.len() {
+                            return Err(ErrKind::Value);
+                        }
+                        names.push(ident(other)?);
+                    }
+                }
+            }
+            return Ok(Arg::F(Rc::new(Lambda { params: names, required, body: body.clone(), env: self.env.borrow().clone() })));
         }
         if a.len() < 3 || a.len().is_multiple_of(2) {
             return Err(ErrKind::Value);
@@ -1040,6 +1080,9 @@ impl<'a> Eval<'a> {
                         Value::Error(ErrKind::Name) => 5.0,
                         Value::Error(ErrKind::Num) => 6.0,
                         Value::Error(ErrKind::Na) => 7.0,
+                        Value::Error(ErrKind::Spill) => 9.0,
+                        Value::Error(ErrKind::Error) => 12.0,
+                        Value::Error(ErrKind::Calc) => 14.0,
                         _ => return Err(ErrKind::Na),
                     };
                     Value::Number(code)
@@ -1047,6 +1090,11 @@ impl<'a> Eval<'a> {
                 "ISERR" => Value::Bool(matches!(self.scalar(a.first().ok_or(ErrKind::Na)?), Value::Error(k) if k != ErrKind::Na)),
                 "ISLOGICAL" => Value::Bool(matches!(self.scalar(a.first().ok_or(ErrKind::Na)?), Value::Bool(_))),
                 "ISNONTEXT" => Value::Bool(!matches!(self.scalar(a.first().ok_or(ErrKind::Na)?), Value::Text(_))),
+                "ISOMITTED" => match a {
+                    [Expr::Name(n)] => Value::Bool(self.local(&format!("\u{1}{}", n.to_ascii_uppercase())).is_some()),
+                    [_] => return Err(ErrKind::Value),
+                    _ => return Err(ErrKind::Na),
+                },
                 "ISREF" => Value::Bool(matches!(self.arg(a.first().ok_or(ErrKind::Na)?), Arg::R(..))),
                 "NA" => return Err(ErrKind::Na),
                 "DATE" => {
@@ -1208,8 +1256,9 @@ impl<'a> Eval<'a> {
                         self.at(&t, off, pos)
                     }
                 }
-                "MATCH" | "XMATCH" => {
-                    if !count(2, if name == "MATCH" { 3 } else { 4 }) {
+                "XMATCH" => self.xmatch(a)?,
+                "MATCH" => {
+                    if !count(2, 3) {
                         return Err(ErrKind::Na);
                     }
                     let key = self.scalar(&a[0]);
@@ -1222,36 +1271,9 @@ impl<'a> Eval<'a> {
                         return Err(ErrKind::Na);
                     }
                     let opt = |i: usize, d: f64| -> Result<f64, ErrKind> { if a.len() > i && !matches!(a[i], Expr::Missing) { self.n(a, i) } else { Ok(d) } };
-                    let (mode, back) = if name == "MATCH" {
-                        (match opt(2, 1.0)? { m if m > 0.0 => 1, m if m < 0.0 => -1, _ => 2 }, false)
-                    } else {
-                        (xmode(opt(2, 0.0)?)?, opt(3, 1.0)? < 0.0)
-                    };
-                    let pos = self.find(&key, self.line(&t, w == 1, 0), mode, back)?.ok_or(ErrKind::Na)?;
+                    let mode = match opt(2, 1.0)? { m if m > 0.0 => 1, m if m < 0.0 => -1, _ => 2 };
+                    let pos = self.find(&key, self.line(&t, w == 1, 0), mode, false)?.ok_or(ErrKind::Na)?;
                     Value::Number(f64::from(pos + 1))
-                }
-                "XLOOKUP" => {
-                    if !count(3, 6) {
-                        return Err(ErrKind::Na);
-                    }
-                    let key = self.scalar(&a[0]);
-                    if let Value::Error(k) = key {
-                        return Err(k);
-                    }
-                    let (look, ret) = (self.table(&a[1])?, self.table(&a[2])?);
-                    let ((lh, lw), (rh, rw)) = (look.dims(), ret.dims());
-                    let vertical = lw == 1;
-                    if (lh != 1 && lw != 1) || (vertical && (lh != rh || rw != 1)) || (!vertical && (lw != rw || rh != 1)) {
-                        return Err(ErrKind::Value);
-                    }
-                    let opt = |i: usize, d: f64| -> Result<f64, ErrKind> { if a.len() > i && !matches!(a[i], Expr::Missing) { self.n(a, i) } else { Ok(d) } };
-                    let mode = xmode(opt(4, 0.0)?)?;
-                    let back = opt(5, 1.0)? < 0.0;
-                    match self.find(&key, self.line(&look, vertical, 0), mode, back)? {
-                        Some(p) => self.at(&ret, if vertical { p } else { 0 }, if vertical { 0 } else { p }),
-                        None if a.len() > 3 && !matches!(a[3], Expr::Missing) => self.scalar(&a[3]),
-                        None => return Err(ErrKind::Na),
-                    }
                 }
                 "PERCENTOF" => self.percentof(a)?,
                 _ => match self.call_chart(name, a) {
@@ -1899,16 +1921,6 @@ impl Eval<'_> {
                 Ok(best.map(|b| b.0))
             }
         }
-    }
-}
-
-fn xmode(m: f64) -> Result<i32, ErrKind> {
-    match m as i64 {
-        0 => Ok(0),
-        -1 => Ok(10),
-        1 => Ok(11),
-        2 => Ok(2),
-        _ => Err(ErrKind::Value),
     }
 }
 

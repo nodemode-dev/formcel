@@ -54,7 +54,7 @@ export function mountShell(root: HTMLElement): ShellParts {
         <span class="fc-tool-sep" aria-hidden="true"></span>
         ${tool('data.sort-asc', 'sortAsc', 'Sort A to Z by the active column')}${tool('data.sort-desc', 'sortDesc', 'Sort Z to A by the active column')}${tool('data.sort', 'sort', 'Sort by several columns')}${tool('data.filter', 'filter', 'Filter (Ctrl+Shift+L)')}${tool('table.create', 'table', 'Table (Ctrl+T)')}${tool('pivot.create', 'pivot', 'Insert PivotTable')}${tool('pivot.refresh', 'refresh', 'Refresh PivotTable')}${tool('data.validation', 'validation', 'Data validation')}${tool('data.whatif', 'whatIf', 'What-If Analysis, forecast and data analysis')}${tool('data.tools', 'dataTools', 'Data tools')}
         <span class="fc-tool-sep" aria-hidden="true"></span>
-        ${tool('audit.precedents', 'tracePrec', 'Trace precedents')}${tool('audit.dependents', 'traceDep', 'Trace dependents')}${tool('audit.remove-arrows', 'removeArrows', 'Remove arrows')}${tool('audit.evaluate', 'evalFormula', 'Evaluate formula')}${tool('audit.watch', 'watch', 'Watch window')}
+        ${tool('audit.precedents', 'tracePrec', 'Trace precedents')}${tool('audit.dependents', 'traceDep', 'Trace dependents')}${tool('audit.remove-arrows', 'removeArrows', 'Remove arrows')}${tool('audit.evaluate', 'evalFormula', 'Evaluate formula')}${tool('audit.watch', 'watch', 'Watch window')}${tool('names.manager', 'names', 'Name Manager (Ctrl+F3)')}${tool('names.functions', 'insertFn', 'Named functions')}
         ${tool('insert.chart', 'chart', 'Insert chart')}${tool('insert.chart-recommended', 'chartRecommended', 'Recommended charts')}${tool('insert.pivot-chart', 'pivotChart', 'Insert PivotChart')}${tool('insert.picture', 'picture', 'Insert picture')}${tool('insert.shape-rect', 'shapeRect', 'Insert rectangle')}${tool('insert.shape-ellipse', 'shapeEllipse', 'Insert ellipse')}${tool('insert.shape-arrow', 'shapeArrow', 'Insert arrow')}${tool('insert.textbox', 'textBox', 'Insert text box')}${tool('insert.cell-picture', 'cellPicture', 'Insert picture in cell')}${tool('insert.sparkline', 'sparkline', 'Insert sparklines')}${tool('view.timeline', 'timeline', 'Timeline view of the rows')}
         ${tool('review.note', 'note', 'Notes on the active cell')}${tool('review.comment', 'comment', 'Comment on the active cell')}${tool('review.panel', 'clock', 'Comments, changes, version history and sharing')}${tool('protect.menu', 'lock', 'Protection')}${tool('share.panel', 'share', 'Share, publish and embed')}
         ${tool('page.menu', 'page', 'Page layout, print area and page breaks')}${tool('view.access', 'access', 'Accessibility, theme, text size and locale')}
@@ -65,7 +65,7 @@ export function mountShell(root: HTMLElement): ShellParts {
       </div>
       <div class="fc-formula">
         <input class="fc-namebox" aria-label="Name Box" spellcheck="false" autocomplete="off">
-        <span class="fc-fx" aria-hidden="true">fx</span>
+        <button type="button" class="fc-fx" data-cmd="formula.insert-function" title="Insert Function (Shift+F3)" aria-label="Insert Function">fx</button>
         <textarea class="fc-fbar" rows="1" wrap="off" aria-label="Formula bar" spellcheck="false" autocomplete="off"></textarea>
         <button type="button" class="fc-tool fc-fbar-toggle" title="Expand formula bar (Ctrl+Shift+U)" aria-label="Expand formula bar" aria-expanded="false">${icon('chevronDown')}</button>
         <div class="fc-fbar-grip" role="separator" aria-orientation="horizontal" aria-label="Resize formula bar" hidden></div>

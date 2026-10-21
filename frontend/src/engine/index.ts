@@ -1,6 +1,6 @@
-import type { Arrow, EvalStep, Area, Cell, CfCell, Changed, Dir, Edit, Effect, FilterList, FormatItem, LinkChange, MergeMode, Name, RequestBody, Response, Shift, StyleOp, Value, WhatIfReply } from './protocol';
+import type { Arrow, EvalStep, Area, Cell, CfCell, Changed, Dir, Edit, Effect, FilterList, FormatItem, LinkChange, MergeMode, Name, NameRow, RequestBody, Response, Shift, StyleOp, Value, WhatIfReply } from './protocol';
 
-export type { Arrow, EvalStep, Area, Cell, CfCell, Changed, Dir, Edit, Effect, FilterList, FormatChange, FormatItem, LinkChange, MergeMode, Name, Shift, StyleChange, StyleOp } from './protocol';
+export type { Arrow, EvalStep, Area, Cell, CfCell, Changed, Dir, Edit, Effect, FilterList, FormatChange, FormatItem, LinkChange, MergeMode, Name, NameRow, Shift, StyleChange, StyleOp } from './protocol';
 
 type Pending = { resolve: (v: Value) => void; reject: (e: Error) => void };
 
@@ -417,6 +417,41 @@ export class EngineClient {
 
   async names(book: number): Promise<Name[]> {
     return (await this.call({ op: 'name.list', book })) as Name[];
+  }
+
+  async nameRows(book: number): Promise<NameRow[]> {
+    return JSON.parse((await this.call({ op: 'name.tool', book, tool: 'rows', args: [] })) as string) as NameRow[];
+  }
+
+  async nameComment(book: number, name: string, comment: string): Promise<void> {
+    await this.call({ op: 'name.tool', book, tool: 'comment', args: [name, comment] });
+  }
+
+  async renameName(book: number, from: string, to: string): Promise<Changed[]> {
+    return (await this.call({ op: 'name.tool', book, tool: 'rename', args: [from, to] })) as Changed[];
+  }
+
+  async namesFromSelection(book: number, sheet: number, area: [number, number, number, number], edges: { top: boolean; left: boolean; bottom: boolean; right: boolean }, replace: boolean): Promise<{ made: string[]; skipped: string[] }> {
+    const flags = [edges.top, edges.left, edges.bottom, edges.right, replace].map((b) => (b ? '1' : '0')).join('');
+    const rows = JSON.parse((await this.call({ op: 'name.tool', book, tool: 'select', args: [String(sheet), ...area.map(String), flags] })) as string) as [string, string][];
+    return { made: rows.filter((r) => r[0] === '+').map((r) => r[1]), skipped: rows.filter((r) => r[0] === '-').map((r) => r[1]) };
+  }
+
+  async applyNames(book: number, region: { sheet: number; area: [number, number, number, number] } | null, names: string[], ignoreAbsolute: boolean): Promise<{ count: number; changed: Changed[] }> {
+    const r = region ? [String(region.sheet), '1', ...region.area.map(String)] : ['0', '0', '0', '0', '0', '0'];
+    return JSON.parse((await this.call({ op: 'name.tool', book, tool: 'apply', args: [...r, ignoreAbsolute ? '1' : '0', ...names] })) as string) as { count: number; changed: Changed[] };
+  }
+
+  async nameNotes(book: number): Promise<[string, string][]> {
+    return JSON.parse((await this.call({ op: 'name.tool', book, tool: 'notes', args: [] })) as string) as [string, string][];
+  }
+
+  async evalText(book: number, sheet: number, row: number, col: number, text: string, quote = false): Promise<string> {
+    return (await this.call({ op: 'name.tool', book, tool: 'eval', args: [String(sheet), String(row), String(col), text, quote ? '1' : '0'] })) as string;
+  }
+
+  async setFileName(book: number, folder: string, name: string): Promise<void> {
+    await this.call({ op: 'name.tool', book, tool: 'file', args: [folder, name] });
   }
 
   async history(book: number): Promise<{ undo: boolean; redo: boolean }> {

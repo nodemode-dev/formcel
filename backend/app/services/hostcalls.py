@@ -194,8 +194,14 @@ def resolve(key: str, books, fresh: bool = False, auto: dict | None = None) -> t
             delim = text_arg(args[1]) if len(args) > 1 and args[1] != "" else None
             return encode(webdata.import_data(text_arg(args[0]), delim, fresh)), ""
         if name == "IMPORTHTML":
-            need(args, 3)
+            need(args, 3, 1)
             return encode(webdata.import_html(text_arg(args[0]), text_arg(args[1]), int(args[2]), fresh)), ""
+        if name == "IMPORTFEED":
+            need(args, 1, 3)
+            query = text_arg(args[1]) if len(args) > 1 and args[1] != "" else "items"
+            heads = len(args) > 2 and args[2] not in ("", False, 0.0)
+            count = int(args[3]) if len(args) > 3 and args[3] != "" else None
+            return encode(webdata.import_feed(text_arg(args[0]), query, heads, count, fresh)), ""
         if name == "IMPORTXML":
             need(args, 2)
             return encode(webdata.import_xml(text_arg(args[0]), text_arg(args[1]), fresh)), ""
@@ -205,10 +211,10 @@ def resolve(key: str, books, fresh: bool = False, auto: dict | None = None) -> t
         if name == "IMPORTRANGE":
             return encode(importrange(args, books)), ""
         if name == "AI":
-            need(args, 1, 1)
-            return aiclient.cell_answer(text_arg(args[0]), text_arg(args[1]) if len(args) > 1 else ""), ""
+            need(args, 1, 7)
+            return aiclient.cell_answer(text_arg(args[0]), [text_arg(a) for a in args[1:] if a != ""]), ""
     except aiclient.NotConfigured as e:
-        return error("#N/A"), str(e)
+        return error("#ERROR!"), str(e)
     except (webdata.FetchError, ValueError, KeyError, IndexError, TypeError) as e:
         code = "#VALUE!" if name in ("WEBSERVICE", "FILTERXML") else "#N/A"
         return error(code), f"{name}: {e}"

@@ -54,6 +54,11 @@ class NameIn(BaseModel):
     refers: str = ""
 
 
+class NameToolIn(BaseModel):
+    op: str = Field(pattern="^(comment|rename|select|apply)$")
+    args: str = Field(max_length=20000)
+
+
 def missing(wid: str) -> HTTPException:
     return HTTPException(404, f"No workbook {wid}. It may have been moved to the Trash.")
 
@@ -439,6 +444,16 @@ def put_properties(wid: str, body: PropsIn) -> dict:
         return store().set_properties(wid, body.model_dump())
     except (KeyError, FileNotFoundError):
         raise missing(wid)
+
+
+@router.put("/workbooks/{wid}/names/tool")
+def name_tool(wid: str, body: NameToolIn) -> dict:
+    try:
+        return store().name_tool(wid, body.op, body.args)
+    except (KeyError, FileNotFoundError):
+        raise missing(wid)
+    except ValueError as e:
+        raise HTTPException(422, f"That name change was refused: {e}")
 
 
 def sheet_call(wid: str, *args, **kw) -> dict:

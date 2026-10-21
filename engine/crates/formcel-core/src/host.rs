@@ -4,7 +4,7 @@ use crate::{Addr, Changed, Value, Workbook};
 use std::sync::Mutex;
 use std::collections::HashMap;
 
-pub const HOST_FNS: [&str; 7] = ["AI", "FILTERXML", "IMPORTDATA", "IMPORTHTML", "IMPORTRANGE", "IMPORTXML", "WEBSERVICE"];
+pub const HOST_FNS: [&str; 8] = ["AI", "FILTERXML", "IMPORTDATA", "IMPORTFEED", "IMPORTHTML", "IMPORTRANGE", "IMPORTXML", "WEBSERVICE"];
 
 #[derive(Default, Debug)]
 pub struct Host {

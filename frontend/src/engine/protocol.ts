@@ -77,6 +77,7 @@ export type Request =
   | { id: number; op: 'format.read'; book: number; sheet: number; r0: number; c0: number; r1: number; c1: number }
   | { id: number; op: 'name.define'; book: number; name: string; refers: string }
   | { id: number; op: 'name.list'; book: number }
+  | { id: number; op: 'name.tool'; book: number; tool: string; args: string[] }
   | { id: number; op: 'undo' | 'redo' | 'history'; book: number }
   | { id: number; op: 'read'; book: number; sheet: number; r0: number; c0: number; r1: number; c1: number }
   | { id: number; op: 'extent'; book: number; sheet: number }
@@ -132,12 +133,19 @@ export interface FilterList {
 export type CfCell = [row: number, col: number, style: string, bar: string, icon: string];
 export type StyleChange = [sheet: number, row: number, col: number, raw: string, shown: string];
 export type Name = [name: string, refers: string];
+export interface NameRow {
+  name: string;
+  scope: string;
+  refers: string;
+  comment: string;
+  value: string;
+}
 export interface WhatIfReply {
   text: string;
   effect: Effect;
 }
 export type Arrow = [fromSheet: number, r0: number, c0: number, r1: number, c1: number, toSheet: number, row: number, col: number, level: number];
-export type EvalStep = [before: string, evaluating: string, after: string];
+export type EvalStep = [before: string, evaluating: string, after: string, into: string];
 export type Value = WhatIfReply | Arrow[] | EvalStep[] | string | number | boolean | number[] | string[] | Cell[] | Changed[] | Name[] | Edit[] | Area[] | CfCell[] | LinkChange[] | [number, number] | Shift | Effect | FilterList | null;
 
 export type Response =
