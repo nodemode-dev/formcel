@@ -2,6 +2,7 @@ import { engine } from '../engine';
 import type { Grid, Presence } from '../grid/grid';
 import { colName, parseRef } from '../grid/a1';
 import type { Menu } from './menu';
+import { NoticesPane, PeoplePane, SharePane, type ChatLine, type Chip, type Notice, type PaneHost, type Watch } from './review';
 
 export interface Host {
   grid: Grid;
@@ -14,10 +15,9 @@ export interface Host {
 interface Note { text: string; author: string; time: string }
 interface Message { id: string; author: string; time: string; text: string }
 interface Thread { id: string; sheet: number; row: number; col: number; status: string; assignee: string; messages: Message[] }
-interface Snapshot { notes: Record<string, Note>; threads: Thread[]; people: string[]; protection?: { book: string[]; sheets: string[][] } }
+interface Snapshot { notes: Record<string, Note>; threads: Thread[]; people: string[]; protection?: { book: string[]; sheets: string[][] }; notifications?: Notice[]; chat?: ChatLine[]; chips?: Record<string, Chip[]>; watch?: Watch[] }
 interface Version { id: string; time: string; name: string; user: string; why: string; size: number }
-interface Share { token: string; sheet: number; kind: string; url: string; embed: string }
-interface Change { t: string; user: string; sheetName: string; ref: string; before: string; after: string }
+interface Change { t: string; user: string; sheetName: string; ref: string; before: string; after: string; why?: string; kind?: string }
 
 const USER_KEY = 'formcel.user';
 export const clientId = Math.random().toString(36).slice(2, 10);
@@ -34,7 +34,7 @@ export function identityHeaders(): Record<string, string> {
   return { 'x-formcel-user': encodeURIComponent(userName()), 'x-formcel-client': clientId };
 }
 
-async function call<T>(method: string, url: string, body?: unknown): Promise<T> {
+export async function call<T>(method: string, url: string, body?: unknown): Promise<T> {
   const r = await fetch(url, { method, headers: { ...identityHeaders(), ...(body === undefined ? {} : { 'content-type': 'application/json' }) }, body: body === undefined ? undefined : JSON.stringify(body) });
   if (!r.ok) {
     const detail = await r.json().then((j: { detail?: string }) => j.detail).catch(() => undefined);
@@ -57,25 +57,25 @@ function esc(s: string): string {
   return s.replace(/[\\\t\n\r]/g, (c) => (c === '\\' ? '\\\\' : c === '\t' ? '\\t' : c === '\n' ? '\\n' : '\\r'));
 }
 
-function el<K extends keyof HTMLElementTagNameMap>(tag: K, cls = '', text = ''): HTMLElementTagNameMap[K] {
+export function el<K extends keyof HTMLElementTagNameMap>(tag: K, cls = '', text = ''): HTMLElementTagNameMap[K] {
   const e = document.createElement(tag);
   if (cls) e.className = cls;
   if (text) e.textContent = text;
   return e;
 }
 
-function button(label: string, cls = 'fc-btn'): HTMLButtonElement {
+export function button(label: string, cls = 'fc-btn'): HTMLButtonElement {
   const b = el('button', cls, label);
   b.type = 'button';
   return b;
 }
 
-function when(t: string): string {
+export function when(t: string): string {
   const d = new Date(t);
   return Number.isNaN(d.getTime()) ? t : d.toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' });
 }
 
-function colour(id: string): string {
+export function colour(id: string): string {
   let h = 0;
   for (const ch of id) h = (h * 31 + ch.charCodeAt(0)) % 360;
   return `hsl(${h} 70% 42%)`;
@@ -145,7 +145,14 @@ export class Collab {
   private readonly versionList = el('div', 'fc-side-list');
   private readonly versionName = el('input', 'fc-fmt-input');
   private readonly preview = el('div', 'fc-preview');
-  private readonly shareList = el('div', 'fc-side-list');
+  private readonly peoplePane: PeoplePane;
+  private readonly noticesPane: NoticesPane;
+  private readonly sharePane: SharePane;
+  private readonly changeUser = el('select', 'fc-fmt-input');
+  private readonly changeSince = el('select', 'fc-fmt-input');
+  private readonly chipLine = el('div', 'fc-chip-line');
+  private chipDlg: Dialog | null = null;
+  private chips: Record<string, Chip[]> = {};
   private readonly activityList = el('div', 'fc-side-list');
   private readonly tip = el('div', 'fc-note-tip');
   private readonly banner = el('div', 'fc-final-banner');
@@ -161,6 +168,19 @@ export class Collab {
   private tab = 'comments';
 
   constructor(private readonly host: Host) {
+    const pane: PaneHost = {
+      id: () => this.id,
+      sheets: () => this.sheets,
+      sheet: () => this.host.grid.sheetIndex,
+      selection: () => this.host.grid.selection(),
+      goTo: (a1) => this.host.grid.goTo(a1),
+      status: (text, error) => this.host.status(text, error),
+      refused: (text) => this.refused(text),
+      colName,
+    };
+    this.peoplePane = new PeoplePane(pane);
+    this.noticesPane = new NoticesPane(pane, () => this.paintInbox(), () => void this.reloadSnapshot(false));
+    this.sharePane = new SharePane(pane);
     this.buildSide();
     this.tip.hidden = true;
     this.banner.hidden = true;
@@ -180,7 +200,11 @@ export class Collab {
     cmd('review.panel', 'Comments panel', 'Open the side panel with comments, changes, version history, sharing and activity.', false, () => this.openTab(this.tab === 'share' ? 'comments' : this.tab));
     cmd('review.changes', 'Show changes', 'List who changed the active cell, the selection or the sheet, with the values before and after.', false, () => this.openTab('changes'));
     cmd('history.panel', 'Version history', 'List saved versions of this workbook, name one, preview it or restore it.', false, () => this.openTab('versions'));
-    cmd('share.panel', 'Share, publish and embed', 'Make a read-only link to a sheet served by the FormCel engine on this computer, copy an embed snippet, or revoke a link.', false, () => this.openTab('share'));
+    cmd('share.panel', 'Share, publish and embed', 'Turn on sharing on your network, make a link that lets people view, comment or edit, publish a sheet or the workbook as a web page or CSV, copy an embed snippet with gridlines, headers and range options, see who opened each link, or revoke a link.', false, () => this.openTab('share'));
+    cmd('review.inbox', 'Inbox', 'Open mentions, assigned comments, replies and changes to ranges you watch.', false, () => this.openTab('notices'));
+    cmd('review.people', 'People and chat', 'See who has this workbook open and where their cursor is, and chat with them.', false, () => this.openTab('people'));
+    cmd('review.watch', 'Notify me of changes in selection', 'Get a notice in the Inbox whenever another person changes a cell in the selected range.', false, () => this.watchSelection());
+    cmd('insert.chip', 'Smart chip', 'Attach a person, date, file or place chip to the active cell. Chips show in the side panel and when you point at the cell.', false, () => this.chipBox());
     cmd('protect.menu', 'Protection', 'Protect the sheet or the workbook structure, lock or hide cells, protect ranges for named people, or mark the workbook as final.', false, () => this.protectMenu());
     cmd('protect.sheet', 'Protect sheet', 'Stop edits to locked cells on the sheet, with an optional password and a list of allowed actions.', false, () => this.sheetBox());
     cmd('protect.cells', 'Cell protection', 'Mark the selected cells locked or unlocked, and hide or show their formulas when the sheet is protected.', false, () => void this.cellBox());
@@ -218,6 +242,8 @@ export class Collab {
     this.banner.hidden = true;
     this.tip.hidden = true;
     this.host.grid.setOthers([]);
+    this.peoplePane.reset();
+    this.chips = {};
     this.host.grid.setMarks(new Map());
     this.host.grid.setMasked(new Set());
   }
@@ -234,6 +260,7 @@ export class Collab {
       void call('POST', `/api/workbooks/${this.id}/presence`, { client: clientId, user: userName(), sheet: this.host.grid.sheetIndex, row, col }).catch(() => undefined);
     }, 150);
     if (this.tab === 'changes' && this.side.dataset.open === 'true' && this.changeScope.value === 'cell') void this.loadChanges();
+    this.paintChips();
   }
 
   refused(message: string): void {
@@ -245,11 +272,12 @@ export class Collab {
 
   hover(row: number, col: number, x: number, y: number): void {
     const note = row >= 0 ? this.snap.notes[`${this.host.grid.sheetIndex}:${row}:${col}`] : undefined;
-    if (!note) {
+    const chips = row >= 0 ? this.chipsHere(row, col) : [];
+    if (!note && !chips.length) {
       if (!this.tip.hidden) this.tip.hidden = true;
       return;
     }
-    this.tip.replaceChildren(document.createTextNode(note.text), Object.assign(el('small'), { textContent: note.author }));
+    this.tip.replaceChildren(document.createTextNode(note?.text ?? chips.map((c) => `${c.kind}: ${c.label}`).join('\n')), Object.assign(el('small'), { textContent: note ? note.author : 'Smart chip' }));
     this.tip.style.left = `${Math.min(x + 14, innerWidth - 280)}px`;
     this.tip.style.top = `${Math.min(y + 14, innerHeight - 120)}px`;
     this.tip.hidden = false;
@@ -289,6 +317,15 @@ export class Collab {
       this.host.grid.patch(changed);
       const [r, c] = cells[0] ?? [0, 0];
       this.addActivity(`${String(ev.user) || 'Someone'} edited ${this.sheets[sheet] ?? 'a sheet'}!${colName(c)}${r + 1}${cells.length > 1 ? ` and ${cells.length - 1} more cell${cells.length > 2 ? 's' : ''}` : ''}`);
+      if (((ev.told as string[] | undefined) ?? []).some((n) => n.toLowerCase() === userName().toLowerCase())) void this.reloadSnapshot(false);
+    } else if (type === 'chat') {
+      const m = ev.message as ChatLine;
+      this.peoplePane.add(m);
+      this.addActivity(`${m.user} wrote in chat`);
+    } else if (type === 'notices') {
+      void this.reloadSnapshot(false);
+    } else if (type === 'access') {
+      if (this.side.dataset.open === 'true' && this.tab === 'share') void this.sharePane.activity();
     } else if (type === 'collab' || type === 'protection') {
       await this.reloadSnapshot(true);
       if (type === 'collab') this.addActivity('Notes or comments changed');
@@ -304,12 +341,20 @@ export class Collab {
     if (!this.id) return;
     const s = await call<Snapshot>('GET', `/api/workbooks/${this.id}/collab`).catch(() => null);
     if (!s || !this.id) return;
-    this.snap = s;
+    this.take(s);
     if (withProtection && s.protection) {
       await engine().protLoad(this.book, -1, s.protection.book);
       for (let i = 0; i < this.sheets.length; i++) await engine().protLoad(this.book, i, s.protection.sheets[i] ?? []);
     }
     await this.refreshAll();
+  }
+
+  private take(s: Snapshot): void {
+    this.snap = s;
+    this.chips = s.chips ?? {};
+    this.noticesPane.show(s.notifications ?? [], s.watch ?? []);
+    this.peoplePane.lines(s.chat ?? []);
+    this.paintChips();
   }
 
   private addActivity(text: string): void {
@@ -328,12 +373,17 @@ export class Collab {
     }
     this.host.grid.setOthers(here);
     this.who.textContent = names.length ? `Also here: ${names.join(', ')}` : 'Only you have this workbook open.';
+    this.peoplePane.people([...this.others].map(([id, o]) => ({ id, user: o.user, where: o.row >= 0 ? `${this.sheets[o.sheet] ?? ''}!${colName(o.col)}${o.row + 1}` : '' })));
   }
 
   private async refreshAll(): Promise<void> {
     if (!this.id) return;
     const sheet = this.host.grid.sheetIndex;
     const marks = new Map<number, string>();
+    for (const k of Object.keys(this.chips)) {
+      const [s, r, c] = k.split(':').map(Number);
+      if (s === sheet) marks.set(this.host.grid.keyOf(r, c), '#0d9488');
+    }
     for (const t of this.snap.threads) if (t.sheet === sheet && t.status !== 'resolved') marks.set(this.host.grid.keyOf(t.row, t.col), '#7c3aed');
     for (const k of Object.keys(this.snap.notes)) {
       const [s, r, c] = k.split(':').map(Number);
@@ -377,7 +427,7 @@ export class Collab {
     this.side.setAttribute('aria-label', 'Review');
     const head = el('div', 'fc-side-tabs');
     head.setAttribute('role', 'tablist');
-    const labels: [string, string][] = [['comments', 'Comments'], ['changes', 'Changes'], ['versions', 'Versions'], ['share', 'Share'], ['activity', 'Activity']];
+    const labels: [string, string][] = [['comments', 'Comments'], ['notices', 'Inbox'], ['people', 'People'], ['changes', 'Changes'], ['versions', 'Versions'], ['share', 'Share'], ['activity', 'Activity']];
     for (const [k, label] of labels) {
       const t = button(label, 'fc-side-tab');
       t.setAttribute('role', 'tab');
@@ -403,7 +453,7 @@ export class Collab {
     post.addEventListener('click', () => void this.newThread());
     const compose = el('div', 'fc-card');
     compose.append(this.composer, this.mentionRow, assignLabel, post);
-    comments.append(compose, this.threadList);
+    comments.append(this.chipLine, compose, this.threadList);
     this.panes.set('comments', comments);
 
     const changes = el('div', 'fc-side-pane');
@@ -413,7 +463,15 @@ export class Collab {
     refresh.addEventListener('click', () => void this.loadChanges());
     const row = el('div', 'fc-row');
     row.append(this.changeScope, refresh);
-    changes.append(row, this.changeList);
+    this.changeUser.appendChild(Object.assign(el('option'), { value: '', textContent: 'Everyone' }));
+    for (const [v, l] of [['', 'Any time'], ['1h', 'Last hour'], ['today', 'Today'], ['7d', 'Last 7 days'], ['30d', 'Last 30 days']]) this.changeSince.appendChild(Object.assign(el('option'), { value: v, textContent: l }));
+    this.changeUser.setAttribute('aria-label', 'Changes by');
+    this.changeSince.setAttribute('aria-label', 'Changes since');
+    this.changeUser.addEventListener('change', () => void this.loadChanges());
+    this.changeSince.addEventListener('change', () => void this.loadChanges());
+    const filters = el('div', 'fc-filters');
+    filters.append(this.changeUser, this.changeSince);
+    changes.append(row, filters, this.changeList);
     this.panes.set('changes', changes);
 
     const versions = el('div', 'fc-side-pane');
@@ -426,14 +484,9 @@ export class Collab {
     this.preview.hidden = true;
     this.panes.set('versions', versions);
 
-    const share = el('div', 'fc-side-pane');
-    const pub = button('Publish this sheet to the web');
-    pub.addEventListener('click', () => void this.makeShare('publish'));
-    const link = button('Share this sheet by link (read-only)');
-    link.addEventListener('click', () => void this.makeShare('share'));
-    const snote = el('span', 'fc-muted', 'Links open a read-only page served by the FormCel engine on this computer, so they work on this machine or on a network that can reach it. Revoke a link to stop it working.');
-    share.append(pub, link, snote, this.shareList);
-    this.panes.set('share', share);
+    this.panes.set('notices', this.noticesPane.root);
+    this.panes.set('people', this.peoplePane.root);
+    this.panes.set('share', this.sharePane.root);
 
     const act = el('div', 'fc-side-pane');
     act.append(el('span', 'fc-muted', 'Edits and changes made by other windows on this workbook.'), this.activityList);
@@ -533,8 +586,7 @@ export class Collab {
 
   private async apply(p: Promise<Snapshot>): Promise<void> {
     try {
-      const s = await p;
-      this.snap = s;
+      this.take(await p);
       await this.refreshAll();
     } catch (err) {
       this.refused(err instanceof Error ? err.message : 'That did not save.');
@@ -798,11 +850,23 @@ export class Collab {
     const sheet = g.sheetIndex;
     const scope = this.changeScope.value;
     const s = scope === 'cell' ? { r0: g.activeCell()[0], c0: g.activeCell()[1], r1: g.activeCell()[0], c1: g.activeCell()[1] } : g.selection();
-    const q = scope === 'all' ? '' : scope === 'sheet' ? `?sheet=${sheet}` : `?sheet=${sheet}&r0=${s.r0}&c0=${s.c0}&r1=${s.r1}&c1=${s.c1}`;
-    const r = await call<{ changes: Change[] }>('GET', `/api/workbooks/${this.id}/history${q}`).catch(() => ({ changes: [] as Change[] }));
+    const q = new URLSearchParams();
+    if (scope === 'sheet') q.set('sheet', String(sheet));
+    else if (scope !== 'all') for (const [k, v] of Object.entries({ sheet, r0: s.r0, c0: s.c0, r1: s.r1, c1: s.c1 })) q.set(k, String(v));
+    if (this.changeUser.value) q.set('user', this.changeUser.value);
+    const since = this.changeSince.value;
+    if (since) {
+      const d = new Date();
+      if (since === 'today') d.setHours(0, 0, 0, 0);
+      else d.setTime(d.getTime() - { '1h': 3600e3, '7d': 7 * 864e5, '30d': 30 * 864e5 }[since]!);
+      q.set('since', d.toISOString());
+    }
+    const r = await call<{ changes: Change[]; people?: string[] }>('GET', `/api/workbooks/${this.id}/history${q.size ? `?${q.toString()}` : ''}`).catch(() => ({ changes: [] as Change[], people: undefined }));
+    if (r.people) this.fillChangeUsers(r.people);
     const rows = r.changes.map((c) => {
       const tr = el('tr');
-      for (const v of [when(c.t), c.user || 'Unknown', `${c.sheetName}!${c.ref}`, `${c.before || '(empty)'} to ${c.after || '(empty)'}`]) tr.appendChild(el('td', '', v));
+      const detail = c.kind === 'shift' ? (c.why ?? '') : `${c.before || '(empty)'} to ${c.after || '(empty)'}${c.why ? ` (${c.why})` : ''}`;
+      for (const v of [when(c.t), c.user || 'Unknown', `${c.sheetName}!${c.ref}`, detail]) tr.appendChild(el('td', '', v));
       return tr;
     });
     if (!rows.length) {
@@ -811,6 +875,23 @@ export class Collab {
       rows.push(tr);
     }
     this.changeList.replaceChildren(...rows);
+  }
+
+  private watchSelection(): void {
+    if (!this.id) return;
+    const s = this.host.grid.selection();
+    void call('POST', `/api/workbooks/${this.id}/watch`, { sheet: this.host.grid.sheetIndex, r0: s.r0, c0: s.c0, r1: s.r1, c1: s.c1 }).then(
+      () => {
+        this.host.status('You will be told when that range changes');
+        return this.reloadSnapshot(false);
+      },
+      (err: unknown) => this.refused(err instanceof Error ? err.message : 'Not watching.'),
+    );
+  }
+
+  private fillChangeUsers(names: string[]): void {
+    const have = new Set(Array.from(this.changeUser.options).map((o) => o.value));
+    for (const n of names) if (!have.has(n)) this.changeUser.appendChild(Object.assign(el('option'), { value: n, textContent: n }));
   }
 
   private async loadVersions(): Promise<void> {
@@ -875,44 +956,84 @@ export class Collab {
   }
 
   private async loadShares(): Promise<void> {
-    if (!this.id) return;
-    const r = await call<{ shares: Share[] }>('GET', `/api/workbooks/${this.id}/shares`).catch(() => ({ shares: [] as Share[] }));
-    const cards = r.shares.map((s) => {
-      const c = el('div', 'fc-card');
-      const head = el('div', 'fc-card-head');
-      head.append(Object.assign(el('strong'), { textContent: s.kind === 'publish' ? 'Published' : 'Shared by link' }), el('span', 'fc-muted', this.sheets[s.sheet] ?? ''));
-      const url = el('input', 'fc-fmt-input');
-      url.readOnly = true;
-      url.value = s.url;
-      url.setAttribute('aria-label', 'Link');
-      const row = el('div', 'fc-row');
-      const copy = button('Copy link');
-      copy.addEventListener('click', () => void this.copy(s.url));
-      const embed = button('Copy embed code');
-      embed.addEventListener('click', () => void this.copy(s.embed));
-      const open = button('Open');
-      open.addEventListener('click', () => window.open(s.url, '_blank', 'noopener'));
-      const revoke = button('Revoke', 'fc-btn');
-      revoke.addEventListener('click', () => void call('DELETE', `/api/workbooks/${this.id}/shares/${s.token}`).then(() => this.loadShares()));
-      row.append(copy, embed, open, revoke);
-      c.append(head, url, row);
-      return c;
+    await this.sharePane.load();
+  }
+
+  private paintInbox(): void {
+    const n = this.noticesPane.unread();
+    const label = n ? `Inbox (${n})` : 'Inbox';
+    const tab = this.tabs.get('notices');
+    if (tab && tab.textContent !== label) tab.textContent = label;
+  }
+
+  private chipsHere(row: number, col: number): Chip[] {
+    return this.chips[`${this.host.grid.sheetIndex}:${row}:${col}`] ?? [];
+  }
+
+  private paintChips(): void {
+    const [row, col] = this.host.grid.activeCell();
+    const sheet = this.host.grid.sheetIndex;
+    const here = this.chipsHere(row, col);
+    const nodes = here.map((c) => {
+      const chip = el('span', 'fc-chip', `${c.label}`);
+      chip.dataset.kind = c.kind;
+      chip.title = `${c.kind}: ${c.value}`;
+      const wrap = el('span', 'fc-row');
+      const link = this.chipLink(c);
+      if (link) {
+        const open = button(c.kind === 'place' ? 'Map' : 'Open', 'fc-link');
+        open.addEventListener('click', () => window.open(link, '_blank', 'noopener'));
+        wrap.append(chip, open);
+      } else {
+        wrap.append(chip);
+      }
+      const del = button('Remove', 'fc-link');
+      del.addEventListener('click', () => void this.apply(call<Snapshot>('DELETE', `/api/workbooks/${this.id}/chips/${sheet}/${row}/${col}/${c.id}`)));
+      wrap.append(del);
+      return wrap;
     });
-    this.shareList.replaceChildren(...(cards.length ? cards : [el('span', 'fc-muted', 'Nothing is shared or published.')]));
+    const sig = here.map((c) => c.id).join('|') + `@${sheet}:${row}:${col}`;
+    if (this.chipLine.dataset.sig === sig) return;
+    this.chipLine.dataset.sig = sig;
+    this.chipLine.hidden = !nodes.length;
+    this.chipLine.replaceChildren(...nodes);
   }
 
-  private async copy(text: string): Promise<void> {
-    try {
-      await navigator.clipboard.writeText(text);
-      this.host.status('Copied');
-    } catch {
-      this.host.status('Could not copy; select the link and copy it', true);
-    }
+  private chipLink(c: Chip): string {
+    if (c.kind === 'place') return `https://www.openstreetmap.org/search?query=${encodeURIComponent(c.value || c.label)}`;
+    if (c.kind === 'file' && /^https?:\/\//i.test(c.value)) return c.value;
+    if (c.kind === 'person' && /^[^@\s]+@[^@\s]+$/.test(c.value)) return `mailto:${c.value}`;
+    return '';
   }
 
-  private async makeShare(kind: string): Promise<void> {
-    await call('POST', `/api/workbooks/${this.id}/shares`, { sheet: this.host.grid.sheetIndex, kind }).catch((e: unknown) => this.refused(e instanceof Error ? e.message : 'Not shared.'));
-    await this.loadShares();
+  private chipBox(): void {
+    if (!this.id) return;
+    const d = (this.chipDlg ??= dialog('Smart chip', '<label class="fc-fmt-label">Kind<select class="fc-fmt-input" data-k="kind"><option value="person">Person</option><option value="date">Date</option><option value="file">File or link</option><option value="place">Place</option></select></label><label class="fc-fmt-label">Name shown<input class="fc-fmt-input" data-k="label" autocomplete="off"></label><label class="fc-fmt-label">Value: email address, date (2026-10-23), link or path, or an address<input class="fc-fmt-input" data-k="value" autocomplete="off"></label>', () => this.host.grid.focus()));
+    const [row, col] = this.host.grid.activeCell();
+    d.form.querySelector('.fc-fmt-title')!.textContent = `Smart chip on ${colName(col)}${row + 1}`;
+    d.q<HTMLInputElement>('label').value = '';
+    d.q<HTMLInputElement>('value').value = '';
+    d.form.onsubmit = (e) => {
+      e.preventDefault();
+      const kind = d.q<HTMLSelectElement>('kind').value;
+      const value = d.q<HTMLInputElement>('value').value.trim();
+      const label = d.q<HTMLInputElement>('label').value.trim() || value;
+      if (!label) {
+        d.form.dataset.state = 'error';
+        d.hint.textContent = 'Give the chip a name or a value.';
+        return;
+      }
+      if (kind === 'date' && Number.isNaN(new Date(value).getTime())) {
+        d.form.dataset.state = 'error';
+        d.hint.textContent = 'Type the date as year-month-day, for example 2026-10-23.';
+        return;
+      }
+      void this.apply(call<Snapshot>('POST', `/api/workbooks/${this.id}/chips`, { sheet: this.host.grid.sheetIndex, row, col, kind, label, value })).then(() => {
+        d.close();
+        this.openTab('comments');
+      });
+    };
+    d.show();
   }
 
   private paintActivity(): void {

@@ -15,6 +15,7 @@ import { Axis, type AxisState } from './axis';
 import { MAX_COLS, MAX_ROWS, a1, colName, parseRef, rangeText, type Range } from './a1';
 import { fillSeries } from './fill';
 import { runCommand } from '../ui/commands';
+import { markAction } from '../ui/action';
 import { parseTable, tablePaint, type TableInfo } from './tables';
 import { drawSpark, SPARK_CODE } from '../charts/spark';
 
@@ -1045,6 +1046,7 @@ export class Grid {
   }
 
   async sortRange(range: Range, keys: [number, boolean][], header: boolean, caseSensitive = false): Promise<void> {
+    markAction(`Sorted ${rangeText(range)}`);
     this.recorder?.({ k: 'sort', sheet: this.sheet, r0: range.r0, c0: range.c0, r1: range.r1, c1: range.c1, keys, header });
     await this.applyEffect(await this.engine.sort(this.book, this.sheet, range.r0, range.c0, range.r1, range.c1, keys, header, caseSensitive));
     this.select(range.r0, range.c0, range.r1, range.c1, false);
@@ -1078,6 +1080,7 @@ export class Grid {
     const a = this.filterArea;
     if (!a) return;
     const mark = await this.engine.undoMark(this.book);
+    markAction(`Sorted ${rangeText({ r0: a[0], c0: a[1], r1: a[2], c1: a[3] })} by column ${colName(col)}`);
     await this.applyEffect(await this.engine.sort(this.book, this.sheet, a[0], a[1], a[2], a[3], [[col, descending]], true, false));
     await this.applyEffect(await this.engine.reapplyFilter(this.book, this.sheet));
     await this.engine.undoGroup(this.book, mark);
