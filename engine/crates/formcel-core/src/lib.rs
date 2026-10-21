@@ -5,6 +5,7 @@ use std::fmt;
 pub mod eval;
 pub mod formula;
 mod graph;
+pub mod fmtcode;
 pub mod numfmt;
 pub use numfmt::Fmt;
 mod store;

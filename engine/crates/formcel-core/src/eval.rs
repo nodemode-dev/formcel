@@ -709,6 +709,22 @@ impl<'a> Eval<'a> {
                     }
                     Value::Text(s.iter().skip(st as usize - 1).take(k as usize).collect())
                 }
+                "TEXT" => {
+                    if !count(2, 2) {
+                        return Err(ErrKind::Na);
+                    }
+                    let v = match self.scalar(&a[0]) {
+                        Value::Error(k) => return Err(k),
+                        Value::Text(s) => match Value::parse_input(&s) {
+                            n @ Value::Number(_) => n,
+                            _ => Value::Text(s),
+                        },
+                        Value::Empty => Value::Number(0.0),
+                        o => o,
+                    };
+                    let code = self.t(a, 1)?;
+                    Value::Text(crate::fmtcode::text(&v, &code).ok_or(ErrKind::Value)?)
+                }
                 "SUBSTITUTE" => {
                     if !count(3, 4) {
                         return Err(ErrKind::Na);

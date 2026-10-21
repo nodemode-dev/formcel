@@ -1661,6 +1661,25 @@
    }
   },
   {
+   "name": "TEXT",
+   "args": [
+    "value",
+    "format_text"
+   ],
+   "summary": "A value shown as text in a number format code.",
+   "category": "Text",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/text-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Text",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
    "name": "TEXTSPLIT",
    "args": [
     "text",

@@ -2,8 +2,31 @@
 
 Living log of comment content and rationale for the Rust engine. Source stays near comment-free; it lives here.
 
-Current build version: v0.16.0
-Last updated: 2026-10-21 · ERROR.TYPE, EXACT
+Current build version: v0.17.0
+Last updated: 2026-10-21 · number format codes, TEXT
+
+### Number format codes and TEXT
+- refers-to: src/fmtcode.rs :: parse, section, Code::render, number, fraction, date, literal, text; src/eval.rs :: call ("TEXT"); src/formula.rs :: FUNCTIONS (107)
+- kind: explainer
+- logged: v0.17.0 · 2026-10-21
+
+`fmtcode` reads the format codes described on Microsoft's "Review guidelines for customizing a number format" page (MS-NUMGUIDE) and renders a value with them:
+- Sections and selection: up to four sections (positive, negative, zero, text), split on `;` outside quotes. With two or more sections a negative number uses the second section and is shown without its minus sign (`$-0.00" Shortage"` writes its own). With three or more, zero uses the third. The text section is the fourth, or a section that has `@` and no digit placeholders.
+- Brackets: `[Red]` and the other seven colours are parsed and returned for later cell display. Conditions such as `[<=9999999]` pick the section that holds; when none holds, the next section without a condition is used. `[$€-407]` shows its symbol.
+- Literals: quoted text, `\x`, and any other character are shown as written. `_x` gives one space; `*x` is skipped, since there is no column to fill.
+- Numbers: `0`, `#` and `?` digit placeholders on both sides of `.`, with extra integer digits shown. A comma between placeholders adds thousands separators, and commas after the last placeholder each divide by 1,000. `%` multiplies by 100.
+- Scientific: `E+` or `E-` with exponent digits. With `#` in the integer part, the exponent steps by the number of integer placeholders (`#0.0E+0` gives `12.2E+6`).
+- Fractions: `# ?/?` and `# ???/???` use the closest fraction whose denominator has that many digits, and a fixed denominator such as `?/8` is also read.
+- Dates and times: `y`, `m` and `d` runs, `h`, `m` and `s`. `m` or `mm` is minutes right after an hour code or right before seconds, and months otherwise, as the page's note says. AM/PM and A/P switch to a 12-hour clock. `.00` after seconds shows hundredths. `[h]`, `[mm]` and `[ss]` show elapsed time.
+- `General` shows the usual display.
+
+Rounding is half away from zero. A single-section code shows a minus sign before a negative number only when a nonzero digit is shown, so `-0.001` in `0.00` shows `0.00`; that is FormCel's own choice.
+
+TEXT(value, format_text) renders with the code. Number-like text is read as a number (`TEXT("5","0.0")` is 5.0), a blank is 0, TRUE and FALSE show as written, errors pass through, and an unreadable code (unbalanced quote, unknown bracket, five sections) gives `#VALUE!`. A date code on a negative number also gives `#VALUE!` (FormCel's choice; there is no column for `####`).
+
+Checks (`fmtcheck.py` in the sidecar's tools): every "To display / As / Use this code" row on MS-NUMGUIDE, the sections, literal and text examples in its prose, and TEXT's examples that do not depend on today (51 cases, aligned output compared with runs of spaces squashed). Dates and times were checked on 4 March 2026 16:36:03.75, a value chosen here, with the expected text worked by hand. The conformance run is now 186 pass, 0 fail: THANKSGIVINGDATE on the LAMBDA page needed TEXT.
+
+Not done yet: cells cannot take a format code (they still use the automatic `Fmt`); the format is not applied to cell display; locale-specific codes (`[$-409]` dates, decimal commas) are not built.
 
 ### ERROR.TYPE and EXACT
 - refers-to: src/eval.rs :: call ("ERROR.TYPE", "EXACT"); src/formula.rs :: FUNCTIONS (106)
