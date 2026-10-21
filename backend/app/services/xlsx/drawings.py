@@ -3,21 +3,66 @@ import io
 import re
 from collections import Counter
 
-from openpyxl.chart import AreaChart, BarChart, BubbleChart, DoughnutChart, LineChart, PieChart, RadarChart, Reference, ScatterChart, Series
+from openpyxl.chart import AreaChart, BarChart, BubbleChart, DoughnutChart, LineChart, PieChart, RadarChart, Reference, ScatterChart, Series, StockChart
+from openpyxl.chart.axis import ChartLines
 from openpyxl.chart.data_source import AxDataSource, NumDataSource, NumRef, StrRef
 from openpyxl.chart.label import DataLabelList
+from openpyxl.chart.marker import Marker
 from openpyxl.chart.series import SeriesLabel
+from openpyxl.chart.updown_bars import UpDownBars
 from openpyxl.drawing.image import Image as XImage
 from openpyxl.drawing.spreadsheet_drawing import AnchorMarker, OneCellAnchor
 from openpyxl.drawing.xdr import XDRPositiveSize2D
 from openpyxl.utils import get_column_letter, range_boundaries
+
+from . import chartex, chartstyle
 
 EMU = 9525
 COL_PX = 100
 ROW_PX = 24
 LEGEND = {"right": "r", "left": "l", "top": "t", "bottom": "b"}
 LEGEND_IN = {"r": "right", "l": "left", "t": "top", "b": "bottom", "tr": "right"}
-EXPORTED = {"column", "column-stacked", "bar", "bar-stacked", "line", "area", "pie", "doughnut", "scatter", "bubble", "combo", "radar"}
+EXPORTED = {"column", "column-stacked", "bar", "bar-stacked", "line", "area", "pie", "doughnut", "scatter", "bubble", "combo", "radar", "candlestick"} | chartex.CHARTEX | chartex.TAGGED
+LIST = "\x1f"
+
+
+def _plain(s: str) -> str:
+    out = ""
+    i = 0
+    while i < len(s):
+        if s[i] == "\\" and i + 1 < len(s):
+            out += {"t": "\t", "n": "\n", "r": "\r"}.get(s[i + 1], s[i + 1])
+            i += 2
+        else:
+            out += s[i]
+            i += 1
+    return out
+
+
+def pivot_ranges(lines: list[str], names: list[str]) -> dict[str, str]:
+    out: dict[str, str] = {}
+    for line in lines or []:
+        p = line.split("\t")
+        if len(p) < 13 or not p[7] or ":" not in p[7]:
+            continue
+        try:
+            sheet, area = p[7].split(":", 1)
+            r0, c0, r1, c1 = (int(x) for x in area.split(","))
+            sheet = names[int(sheet)]
+        except (ValueError, IndexError):
+            continue
+        filters = [x for x in p[11].split(LIST) if x]
+        kc = len([x for x in p[9].split(LIST) if x])
+        nv = len([x for x in p[10].split(LIST) if x])
+        flags = p[6]
+        top = r0 + (len(filters) + 1 if filters else 0)
+        head = top + (kc + (1 if nv > 1 else 0) if kc > 0 else 0)
+        last = r1 - (1 if "r" in flags and r1 > head else 0)
+        width = max(nv, 1)
+        right = c1 - (width if "c" in flags and kc > 0 and c1 - width > c0 else 0)
+        name = _plain(p[0])
+        out[name] = f"'{sheet.replace(chr(39), chr(39) * 2)}'!{get_column_letter(c0 + 1)}{head + 1}:{get_column_letter(right + 1)}{last + 1}"
+    return out
 
 
 def _sizes(view: dict, key: str, default: int) -> dict[int, int]:
@@ -79,11 +124,16 @@ def _cell_ref(ws, by_rows: bool, bounds: tuple[int, int, int, int], line: int, p
     return f"'{ws.title}'!${get_column_letter(col)}${row}"
 
 
-def chart_out(wb, host, obj: dict, view: dict) -> bool:
+def chart_out(wb, host, obj: dict, view: dict, pivots: dict | None = None) -> bool:
     spec = obj.get("chart") or {}
+    if spec.get("pivot") and pivots and spec["pivot"] in pivots:
+        spec = {**spec, "range": pivots[spec["pivot"]]}
     kind = spec.get("type", "column")
     if kind not in EXPORTED:
         return False
+    tagged = kind in chartex.TAGGED
+    if tagged:
+        kind = "column"
     text = str(spec.get("range", ""))
     ws = host
     if "!" in text:
@@ -104,6 +154,12 @@ def chart_out(wb, host, obj: dict, view: dict) -> bool:
     lay = _layout(ws, bounds, by_rows, scatter)
     if lay["rows"] < 1 or lay["cols"] < 1:
         return False
+    if kind in chartex.CHARTEX:
+        xml = chartex.build(kind, spec, ws, bounds, by_rows, lay)
+        if xml is None:
+            return False
+        chartex.queue(wb, host.title, obj, xml)
+        return True
     first = 1 if lay["labels"] else 0
     lo = 1 if lay["header"] else 0
     hi = lay["rows"] - 1
@@ -116,18 +172,21 @@ def chart_out(wb, host, obj: dict, view: dict) -> bool:
     if kind == "combo" and not secondary and nser > 1:
         secondary = {nser - 1}
 
-    def series(j: int):
+    style_kind = "pie" if kind in ("pie", "doughnut") else kind
+
+    def series(j: int, line_like: bool = False):
         line = first + j
         vals = _ref(ws, by_rows, bounds, line, lo, hi)
         s = Series(vals, title=None)
         if lay["header"]:
             s.tx = SeriesLabel(strRef=StrRef(_cell_ref(ws, by_rows, bounds, line, 0)))
+        chartstyle.series_out(s, j, spec, style_kind, line_like or kind in ("line", "scatter", "radar"))
         return s
 
-    def attach(chart, indices) -> None:
+    def attach(chart, indices, line_like: bool = False) -> None:
         cats = _ref(ws, by_rows, bounds, 0, lo, hi) if lay["labels"] else None
         for j in indices:
-            s = series(j)
+            s = series(j, line_like)
             if scatter and cats is not None:
                 s.xVal = AxDataSource(numRef=NumRef(f=str(cats)))
             chart.series.append(s)
@@ -144,7 +203,7 @@ def chart_out(wb, host, obj: dict, view: dict) -> bool:
         attach(chart, main)
         if kind == "combo" and secondary:
             top = LineChart()
-            attach(top, sorted(secondary))
+            attach(top, sorted(secondary), True)
             top.y_axis.axId = 200
             top.y_axis.crosses = "max"
             top.y_axis.delete = False
@@ -172,9 +231,27 @@ def chart_out(wb, host, obj: dict, view: dict) -> bool:
             s.xVal = AxDataSource(numRef=NumRef(f=str(cats)))
             s.yVal = NumDataSource(numRef=NumRef(f=str(_ref(ws, by_rows, bounds, first, lo, hi))))
             s.bubbleSize = NumDataSource(numRef=NumRef(f=str(_ref(ws, by_rows, bounds, first + 1, lo, hi))))
+            if lay["header"]:
+                s.tx = SeriesLabel(strRef=StrRef(_cell_ref(ws, by_rows, bounds, first, 0)))
+            chartstyle.series_out(s, 0, spec, "bubble", False)
             chart.series.append(s)
         else:
             return False
+    elif kind == "candlestick":
+        if nser < 4:
+            return False
+        names = [str(ws.cell(row=(bounds[1] + first + j) if by_rows else bounds[1], column=bounds[0] if by_rows else bounds[0] + first + j).value or "").lower() for j in range(nser)]
+        picks = []
+        for word, fallback in (("open", 0), ("high", 1), ("low", 2), ("close", 3)):
+            hit = next((j for j, n in enumerate(names) if word in n and j not in picks), None)
+            picks.append(hit if hit is not None else fallback)
+        chart = StockChart()
+        attach(chart, picks, True)
+        for s in chart.series:
+            s.graphicalProperties.line.noFill = True
+            s.marker = Marker(symbol="none")
+        chart.hiLowLines = ChartLines()
+        chart.upDownBars = UpDownBars()
     else:
         chart = RadarChart()
         attach(chart, range(nser))
@@ -199,8 +276,11 @@ def chart_out(wb, host, obj: dict, view: dict) -> bool:
     if spec.get("labels"):
         chart.dataLabels = DataLabelList()
         chart.dataLabels.showVal = True
+    chartstyle.chart_out(chart, spec, style_kind, [c for c in getattr(chart, "_charts", []) if c is not chart])
     chart.anchor = _anchor(obj, view)
     host.add_chart(chart)
+    if tagged:
+        chartex.tag(wb, host.title, len(host._charts) - 1, spec)
     return True
 
 
@@ -219,10 +299,10 @@ def picture_out(host, obj: dict, view: dict) -> bool:
     return True
 
 
-def objects_out(wb, ws, objects: list[dict], view: dict, notes: Counter | None = None) -> None:
+def objects_out(wb, ws, objects: list[dict], view: dict, notes: Counter | None = None, pivots: dict | None = None) -> None:
     for obj in objects:
         kind = obj.get("kind")
-        ok = chart_out(wb, ws, obj, view) if kind == "chart" else picture_out(ws, obj, view) if kind == "picture" else False
+        ok = chart_out(wb, ws, obj, view, pivots) if kind == "chart" else picture_out(ws, obj, view) if kind == "picture" else False
         if not ok and notes is not None:
             notes[kind or "object"] += 1
 
@@ -265,17 +345,30 @@ def _title_text(t) -> str:
         return ""
 
 
-def chart_in(ch, ws_title: str, view: dict) -> dict | None:
-    sers = list(ch.series)
+def _val_pos(s, rows_axis: bool) -> int | None:
+    src = getattr(s, "val", None) or getattr(s, "yVal", None)
+    ref = src.numRef.f if src is not None and src.numRef is not None else None
+    got = _refs(ref) if ref else None
+    if not got:
+        return None
+    return got[1][1] if rows_axis else got[1][0]
+
+
+def chart_in(ch, ws_title: str, view: dict, found: dict | None = None) -> dict | None:
+    charts = list(getattr(ch, "_charts", None) or [ch])
+    sers = [s for c in charts for s in c.series]
     if not sers:
         return None
     kind = ch.tagname
     if kind == "barChart":
         spec_type = ("bar" if ch.type == "bar" else "column") + ("-stacked" if ch.grouping in ("stacked", "percentStacked") else "")
     else:
-        spec_type = {"lineChart": "line", "line3DChart": "line", "areaChart": "area", "pieChart": "pie", "pie3DChart": "pie", "doughnutChart": "doughnut", "scatterChart": "scatter", "bubbleChart": "bubble", "radarChart": "radar"}.get(kind)
+        spec_type = {"lineChart": "line", "line3DChart": "line", "areaChart": "area", "pieChart": "pie", "pie3DChart": "pie", "doughnutChart": "doughnut", "scatterChart": "scatter", "bubbleChart": "bubble", "radarChart": "radar", "stockChart": "candlestick"}.get(kind)
     if not spec_type:
         return None
+    second = [c for c in charts[1:] if c.tagname == "lineChart"] if kind == "barChart" else []
+    if second:
+        spec_type = "combo"
     boxes: list[tuple[int, int, int, int]] = []
     sheet = None
     by_rows = False
@@ -311,18 +404,41 @@ def chart_in(ch, ws_title: str, view: dict) -> dict | None:
     xt = _title_text(ch.x_axis.title) if getattr(ch, "x_axis", None) is not None and ch.x_axis.title is not None else ""
     yt = _title_text(ch.y_axis.title) if getattr(ch, "y_axis", None) is not None and ch.y_axis.title is not None else ""
     x, y, w, h = _px_from_anchor(ch.anchor, view)
-    return {"kind": "chart", "x": x, "y": y, "w": w, "h": h, "chart": {"type": spec_type, "range": rng, "byRows": by_rows, "title": _title_text(ch.title) if ch.title is not None else "", "xTitle": xt, "yTitle": yt, "legend": legend, "labels": bool(ch.dataLabels is not None and ch.dataLabels.showVal), "secondary": []}}
+    labels = bool(ch.dataLabels is not None and ch.dataLabels.showVal) or any(getattr(s, "dLbls", None) is not None and s.dLbls.showVal for s in sers)
+    spec: dict = {"type": spec_type, "range": rng, "byRows": by_rows, "title": _title_text(ch.title) if ch.title is not None else "", "xTitle": xt, "yTitle": yt, "legend": legend, "labels": labels, "secondary": []}
+    if spec_type == "combo":
+        positions = sorted({p for p in (_val_pos(s, by_rows) for s in sers) if p is not None})
+        spec["secondary"] = sorted({positions.index(p) for p in (_val_pos(s, by_rows) for c in second for s in c.series) if p in positions})
+    chartstyle.chart_in(ch, spec, sers, "pie" if spec_type in ("pie", "doughnut") else spec_type)
+    if found:
+        fill = chartex.plot_fill(found["xml"])
+        if fill:
+            spec["plotFill"] = fill
+        tagged = chartex.decode_tag(found.get("title", ""))
+        if tagged and tagged.get("type") in chartex.TAGGED:
+            spec.update({k: v for k, v in tagged.items() if k != "pivot"})
+    return {"kind": "chart", "x": x, "y": y, "w": w, "h": h, "chart": spec}
 
 
-def objects_in(ws, view: dict, notes: Counter) -> list[dict]:
+def objects_in(ws, view: dict, notes: Counter, found: list[dict] | None = None) -> list[dict]:
     out: list[dict] = []
+    classic = {(e["from"][0], e["from"][2]): e for e in (found or []) if e.get("kind") == "chart" and "from" in e}
     for i, ch in enumerate(getattr(ws, "_charts", []) or []):
-        item = chart_in(ch, ws.title, view)
+        anchor = getattr(ch, "anchor", None)
+        key = (anchor._from.col, anchor._from.row) if anchor is not None and getattr(anchor, "_from", None) is not None else None
+        item = chart_in(ch, ws.title, view, classic.get(key))
         if item is None:
             notes["charts of a type FormCel does not draw left out"] += 1
             continue
         item["id"] = f"x{id(ws) % 10**6}c{i}"
         out.append(item)
+    for i, e in enumerate(x for x in (found or []) if x.get("kind") == "cx"):
+        cspec = chartex.parse(e["xml"], ws.title)
+        if cspec is None:
+            notes["charts of a type FormCel does not draw left out"] += 1
+            continue
+        x, y, w, h = _px_from_anchor(chartex.anchor_of(e), view)
+        out.append({"id": f"x{id(ws) % 10**6}x{i}", "kind": "chart", "x": x, "y": y, "w": w, "h": h, "chart": cspec})
     for i, im in enumerate(getattr(ws, "_images", []) or []):
         try:
             data = im._data()

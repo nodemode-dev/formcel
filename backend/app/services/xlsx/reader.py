@@ -11,6 +11,7 @@ from openpyxl.worksheet.formula import ArrayFormula, DataTableFormula
 from .. import page
 from .autofilter import filter_in
 from .cf import rules_in
+from .chartex import scan
 from .drawings import objects_in
 from .formulas import from_file
 from .protect import book_in, flags_in, notes_in, sheet_in
@@ -130,6 +131,7 @@ def read(data: bytes) -> dict:
     except (AttributeError, IndexError, TypeError):
         pass
     known, custom = _named(wb, default_font)
+    drawn = scan(data)
     sheets = []
     for ws in wb.worksheets:
         cells, formats, styles, links = [], [], [], []
@@ -182,7 +184,7 @@ def read(data: bytes) -> dict:
         rules = rules_in(ws, notes)
         autofilter = filter_in(ws, wb, view, notes)
         valid = validations_in(ws, notes)
-        objects = objects_in(ws, view, notes)
+        objects = objects_in(ws, view, notes, drawn.get(ws.title))
         if getattr(ws, "_pivots", None):
             notes["pivot tables left out"] += len(ws._pivots)
         if not autofilter:

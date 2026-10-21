@@ -10,7 +10,8 @@ from openpyxl.worksheet.hyperlink import Hyperlink
 from .. import page
 from .autofilter import filter_out
 from .cf import rules_out
-from .drawings import objects_out
+from .chartex import inject
+from .drawings import objects_out, pivot_ranges
 from .formulas import to_file
 from .protect import book_out, notes_out, sheet_out
 from .styles import apply_out
@@ -139,9 +140,10 @@ def write(eng, views: list[dict], vba: dict[str, bytes] | None = None, objects: 
                     tb.autoFilter.filterColumn = list(ws.auto_filter.filterColumn)
                 ws.auto_filter.ref = None
                 ws.auto_filter.filterColumn = []
+    pivots = pivot_ranges(eng.pivots(), eng.sheet_names())
     for i, items in enumerate(objects or []):
         if items and i < len(wb.worksheets):
-            objects_out(wb, wb.worksheets[i], items, views[i] if i < len(views) else {})
+            objects_out(wb, wb.worksheets[i], items, views[i] if i < len(views) else {}, pivots=pivots)
     wb.calculation.fullCalcOnLoad = True
     if vba:
         buf = io.BytesIO()
@@ -151,4 +153,4 @@ def write(eng, views: list[dict], vba: dict[str, bytes] | None = None, objects: 
         wb.vba_archive = zipfile.ZipFile(io.BytesIO(buf.getvalue()))
     out = io.BytesIO()
     wb.save(out)
-    return out.getvalue()
+    return inject(out.getvalue(), wb, views, COL_PX, ROW_PX)
