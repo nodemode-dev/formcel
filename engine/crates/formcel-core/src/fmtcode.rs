@@ -529,7 +529,37 @@ fn literal(sec: &Section, text: Option<&str>) -> String {
     out
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Class {
+    Number,
+    Percent,
+    Date,
+    Time,
+    DateTime,
+    Text,
+}
+
 impl Code {
+    pub fn class(&self) -> Class {
+        let s = &self.sections[0];
+        if s.is_text() && !s.has_number() && self.sections.len() == 1 {
+            return Class::Text;
+        }
+        if s.is_date() {
+            let date = s.toks.iter().any(|t| matches!(t, Tok::Date('y' | 'd', _)) || matches!(t, Tok::Date('m', n) if *n > 2));
+            let time = s.toks.iter().any(|t| matches!(t, Tok::Date('h' | 's', _) | Tok::AmPm(_) | Tok::Elapsed(..)));
+            return match (date, time) {
+                (true, true) => Class::DateTime,
+                (false, true) => Class::Time,
+                _ => Class::Date,
+            };
+        }
+        if s.toks.contains(&Tok::Percent) {
+            return Class::Percent;
+        }
+        Class::Number
+    }
+
     pub fn render(&self, v: &Value) -> Option<(String, Option<Color>)> {
         let secs = &self.sections;
         match v {

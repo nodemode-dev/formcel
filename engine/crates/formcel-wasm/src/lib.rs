@@ -99,7 +99,7 @@ pub unsafe extern "C" fn fc_get(id: u32, sheet: u32, a1: *const u8, a1_len: u32)
 #[no_mangle]
 pub unsafe extern "C" fn fc_apply(id: u32, sheet: u32, edits: *const u8, len: u32) -> i32 {
     let Some(edits) = wire::decode_edits(text(edits, len)) else { return -1 };
-    match with_book(id, |wb| wb.apply(sheet as usize, &edits).map(|c| wire::encode_changed(&c, &|s, a| wb.formula_text(s, a)))) {
+    match with_book(id, |wb| wb.apply(sheet as usize, &edits).map(|c| wire::encode_changed(&c, &|s, a| wb.meta(s, a)))) {
         Some(Ok(s)) => emit(&s) as i32,
         _ => -1,
     }
@@ -159,7 +159,7 @@ pub extern "C" fn fc_sheet_names(id: u32) -> i32 {
 fn history(id: u32, forward: bool) -> i32 {
     let r = with_book(id, |wb| {
         let e = if forward { wb.redo() } else { wb.undo() };
-        e.map(|e| wire::encode_effect(&e, &|s, a| wb.formula_text(s, a)))
+        e.map(|e| wire::encode_effect(&e, &|s, a| wb.meta(s, a)))
     });
     match r {
         Some(Some(s)) => emit(&s) as i32,
@@ -201,11 +201,49 @@ pub extern "C" fn fc_move_sheet(id: u32, from: u32, to: u32) -> i32 {
 #[no_mangle]
 pub unsafe extern "C" fn fc_define_name(id: u32, name: *const u8, name_len: u32, refers: *const u8, refers_len: u32) -> i32 {
     let (name, refers) = (text(name, name_len).to_string(), text(refers, refers_len).to_string());
-    match with_book(id, |wb| wb.define_name(&name, &refers).map(|c| wire::encode_changed(&c, &|s, a| wb.formula_text(s, a)))) {
+    match with_book(id, |wb| wb.define_name(&name, &refers).map(|c| wire::encode_changed(&c, &|s, a| wb.meta(s, a)))) {
         Some(Ok(s)) => emit(&s) as i32,
         Some(Err(formcel_core::EngineError::BadName(_))) => -3,
         Some(Err(_)) => -4,
         None => -1,
+    }
+}
+
+/// Sets the number format code of a rectangle as one undo step (empty or General clears it); the out buffer gets the effect.
+/// Returns -3 for a code that does not parse.
+///
+/// # Safety
+/// `code` must point at `len` readable bytes.
+#[no_mangle]
+pub unsafe extern "C" fn fc_set_format(id: u32, sheet: u32, r0: u32, c0: u32, r1: u32, c1: u32, code: *const u8, len: u32) -> i32 {
+    let code = text(code, len).to_string();
+    let r = with_book(id, |wb| wb.set_format(sheet as usize, Addr { row: r0, col: c0 }, Addr { row: r1, col: c1 }, &code).map(|e| wire::encode_effect(&e, &|s, a| wb.meta(s, a))));
+    match r {
+        Some(Ok(s)) => emit(&s) as i32,
+        Some(Err(formcel_core::EngineError::BadFormat(_))) => -3,
+        _ => -1,
+    }
+}
+
+/// The number format code of one cell, empty for General.
+#[no_mangle]
+pub extern "C" fn fc_format_at(id: u32, sheet: u32, row: u32, col: u32) -> i32 {
+    match with_book(id, |wb| wb.format_code(sheet as usize, Addr { row, col }).unwrap_or_default()) {
+        Some(s) => emit(&s) as i32,
+        None => -1,
+    }
+}
+
+/// Loads `row\tcol\tcode` lines without an undo step; returns the count.
+///
+/// # Safety
+/// `lines` must point at `len` readable bytes.
+#[no_mangle]
+pub unsafe extern "C" fn fc_load_formats(id: u32, sheet: u32, lines: *const u8, len: u32) -> i32 {
+    let Some(cells) = wire::decode_edits(text(lines, len)) else { return -1 };
+    match with_book(id, |wb| wb.load_formats(sheet as usize, &cells)) {
+        Some(Ok(n)) => n as i32,
+        _ => -1,
     }
 }
 
@@ -256,7 +294,7 @@ pub extern "C" fn fc_history(id: u32) -> i32 {
 #[no_mangle]
 pub extern "C" fn fc_read(id: u32, sheet: u32, r0: u32, c0: u32, r1: u32, c1: u32) -> i32 {
     let (top, bottom) = (Addr { row: r0, col: c0 }, Addr { row: r1, col: c1 });
-    match with_book(id, |wb| wb.read(sheet as usize, top, bottom).map(|cells| wire::encode_cells(sheet as usize, &cells, &|s, a| wb.formula_text(s, a)))) {
+    match with_book(id, |wb| wb.read(sheet as usize, top, bottom).map(|cells| wire::encode_cells(sheet as usize, &cells, &|s, a| wb.meta(s, a)))) {
         Some(Ok(s)) => emit(&s) as i32,
         _ => -1,
     }

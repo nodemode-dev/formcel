@@ -4,10 +4,21 @@ pub fn encode_shift(s: &Shift) -> String {
     format!("#\t{}\t{}\t{}\t{}\n", s.sheet, if s.rows { 'r' } else { 'c' }, s.at, s.delta)
 }
 
-pub type FxOf<'a> = &'a dyn Fn(usize, Addr) -> Option<String>;
+pub type FxOf<'a> = &'a dyn Fn(usize, Addr) -> (Option<String>, bool);
+
+pub fn encode_formats(formats: &[(usize, Addr, String)]) -> String {
+    let mut out = String::new();
+    for (s, a, code) in formats {
+        out.push_str(&format!("%\t{}\t{}\t{}\t", s, a.row, a.col));
+        escape(code, &mut out);
+        out.push('\n');
+    }
+    out
+}
 
 pub fn encode_effect(e: &Effect, fx: FxOf) -> String {
     let mut out = e.shift.as_ref().map(encode_shift).unwrap_or_default();
+    out.push_str(&encode_formats(&e.formats));
     out.push_str(&encode_changed(&e.cells, fx));
     out
 }
@@ -43,10 +54,14 @@ pub fn unescape(s: &str) -> String {
     out
 }
 
-fn line(out: &mut String, a: Addr, v: &Value, fx: Option<String>) {
+fn line(out: &mut String, a: Addr, v: &Value, (fx, num): (Option<String>, bool)) {
     out.push_str(&a.row.to_string());
     out.push('\t');
     out.push_str(&a.col.to_string());
+    out.push('\t');
+    if num {
+        out.push('n');
+    }
     out.push('\t');
     escape(&v.to_string(), out);
     if let Some(f) = fx {

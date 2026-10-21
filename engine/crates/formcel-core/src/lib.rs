@@ -126,6 +126,7 @@ pub enum EngineError {
     NoSheet(usize),
     BadName(String),
     BadFormula(String),
+    BadFormat(String),
 }
 
 impl fmt::Display for EngineError {
@@ -136,6 +137,7 @@ impl fmt::Display for EngineError {
             EngineError::NoSheet(i) => write!(f, "no sheet at index {i}"),
             EngineError::BadName(n) => write!(f, "not a valid name: {n}"),
             EngineError::BadFormula(s) => write!(f, "not a valid formula: {s}"),
+            EngineError::BadFormat(s) => write!(f, "not a valid number format: {s}"),
         }
     }
 }
@@ -253,12 +255,18 @@ pub struct Shift {
 pub struct Effect {
     pub cells: Changed,
     pub shift: Option<Shift>,
+    pub formats: Vec<(usize, Addr, String)>,
 }
+
+type FormatChange = (Key, Option<String>, Option<String>);
+
+const FORMAT_LIMIT: u64 = 1_000_000;
 
 #[derive(Clone, Debug)]
 enum Tx {
     Cells(Vec<Change>),
     Shift { shift: Shift, dropped: Vec<(Addr, String)>, rewritten: Vec<(usize, Addr, String)> },
+    Formats(Vec<FormatChange>),
 }
 
 #[derive(Debug)]
@@ -273,6 +281,7 @@ pub struct Workbook {
     spilled: FastMap<Key, Key>,
     touched: Vec<Key>,
     names: FastMap<String, (String, Expr)>,
+    codes: FastMap<Key, std::sync::Arc<(String, fmtcode::Code)>>,
 }
 
 const SPILL_PASSES: usize = 8;
@@ -319,6 +328,7 @@ impl Workbook {
             spilled: FastMap::default(),
             touched: Vec::new(),
             names: FastMap::default(),
+            codes: FastMap::default(),
         }
     }
 
@@ -397,10 +407,131 @@ impl Workbook {
     }
 
     fn shown(&self, sheet: usize, a: Addr, v: Value) -> Value {
+        if let Some(c) = self.codes.get(&(sheet, a)) {
+            if matches!(v, Value::Number(_) | Value::Text(_)) {
+                if let Some((s, _)) = c.1.render(&v) {
+                    return Value::Text(s);
+                }
+            }
+            return v;
+        }
         match (&v, self.fmts.get(&(sheet, a))) {
             (Value::Number(n), Some(f)) => numfmt::show(*n, *f).map_or(v, Value::Text),
             _ => v,
         }
+    }
+
+    fn const_text(&self, sheet: usize, a: Addr, v: &Value) -> String {
+        let Some(c) = self.codes.get(&(sheet, a)) else { return self.shown(sheet, a, v.clone()).to_string() };
+        let Value::Number(n) = v else { return v.to_string() };
+        let n = *n;
+        let as_fmt = match c.1.class() {
+            fmtcode::Class::Date if n.fract() == 0.0 => Some(Fmt::Date),
+            fmtcode::Class::Date | fmtcode::Class::DateTime => Some(if n.fract() == 0.0 { Fmt::Date } else { Fmt::DateTime { secs: true, ampm: true } }),
+            fmtcode::Class::Time => Some(Fmt::Time { secs: true, ampm: true }),
+            fmtcode::Class::Percent => return format!("{}%", Value::Number(eval::sig15(n * 100.0))),
+            _ => None,
+        };
+        as_fmt.and_then(|f| numfmt::show(n, f)).unwrap_or_else(|| v.to_string())
+    }
+
+    pub fn meta(&self, sheet: usize, a: Addr) -> (Option<String>, bool) {
+        let num = matches!(self.sheets.get(sheet).and_then(|s| s.cells.get(a)), Some(Value::Number(_)));
+        let raw = self.formula_text(sheet, a).or_else(|| (self.codes.contains_key(&(sheet, a)) && !self.spilled.contains_key(&(sheet, a))).then(|| self.input(sheet, a)).filter(|s| !s.is_empty()));
+        (raw, num)
+    }
+
+    pub fn format_code(&self, sheet: usize, a: Addr) -> Option<String> {
+        self.codes.get(&(sheet, a)).map(|c| c.0.clone())
+    }
+
+    pub fn formats(&self, sheet: usize) -> Vec<(Addr, String)> {
+        let mut out: Vec<(Addr, String)> = self.codes.iter().filter(|((s, _), _)| *s == sheet).map(|((_, a), c)| (*a, c.0.clone())).collect();
+        out.sort_by_key(|(a, _)| (a.row, a.col));
+        out
+    }
+
+    pub fn load_formats(&mut self, sheet: usize, cells: &[(Addr, String)]) -> Result<usize, EngineError> {
+        if sheet >= self.sheets.len() {
+            return Err(EngineError::NoSheet(sheet));
+        }
+        let mut n = 0;
+        for (a, code) in cells {
+            let k = (sheet, *a);
+            if code.is_empty() {
+                self.codes.remove(&k);
+            } else if let Some(c) = fmtcode::parse(code) {
+                self.codes.insert(k, std::sync::Arc::new((code.clone(), c)));
+                n += 1;
+            }
+        }
+        Ok(n)
+    }
+
+    pub fn set_format(&mut self, sheet: usize, top: Addr, bottom: Addr, code: &str) -> Result<Effect, EngineError> {
+        self.check(sheet, top)?;
+        self.check(sheet, bottom)?;
+        let code = code.trim();
+        let new = if code.is_empty() || code.eq_ignore_ascii_case("General") { None } else { Some(code.to_string()) };
+        if let Some(c) = &new {
+            fmtcode::parse(c).ok_or_else(|| EngineError::BadFormat(c.clone()))?;
+        }
+        let (r0, r1, c0, mut c1) = (top.row.min(bottom.row), top.row.max(bottom.row), top.col.min(bottom.col), top.col.max(bottom.col));
+        let mut r1 = r1;
+        if u64::from(r1 - r0 + 1) * u64::from(c1 - c0 + 1) > FORMAT_LIMIT {
+            let e = self.sheets[sheet].cells.extent().unwrap_or(Addr { row: 0, col: 0 });
+            r1 = r1.min(e.row.max(r0 + 999));
+            c1 = c1.min(e.col.max(c0 + 25));
+            let width = u64::from(c1 - c0 + 1);
+            if u64::from(r1 - r0 + 1) * width > FORMAT_LIMIT {
+                r1 = r0 + (FORMAT_LIMIT / width) as u32 - 1;
+            }
+        }
+        let mut changes = Vec::new();
+        for r in r0..=r1 {
+            for c in c0..=c1 {
+                let k = (sheet, Addr { row: r, col: c });
+                let before = self.codes.get(&k).map(|x| x.0.clone());
+                if before != new {
+                    changes.push((k, before, new.clone()));
+                }
+            }
+        }
+        let eff = self.apply_formats(&changes, true);
+        if !changes.is_empty() {
+            self.record(Tx::Formats(changes));
+        }
+        Ok(Effect { cells: self.present(eff.cells), ..eff })
+    }
+
+    fn apply_formats(&mut self, changes: &[FormatChange], forward: bool) -> Effect {
+        let mut cells = Vec::new();
+        let mut formats = Vec::with_capacity(changes.len());
+        let mut parsed: Vec<std::sync::Arc<(String, fmtcode::Code)>> = Vec::new();
+        for (k, before, after) in changes {
+            let to = if forward { after } else { before };
+            let entry = to.as_ref().and_then(|c| match parsed.iter().find(|p| &p.0 == c) {
+                Some(p) => Some(p.clone()),
+                None => fmtcode::parse(c).map(|p| {
+                    let arc = std::sync::Arc::new((c.clone(), p));
+                    parsed.push(arc.clone());
+                    arc
+                }),
+            });
+            match entry {
+                Some(arc) => {
+                    self.codes.insert(*k, arc);
+                }
+                None => {
+                    self.codes.remove(k);
+                }
+            }
+            formats.push((k.0, k.1, to.clone().unwrap_or_default()));
+            if let Some(v) = self.sheets[k.0].cells.get(k.1) {
+                cells.push((k.0, k.1, v.clone()));
+            }
+        }
+        Effect { cells, shift: None, formats }
     }
 
     fn present(&self, changed: Changed) -> Changed {
@@ -415,7 +546,7 @@ impl Workbook {
             return String::new();
         }
         match self.sheets.get(sheet).and_then(|s| s.cells.get(a)) {
-            Some(v) => self.shown(sheet, a, v.clone()).to_string(),
+            Some(v) => self.const_text(sheet, a, v),
             None => String::new(),
         }
     }
@@ -435,7 +566,7 @@ impl Workbook {
                 if self.spilled.contains_key(&(sheet, a)) {
                     return;
                 }
-                let text = self.formulas.get(&(sheet, a)).map_or_else(|| self.shown(sheet, a, v.clone()).to_string(), Formula::text);
+                let text = self.formulas.get(&(sheet, a)).map_or_else(|| self.const_text(sheet, a, v), Formula::text);
                 out.push((a, text));
             });
         }
@@ -445,7 +576,14 @@ impl Workbook {
     fn set_raw(&mut self, sheet: usize, a: Addr, raw: &str) {
         let k = (sheet, a);
         self.spilled.remove(&k);
-        if is_formula(raw) {
+        let as_text = self.codes.get(&k).is_some_and(|c| c.1.class() == fmtcode::Class::Text);
+        if as_text {
+            if self.formulas.remove(&k).is_some() {
+                self.graph.remove(&k);
+            }
+            self.fmts.remove(&k);
+            self.sheets[sheet].cells.set(a, if raw.is_empty() { Value::Empty } else { Value::Text(raw.to_string()) });
+        } else if is_formula(raw) {
             let f = Formula::new(raw);
             if self.graph.built {
                 let areas = self.areas_of(&k, &f);
@@ -834,7 +972,7 @@ impl Workbook {
                 self.formulas.insert((s.sheet, b), f);
             }
         }
-        let dropped = values.into_iter().map(|(a, v)| (a, lost.get(&a).cloned().unwrap_or_else(|| self.shown(s.sheet, a, v).to_string()))).collect();
+        let dropped = values.into_iter().map(|(a, v)| (a, lost.get(&a).cloned().unwrap_or_else(|| self.const_text(s.sheet, a, &v)))).collect();
         let fmts: Vec<(Key, Fmt)> = self.fmts.iter().filter(|((sh, _), _)| *sh == s.sheet).map(|(k, f)| (*k, *f)).collect();
         for (k, _) in &fmts {
             self.fmts.remove(k);
@@ -842,6 +980,15 @@ impl Workbook {
         for ((sh, a), f) in fmts {
             if let Some(b) = moved(a) {
                 self.fmts.insert((sh, b), f);
+            }
+        }
+        let codes: Vec<(Key, std::sync::Arc<(String, fmtcode::Code)>)> = self.codes.iter().filter(|((sh, _), _)| *sh == s.sheet).map(|(k, c)| (*k, c.clone())).collect();
+        for (k, _) in &codes {
+            self.codes.remove(k);
+        }
+        for ((sh, a), c) in codes {
+            if let Some(b) = moved(a) {
+                self.codes.insert((sh, b), c);
             }
         }
         self.recalc_all();
@@ -859,6 +1006,12 @@ impl Workbook {
         for ((s, a), f) in old {
             if let Some(n) = map(s) {
                 self.fmts.insert((n, a), f);
+            }
+        }
+        let old = std::mem::take(&mut self.codes);
+        for ((s, a), c) in old {
+            if let Some(n) = map(s) {
+                self.codes.insert((n, a), c);
             }
         }
     }
@@ -952,12 +1105,13 @@ impl Workbook {
                     self.set_raw(c.sheet, c.addr, raw);
                     seeds.push((c.sheet, c.addr));
                 }
-                Effect { cells: self.recalc(&seeds), shift: None }
+                Effect { cells: self.recalc(&seeds), shift: None, formats: Vec::new() }
             }
+            Tx::Formats(changes) => self.apply_formats(changes, forward),
             Tx::Shift { shift, dropped, rewritten } => {
                 if forward {
                     self.do_shift(*shift);
-                    return Effect { cells: Vec::new(), shift: Some(*shift) };
+                    return Effect { cells: Vec::new(), shift: Some(*shift), formats: Vec::new() };
                 }
                 let back = Shift { delta: -shift.delta, ..*shift };
                 self.do_shift(back);
@@ -969,7 +1123,7 @@ impl Workbook {
                 }
                 self.recalc_all();
                 let cells = dropped.iter().map(|(a, _)| (shift.sheet, *a, self.sheets[shift.sheet].cells.get(*a).cloned().unwrap_or(Value::Empty))).collect();
-                Effect { cells, shift: Some(back) }
+                Effect { cells, shift: Some(back), formats: Vec::new() }
             }
         }
     }
@@ -978,14 +1132,14 @@ impl Workbook {
         let tx = self.undo.pop()?;
         let out = self.replay(&tx, false);
         self.redo.push(tx);
-        Some(Effect { cells: self.present(out.cells), shift: out.shift })
+        Some(Effect { cells: self.present(out.cells), ..out })
     }
 
     pub fn redo(&mut self) -> Option<Effect> {
         let tx = self.redo.pop()?;
         let out = self.replay(&tx, true);
         self.undo.push(tx);
-        Some(Effect { cells: self.present(out.cells), shift: out.shift })
+        Some(Effect { cells: self.present(out.cells), ..out })
     }
 
     pub fn can_undo(&self) -> bool {

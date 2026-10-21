@@ -82,6 +82,30 @@ impl Workbook {
         self.inner.names()
     }
 
+    #[pyo3(signature = (top, bottom, code, sheet = 0))]
+    fn set_format(&mut self, top: &str, bottom: &str, code: &str, sheet: usize) -> PyResult<Vec<(String, String)>> {
+        let t = parse_a1(top).map_err(|e| PyValueError::new_err(e.to_string()))?;
+        let b = parse_a1(bottom).map_err(|e| PyValueError::new_err(e.to_string()))?;
+        self.inner.set_format(sheet, t, b, code).map(|e| pairs(e.cells)).map_err(|e| PyValueError::new_err(e.to_string()))
+    }
+
+    #[pyo3(signature = (a1, sheet = 0))]
+    fn format_code(&self, a1: &str, sheet: usize) -> PyResult<Option<String>> {
+        let a = parse_a1(a1).map_err(|e| PyValueError::new_err(e.to_string()))?;
+        Ok(self.inner.format_code(sheet, a))
+    }
+
+    #[pyo3(signature = (sheet = 0))]
+    fn formats(&self, sheet: usize) -> Vec<(u32, u32, String)> {
+        self.inner.formats(sheet).into_iter().map(|(a, c)| (a.row, a.col, c)).collect()
+    }
+
+    #[pyo3(signature = (cells, sheet = 0))]
+    fn load_formats(&mut self, cells: Vec<(u32, u32, String)>, sheet: usize) -> PyResult<usize> {
+        let cells: Vec<(Addr, String)> = cells.into_iter().map(|(row, col, c)| (Addr { row, col }, c)).collect();
+        self.inner.load_formats(sheet, &cells).map_err(|e| PyValueError::new_err(e.to_string()))
+    }
+
     fn undo(&mut self) -> Option<Vec<(String, String)>> {
         self.inner.undo().map(|e| pairs(e.cells))
     }
