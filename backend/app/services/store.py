@@ -2,10 +2,11 @@ import json
 import os
 import shutil
 import threading
+import time
 import uuid
 import zipfile
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import formcel_engine
@@ -111,6 +112,8 @@ class Store:
         self.guard = threading.Lock()
         self.versions = cb.Versions(root)
         self.hub = cb.Hub()
+        self.share_index: dict[str, str] = {}
+        self.flushed: dict[str, float] = {}
 
     def path(self, wid: str, trashed: bool = False) -> Path:
         if not wid.isalnum():
@@ -622,7 +625,7 @@ class Store:
             self._write(b)
             return {"names": [list(n) for n in b.engine.names()]}
 
-    def edit(self, wid: str, sheet: int, cells: list[tuple[int, int, str]], user: str = "", client: str | None = None) -> dict:
+    def edit(self, wid: str, sheet: int, cells: list[tuple[int, int, str]], user: str = "", client: str | None = None, why: str = "") -> dict:
         b = self._load(wid)
         with b.lock:
             names = b.sheet_names()
@@ -632,13 +635,16 @@ class Store:
             b.engine.guard_cells(sheet, [(r, c) for r, c, _ in cells])
             before = [b.engine.input(f"{cb.col_name(c)}{r + 1}", sheet) for r, c, _ in cells]
             b.engine.load(cells, sheet)
+            moved = []
             for (r, c, raw), was in zip(cells, before):
                 after = b.engine.input(f"{cb.col_name(c)}{r + 1}", sheet)
                 if after != was:
-                    cb.log_edit(b.collab, user, sheet, names[sheet], r, c, was, after)
+                    cb.log_edit(b.collab, user, sheet, names[sheet], r, c, was, after, why)
+                    moved.append((r, c))
+            told = cb.notify_edit(b.collab, user, sheet, names[sheet], moved) if moved and b.collab["watch"] else []
             b.modified = now()
             self._write(b)
-            self.hub.publish(wid, {"type": "edit", "sheet": sheet, "cells": [list(x) for x in cells], "user": user}, client)
+            self.hub.publish(wid, {"type": "edit", "sheet": sheet, "cells": [list(x) for x in cells], "user": user, "told": told}, client)
             return {"id": b.id, "modified": b.modified}
 
     def collab_edit(self, wid: str, fn, client: str | None = None, event: str = "collab"):
@@ -684,14 +690,49 @@ class Store:
         self.hub.publish(wid, {"type": "reload"}, client)
         return made or {}
 
-    def publish_sheet(self, wid: str, sheet: int, kind: str) -> dict:
+    def publish_sheet(self, wid: str, sheet: int, kind: str, perm: str = "view", scope: str = "sheet", fmt: str = "html", live: bool = True, days: int | None = None) -> dict:
         def run(b):
             if sheet >= len(b.sheet_names()):
                 raise IndexError(sheet)
+            if perm not in ("view", "comment", "edit"):
+                raise ValueError("A link gives view, comment or edit access.")
             t = cb.token()
-            b.collab["shares"][t] = {"sheet": sheet, "kind": kind, "created": cb.stamp(), "revoked": False, "wid": wid}
-            return {"token": t, **b.collab["shares"][t]}
+            expires = (datetime.now(timezone.utc) + timedelta(days=days)).isoformat(timespec="seconds") if days else ""
+            s = {"sheet": sheet, "kind": kind, "perm": perm, "scope": scope if scope in ("sheet", "book") else "sheet", "format": fmt if fmt in ("html", "csv") else "html", "live": bool(live), "expires": expires, "created": cb.stamp(), "revoked": False, "wid": wid}
+            if not live:
+                s["frozen"] = self._freeze(b, s)
+            b.collab["shares"][t] = s
+            return {"token": t, **{k: v for k, v in s.items() if k != "frozen"}}
         return self.collab_edit(wid, run, event="shares")
+
+    def republish(self, wid: str, t: str) -> dict:
+        def run(b):
+            s = b.collab["shares"][t]
+            if not s["live"]:
+                s["frozen"] = self._freeze(b, s)
+            s["republished"] = cb.stamp()
+            return {"token": t, **{k: v for k, v in s.items() if k != "frozen"}}
+        return self.collab_edit(wid, run, event="shares")
+
+    def share_options(self, wid: str, t: str, live: bool | None, perm: str | None) -> dict:
+        def run(b):
+            s = b.collab["shares"][t]
+            if perm in ("view", "comment", "edit"):
+                s["perm"] = perm
+            if live is not None and live != s["live"]:
+                s["live"] = live
+                if live:
+                    s.pop("frozen", None)
+                else:
+                    s["frozen"] = self._freeze(b, s)
+            return {"token": t, **{k: v for k, v in s.items() if k != "frozen"}}
+        return self.collab_edit(wid, run, event="shares")
+
+    @staticmethod
+    def _freeze(b: Book, s: dict) -> dict:
+        names = b.sheet_names()
+        keep = range(len(names)) if s["scope"] == "book" else [s["sheet"]]
+        return {"title": b.title, "names": names, "values": {str(i): [list(x) for x in b.engine.values(i)] for i in keep}, "styles": {str(i): [list(x) for x in b.engine.styles(i)] for i in keep}}
 
     def revoke_share(self, wid: str, t: str) -> dict:
         def run(b):
@@ -700,28 +741,59 @@ class Store:
             return {"token": t, **s}
         return self.collab_edit(wid, run, event="shares")
 
-    def published(self, t: str, embed: bool) -> str | None:
-        for p in sorted(self.dir.glob("*.fcel")):
-            wid = p.stem
+    def find_share(self, t: str) -> tuple[str, Book, dict] | None:
+        wid = self.share_index.get(t)
+        order = [self.dir / f"{wid}.fcel"] if wid else []
+        order += [p for p in sorted(self.dir.glob("*.fcel")) if p.stem != wid]
+        for p in order:
             try:
-                b = self.open.get(wid)
+                b = self.open.get(p.stem)
                 shares = b.collab["shares"] if b else (self._read(p).get("collab") or {}).get("shares", {})
                 if t not in shares:
                     continue
-                b = self._load(wid)
+                b = self._load(p.stem)
             except (OSError, ValueError, KeyError, zipfile.BadZipFile):
                 continue
             s = b.collab["shares"][t]
             if s["revoked"]:
                 return None
-            with b.lock:
-                i = s["sheet"]
-                names = b.sheet_names()
-                if i >= len(names):
-                    return None
-                styles = {(r, c): st for r, c, st in b.engine.styles(i)}
-                return cb.render_sheet(b.title, names[i], b.engine.values(i), styles, embed)
+            if s.get("expires") and (cb.when_of(s["expires"]) or datetime.now(timezone.utc)) < datetime.now(timezone.utc):
+                return None
+            self.share_index[t] = p.stem
+            return p.stem, b, s
         return None
+
+    def render_share(self, b: Book, s: dict, embed: bool, opts: dict) -> tuple[str, str] | None:
+        with b.lock:
+            if s.get("frozen"):
+                f = s["frozen"]
+                title, names = f["title"], f["names"]
+                values = lambda i: [tuple(x) for x in f["values"].get(str(i), [])]
+                styles = lambda i: {(r, c): st for r, c, st in f["styles"].get(str(i), [])}
+            else:
+                title, names = b.title, b.sheet_names()
+                values = lambda i: b.engine.values(i)
+                styles = lambda i: {(r, c): st for r, c, st in b.engine.styles(i)}
+            book_wide = s.get("scope") == "book"
+            try:
+                i = int(opts.get("sheet", s["sheet"])) if book_wide else s["sheet"]
+            except ValueError:
+                i = s["sheet"]
+            if not 0 <= i < len(names) or (s.get("frozen") and str(i) not in s["frozen"]["values"]):
+                return None
+            area = cb.area_of(opts.get("range", ""))
+            if s.get("format") == "csv":
+                return "text/csv; charset=utf-8", cb.csv_of(values(i), area)
+            return "text/html; charset=utf-8", cb.render_sheet(title, names[i], values(i), styles(i), embed, opts.get("gridlines", "1") != "0", opts.get("headers", "1") != "0", area, names if book_wide else None, i)
+
+    def record_access(self, wid: str, token: str, who: str, ip: str, what: str) -> None:
+        b = self._load(wid)
+        with b.lock:
+            cb.log_access(b.collab, token, who, ip, what)
+            if time.time() - self.flushed.get(wid, 0) > 15:
+                self.flushed[wid] = time.time()
+                self._write(b)
+        self.hub.publish(wid, {"type": "access"}, None)
 
     def add_sheet(self, wid: str, name: str) -> dict:
         b = self._load(wid)
@@ -731,11 +803,12 @@ class Store:
             self._write(b)
             return {"index": idx, "sheets": b.sheet_names()}
 
-    def shift(self, wid: str, sheet: int, rows: bool, at: int, n: int, insert: bool) -> dict:
+    def shift(self, wid: str, sheet: int, rows: bool, at: int, n: int, insert: bool, user: str = "") -> dict:
         b = self._load(wid)
         with b.lock:
             b.engine.shift(sheet, rows, at, n, insert)
             cb.shift_keys(b.collab, sheet, rows, at, n if insert else -n)
+            cb.log_shift(b.collab, user, sheet, b.sheet_names()[sheet], rows, at, n, insert)
             b.modified = now()
             self._write(b)
             return {"id": b.id, "modified": b.modified}

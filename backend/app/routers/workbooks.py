@@ -211,9 +211,9 @@ def get_workbook(wid: str) -> dict:
 
 
 @router.post("/workbooks/{wid}/cells")
-def edit_cells(wid: str, body: EditIn, request: Request) -> dict:
+def edit_cells(wid: str, body: EditIn, request: Request, why: str = "") -> dict:
     try:
-        return store().edit(wid, body.sheet, body.cells, unquote(request.headers.get("x-formcel-user", "")).strip()[:60], request.headers.get("x-formcel-client"))
+        return store().edit(wid, body.sheet, body.cells, unquote(request.headers.get("x-formcel-user", "")).strip()[:60], request.headers.get("x-formcel-client"), why)
     except PermissionError as e:
         raise HTTPException(403, str(e))
     except (KeyError, FileNotFoundError):
@@ -231,9 +231,9 @@ def add_sheet(wid: str, body: SheetIn) -> dict:
 
 
 @router.post("/workbooks/{wid}/shift")
-def shift_cells(wid: str, body: ShiftIn) -> dict:
+def shift_cells(wid: str, body: ShiftIn, request: Request) -> dict:
     try:
-        return store().shift(wid, body.sheet, body.rows, body.at, body.n, body.insert)
+        return store().shift(wid, body.sheet, body.rows, body.at, body.n, body.insert, unquote(request.headers.get("x-formcel-user", "")).strip()[:60])
     except (KeyError, FileNotFoundError):
         raise missing(wid)
     except ValueError as e:
