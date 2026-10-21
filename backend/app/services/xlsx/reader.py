@@ -14,10 +14,12 @@ from .autofilter import filter_in
 from .calcio import calc_in, render, scan
 from .cf import rules_in
 from .chartex import scan as scan_charts
+from .chartsheets import sheets_in
 from .drawings import objects_in
 from .extlinks import books_in, lines_in
 from .formulas import from_file
 from .overlay import Package
+from .prints import extra_areas, skip_name
 from .protect import book_in, flags_in, notes_in, sheet_in
 from .review import ranges_in, threads_in
 from .styles import tokens_in
@@ -26,6 +28,7 @@ from .whatif import whatif_in
 from .tables import tables_in
 from .theme import theme_in
 from .props import read_props
+from .slicers import slicers_in
 from .validation import validations_in
 
 ZOOMS = [0.5, 0.67, 0.75, 0.9, 1, 1.1, 1.25, 1.5, 1.75, 2]
@@ -200,6 +203,8 @@ def read(data: bytes) -> dict:
         setup = page.from_xlsx(ws)
         if setup:
             view["page"] = setup
+        if extra_areas(ws):
+            notes["print areas beyond the first on a sheet left out"] += extra_areas(ws)
         tab = ws.sheet_properties.tabColor
         if tab is not None and isinstance(tab.rgb, str) and len(tab.rgb) >= 6:
             view["color"] = "#" + tab.rgb[-6:].lower()
@@ -213,13 +218,13 @@ def read(data: bytes) -> dict:
                     autofilter = filter_in(ws, wb, view, notes, af=t.autoFilter)
                     break
         sheets.append({"name": ws.title[:31], "cells": cells, "formats": formats, "styles": styles, "merges": merges, "links": links, "rules": rules, "filter": autofilter, "validations": valid, "view": view, "objects": objects, "notes": notes_in(ws), "threads": threads[len(sheets)] if len(sheets) < len(threads) else [], "protection": sheet_in(ws, flagged) + (kept_ranges[len(sheets)] if len(sheets) < len(kept_ranges) else []), "arrays": [a[:4] for a in found if a[4] not in dynamic]})
-    for cs in wb.chartsheets:
-        notes["chart sheets left out"] += 1
+    for pos, entry in sheets_in(wb, notes):
+        sheets.insert(pos, entry)
+    order = {s.title: i for i, s in enumerate(wb._sheets)}
     names = []
     name_notes = []
     for name, dn in wb.defined_names.items():
-        if name.startswith("_xlnm.") or dn.hidden:
-            notes["print areas and hidden names left out"] += 1
+        if skip_name(name, dn, notes):
             continue
         text = dn.attr_text or ""
         names.append((name, "=" + from_file(text.lstrip("="))))
@@ -230,16 +235,16 @@ def read(data: bytes) -> dict:
         for name, dn in ws.defined_names.items():
             if name.startswith("solver_"):
                 continue
-            if name.startswith("_xlnm.") or dn.hidden:
-                notes["print areas and hidden names left out"] += 1
+            if skip_name(name, dn, notes):
                 continue
             scoped = f"{local}!{name}"
             names.append((scoped, "=" + from_file((dn.attr_text or "").lstrip("="))))
             if dn.comment:
                 name_notes.append((scoped, dn.comment))
-    tables = tables_in(wb, {ws.title: i for i, ws in enumerate(wb.worksheets)}, notes)
-    pivots = pivots_in(wb, data, {ws.title: i for i, ws in enumerate(wb.worksheets)}, notes)
-    what, filled = whatif_in(wb, data, {ws.title: i for i, ws in enumerate(wb.worksheets)}, notes)
+    tables = tables_in(wb, order, notes)
+    pivots = pivots_in(wb, data, order, notes)
+    slicers_in(wb, data, order, pivots, dict(enumerate(sheets)), notes)
+    what, filled = whatif_in(wb, data, order, notes)
     for i, r, c, v in filled:
         if i < len(sheets):
             sheets[i]["cells"].append((r, c, v))

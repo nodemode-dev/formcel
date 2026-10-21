@@ -47,7 +47,7 @@ def tidy(text: str) -> str:
     return "".join(out)
 
 
-def read(data: bytes, book) -> tuple[list[dict[tuple[int, int], str]], int]:
+def read(data: bytes, book, covered: list[set[tuple[int, int]]] | None = None) -> tuple[list[dict[tuple[int, int], str]], int]:
     try:
         doc = compdoc.CompDoc(data, io.StringIO())
         mem = doc.get_named_stream("Workbook") or doc.get_named_stream("Book")
@@ -64,8 +64,9 @@ def read(data: bytes, book) -> tuple[list[dict[tuple[int, int], str]], int]:
                 break
     sheets: list[dict[tuple[int, int], str]] = []
     lost = 0
-    for start in starts:
+    for si, start in enumerate(starts):
         found: dict[tuple[int, int], str] = {}
+        own = covered[si] if covered and si < len(covered) else set()
         shared: list[tuple[int, int, int, int, bytes]] = []
         pending: list[tuple[int, int]] = []
         depth = 0
@@ -84,7 +85,7 @@ def read(data: bytes, book) -> tuple[list[dict[tuple[int, int], str]], int]:
                 row, col = struct.unpack_from("<HH", mem, at)
                 cb = struct.unpack_from("<H", mem, at + 20)[0]
                 rgce = bytes(mem[at + 22 : at + 22 + cb])
-                if rgce[:1] == b"\x01":
+                if rgce[:1] in (b"\x01", b"\x02"):
                     pending.append((row, col))
                 else:
                     t = _text(book, rgce, TYPE_CELL, row, col)
@@ -97,7 +98,9 @@ def read(data: bytes, book) -> tuple[list[dict[tuple[int, int], str]], int]:
                 cce = struct.unpack_from("<H", mem, at + 8)[0]
                 shared.append((r0, r1, c0, c1, bytes(mem[at + 10 : at + 10 + cce])))
         for row, col in pending:
-            hit = next((s for s in shared if s[0] <= row <= s[1] and s[2] <= col <= s[3]), None)
+            if (row, col) in own:
+                continue
+            hit =next((s for s in shared if s[0] <= row <= s[1] and s[2] <= col <= s[3]), None)
             t = _text(book, hit[4], TYPE_SHARED, row, col) if hit else None
             if t is None:
                 lost += 1
