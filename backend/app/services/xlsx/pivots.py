@@ -607,7 +607,7 @@ def pivots_out(wb, eng) -> dict:
             continue
         try:
             made = build(eng, d, tables, k + 1, wb)
-        except (ValueError, TypeError, KeyError, IndexError, AttributeError):
+        except (ValueError, TypeError, KeyError, IndexError, AttributeError, ArithmeticError):
             made = None
         if made is None:
             continue
@@ -835,7 +835,7 @@ def pivots_in(wb, data: bytes, sheet_index: dict, notes: Counter) -> list[str]:
         for pt in getattr(ws, "_pivots", []):
             try:
                 line = pivot_in(wb, i, pt, sheet_index, ext.get(pt.name, []), notes)
-            except (ValueError, TypeError, KeyError, IndexError, AttributeError):
+            except (ValueError, TypeError, KeyError, IndexError, AttributeError, ArithmeticError):
                 line = None
                 notes["pivot tables FormCel could not read left out"] += 1
             if line:
