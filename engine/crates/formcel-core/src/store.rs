@@ -181,6 +181,44 @@ impl Store {
         }
     }
 
+    pub fn take_all(&mut self) -> Vec<(Addr, Value)> {
+        let blocks = std::mem::take(&mut self.blocks);
+        self.len = 0;
+        let mut out = Vec::new();
+        for ((rb, cb), b) in blocks {
+            for (i, v) in b.cells {
+                out.push((unkey(rb, cb, i), v));
+            }
+        }
+        out
+    }
+
+    pub fn shift(&mut self, rows: bool, at: u32, delta: i64) -> Vec<(Addr, Value)> {
+        let mut dropped = Vec::new();
+        let limit = i64::from(if rows { MAX_ROWS } else { MAX_COLS });
+        let at64 = i64::from(at);
+        for (a, v) in self.take_all() {
+            let c = i64::from(if rows { a.row } else { a.col });
+            let moved = if delta >= 0 {
+                if c >= at64 { c + delta } else { c }
+            } else if c >= at64 && c < at64 - delta {
+                dropped.push((a, v));
+                continue;
+            } else if c >= at64 - delta {
+                c + delta
+            } else {
+                c
+            };
+            if moved >= limit {
+                dropped.push((a, v));
+                continue;
+            }
+            let b = if rows { Addr { row: moved as u32, ..a } } else { Addr { col: moved as u32, ..a } };
+            self.set(b, v);
+        }
+        dropped
+    }
+
     pub fn edge(&self, from: Addr, dir: Dir) -> Addr {
         let Some(n) = dir.step(from) else { return from };
         if self.is_filled(from) && self.is_filled(n) {

@@ -143,9 +143,45 @@ pub extern "C" fn fc_sheet_names(id: u32) -> i32 {
 
 fn history(id: u32, forward: bool) -> i32 {
     match with_book(id, |wb| if forward { wb.redo() } else { wb.undo() }) {
-        Some(Some(c)) => emit(&wire::encode_changed(&c)) as i32,
+        Some(Some(e)) => emit(&wire::encode_effect(&e)) as i32,
         Some(None) => -2,
         None => -1,
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn fc_shift(id: u32, sheet: u32, rows: u32, at: u32, n: u32, insert: u32) -> i32 {
+    let r = with_book(id, |wb| if insert != 0 { wb.insert(sheet as usize, rows != 0, at, n) } else { wb.delete(sheet as usize, rows != 0, at, n) });
+    match r {
+        Some(Ok(s)) => emit(&wire::encode_shift(&s)) as i32,
+        _ => -1,
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn fc_delete_sheet(id: u32, sheet: u32) -> i32 {
+    match with_book(id, |wb| wb.delete_sheet(sheet as usize)) {
+        Some(Ok(())) => 0,
+        _ => -1,
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn fc_move_sheet(id: u32, from: u32, to: u32) -> i32 {
+    match with_book(id, |wb| wb.move_sheet(from as usize, to as usize)) {
+        Some(Ok(())) => 0,
+        _ => -1,
+    }
+}
+
+/// # Safety
+/// `name` must point at `len` readable bytes.
+#[no_mangle]
+pub unsafe extern "C" fn fc_rename_sheet(id: u32, sheet: u32, name: *const u8, len: u32) -> i32 {
+    let name = text(name, len).to_string();
+    match with_book(id, |wb| wb.rename_sheet(sheet as usize, &name)) {
+        Some(Ok(())) => 0,
+        _ => -1,
     }
 }
 

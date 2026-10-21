@@ -1,4 +1,14 @@
-use crate::{Addr, Changed, Value};
+use crate::{Addr, Changed, Effect, Shift, Value};
+
+pub fn encode_shift(s: &Shift) -> String {
+    format!("#\t{}\t{}\t{}\t{}\n", s.sheet, if s.rows { 'r' } else { 'c' }, s.at, s.delta)
+}
+
+pub fn encode_effect(e: &Effect) -> String {
+    let mut out = e.shift.as_ref().map(encode_shift).unwrap_or_default();
+    out.push_str(&encode_changed(&e.cells));
+    out
+}
 
 pub fn escape(s: &str, out: &mut String) {
     for ch in s.chars() {

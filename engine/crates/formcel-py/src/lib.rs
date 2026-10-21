@@ -2,7 +2,7 @@ use formcel_core::{parse_a1, to_a1, Addr, Changed, Dir, Workbook as CoreBook, MA
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 
-#[pyclass(name = "Workbook", unsendable)]
+#[pyclass(name = "Workbook")]
 struct Workbook {
     inner: CoreBook,
 }
@@ -63,11 +63,25 @@ impl Workbook {
     }
 
     fn undo(&mut self) -> Option<Vec<(String, String)>> {
-        self.inner.undo().map(pairs)
+        self.inner.undo().map(|e| pairs(e.cells))
     }
 
     fn redo(&mut self) -> Option<Vec<(String, String)>> {
-        self.inner.redo().map(pairs)
+        self.inner.redo().map(|e| pairs(e.cells))
+    }
+
+    #[pyo3(signature = (sheet, rows, at, n, insert = true))]
+    fn shift(&mut self, sheet: usize, rows: bool, at: u32, n: u32, insert: bool) -> PyResult<(u32, i64)> {
+        let s = if insert { self.inner.insert(sheet, rows, at, n) } else { self.inner.delete(sheet, rows, at, n) };
+        s.map(|s| (s.at, s.delta)).map_err(|e| PyValueError::new_err(e.to_string()))
+    }
+
+    fn delete_sheet(&mut self, sheet: usize) -> PyResult<()> {
+        self.inner.delete_sheet(sheet).map_err(|e| PyValueError::new_err(e.to_string()))
+    }
+
+    fn move_sheet(&mut self, from: usize, to: usize) -> PyResult<()> {
+        self.inner.move_sheet(from, to).map_err(|e| PyValueError::new_err(e.to_string()))
     }
 
     #[pyo3(signature = (top, bottom, sheet = 0))]

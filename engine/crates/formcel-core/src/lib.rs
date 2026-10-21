@@ -145,11 +145,31 @@ struct Change {
 
 pub type Changed = Vec<(usize, Addr, Value)>;
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Shift {
+    pub sheet: usize,
+    pub rows: bool,
+    pub at: u32,
+    pub delta: i64,
+}
+
+#[derive(Debug, Default)]
+pub struct Effect {
+    pub cells: Changed,
+    pub shift: Option<Shift>,
+}
+
+#[derive(Clone, Debug)]
+enum Tx {
+    Cells(Vec<Change>),
+    Shift { shift: Shift, dropped: Vec<(Addr, Value)> },
+}
+
 #[derive(Debug)]
 pub struct Workbook {
     sheets: Vec<Sheet>,
-    undo: Vec<Vec<Change>>,
-    redo: Vec<Vec<Change>>,
+    undo: Vec<Tx>,
+    redo: Vec<Tx>,
 }
 
 impl Default for Workbook {
@@ -212,13 +232,69 @@ impl Workbook {
             out.push((sheet, *a, after));
         }
         if !tx.is_empty() {
-            self.undo.push(tx);
-            if self.undo.len() > HISTORY_LIMIT {
-                self.undo.remove(0);
-            }
-            self.redo.clear();
+            self.record(Tx::Cells(tx));
         }
         Ok(out)
+    }
+
+    fn record(&mut self, tx: Tx) {
+        self.undo.push(tx);
+        if self.undo.len() > HISTORY_LIMIT {
+            self.undo.remove(0);
+        }
+        self.redo.clear();
+    }
+
+    fn do_shift(&mut self, s: Shift) -> Vec<(Addr, Value)> {
+        self.sheets[s.sheet].cells.shift(s.rows, s.at, s.delta)
+    }
+
+    pub fn insert(&mut self, sheet: usize, rows: bool, at: u32, n: u32) -> Result<Shift, EngineError> {
+        let limit = if rows { MAX_ROWS } else { MAX_COLS };
+        if sheet >= self.sheets.len() {
+            return Err(EngineError::NoSheet(sheet));
+        }
+        if n == 0 || at >= limit {
+            return Err(EngineError::OutOfRange { row: at, col: n });
+        }
+        let shift = Shift { sheet, rows, at, delta: i64::from(n) };
+        let dropped = self.do_shift(shift);
+        self.record(Tx::Shift { shift, dropped });
+        Ok(shift)
+    }
+
+    pub fn delete(&mut self, sheet: usize, rows: bool, at: u32, n: u32) -> Result<Shift, EngineError> {
+        let limit = if rows { MAX_ROWS } else { MAX_COLS };
+        if sheet >= self.sheets.len() {
+            return Err(EngineError::NoSheet(sheet));
+        }
+        if n == 0 || at >= limit {
+            return Err(EngineError::OutOfRange { row: at, col: n });
+        }
+        let n = n.min(limit - at);
+        let shift = Shift { sheet, rows, at, delta: -i64::from(n) };
+        let dropped = self.do_shift(shift);
+        self.record(Tx::Shift { shift, dropped });
+        Ok(shift)
+    }
+
+    pub fn delete_sheet(&mut self, sheet: usize) -> Result<(), EngineError> {
+        if sheet >= self.sheets.len() || self.sheets.len() == 1 {
+            return Err(EngineError::NoSheet(sheet));
+        }
+        self.sheets.remove(sheet);
+        self.clear_history();
+        Ok(())
+    }
+
+    pub fn move_sheet(&mut self, from: usize, to: usize) -> Result<(), EngineError> {
+        if from >= self.sheets.len() || to >= self.sheets.len() {
+            return Err(EngineError::NoSheet(from.max(to)));
+        }
+        let s = self.sheets.remove(from);
+        self.sheets.insert(to, s);
+        self.clear_history();
+        Ok(())
     }
 
     pub fn load(&mut self, sheet: usize, edits: &[(Addr, String)]) -> Result<usize, EngineError> {
@@ -236,25 +312,43 @@ impl Workbook {
         self.redo.clear();
     }
 
-    fn replay(&mut self, tx: &[Change], forward: bool) -> Changed {
-        let mut out = Vec::with_capacity(tx.len());
-        let steps: Box<dyn Iterator<Item = &Change>> = if forward { Box::new(tx.iter()) } else { Box::new(tx.iter().rev()) };
-        for c in steps {
-            let v = if forward { c.after.clone() } else { c.before.clone() };
-            self.sheets[c.sheet].cells.set(c.addr, v.clone());
-            out.push((c.sheet, c.addr, v));
+    fn replay(&mut self, tx: &Tx, forward: bool) -> Effect {
+        match tx {
+            Tx::Cells(changes) => {
+                let mut cells = Vec::with_capacity(changes.len());
+                let steps: Box<dyn Iterator<Item = &Change>> = if forward { Box::new(changes.iter()) } else { Box::new(changes.iter().rev()) };
+                for c in steps {
+                    let v = if forward { c.after.clone() } else { c.before.clone() };
+                    self.sheets[c.sheet].cells.set(c.addr, v.clone());
+                    cells.push((c.sheet, c.addr, v));
+                }
+                Effect { cells, shift: None }
+            }
+            Tx::Shift { shift, dropped } => {
+                if forward {
+                    self.do_shift(*shift);
+                    return Effect { cells: Vec::new(), shift: Some(*shift) };
+                }
+                let back = Shift { delta: -shift.delta, ..*shift };
+                self.do_shift(back);
+                let mut cells = Vec::with_capacity(dropped.len());
+                for (a, v) in dropped {
+                    self.sheets[shift.sheet].cells.set(*a, v.clone());
+                    cells.push((shift.sheet, *a, v.clone()));
+                }
+                Effect { cells, shift: Some(back) }
+            }
         }
-        out
     }
 
-    pub fn undo(&mut self) -> Option<Changed> {
+    pub fn undo(&mut self) -> Option<Effect> {
         let tx = self.undo.pop()?;
         let out = self.replay(&tx, false);
         self.redo.push(tx);
         Some(out)
     }
 
-    pub fn redo(&mut self) -> Option<Changed> {
+    pub fn redo(&mut self) -> Option<Effect> {
         let tx = self.redo.pop()?;
         let out = self.replay(&tx, true);
         self.undo.push(tx);
