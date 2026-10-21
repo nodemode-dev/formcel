@@ -312,3 +312,14 @@ ARRAYFORMULA is a FormCel function now (GS-ARRAYFORMULA); Excel and LibreOffice 
 - logged: v0.29.0 · 2026-10-21
 
 `python corpus.py FOLDER REPORT.md` (from backend/, venv active) opens every .xlsx and .xlsm in a folder as FormCel does, saves each again, reads the copy back and writes a report of import notes and every difference per file. Opening the copies in Excel and noting any repair prompt is the half of the Phase 4 exit it cannot do. Rehearsed on 36 .xlsx files written by LibreOffice 24.2 from the templates: 35 came back with no differences; the other has a LAMBDA name LibreOffice had already garbled, which FormCel leaves out with a note. LibreOffice reopens all 36 copies.
+
+### Filters in files
+- refers-to: app/services/xlsx/autofilter.py :: filter_in, filter_out, filtered_rows, _cond_in; app/services/store.py :: set_filter, _write, import_xlsx; app/routers/workbooks.py :: PUT /api/workbooks/{id}/filter; app/services/pdf.py; app/services/ods/__init__.py
+- kind: explainer
+- logged: v0.31.0 · 2026-10-21
+
+The .fcel file keeps each sheet's filter as its engine text under `filter`; GET /api/workbooks/{id} returns them as `filters`, and PUT /api/workbooks/{id}/filter stores a new one sent by the window.
+
+In .xlsx (MS-XLSX autoFilter) the filter is the sheet's autoFilter ref with a filterColumn per criterion: filters (values, blank), customFilters (and), top10, dynamicFilter aboveAverage and belowAverage, and colorFilter with a differential style holding the colour (cellColor 0 for text colour). Begins with, ends with and contains are written as equal or notEqual with `*` around the text, as Excel writes them, and read back the same way. Rows the filter hides are written hidden; on reading, hidden rows inside a filter that has criteria become the filter's rows and the rest stay hidden by hand. Date group filters, icon filters and saved sort states are left out with a note.
+
+PDF leaves out rows a filter hides, as it does hand-hidden rows, and .ods writes them hidden. A filter in an .ods file is left out with a note; .ods files written by FormCel carry no filter.

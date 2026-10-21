@@ -272,6 +272,21 @@ def set_rules(wid: str, body: RulesIn) -> dict:
         raise HTTPException(422, f"Those conditional formatting rules could not be saved: {e}")
 
 
+class FilterIn(BaseModel):
+    sheet: int = 0
+    text: str = Field(default="", max_length=2_000_000)
+
+
+@router.put("/workbooks/{wid}/filter")
+def set_filter(wid: str, body: FilterIn) -> dict:
+    try:
+        return store().set_filter(wid, body.sheet, body.text)
+    except (KeyError, FileNotFoundError):
+        raise missing(wid)
+    except (IndexError, ValueError) as e:
+        raise HTTPException(422, f"That filter could not be saved: {e}")
+
+
 @router.put("/workbooks/{wid}/merges")
 def set_merges(wid: str, body: MergesIn) -> dict:
     try:

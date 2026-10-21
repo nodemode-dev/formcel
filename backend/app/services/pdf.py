@@ -8,6 +8,8 @@ from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.pdfgen import canvas
 
+from .xlsx.autofilter import filtered_rows
+
 PAGE_W, PAGE_H = 612.0, 792.0
 MARGIN_X, MARGIN_Y = 0.7 * 72, 0.75 * 72
 COL_PX, ROW_PX = 100, 24
@@ -118,8 +120,8 @@ def _sheet(c: canvas.Canvas, eng, i: int, view: dict, slots: dict[str, str], fon
     colpx = dict((view.get("cols") or {}).get("sizes", []))
     rowpx = dict((view.get("rows") or {}).get("sizes", []))
     hidden_c = set((view.get("cols") or {}).get("hidden", []))
-    hidden_r = set((view.get("rows") or {}).get("hidden", []))
-    cw = [0.0 if col in hidden_c else colpx.get(col, COL_PX) * PT for col in range(ncols)]
+    hidden_r = set((view.get("rows") or {}).get("hidden", [])) | filtered_rows(eng.filter(i))
+    cw =[0.0 if col in hidden_c else colpx.get(col, COL_PX) * PT for col in range(ncols)]
     rh = [0.0 if r in hidden_r else rowpx.get(r, ROW_PX) * PT for r in range(nrows)]
     room_w, room_h = PAGE_W - 2 * MARGIN_X, PAGE_H - 2 * MARGIN_Y
     scale = min(1.0, max(0.5, room_w / sum(cw))) if sum(cw) else 1.0

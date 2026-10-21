@@ -7,6 +7,7 @@ from openpyxl.utils import get_column_letter
 from openpyxl.workbook.defined_name import DefinedName
 from openpyxl.worksheet.hyperlink import Hyperlink
 
+from .autofilter import filter_out
 from .cf import rules_out
 from .formulas import to_file
 from .styles import apply_out
@@ -89,6 +90,7 @@ def write(eng, views: list[dict], vba: dict[str, bytes] | None = None) -> bytes:
             else:
                 cell.hyperlink = target
         rules_out(ws, eng.rules(i))
+        filtered = filter_out(ws, wb, eng.filter(i))
         for r1, c1, r2, c2 in eng.merges(i):
             ws.merge_cells(start_row=r1 + 1, start_column=c1 + 1, end_row=r2 + 1, end_column=c2 + 1)
         ws.sheet_format.defaultColWidth = round(COL_PX / 7, 4)
@@ -103,7 +105,7 @@ def write(eng, views: list[dict], vba: dict[str, bytes] | None = None) -> bytes:
         rows = view.get("rows") or {}
         for r, px in rows.get("sizes", []):
             ws.row_dimensions[r + 1].height = px * 0.75
-        for r in rows.get("hidden", []):
+        for r in [*rows.get("hidden", []), *filtered]:
             ws.row_dimensions[r + 1].hidden = True
         for r, lv in rows.get("levels", []):
             ws.row_dimensions[r + 1].outlineLevel = lv

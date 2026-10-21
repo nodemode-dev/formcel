@@ -9,6 +9,7 @@ from xml.sax.saxutils import escape, quoteattr
 from formcel_engine import reads_as_text
 from openpyxl.utils import get_column_letter
 
+from ..xlsx.autofilter import filtered_rows
 from . import cf, numfmt
 from .formulas import from_file, range_in, to_file
 
@@ -266,6 +267,9 @@ def read(data: bytes) -> dict:
         names.append((ne.get(f"{T}name"), from_file(ne.get(f"{T}expression") or "")))
     if any(True for _ in root.iter(f"{O}annotation")):
         notes["comments left out"] += sum(1 for _ in root.iter(f"{O}annotation"))
+    filters = sum(1 for _ in root.iter(f"{T}filter"))
+    if filters:
+        notes["filters left out"] += filters
     return {"sheets": sheets, "names": names, "theme": None, "cellStyles": [], "vba": None, "notes": [f"{n} {what}" for what, n in sorted(notes.items())]}
 
 
@@ -445,7 +449,7 @@ def write(eng, views: list[dict]) -> tuple[bytes, list[str]]:
         cols = dict((view.get("cols") or {}).get("sizes", []))
         hidden_c = set((view.get("cols") or {}).get("hidden", []))
         rows = dict((view.get("rows") or {}).get("sizes", []))
-        hidden_r = set((view.get("rows") or {}).get("hidden", []))
+        hidden_r = set((view.get("rows") or {}).get("hidden", [])) | filtered_rows(eng.filter(i))
         parts = [f"<table:table table:name={quoteattr(name)}>"]
         for c in range(max(ncols, 1)):
             px = cols.get(c, 100)
