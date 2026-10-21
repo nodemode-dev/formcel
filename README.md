@@ -2,19 +2,35 @@
 
 Spreadsheets in the form family. An open alternative to Excel and Google Sheets, built so that Claude Code, Codex or Cursor can read and edit a live workbook while you watch.
 
-Version 0.1.0 · Apache-2.0 · macOS, Windows, Linux (browser now, Tauri desktop later)
+Version 0.2.0 · Apache-2.0 · macOS, Windows, Linux (browser now, Tauri desktop later)
 
 **Stack.** Vanilla TypeScript and Vite · Python 3.12 and FastAPI · one calculation engine in Rust, compiled to WebAssembly for the window and to a Python module for the engine process · Tauri 2 later.
 
 ## Status
 
-0.1.0 is the scaffold (Phase 0 of `DEV_PLAN.md`). The window, the engine process and both builds of the Rust engine install and run, and the window confirms that both report the same engine version. Workbooks, the grid and the home screen arrive in 0.2.0 (Phase 1).
+0.2.0 is the first part of Phase 1 in `DEV_PLAN.md`: the grid. Workbooks are not saved yet; the home screen, the `.fcel` store and templates come next.
 
-| Area | In 0.1.0 |
+| Area | In 0.2.0 |
 | --- | --- |
-| Engine | Rust core with a sparse cell store sized for 1,048,576 rows by 16,384 columns, A1 addresses, typed input (numbers, text, TRUE and FALSE) |
-| Window | Shell with the family theme profiles applied before the first frame, engine status, the engine running in a Web Worker |
+| Engine | Rust core, one build for the window (WebAssembly) and one for the engine process (Python): a chunked cell store for 1,048,576 rows by 16,384 columns, typed input (numbers, text, TRUE and FALSE), undo and redo of 500 steps, batched edits, viewport reads, the used range and Ctrl+arrow data edges |
+| Grid | Canvas grid with headers and selection of cells, ranges, rows, columns and the whole sheet; arrows, Ctrl+arrows, Ctrl+Home, Ctrl+End, Home, Page Up and Down; typing, F2 and Alt+Enter; Name Box and formula bar; undo, redo, clear; copy, cut and paste of tab-separated text; resizing rows and columns, autofit columns; freeze top row, first column or panes at the active cell |
+| Speed | 1,000,000 filled rows scroll at a 16.7 ms p95 frame with the CPU slowed 4x |
+| Window | Family theme profiles applied before the first frame, engine status, the engine running in a Web Worker |
 | Engine process | FastAPI on 127.0.0.1:8199, `/api/health` and `/api/version`, data folder `~/FormCel` |
+
+## Keys
+
+| Keys | Does |
+| --- | --- |
+| Arrows, Shift+arrows | Move, extend the selection |
+| Ctrl+arrows (Cmd on a Mac) | Jump to the edge of the data |
+| Ctrl+Home, Ctrl+End | A1, the last cell of the used range |
+| Enter, Tab (Shift to reverse) | Commit and move |
+| F2, or start typing | Edit the cell; Alt+Enter adds a line |
+| Delete | Clear the selection |
+| Ctrl+Z, Ctrl+Y | Undo, redo |
+| Ctrl+C, Ctrl+X, Ctrl+V | Copy, cut, paste as tab-separated text |
+| Double-click a column border | Autofit the column |
 
 ## Quick start
 
