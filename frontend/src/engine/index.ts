@@ -1,6 +1,6 @@
-import type { Cell, Changed, Dir, Edit, Effect, Name, RequestBody, Response, Shift, StyleOp, Value } from './protocol';
+import type { Area, Cell, Changed, Dir, Edit, Effect, FormatItem, MergeMode, Name, RequestBody, Response, Shift, StyleOp, Value } from './protocol';
 
-export type { Cell, Changed, Dir, Edit, Effect, FormatChange, Name, Shift, StyleOp } from './protocol';
+export type { Area, Cell, Changed, Dir, Edit, Effect, FormatChange, FormatItem, MergeMode, Name, Shift, StyleOp } from './protocol';
 
 type Pending = { resolve: (v: Value) => void; reject: (e: Error) => void };
 
@@ -110,6 +110,34 @@ export class EngineClient {
 
   async loadStyles(book: number, sheet: number, cells: Edit[]): Promise<void> {
     if (cells.length) await this.call({ op: 'style.load', book, sheet, cells });
+  }
+
+  async merge(book: number, sheet: number, r0: number, c0: number, r1: number, c1: number, mode: MergeMode): Promise<Effect> {
+    return (await this.call({ op: 'merge.set', book, sheet, r0, c0, r1, c1, mode })) as Effect;
+  }
+
+  async merges(book: number, sheet: number): Promise<Area[]> {
+    return (await this.call({ op: 'merge.list', book, sheet })) as Area[];
+  }
+
+  async loadMerges(book: number, sheet: number, areas: Area[]): Promise<void> {
+    if (areas.length) await this.call({ op: 'merge.load', book, sheet, areas });
+  }
+
+  async putFormats(book: number, sheet: number, items: FormatItem[]): Promise<Effect> {
+    return (await this.call({ op: 'format.put', book, sheet, items })) as Effect;
+  }
+
+  async undoMark(book: number): Promise<number> {
+    return Number(await this.call({ op: 'undo.mark', book }));
+  }
+
+  async undoGroup(book: number, mark: number): Promise<void> {
+    await this.call({ op: 'undo.group', book, mark });
+  }
+
+  async readFormats(book: number, sheet: number, r0: number, c0: number, r1: number, c1: number): Promise<Edit[]> {
+    return (await this.call({ op: 'format.read', book, sheet, r0, c0, r1, c1 })) as Edit[];
   }
 
   async defineName(book: number, name: string, refers: string): Promise<Changed[]> {

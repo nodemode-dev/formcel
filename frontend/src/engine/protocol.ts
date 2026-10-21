@@ -18,6 +18,13 @@ export type Request =
   | { id: number; op: 'style.read'; book: number; sheet: number; r0: number; c0: number; r1: number; c1: number }
   | { id: number; op: 'style.at'; book: number; sheet: number; row: number; col: number }
   | { id: number; op: 'style.load'; book: number; sheet: number; cells: Edit[] }
+  | { id: number; op: 'merge.set'; book: number; sheet: number; r0: number; c0: number; r1: number; c1: number; mode: MergeMode }
+  | { id: number; op: 'merge.list'; book: number; sheet: number }
+  | { id: number; op: 'merge.load'; book: number; sheet: number; areas: Area[] }
+  | { id: number; op: 'format.put'; book: number; sheet: number; items: FormatItem[] }
+  | { id: number; op: 'undo.mark'; book: number }
+  | { id: number; op: 'undo.group'; book: number; mark: number }
+  | { id: number; op: 'format.read'; book: number; sheet: number; r0: number; c0: number; r1: number; c1: number }
   | { id: number; op: 'name.define'; book: number; name: string; refers: string }
   | { id: number; op: 'name.list'; book: number }
   | { id: number; op: 'undo' | 'redo' | 'history'; book: number }
@@ -32,6 +39,9 @@ export type Cell = [row: number, col: number, text: string, formula?: string, nu
 export type Changed = [sheet: number, row: number, col: number, text: string, formula?: string, numeric?: boolean, color?: string];
 export type FormatChange = [sheet: number, row: number, col: number, code: string];
 export type StyleOp = [r0: number, c0: number, r1: number, c1: number, patch: string];
+export type Area = [r0: number, c0: number, r1: number, c1: number];
+export type MergeMode = 'center' | 'across' | 'cells' | 'unmerge';
+export type FormatItem = [row: number, col: number, style: string, code: string];
 export interface Shift {
   sheet: number;
   rows: boolean;
@@ -43,9 +53,10 @@ export interface Effect {
   shift: Shift | null;
   formats: FormatChange[];
   styles: FormatChange[];
+  merges: number | null;
 }
 export type Name = [name: string, refers: string];
-export type Value = string | number | string[] | Cell[] | Changed[] | Name[] | Edit[] | [number, number] | Shift | Effect | null;
+export type Value = string | number | string[] | Cell[] | Changed[] | Name[] | Edit[] | Area[] | [number, number] | Shift | Effect | null;
 
 export type Response =
   | { id: number; ok: true; value: Value }

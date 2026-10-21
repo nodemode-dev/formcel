@@ -1,4 +1,4 @@
-import type { Cell, Changed, Dir, Effect, EngineClient, FormatChange, Shift, StyleOp } from '../engine';
+import type { Area, Cell, Changed, Dir, Effect, EngineClient, FormatChange, FormatItem, MergeMode, Shift, StyleOp } from '../engine';
 import { light, parseStyle, PLAIN, type CellStyle } from './style';
 
 export type BorderKind = 'all' | 'outside' | 'inside' | 'top' | 'bottom' | 'left' | 'right' | 'none';
@@ -50,6 +50,8 @@ export interface GridEvents {
   onShift(shift: Shift): void;
   onFormats(formats: FormatChange[]): void;
   onStyles(styles: FormatChange[]): void;
+  onMerges(sheet: number, areas: Area[]): void;
+  onPainter(state: 'on' | 'sticky' | 'off'): void;
   onView(sheet: number, view: SheetView): void;
   onMenu(kind: MenuKind, x: number, y: number): void;
   onGoto(): void;
@@ -72,6 +74,9 @@ export class Grid {
   private readonly nums = new Set<number>();
   private readonly colors = new Map<number, string>();
   private readonly styles = new Map<number, CellStyle>();
+  private merges: Area[] = [];
+  private painter: { h: number; w: number; items: Map<number, [string, string]>; sticky: boolean } | null = null;
+  private copied: { text: string; h: number; w: number; items: Map<number, [string, string]> } | null = null;
   private wins: (Range | null)[] = [null, null, null, null];
   private pendingWins: (Range | null)[] = [null, null, null, null];
   private sh = 0;
@@ -546,7 +551,13 @@ export class Grid {
       ctx.lineTo(xx, this.y(r1 + 1));
     }
     ctx.stroke();
-    const auto = (c: string) => (c === '#000000' ? pal.fg : c);
+    const merged = this.merges.length ? (r: number, c: number) => !!this.mergeAt(r, c) : () => false;
+    const shown = this.merges.filter(([a, b, cc, d]) => a <= r1 && cc >= r0 && b <= c1 && d >= c0);
+    for (const [mr0, mc0, mr1, mc1] of shown) {
+      const [x, y, w, h] = this.areaRect(mr0, mc0, mr1, mc1);
+      ctx.fillStyle = this.styles.get(KEY(mr0, mc0))?.bg ?? pal.bg;
+      ctx.fillRect(x + 1, y + 1, w - 1, h - 1);
+    }
     if (this.styles.size) {
       for (let r = r0; r <= r1; r++) {
         const rh = this.rows.size(r);
@@ -554,7 +565,7 @@ export class Grid {
         for (let c = c0; c <= c1; c++) {
           const bg = this.styles.get(KEY(r, c))?.bg;
           const cw = this.cols.size(c);
-          if (!bg || !cw) continue;
+          if (!bg || !cw || merged(r, c)) continue;
           ctx.fillStyle = bg;
           ctx.fillRect(Math.round(this.x(c)) + 1, Math.round(this.y(r)) + 1, Math.round(this.x(c) + cw) - Math.round(this.x(c)) - 1, Math.round(this.y(r) + rh) - Math.round(this.y(r)) - 1);
         }
@@ -564,54 +575,22 @@ export class Grid {
     const ca = Math.max(0, c0 - OVERFLOW_COLS);
     const cb = Math.min(MAX_COLS - 1, c1 + OVERFLOW_COLS);
     for (let r = r0; r <= r1; r++) {
-      const yy = this.y(r);
       const rh = this.rows.size(r);
       if (!rh) continue;
       for (let c = ca; c <= cb; c++) {
         const k = KEY(r, c);
         const t = this.cache.get(k);
-        if (!t) continue;
-        const cw = this.cols.size(c);
-        if (!cw) continue;
-        const st = this.styles.get(k) ?? PLAIN;
-        const px = st.size ? Math.round(st.size * 13.333) / 10 : 13;
-        ctx.font = `${st.i ? 'italic ' : ''}${st.b ? '700 ' : ''}${px}px ${st.font ? `"${st.font}", ` : ''}Inter, system-ui, -apple-system, "Segoe UI", sans-serif`;
-        const num = this.nums.has(k);
-        const ha = st.ha ?? (num ? 'right' : t === 'TRUE' || t === 'FALSE' || ERRORS.has(t) ? 'center' : 'left');
-        const pad = 5 + st.indent * INDENT_PX;
-        const lines = st.wrap ? wrapLines(ctx, t, cw - 10) : [t.split('\n', 1)[0]];
-        let left = this.x(c);
-        let right = left + cw;
-        if (!st.wrap && !num) {
-          const need = ctx.measureText(lines[0]).width + pad + 5;
-          const empty = (cc: number) => cc >= 0 && cc < MAX_COLS && !this.cache.has(KEY(r, cc));
-          for (let cc = c + 1; ha !== 'right' && right - left < need && empty(cc) && cc <= c + OVERFLOW_COLS; cc++) right += this.cols.size(cc);
-          for (let cc = c - 1; ha !== 'left' && right - left < need && empty(cc) && cc >= c - OVERFLOW_COLS; cc--) left -= this.cols.size(cc);
-        }
-        if ((c < c0 || c > c1) && right - left <= cw) continue;
-        const lh = Math.round(px * 1.3);
-        const va = st.va ?? 'bottom';
-        const block = lh * lines.length;
-        let base = va === 'top' ? yy + lh - 4 : va === 'middle' ? yy + (rh - block) / 2 + lh - 4 : yy + rh - block + lh - 5;
-        ctx.save();
-        ctx.beginPath();
-        ctx.rect(left + 1, yy, right - left - 2, rh);
-        ctx.clip();
-        ctx.fillStyle = st.fc ? auto(st.fc) : this.colors.get(k) ?? (st.bg ? (light(st.bg) ? '#1a1a1a' : '#f5f5f5') : pal.fg);
-        ctx.textAlign = ha;
-        const tx = ha === 'right' ? right - pad : ha === 'center' ? (left + right) / 2 : left + pad;
-        for (const ln of lines) {
-          ctx.fillText(ln, tx, base);
-          if (st.u || st.s) {
-            const w = ctx.measureText(ln).width;
-            const x0 = ha === 'right' ? tx - w : ha === 'center' ? tx - w / 2 : tx;
-            if (st.u) ctx.fillRect(x0, base + 2, w, Math.max(1, px / 13));
-            if (st.s) ctx.fillRect(x0, base - px * 0.3, w, Math.max(1, px / 13));
-          }
-          base += lh;
-        }
-        ctx.restore();
+        if (!t || !this.cols.size(c) || merged(r, c)) continue;
+        const span = this.textSpan(k, t, r, c, merged);
+        if ((c < c0 || c > c1) && span[1] - span[0] <= this.cols.size(c)) continue;
+        this.cellText(k, t, span[0], span[1], this.y(r), rh);
       }
+    }
+    for (const [mr0, mc0, mr1, mc1] of shown) {
+      const t = this.cache.get(KEY(mr0, mc0));
+      if (!t) continue;
+      const [x, y, w, h] = this.areaRect(mr0, mc0, mr1, mc1);
+      this.cellText(KEY(mr0, mc0), t, x, x + w, y, h);
     }
     ctx.textBaseline = 'middle';
     ctx.font = '13px Inter, system-ui, -apple-system, "Segoe UI", sans-serif';
@@ -620,20 +599,111 @@ export class Grid {
       const rh = this.rows.size(r);
       if (!rh) continue;
       for (let c = c0; c <= c1; c++) {
-        const st = this.styles.get(KEY(r, c));
         const cw = this.cols.size(c);
-        if (!st || !cw || st.borders.every((b) => !b)) continue;
-        const x0 = Math.round(this.x(c)) + 0.5;
-        const y0 = Math.round(this.y(r)) + 0.5;
-        const x1 = Math.round(this.x(c) + cw) + 0.5;
-        const y1 = Math.round(this.y(r) + rh) + 0.5;
-        const ends: [number, number, number, number][] = [[x0, y0, x1, y0], [x1, y0, x1, y1], [x0, y1, x1, y1], [x0, y0, x0, y1]];
-        st.borders.forEach((b, i) => {
-          if (b) this.edge(ends[i], b.line, auto(b.color), i % 2 === 0);
-        });
+        if (cw && !merged(r, c)) this.cellBorders(KEY(r, c), this.x(c), this.y(r), cw, rh);
       }
     }
+    for (const [mr0, mc0, mr1, mc1] of shown) this.cellBorders(KEY(mr0, mc0), ...this.areaRect(mr0, mc0, mr1, mc1));
     ctx.setLineDash([]);
+  }
+
+  private areaRect(r0: number, c0: number, r1: number, c1: number): [number, number, number, number] {
+    const x = this.x(c0);
+    const y = this.y(r0);
+    return [x, y, this.x(c1 + 1) - x, this.y(r1 + 1) - y];
+  }
+
+  private mergeAt(r: number, c: number): Area | undefined {
+    for (const m of this.merges) if (r >= m[0] && r <= m[2] && c >= m[1] && c <= m[3]) return m;
+    return undefined;
+  }
+
+  private font(st: CellStyle): number {
+    const px = st.size ? Math.round(st.size * 13.333) / 10 : 13;
+    this.ctx.font = `${st.i ? 'italic ' : ''}${st.b ? '700 ' : ''}${px}px ${st.font ? `"${st.font}", ` : ''}Inter, system-ui, -apple-system, "Segoe UI", sans-serif`;
+    return px;
+  }
+
+  private align(k: number, t: string, st: CellStyle): 'left' | 'center' | 'right' {
+    return st.ha ?? (this.nums.has(k) ? 'right' : t === 'TRUE' || t === 'FALSE' || ERRORS.has(t) ? 'center' : 'left');
+  }
+
+  private textSpan(k: number, t: string, r: number, c: number, merged: (r: number, c: number) => boolean): [number, number] {
+    const st = this.styles.get(k) ?? PLAIN;
+    let left = this.x(c);
+    let right = left + this.cols.size(c);
+    if (st.wrap || st.rot || st.vertical || this.nums.has(k)) return [left, right];
+    this.font(st);
+    const ha = this.align(k, t, st);
+    const need = this.ctx.measureText(t.split('\n', 1)[0]).width + 10 + st.indent * INDENT_PX;
+    const empty = (cc: number) => cc >= 0 && cc < MAX_COLS && !this.cache.has(KEY(r, cc)) && !merged(r, cc);
+    for (let cc = c + 1; ha !== 'right' && right - left < need && empty(cc) && cc <= c + OVERFLOW_COLS; cc++) right += this.cols.size(cc);
+    for (let cc = c - 1; ha !== 'left' && right - left < need && empty(cc) && cc >= c - OVERFLOW_COLS; cc--) left -= this.cols.size(cc);
+    return [left, right];
+  }
+
+  private cellText(k: number, t: string, left: number, right: number, yy: number, rh: number): void {
+    const { ctx, pal } = this;
+    const st = this.styles.get(k) ?? PLAIN;
+    const px = this.font(st);
+    const ha = this.align(k, t, st);
+    const pad = 5 + st.indent * INDENT_PX;
+    const lh = Math.round(px * 1.3);
+    const auto = (c: string) => (c === '#000000' ? pal.fg : c);
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(left + 1, yy, right - left - 2, rh);
+    ctx.clip();
+    ctx.fillStyle = st.fc ? auto(st.fc) : this.colors.get(k) ?? (st.bg ? (light(st.bg) ? '#1a1a1a' : '#f5f5f5') : pal.fg);
+    if (st.vertical) {
+      ctx.textAlign = 'center';
+      const chars = [...t.split('\n', 1)[0]];
+      const x = ha === 'left' ? left + pad + px / 2 : ha === 'right' ? right - pad - px / 2 : (left + right) / 2;
+      let base = yy + lh - 2;
+      for (const ch of chars) {
+        ctx.fillText(ch, x, base);
+        base += lh;
+      }
+    } else if (st.rot) {
+      const a = (st.rot * Math.PI) / 180;
+      const up = st.rot > 0;
+      const lift = up ? px * 0.8 * Math.sin(a) : 0;
+      ctx.translate(ha === 'right' ? right - pad : left + pad + lift, up ? yy + rh - 5 : yy + 5);
+      ctx.rotate(-a);
+      ctx.textAlign = 'left';
+      ctx.fillText(t.split('\n', 1)[0], 0, 0);
+    } else {
+      const lines = st.wrap ? wrapLines(ctx, t, right - left - 10) : [t.split('\n', 1)[0]];
+      const va = st.va ?? 'bottom';
+      const block = lh * lines.length;
+      let base = va === 'top' ? yy + lh - 4 : va === 'middle' ? yy + (rh - block) / 2 + lh - 4 : yy + rh - block + lh - 5;
+      ctx.textAlign = ha;
+      const tx = ha === 'right' ? right - pad : ha === 'center' ? (left + right) / 2 : left + pad;
+      for (const ln of lines) {
+        ctx.fillText(ln, tx, base);
+        if (st.u || st.s) {
+          const w = ctx.measureText(ln).width;
+          const x0 = ha === 'right' ? tx - w : ha === 'center' ? tx - w / 2 : tx;
+          if (st.u) ctx.fillRect(x0, base + 2, w, Math.max(1, px / 13));
+          if (st.s) ctx.fillRect(x0, base - px * 0.3, w, Math.max(1, px / 13));
+        }
+        base += lh;
+      }
+    }
+    ctx.restore();
+  }
+
+  private cellBorders(k: number, x: number, y: number, w: number, h: number): void {
+    const st = this.styles.get(k);
+    if (!st || st.borders.every((b) => !b)) return;
+    const x0 = Math.round(x) + 0.5;
+    const y0 = Math.round(y) + 0.5;
+    const x1 = Math.round(x + w) + 0.5;
+    const y1 = Math.round(y + h) + 0.5;
+    const ends: [number, number, number, number][] = [[x0, y0, x1, y0], [x1, y0, x1, y1], [x0, y1, x1, y1], [x0, y0, x0, y1]];
+    st.borders.forEach((b, i) => {
+      if (b) this.edge(ends[i], b.line, b.color === '#000000' ? this.pal.fg : b.color, i % 2 === 0);
+    });
   }
 
   private edge([ax, ay, bx, by]: [number, number, number, number], line: string, color: string, flat: boolean): void {
@@ -650,7 +720,100 @@ export class Grid {
   }
 
   private sel(): Range {
-    return { r0: Math.min(this.ar, this.fr2), r1: Math.max(this.ar, this.fr2), c0: Math.min(this.ac, this.fc2), c1: Math.max(this.ac, this.fc2) };
+    const s = { r0: Math.min(this.ar, this.fr2), r1: Math.max(this.ar, this.fr2), c0: Math.min(this.ac, this.fc2), c1: Math.max(this.ac, this.fc2) };
+    for (let grew = this.merges.length > 0; grew; ) {
+      grew = false;
+      for (const [a, b, c, d] of this.merges) {
+        if (a > s.r1 || c < s.r0 || b > s.c1 || d < s.c0) continue;
+        if (a < s.r0 || c > s.r1 || b < s.c0 || d > s.c1) {
+          s.r0 = Math.min(s.r0, a);
+          s.r1 = Math.max(s.r1, c);
+          s.c0 = Math.min(s.c0, b);
+          s.c1 = Math.max(s.c1, d);
+          grew = true;
+        }
+      }
+    }
+    return s;
+  }
+
+  private activeArea(): [number, number, number, number] {
+    const m = this.mergeAt(this.ar, this.ac);
+    return m ? this.areaRect(m[0], m[1], m[2], m[3]) : [this.x(this.ac), this.y(this.ar), this.cols.size(this.ac), this.rows.size(this.ar)];
+  }
+
+  private async loadMerges(): Promise<void> {
+    if (this.book < 0) return;
+    const sheet = this.sheet;
+    const list = await this.engine.merges(this.book, sheet);
+    if (sheet !== this.sheet) return;
+    this.merges = list;
+    this.paint();
+  }
+
+  async merge(mode: MergeMode): Promise<void> {
+    const s = this.sel();
+    await this.applyEffect(await this.engine.merge(this.book, this.sheet, s.r0, s.c0, s.r1, s.c1, mode));
+  }
+
+  activeMerged(): boolean {
+    return !!this.mergeAt(this.ar, this.ac);
+  }
+
+  private async formatsOf(s: Range): Promise<Map<number, [string, string]>> {
+    const items = new Map<number, [string, string]>();
+    if ((s.r1 - s.r0 + 1) * (s.c1 - s.c0 + 1) > 100000) return items;
+    const [sts, codes] = await Promise.all([
+      this.engine.readStyles(this.book, this.sheet, s.r0, s.c0, s.r1, s.c1),
+      this.engine.readFormats(this.book, this.sheet, s.r0, s.c0, s.r1, s.c1),
+    ]);
+    for (const [r, c, st] of sts) items.set(KEY(r - s.r0, c - s.c0), [st, '']);
+    for (const [r, c, code] of codes) {
+      const k = KEY(r - s.r0, c - s.c0);
+      items.set(k, [items.get(k)?.[0] ?? '', code]);
+    }
+    return items;
+  }
+
+  private tiled(items: Map<number, [string, string]>, h: number, w: number, t: Range): FormatItem[] {
+    const out: FormatItem[] = [];
+    if ((t.r1 - t.r0 + 1) * (t.c1 - t.c0 + 1) > 100000) return out;
+    for (let r = t.r0; r <= t.r1; r++) {
+      for (let c = t.c0; c <= t.c1; c++) {
+        const [st, code] = items.get(KEY((r - t.r0) % h, (c - t.c0) % w)) ?? ['', ''];
+        out.push([r, c, st, code]);
+      }
+    }
+    return out;
+  }
+
+  async startPainter(sticky: boolean): Promise<void> {
+    const s = this.sel();
+    this.painter = { h: s.r1 - s.r0 + 1, w: s.c1 - s.c0 + 1, items: await this.formatsOf(s), sticky };
+    this.canvas.style.cursor = 'copy';
+    this.events.onPainter(sticky ? 'sticky' : 'on');
+  }
+
+  painting(): boolean {
+    return !!this.painter;
+  }
+
+  stopPainter(): void {
+    if (!this.painter) return;
+    this.painter = null;
+    this.canvas.style.cursor = '';
+    this.events.onPainter('off');
+  }
+
+  private async applyPainter(): Promise<void> {
+    const p = this.painter;
+    if (!p) return;
+    const s = this.sel();
+    const t = s.r0 === s.r1 && s.c0 === s.c1 ? { r0: s.r0, c0: s.c0, r1: Math.min(MAX_ROWS - 1, s.r0 + p.h - 1), c1: Math.min(MAX_COLS - 1, s.c0 + p.w - 1) } : s;
+    if (!p.sticky) this.stopPainter();
+    const items = this.tiled(p.items, p.h, p.w, t);
+    if (items.length) await this.applyEffect(await this.engine.putFormats(this.book, this.sheet, items));
+    this.select(t.r0, t.c0, t.r1, t.c1, false);
   }
 
   private paintSelection(rowSets: Band[], colSets: Band[]): void {
@@ -668,20 +831,21 @@ export class Grid {
         const y0 = this.y(s.r0);
         const x1 = this.x(s.c1 + 1);
         const y1 = this.y(s.r1 + 1);
-        if (s.r0 !== s.r1 || s.c0 !== s.c1) {
+        const am = this.mergeAt(this.ar, this.ac);
+        const single = am ? am[0] === s.r0 && am[1] === s.c0 && am[2] === s.r1 && am[3] === s.c1 : s.r0 === s.r1 && s.c0 === s.c1;
+        if (!single) {
           ctx.fillStyle = pal.sel;
           ctx.fillRect(x0, y0, x1 - x0, y1 - y0);
           ctx.fillStyle = pal.bg;
-          const ax = this.x(this.ac);
-          const ay = this.y(this.ar);
+          const [ax, ay, aw, ah] = this.activeArea();
           ctx.globalAlpha = 0.85;
-          ctx.fillRect(ax + 1, ay + 1, this.cols.size(this.ac) - 1, this.rows.size(this.ar) - 1);
+          ctx.fillRect(ax + 1, ay + 1, aw - 1, ah - 1);
           ctx.globalAlpha = 1;
           const t = this.cache.get(KEY(this.ar, this.ac));
           if (t) {
             ctx.save();
             ctx.beginPath();
-            ctx.rect(ax + 1, ay, this.cols.size(this.ac) - 2, this.rows.size(this.ar));
+            ctx.rect(ax + 1, ay, aw - 2, ah);
             ctx.clip();
             this.paintCells(this.ar, this.ar, this.ac, this.ac);
             ctx.restore();
@@ -804,6 +968,8 @@ export class Grid {
 
   select(r0: number, c0: number, r1 = r0, c1 = c0, reveal = true): void {
     this.tabStart = -1;
+    const m = r0 === r1 && c0 === c1 ? this.mergeAt(r0, c0) : undefined;
+    if (m) [r0, c0, r1, c1] = [m[0], m[1], m[0], m[1]];
     this.ar = clampR(r0);
     this.ac = clampC(c0);
     this.fr2 = clampR(r1);
@@ -920,6 +1086,8 @@ export class Grid {
     this.book = book;
     this.sheet = sheet;
     this.dropWindows();
+    this.merges = [];
+    void this.loadMerges();
     this.rows.restore(view.rows);
     this.cols.restore(view.cols);
     this.fr = view.fr ?? 0;
@@ -1022,7 +1190,7 @@ export class Grid {
       const after = text ? parseStyle(text) : null;
       if (after) this.styles.set(KEY(r, c), after);
       else this.styles.delete(KEY(r, c));
-      if (before?.wrap !== after?.wrap || before?.size !== after?.size) rows.add(r);
+      if (before?.wrap !== after?.wrap || before?.size !== after?.size || before?.rot !== after?.rot || before?.vertical !== after?.vertical) rows.add(r);
     }
     if (!hit) return;
     this.fitRows(rows);
@@ -1049,7 +1217,7 @@ export class Grid {
       if (s !== this.sheet) continue;
       this.store(KEY(r, c), t, f, n, col);
       const st = this.styles.get(KEY(r, c));
-      if (st && (st.wrap || st.size)) fit.add(r);
+      if (st && (st.wrap || st.size || st.rot || st.vertical)) fit.add(r);
     }
     this.fitRows(fit);
     if (changed.length) this.events.onChanged(changed);
@@ -1091,6 +1259,12 @@ export class Grid {
       this.applyStyles(e.styles);
       this.events.onStyles(e.styles);
     }
+    if (e.merges !== null) {
+      const sheet = e.merges;
+      const list = await this.engine.merges(this.book, sheet);
+      if (sheet === this.sheet) this.merges = list;
+      this.events.onMerges(sheet, list);
+    }
     await this.commitEdits(e.changes);
   }
 
@@ -1104,6 +1278,7 @@ export class Grid {
     if (gutter(axis) !== before) this.resize();
     this.dropWindows();
     this.events.onShift(s);
+    void this.loadMerges();
     this.emitView();
     this.paint();
   }
@@ -1230,7 +1405,9 @@ export class Grid {
     const edits: [number, number, string][] = [];
     const moves: [string, number, number][] = [];
     const moved: number[] = [];
+    const pairs: [number, number, number, number][] = [];
     const lane = (cells: [number, number][], targets: [number, number][]) => {
+      targets.forEach(([tr, tc], i) => pairs.push([tr, tc, cells[i % cells.length][0], cells[i % cells.length][1]]));
       const seq = cells.map(([r, c]) => map.get(KEY(r, c)) ?? '');
       if (!seq.some((v) => v.startsWith('='))) {
         fillSeries(seq, targets.length).forEach((v, i) => edits.push([targets[i][0], targets[i][1], v]));
@@ -1265,7 +1442,17 @@ export class Grid {
     }
     const texts = await this.engine.offset(moves);
     texts.forEach((t, i) => (edits[moved[i]][2] = t));
+    const mark = await this.engine.undoMark(this.book);
+    const fmts = await this.formatsOf(s);
     if (edits.length) await this.commitEdits(await this.engine.apply(this.book, edits, this.sheet));
+    if (pairs.length <= 100000) {
+      const items: FormatItem[] = pairs.map(([tr, tc, sr, sc]) => {
+        const [st, code] = fmts.get(KEY(sr - s.r0, sc - s.c0)) ?? ['', ''];
+        return [tr, tc, st, code];
+      });
+      await this.applyEffect(await this.engine.putFormats(this.book, this.sheet, items));
+    }
+    await this.engine.undoGroup(this.book, mark);
     this.select(Math.min(s.r0, target.r0), Math.min(s.c0, target.c0), Math.max(s.r1, target.r1), Math.max(s.c1, target.c1), false);
     this.ar = s.r0;
     this.ac = s.c0;
@@ -1302,9 +1489,16 @@ export class Grid {
       if (r < MAX_ROWS && c < MAX_COLS) edits.push([r, c, v]);
     }));
     if (!edits.length) return;
+    const own = this.copied && this.copied.text.replace(/\r/g, '') === text.replace(/\r/g, '') ? this.copied : null;
+    const mark = await this.engine.undoMark(this.book);
     await this.commitEdits(await this.engine.apply(this.book, edits, this.sheet));
     const rows = grid.length;
     const cols = Math.max(...grid.map((r) => r.length));
+    if (own) {
+      const t = { r0: this.ar, c0: this.ac, r1: Math.min(MAX_ROWS - 1, this.ar + own.h - 1), c1: Math.min(MAX_COLS - 1, this.ac + own.w - 1) };
+      await this.applyEffect(await this.engine.putFormats(this.book, this.sheet, this.tiled(own.items, own.h, own.w, t)));
+      await this.engine.undoGroup(this.book, mark);
+    }
     this.select(this.ar, this.ac, this.ar + rows - 1, this.ac + cols - 1);
   }
 
@@ -1313,12 +1507,15 @@ export class Grid {
     const want = new Map<number, number>();
     for (const [k, st] of this.styles) {
       const r = Math.floor(k / MAX_COLS);
-      if (!rows.has(r) || (!st.wrap && !st.size)) continue;
+      if (!rows.has(r) || (!st.wrap && !st.size && !st.rot && !st.vertical) || this.mergeAt(r, k % MAX_COLS)) continue;
       const t = this.cache.get(k) ?? '';
-      const px = st.size ? Math.round(st.size * 13.333) / 10 : 13;
-      this.ctx.font = `${st.i ? 'italic ' : ''}${st.b ? '700 ' : ''}${px}px ${st.font ? `"${st.font}", ` : ''}Inter, system-ui, sans-serif`;
-      const n = st.wrap && t ? wrapLines(this.ctx, t, this.cols.size(k % MAX_COLS) - 10).length : 1;
-      want.set(r, Math.max(want.get(r) ?? 0, n * Math.round(px * 1.3) + 8));
+      const px = this.font(st);
+      const lh = Math.round(px * 1.3);
+      let need: number;
+      if (st.vertical) need = [...t.split('\n', 1)[0]].length * lh + 8;
+      else if (st.rot) need = Math.abs(Math.sin((st.rot * Math.PI) / 180)) * this.ctx.measureText(t.split('\n', 1)[0]).width + lh + 8;
+      else need = (st.wrap && t ? wrapLines(this.ctx, t, this.cols.size(k % MAX_COLS) - 10).length : 1) * lh + 8;
+      want.set(r, Math.max(want.get(r) ?? 0, need));
     }
     let moved = false;
     for (const r of rows) {
@@ -1363,8 +1560,9 @@ export class Grid {
     const z = this.z;
     st.left = `${this.gw + this.x(this.ac) * z}px`;
     st.top = `${this.gh + this.y(this.ar) * z}px`;
-    st.width = `${Math.max(this.cols.size(this.ac), 60) * z}px`;
-    st.height = `${Math.max(this.rows.size(this.ar), 16) * z}px`;
+    const [, , aw, ah] = this.activeArea();
+    st.width = `${Math.max(aw, 60) * z}px`;
+    st.height = `${Math.max(ah, 16) * z}px`;
     st.fontSize = `${13 * z}px`;
     st.lineHeight = `${16 * z}px`;
   }
@@ -1396,8 +1594,9 @@ export class Grid {
 
   private move(dir: Dir, extend: boolean): void {
     const [dr, dc] = dir === 'up' ? [-1, 0] : dir === 'down' ? [1, 0] : dir === 'left' ? [0, -1] : [0, 1];
-    const fromR = extend ? this.fr2 : this.ar;
-    const fromC = extend ? this.fc2 : this.ac;
+    const m = extend ? undefined : this.mergeAt(this.ar, this.ac);
+    const fromR = extend ? this.fr2 : m ? (dr > 0 ? m[2] : m[0]) : this.ar;
+    const fromC = extend ? this.fc2 : m ? (dc > 0 ? m[3] : m[1]) : this.ac;
     const r = dr ? this.rows.nextVisible(clampR(fromR + dr), dr as 1 | -1) : fromR;
     const c = dc ? this.cols.nextVisible(clampC(fromC + dc), dc as 1 | -1) : fromC;
     if (extend) this.extendTo(r, c);
@@ -1541,7 +1740,8 @@ export class Grid {
       if (this.canvas.hasPointerCapture(e.pointerId)) this.canvas.releasePointerCapture(e.pointerId);
       const d = this.drag;
       this.drag = null;
-      if (d?.kind === 'fill') {
+      if (this.painter && (d?.kind === 'cells' || d?.kind === 'rows' || d?.kind === 'cols')) this.enqueue(() => this.applyPainter());
+      else if (d?.kind === 'fill') {
         const f = this.fillRange();
         this.fillTo = null;
         if (f) this.enqueue(() => this.fill(f));
@@ -1619,6 +1819,13 @@ export class Grid {
     });
   }
 
+  private remember(text: string, s: Range): void {
+    this.copied = null;
+    void this.formatsOf(s).then((items) => {
+      if (items.size) this.copied = { text, h: s.r1 - s.r0 + 1, w: s.c1 - s.c0 + 1, items };
+    });
+  }
+
   private writeClipboard(e: ClipboardEvent): void {
     {
       const s = this.sel();
@@ -1632,8 +1839,12 @@ export class Grid {
           out.push(row.join('\t'));
         }
         e.clipboardData.setData('text/plain', out.join('\n'));
+        this.remember(out.join('\n'), s);
       } else {
-        void this.selectionTSV().then((t) => navigator.clipboard?.writeText(t)).catch(() => undefined);
+        void this.selectionTSV().then((t) => {
+          this.remember(t, s);
+          return navigator.clipboard?.writeText(t);
+        }).catch(() => undefined);
       }
     }
   }
@@ -1681,6 +1892,10 @@ export class Grid {
       else if (e.key === 'Backspace') this.editor.value = this.editor.value.slice(0, -1);
       else if (e.key.length === 1 && !mod) this.editor.value += e.key;
       if (this.editing && this.editor.value !== before) this.editor.dispatchEvent(new Event('input'));
+      return;
+    }
+    if (e.key === 'Escape' && this.painter) {
+      this.stopPainter();
       return;
     }
     if (dir && e.altKey && e.shiftKey && !mod && (dir === 'left' || dir === 'right')) {

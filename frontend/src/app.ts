@@ -1,4 +1,4 @@
-import { engine, type Changed, type FormatChange, type Name, type Shift } from './engine';
+import { engine, type Area, type Changed, type FormatChange, type Name, type Shift } from './engine';
 import { colName, type Range } from './grid/a1';
 import { Autocomplete, FUNCTIONS, type Suggestion } from './ui/autocomplete';
 import { Grid, type BorderKind, type MenuKind, type SheetView } from './grid/grid';
@@ -48,6 +48,15 @@ const BORDER_KINDS: [BorderKind, string][] = [
   ['all', 'All borders'], ['outside', 'Outside borders'], ['inside', 'Inside borders'], ['top', 'Top border'],
   ['bottom', 'Bottom border'], ['left', 'Left border'], ['right', 'Right border'], ['none', 'No border'],
 ];
+const ROTATIONS: [string, string][] = [
+  ['None', 'rot:'], ['Angle counterclockwise', 'rot:45'], ['Angle clockwise', 'rot:-45'], ['Vertical text', 'rot:v'], ['Rotate text up', 'rot:90'], ['Rotate text down', 'rot:-90'],
+];
+
+function rotationLabel(st: { rot: number; vertical: boolean }): string {
+  if (st.vertical) return 'Vertical text';
+  return ROTATIONS.find(([, p]) => p === `rot:${st.rot}`)?.[0] ?? (st.rot ? `${st.rot} degrees` : '');
+}
+
 const LINES: [string, string][] = [['thin', 'Thin'], ['medium', 'Medium'], ['thick', 'Thick'], ['dashed', 'Dashed'], ['dotted', 'Dotted'], ['double', 'Double']];
 
 function bumpCode(code: string, shown: string, dir: 1 | -1): string {
@@ -128,6 +137,8 @@ export class App {
       onShift: (s) => this.sendShift(s),
       onFormats: (f) => this.sendFormats(f),
       onStyles: (s) => this.sendFormats(s, 'styles'),
+      onMerges: (sheet, areas) => this.sendMerges(sheet, areas),
+      onPainter: (state) => this.button('format.painter').setAttribute('aria-pressed', String(state !== 'off')),
       onView: (sheet, view) => this.saveView(sheet, view),
       onMenu: (kind, x, y) => this.cellMenu(kind, x, y),
       onGoto: () => {
@@ -205,9 +216,19 @@ export class App {
     cmd('format.indent-more', 'Increase indent', 'Move the text one step in from its edge.', true, () => g.styleSelection('in:+1'));
     cmd('format.indent-less', 'Decrease indent', 'Move the text one step back toward its edge.', true, () => g.styleSelection('in:-1'));
     cmd('format.clear', 'Clear formats', 'Remove fonts, colours, borders, alignment and number formats from the selected cells.', true, async () => {
+      const e = engine();
+      const mark = this.open ? await e.undoMark(this.open.book) : 0;
       await g.styleSelection('clear');
       await g.setFormat('');
+      if (this.open) await e.undoGroup(this.open.book, mark);
     });
+    cmd('format.merge', 'Merge cells', 'Merge the selected cells into one, or split a merged cell.', true, () => this.mergeMenu());
+    cmd('format.merge-center', 'Merge and center', 'Merge the selection into one cell and center its text. Only the upper-left value is kept.', true, () => g.merge('center'));
+    cmd('format.merge-across', 'Merge across', 'Merge each selected row into one cell.', true, () => g.merge('across'));
+    cmd('format.merge-cells', 'Merge cells without centering', 'Merge the selection into one cell.', true, () => g.merge('cells'));
+    cmd('format.unmerge', 'Unmerge cells', 'Split merged cells in the selection back into single cells.', true, () => g.merge('unmerge'));
+    cmd('format.rotate', 'Text rotation', 'Turn or stack the text in the selected cells.', true, () => this.listMenu('format.rotate', ROTATIONS, rotationLabel(g.activeStyle())));
+    cmd('format.painter', 'Format painter', 'Copy the formatting of the selection onto the next cells you select. Double-click to keep it on until Escape.', true, () => (g.painting() ? g.stopPainter() : g.startPainter(false)));
     cmd('format.text-color', 'Text colour', 'Choose the colour of the text.', true, () => this.colorMenu('format.text-color', 'fc'));
     cmd('format.fill-color', 'Fill colour', 'Choose the colour behind the cells.', true, () => this.colorMenu('format.fill-color', 'bg'));
     cmd('format.borders', 'Borders', 'Draw or remove lines around and inside the selection.', true, () => this.borderMenu());
@@ -225,6 +246,7 @@ export class App {
       if (b && !b.disabled) void runCommand(b.dataset.cmd!).then(() => this.grid.focus());
     });
     p.homeBtn.addEventListener('click', () => void runCommand('file.home'));
+    this.button('format.painter').addEventListener('dblclick', () => void this.grid.startPainter(true).then(() => this.grid.focus()));
     p.addSheet.addEventListener('click', () => void runCommand('sheet.add'));
     p.tabs.addEventListener('click', (e) => {
       const t = (e.target as HTMLElement).closest<HTMLElement>('[data-sheet]');
@@ -331,7 +353,7 @@ export class App {
   private async openWorkbook(id: string, setHash = true): Promise<void> {
     this.flush();
     await this.saving;
-    let doc: WorkbookMeta & { cells: [number, number, string][][]; formats?: [number, number, string][][]; styles?: [number, number, string][][]; views?: SheetView[]; names?: Name[] };
+    let doc: WorkbookMeta & { cells: [number, number, string][][]; formats?: [number, number, string][][]; styles?: [number, number, string][][]; merges?: Area[][]; views?: SheetView[]; names?: Name[] };
     try {
       doc = await api('GET', `/api/workbooks/${id}`);
     } catch {
@@ -344,6 +366,7 @@ export class App {
       if (i) await e.addSheet(book, doc.sheets[i]);
       await e.loadFormats(book, i, doc.formats?.[i] ?? []);
       await e.loadStyles(book, i, doc.styles?.[i] ?? []);
+      await e.loadMerges(book, i, doc.merges?.[i] ?? []);
       if (doc.cells[i]?.length) await e.load(book, doc.cells[i], i);
     }
     for (const [n, f] of doc.names ?? []) await e.defineName(book, n, f).catch(() => []);
@@ -499,6 +522,22 @@ export class App {
     });
   }
 
+  private sendMerges(sheet: number, areas: Area[]): void {
+    const o = this.open;
+    if (!o) return;
+    this.flush();
+    this.status('Saving');
+    this.saving = this.saving.then(async () => {
+      try {
+        await api('PUT', `/api/workbooks/${o.id}/merges`, { sheet, areas });
+        if (!this.pending.size) this.status('Saved');
+      } catch (err) {
+        this.status('Not saved', true);
+        this.p.save.title = err instanceof Error ? err.message : '';
+      }
+    });
+  }
+
   private below(cmd: string): [number, number] {
     const b = this.button(cmd).getBoundingClientRect();
     return [b.left, b.bottom + 4];
@@ -511,6 +550,18 @@ export class App {
     const pick = (c: string) => void g.styleSelection(`${key}:${c.slice(1)}`).then(() => g.focus());
     this.menu.show(x, y, [
       { swatches: CELL_COLOURS, current: st[key] ?? '', pick, name: key === 'fc' ? 'Text colour' : 'Fill colour', none: key === 'fc' ? 'Automatic' : 'No fill' },
+    ], () => g.focus());
+  }
+
+  private mergeMenu(): void {
+    const g = this.grid;
+    const [x, y] = this.below('format.merge');
+    const run = (id: string) => () => runCommand(id).then(() => g.focus());
+    this.menu.show(x, y, [
+      { label: 'Merge and center', run: run('format.merge-center') },
+      { label: 'Merge across', run: run('format.merge-across') },
+      { label: 'Merge cells', run: run('format.merge-cells') },
+      { label: g.activeMerged() ? 'Unmerge cells (current)' : 'Unmerge cells', run: run('format.unmerge') },
     ], () => g.focus());
   }
 

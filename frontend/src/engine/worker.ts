@@ -26,6 +26,13 @@ interface Exports {
   fc_styles_in(book: number, sheet: number, r0: number, c0: number, r1: number, c1: number): number;
   fc_style_at(book: number, sheet: number, row: number, col: number): number;
   fc_load_styles(book: number, sheet: number, lines: number, len: number): number;
+  fc_merge(book: number, sheet: number, r0: number, c0: number, r1: number, c1: number, mode: number): number;
+  fc_merges(book: number, sheet: number): number;
+  fc_load_merges(book: number, sheet: number, lines: number, len: number): number;
+  fc_put_formats(book: number, sheet: number, lines: number, len: number): number;
+  fc_undo_mark(book: number): number;
+  fc_undo_group(book: number, mark: number): number;
+  fc_formats_in(book: number, sheet: number, r0: number, c0: number, r1: number, c1: number): number;
   fc_undo(book: number): number;
   fc_redo(book: number): number;
   fc_history(book: number): number;
@@ -65,7 +72,7 @@ function cells(s: string): Cell[] {
 }
 
 function changed(s: string): Changed[] {
-  return lines(s).filter((l) => l[0] !== '%' && l[0] !== '#' && l[0] !== '&').map(([sh, r, c, fl, t, f]) => [Number(sh), Number(r), Number(c), unescape(t ?? ''), f === undefined ? undefined : unescape(f), fl.startsWith('n'), colorOf(fl)]);
+  return lines(s).filter((l) => l[0] !== '%' && l[0] !== '#' && l[0] !== '&' && l[0] !== '=').map(([sh, r, c, fl, t, f]) => [Number(sh), Number(r), Number(c), unescape(t ?? ''), f === undefined ? undefined : unescape(f), fl.startsWith('n'), colorOf(fl)]);
 }
 
 function formatsOf(s: string, tag = '%'): FormatChange[] {
@@ -79,8 +86,11 @@ function shiftOf(line: string): Shift {
 
 function effect(s: string): Effect {
   const shift = s.startsWith('#') ? shiftOf(s.slice(0, s.indexOf('\n'))) : null;
-  return { shift, changes: changed(s), formats: formatsOf(s), styles: formatsOf(s, '&') };
+  const m = /^=\t(\d+)$/m.exec(s);
+  return { shift, changes: changed(s).filter((l) => !Number.isNaN(l[0])), formats: formatsOf(s), styles: formatsOf(s, '&'), merges: m ? Number(m[1]) : null };
 }
+
+const MERGE_MODES = { center: 0, across: 1, cells: 2, unmerge: 3 } as const;
 
 function ok(n: number, what: string): number {
   if (n < 0) throw new Error(what);
@@ -152,7 +162,7 @@ function run(x: Exports, req: Request): Value {
     case 'undo':
     case 'redo': {
       const n = req.op === 'undo' ? x.fc_undo(req.book) : x.fc_redo(req.book);
-      return n === -2 ? { changes: [], shift: null, formats: [], styles: [] } : effect(out(x, n));
+      return n === -2 ? { changes: [], shift: null, formats: [], styles: [], merges: null } : effect(out(x, n));
     }
     case 'shift':
       return shiftOf(out(x, x.fc_shift(req.book, req.sheet, req.rows ? 1 : 0, req.at, req.n, req.insert ? 1 : 0)).trim());
@@ -190,6 +200,24 @@ function run(x: Exports, req: Request): Value {
       const body = req.cells.map(([r, c, st]) => `${r}\t${c}\t${escape(st)}`).join('\n');
       return withStrings(x, [body], ([p, l]) => ok(x.fc_load_styles(req.book, req.sheet, p, l), 'The engine refused those styles.'));
     }
+    case 'merge.set':
+      return effect(out(x, x.fc_merge(req.book, req.sheet, req.r0, req.c0, req.r1, req.c1, MERGE_MODES[req.mode])));
+    case 'merge.list':
+      return lines(out(x, x.fc_merges(req.book, req.sheet))).map((l) => l.map(Number) as [number, number, number, number]);
+    case 'merge.load': {
+      const body = req.areas.map((a) => a.join('\t')).join('\n');
+      return withStrings(x, [body], ([p, l]) => ok(x.fc_load_merges(req.book, req.sheet, p, l), 'The engine refused those merged cells.'));
+    }
+    case 'format.put': {
+      const body = req.items.map(([r, c, st, code]) => `${r}\t${c}\t${escape(st)}\t${escape(code)}`).join('\n');
+      return withStrings(x, [body], ([p, l]) => effect(out(x, x.fc_put_formats(req.book, req.sheet, p, l))));
+    }
+    case 'undo.mark':
+      return ok(x.fc_undo_mark(req.book), 'No such workbook.');
+    case 'undo.group':
+      return ok(x.fc_undo_group(req.book, req.mark), 'The engine could not join those steps.');
+    case 'format.read':
+      return lines(out(x, x.fc_formats_in(req.book, req.sheet, req.r0, req.c0, req.r1, req.c1))).map(([, r, c, code]) => [Number(r), Number(c), unescape(code ?? '')] as [number, number, string]);
     case 'name.define':
       return withStrings(x, [req.name, req.refers], ([n, nl, r, rl]) => {
         const len = x.fc_define_name(req.book, n, nl, r, rl);

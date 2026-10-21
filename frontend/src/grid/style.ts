@@ -17,12 +17,14 @@ export interface CellStyle {
   ha?: 'left' | 'center' | 'right';
   va?: 'top' | 'middle' | 'bottom';
   indent: number;
+  rot: number;
+  vertical: boolean;
   borders: (Border | null)[];
 }
 
 const EDGES = ['bt', 'br', 'bb', 'bl'];
 
-export const PLAIN: CellStyle = { text: '', b: false, i: false, u: false, s: false, wrap: false, indent: 0, borders: [null, null, null, null] };
+export const PLAIN: CellStyle = { text: '', b: false, i: false, u: false, s: false, wrap: false, indent: 0, rot: 0, vertical: false, borders: [null, null, null, null] };
 
 export function parseStyle(text: string): CellStyle {
   const st: CellStyle = { ...PLAIN, text, borders: [null, null, null, null] };
@@ -38,6 +40,10 @@ export function parseStyle(text: string): CellStyle {
     else if (k === 'ha') st.ha = v as CellStyle['ha'];
     else if (k === 'va') st.va = v as CellStyle['va'];
     else if (k === 'in') st.indent = Number(v);
+    else if (k === 'rot') {
+      if (v === 'v') st.vertical = true;
+      else st.rot = Number(v);
+    }
     else {
       const e = EDGES.indexOf(k);
       if (e >= 0) {
