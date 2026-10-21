@@ -14,6 +14,7 @@ export type BorderKind ='all' | 'outside' | 'inside' | 'top' | 'bottom' | 'left'
 import { Axis, type AxisState } from './axis';
 import { MAX_COLS, MAX_ROWS, a1, colName, parseRef, rangeText, type Range } from './a1';
 import { fillSeries } from './fill';
+import { parseTable, tablePaint, type TableInfo } from './tables';
 
 export interface SheetView {
   rows?: AxisState;
@@ -75,6 +76,8 @@ export interface GridEvents {
   onInvalid(rule: string[]): Promise<'retry' | 'accept' | 'cancel'>;
   onRule(rule: string[] | null, at: DOMRect | null): void;
   onList(): void;
+  onTables(lines: string[]): void;
+  onTableKey(): void;
   onLinks(changes: LinkChange[]): void;
   onOpenLink(): void;
   onLinkBox(): void;
@@ -108,6 +111,7 @@ export class Grid {
   private filterCols = new Map<number, string[]>();
   private filterText = '';
   private validLines: string[] = [];
+  private tableList: TableInfo[] = [];
   private rule: string[] | null = null;
   private ruleSeq = 0;
   look: Look = themeOf('');
@@ -613,7 +617,7 @@ export class Grid {
       ctx.fillStyle = this.styleOf(KEY(mr0, mc0))?.bg ?? pal.bg;
       ctx.fillRect(x + 1, y + 1, w - 1, h - 1);
     }
-    if (this.styles.size || this.cfs.size) {
+    if (this.styles.size || this.cfs.size || this.tableList.length) {
       for (let r = r0; r <= r1; r++) {
         const rh = this.rows.size(r);
         if (!rh) continue;
@@ -685,7 +689,7 @@ export class Grid {
   }
 
   private styleOf(k: number): CellStyle | undefined {
-    const base = this.styles.get(k);
+    const base = this.tabled(k, this.styles.get(k));
     const cf = this.cfs.get(k)?.style;
     if (!cf) return base;
     const b = base ?? PLAIN;
@@ -699,6 +703,74 @@ export class Grid {
       bg: cf.bg ?? b.bg,
       borders: b.borders.map((x, i) => cf.borders[i] ?? x),
     };
+  }
+
+  private tabled(k: number, own: CellStyle | undefined): CellStyle | undefined {
+    if (!this.tableList.length) return own;
+    const r = Math.floor(k / MAX_COLS);
+    const c = k % MAX_COLS;
+    for (const t of this.tableList) {
+      const p = tablePaint(t, r, c, this.look);
+      if (!p) continue;
+      const b = own ?? PLAIN;
+      return { ...b, b: b.b || p.b, bg: b.bg ?? p.bg, fc: b.fc ?? p.fc };
+    }
+    return own;
+  }
+
+  tables(): TableInfo[] {
+    return this.tableList;
+  }
+
+  activeTable(): TableInfo | null {
+    return this.tableList.find((t) => this.ar >= t.area[0] && this.ar <= t.area[2] && this.ac >= t.area[1] && this.ac <= t.area[3]) ?? null;
+  }
+
+  async loadTables(): Promise<void> {
+    if (this.book < 0) return;
+    const sheet = this.sheet;
+    const all = (await this.engine.tables(this.book)).map(parseTable).filter((t): t is TableInfo => !!t);
+    if (sheet !== this.sheet) return;
+    const mine = all.filter((t) => t.sheet === sheet);
+    const same = mine.length === this.tableList.length && mine.every((t, i) => t.line === this.tableList[i].line);
+    this.tableList = mine;
+    if (!same) {
+      this.paint();
+      void this.loadRule();
+    }
+  }
+
+  private async tablesMoved(): Promise<void> {
+    const lines = await this.engine.tables(this.book);
+    const before = this.tableList.map((t) => t.line).join('\n');
+    await this.loadTables();
+    if (this.tableList.map((t) => t.line).join('\n') !== before) {
+      this.events.onTables(lines);
+      const f = await this.engine.filter(this.book, this.sheet);
+      if (f !== this.filterText) {
+        await this.loadFilter();
+        this.events.onFilter(this.sheet, f);
+      }
+    }
+  }
+
+  async createTable(range: Range, header: boolean): Promise<void> {
+    await this.applyEffect(await this.engine.createTable(this.book, this.sheet, range.r0, range.c0, range.r1, range.c1, header));
+  }
+
+  async setTable(name: string, line: string): Promise<void> {
+    await this.applyEffect(await this.engine.setTable(this.book, name, line));
+  }
+
+  async removeTable(name: string, keep: StyleOp[]): Promise<void> {
+    const mark = await this.engine.undoMark(this.book);
+    await this.applyEffect(await this.engine.removeTable(this.book, name));
+    if (keep.length) await this.setStyles(keep);
+    await this.engine.undoGroup(this.book, mark);
+  }
+
+  tablePaintAt(t: TableInfo, r: number, c: number): { bg?: string; fc?: string; b: boolean } | null {
+    return tablePaint(t, r, c, this.look);
   }
 
   private textSpan(k: number, t: string, r: number, c: number, merged: (r: number, c: number) => boolean): [number, number] {
@@ -1282,7 +1354,12 @@ export class Grid {
   }
 
   private hasList(): boolean {
-    return !!this.rule && this.rule[1] === 'list' && (this.rule[5] ?? '').includes('d');
+    return (!!this.rule && this.rule[1] === 'list' && (this.rule[5] ?? '').includes('d')) || !!this.totalsCell();
+  }
+
+  totalsCell(): TableInfo | null {
+    const t = this.activeTable();
+    return t && t.flags.includes('t') && this.ar === t.area[2] ? t : null;
   }
 
   private listArrow(): [number, number, number, number] | null {
@@ -1400,6 +1477,8 @@ export class Grid {
     this.filterText = '';
     this.rows.setFiltered([]);
     this.validLines = [];
+    this.tableList = [];
+    void this.loadTables();
     if (this.rule) this.events.onRule(null, null);
     this.rule = null;
     void this.loadValid();
@@ -1681,6 +1760,7 @@ export class Grid {
       }
     }
     await this.commitEdits(await this.engine.apply(this.book, [[this.ar, this.ac, raw]], this.sheet));
+    if (this.tableList.length) await this.tablesMoved();
     return true;
   }
 
@@ -1729,6 +1809,10 @@ export class Grid {
       const text = await this.engine.filter(this.book, sheet);
       if (sheet === this.sheet) await this.loadFilter();
       this.events.onFilter(sheet, text);
+    }
+    if (e.tables) {
+      await this.loadTables();
+      this.events.onTables(await this.engine.tables(this.book));
     }
     if (e.valid !== null) {
       const sheet = e.valid;
@@ -2492,6 +2576,7 @@ export class Grid {
       if (e.shiftKey && e.code in SHORT_FORMATS) return this.setFormat(SHORT_FORMATS[e.code]);
       if (k === 'g') return this.events.onGoto();
       if (e.shiftKey && e.code === 'KeyL') return this.events.onFilterKey();
+      if (!e.shiftKey && e.code === 'KeyT') return this.events.onTableKey();
       if (k === 'k' && !e.shiftKey) return this.events.onLinkBox();
       if (k === 'z' && !e.shiftKey) return this.undo();
       if (k === 'y' || k === 'z') return this.redo();
@@ -2635,7 +2720,7 @@ function wants(e: KeyboardEvent): boolean {
   if (ARROWS[e.key]) return true;
   const mod = e.ctrlKey || e.metaKey;
   if (mod && e.altKey && e.code === 'KeyV') return true;
-  if (mod) return !e.altKey && (['z', 'y', 'a', 'home', 'end', '+', '=', '-', '_', 'g', 'k'].includes(e.key.toLowerCase()) || (e.shiftKey && e.code === 'KeyL') || e.code === 'Digit9' || e.code === 'Digit0' || (e.shiftKey && (e.code in SHORT_FORMATS || e.code === 'Digit7')) || (!e.shiftKey && e.code in TOGGLE_KEYS));
+  if (mod) return !e.altKey && (['z', 'y', 'a', 'home', 'end', '+', '=', '-', '_', 'g', 'k'].includes(e.key.toLowerCase()) || (e.shiftKey && e.code === 'KeyL') || (!e.shiftKey && e.code === 'KeyT') || e.code === 'Digit9' || e.code === 'Digit0' || (e.shiftKey && (e.code in SHORT_FORMATS || e.code === 'Digit7')) || (!e.shiftKey && e.code in TOGGLE_KEYS));
   if (['Enter', 'Tab', 'Escape', 'Home', 'PageDown', 'PageUp', 'F2', 'F5', 'Delete', 'Backspace'].includes(e.key)) return true;
   return e.key.length === 1 && !e.altKey;
 }

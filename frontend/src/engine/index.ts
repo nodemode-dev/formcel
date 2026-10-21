@@ -210,6 +210,26 @@ export class EngineClient {
     if (lines.length) await this.call({ op: 'rules.load', book, sheet, lines });
   }
 
+  async tables(book: number): Promise<string[]> {
+    return (await this.call({ op: 'table.list', book })) as string[];
+  }
+
+  async loadTables(book: number, lines: string[]): Promise<void> {
+    if (lines.length) await this.call({ op: 'table.load', book, lines });
+  }
+
+  async createTable(book: number, sheet: number, r0: number, c0: number, r1: number, c1: number, header: boolean): Promise<Effect> {
+    return (await this.call({ op: 'table.create', book, sheet, r0, c0, r1, c1, header })) as Effect;
+  }
+
+  async setTable(book: number, name: string, line: string): Promise<Effect> {
+    return (await this.call({ op: 'table.set', book, name, line })) as Effect;
+  }
+
+  async removeTable(book: number, name: string): Promise<Effect> {
+    return (await this.call({ op: 'table.remove', book, name })) as Effect;
+  }
+
   async validations(book: number, sheet: number): Promise<string[]> {
     return (await this.call({ op: 'valid.list', book, sheet })) as string[];
   }

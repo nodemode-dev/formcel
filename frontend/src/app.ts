@@ -1,8 +1,9 @@
 import { engine, type Area, type Changed, type FormatChange, type LinkChange, type Name, type Shift } from './engine';
-import { colName, type Range } from './grid/a1';
+import { colName, parseRef, type Range } from './grid/a1';
 import { Autocomplete, FUNCTIONS, type Suggestion } from './ui/autocomplete';
 import { Grid, type BorderKind, type MenuKind, type PasteKind, type SheetView } from './grid/grid';
 import { paint } from './grid/style';
+import { TABLE_STYLES } from './grid/tables';
 import { listCommands, registerCommand, runCommand } from './ui/commands';
 import { Home, type TemplateMeta, type WorkbookMeta } from './ui/home';
 import { Menu, type MenuItem } from './ui/menu';
@@ -63,7 +64,8 @@ interface AlertForm {
 
 const VALID_KINDS: [string, string][] = [['any', 'Any value'], ['whole', 'Whole number'], ['decimal', 'Decimal'], ['list', 'List'], ['date', 'Date'], ['time', 'Time'], ['length', 'Text length'], ['custom', 'Custom']];
 const VALID_OPS: [string, string][] = [['between', 'between'], ['notbetween', 'not between'], ['eq', 'equal to'], ['ne', 'not equal to'], ['gt', 'greater than'], ['lt', 'less than'], ['ge', 'greater than or equal to'], ['le', 'less than or equal to']];
-const ALERT_TEXT = 'The value you entered is not allowed in this cell.';
+const TOTALS: [string, number][] = [['Average', 101], ['Count', 103], ['Count Numbers', 102], ['Max', 104], ['Min', 105], ['Sum', 109], ['StdDev', 107], ['Var', 110]];
+const ALERT_TEXT ='The value you entered is not allowed in this cell.';
 
 interface SortForm {
   form: HTMLFormElement;
@@ -263,6 +265,8 @@ export class App {
       onInvalid: (rule) => this.invalidBox(rule),
       onRule: (rule, at) => this.showPrompt(rule, at),
       onList: () => void this.dropList(),
+      onTables: (lines) => this.sendTables(lines),
+      onTableKey: () => void runCommand('table.create'),
       onLinks: (changes) => this.sendLinks(changes),
       onOpenLink: () => void this.grid.linkTarget().then((t) => this.followLink(t)),
       onLinkBox: () => this.linkBox(),
@@ -374,6 +378,7 @@ export class App {
     cmd('data.sort-desc', 'Sort Z to A', 'Sort the rows of the selection, or the data around the active cell, by the active column, largest first.', true, () => this.sorted(g.quickSort(true)));
     cmd('data.sort', 'Custom sort', 'Sort by several columns, each A to Z or Z to A, with or without a header row.', true, () => this.sortBox());
     cmd('data.filter', 'Filter', 'Add filter buttons to the header row of the data around the active cell, or take them off.', true, () => this.toggleFilter(), 'Mod+Shift+L');
+    cmd('table.create', 'Table', 'Turn the data around the active cell into a table with a header row, banded rows and filter buttons, or change the table the active cell is in.', true, () => (g.activeTable() ? this.designBox() : this.tableBox()), 'Mod+T');
     cmd('data.validation', 'Data validation', 'Limit what can be typed in the selected cells, offer a dropdown list, show a message when a cell is selected and an alert when a value is not allowed.', true, () => this.validBox());
     cmd('data.filter-clear', 'Clear filter', 'Show every row again and keep the filter buttons.', true, () => this.filterWith(null));
     cmd('data.filter-reapply', 'Reapply filter', 'Run the filter again over the current values, taking in rows added below it.', true, () => g.reapplyFilter());
@@ -600,6 +605,126 @@ export class App {
     return f;
   }
 
+  private async tableBox(): Promise<void> {
+    const o = this.open;
+    if (!o) return;
+    const { range, header } = await this.grid.sortTarget();
+    const f = this.tableForm ??= this.makeTableForm();
+    f.querySelector<HTMLInputElement>('[data-k="range"]')!.value = `${colName(range.c0)}${range.r0 + 1}:${colName(range.c1)}${range.r1 + 1}`;
+    f.querySelector<HTMLInputElement>('[data-k="header"]')!.checked = header || range.r0 === range.r1;
+    f.querySelector<HTMLElement>('.fc-fmt-hint')!.textContent = '';
+    f.dataset.state = '';
+    f.hidden = false;
+    f.querySelector<HTMLInputElement>('[data-k="range"]')!.select();
+  }
+
+  private makeTableForm(): HTMLFormElement {
+    const form = document.createElement('form');
+    form.className = 'fc-fmt-custom fc-pw';
+    form.hidden = true;
+    form.setAttribute('role', 'dialog');
+    form.innerHTML = '<span class="fc-fmt-title">Create table</span><label class="fc-fmt-label">Where is the data for your table?<input class="fc-fmt-input" data-k="range" spellcheck="false" autocomplete="off"></label><label class="fc-sort-check"><input type="checkbox" data-k="header"> My table has headers</label><span class="fc-fmt-hint" aria-live="polite"></span><div class="fc-csv-actions"><button type="button" class="fc-btn" data-a="cancel">Cancel</button><button type="submit" class="fc-btn fc-btn-primary">OK</button></div>';
+    document.getElementById('overlay-root')!.appendChild(form);
+    const close = () => { form.hidden = true; this.grid.focus(); };
+    const hint = form.querySelector<HTMLElement>('.fc-fmt-hint')!;
+    form.addEventListener('click', (e) => { if ((e.target as HTMLElement).closest('[data-a="cancel"]')) close(); });
+    form.addEventListener('keydown', (e) => { if (e.key === 'Escape') close(); });
+    form.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const r = parseRef(form.querySelector<HTMLInputElement>('[data-k="range"]')!.value.replace(/\$/g, ''));
+      if (!r) {
+        form.dataset.state = 'error';
+        hint.textContent = 'Type a range such as A1:D20.';
+        return;
+      }
+      void this.grid.createTable(r, form.querySelector<HTMLInputElement>('[data-k="header"]')!.checked).then(close, (err: unknown) => {
+        form.dataset.state = 'error';
+        hint.textContent = err instanceof Error ? err.message : 'No table made';
+      });
+    });
+    return form;
+  }
+
+  private designBox(): void {
+    const t = this.grid.activeTable();
+    if (!t) return;
+    const f = this.designForm ??= this.makeDesignForm();
+    const q = <T extends HTMLElement>(k: string) => f.querySelector<T>(`[data-k="${k}"]`)!;
+    f.dataset.table = t.name;
+    q<HTMLInputElement>('name').value = t.name;
+    q<HTMLSelectElement>('style').value = t.style;
+    const [r0, c0, r1, c1] = t.area;
+    q<HTMLInputElement>('range').value = `${colName(c0)}${r0 + 1}:${colName(c1)}${r1 + 1}`;
+    for (const [k, ch] of [['totals', 't'], ['rows', 'r'], ['cols', 'c'], ['first', 'f'], ['last', 'l'], ['button', 'b']]) q<HTMLInputElement>(k).checked = t.flags.includes(ch);
+    f.querySelector<HTMLElement>('.fc-fmt-hint')!.textContent = '';
+    f.dataset.state = '';
+    f.hidden = false;
+    q<HTMLInputElement>('name').select();
+  }
+
+  private makeDesignForm(): HTMLFormElement {
+    const form = document.createElement('form');
+    form.className = 'fc-fmt-custom fc-pw fc-tabled';
+    form.hidden = true;
+    form.setAttribute('role', 'dialog');
+    const styles = TABLE_STYLES.map(([id, label]) => `<option value="${id}">${label}</option>`).join('');
+    const box = (k: string, label: string) => `<label class="fc-sort-check"><input type="checkbox" data-k="${k}"> ${label}</label>`;
+    form.innerHTML = `<span class="fc-fmt-title">Table design</span><label class="fc-fmt-label">Table name<input class="fc-fmt-input" data-k="name" spellcheck="false" autocomplete="off"></label><label class="fc-fmt-label">Table style<select class="fc-fmt-input" data-k="style">${styles}</select></label><label class="fc-fmt-label">Resize table (keep the top-left cell)<input class="fc-fmt-input" data-k="range" spellcheck="false" autocomplete="off"></label><div class="fc-tabled-opts">${box('totals', 'Total row')}${box('rows', 'Banded rows')}${box('cols', 'Banded columns')}${box('first', 'First column')}${box('last', 'Last column')}${box('button', 'Filter button')}</div><span class="fc-fmt-hint" aria-live="polite"></span><div class="fc-csv-actions"><button type="button" class="fc-btn" data-a="convert">Convert to range</button><button type="button" class="fc-btn" data-a="cancel">Cancel</button><button type="submit" class="fc-btn fc-btn-primary">OK</button></div>`;
+    document.getElementById('overlay-root')!.appendChild(form);
+    const q = <T extends HTMLElement>(k: string) => form.querySelector<T>(`[data-k="${k}"]`)!;
+    const hint = form.querySelector<HTMLElement>('.fc-fmt-hint')!;
+    const close = () => { form.hidden = true; this.grid.focus(); };
+    const fail = (err: unknown) => {
+      form.dataset.state = 'error';
+      hint.textContent = err instanceof Error ? err.message : 'Not changed';
+    };
+    form.addEventListener('click', (e) => {
+      const a = (e.target as HTMLElement).closest<HTMLElement>('[data-a]')?.dataset.a;
+      if (a === 'cancel') close();
+      if (a === 'convert') {
+        const t = this.grid.tables().find((x) => x.name === form.dataset.table);
+        if (!t) return;
+        const keep: [number, number, number, number, string][] = [];
+        const [r0, c0, r1, c1] = t.area;
+        for (let r = r0; r <= r1; r++) {
+          for (let c = c0; c <= c1; c++) {
+            const p = this.grid.tablePaintAt(t, r, c);
+            const parts = [p?.bg ? `bg:${p.bg.slice(1)}` : '', p?.fc ? `fc:${p.fc.slice(1)}` : '', p?.b ? 'b' : ''].filter(Boolean);
+            if (parts.length) keep.push([r, c, r, c, parts.join(';')]);
+          }
+        }
+        void this.grid.removeTable(t.name, keep).then(close, fail);
+      }
+    });
+    form.addEventListener('keydown', (e) => { if (e.key === 'Escape') close(); });
+    form.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const t = this.grid.tables().find((x) => x.name === form.dataset.table);
+      if (!t) return;
+      const r = parseRef(q<HTMLInputElement>('range').value.replace(/\$/g, ''));
+      if (!r) return fail(new Error('Type a range such as A1:D20.'));
+      const name = q<HTMLInputElement>('name').value.trim();
+      const flags = [['totals', 't'], ['rows', 'r'], ['cols', 'c'], ['first', 'f'], ['last', 'l'], ['button', 'b']].filter(([k]) => q<HTMLInputElement>(k).checked).map(([, c]) => c).join('');
+      let r1 = r.r1;
+      if (flags.includes('t') !== t.flags.includes('t') && r.r1 === t.area[2]) r1 = t.area[2];
+      const w = r.c1 - r.c0 + 1;
+      const cols = Array.from({ length: w }, (_, i) => t.cols[i] ?? '');
+      const pad = (list: string[]) => Array.from({ length: w }, (_, i) => list[i] ?? '');
+      const parts = [name, `${r.r0},${r.c0},${r1},${r.c1}`, t.flags.includes('t') ? `${flags.replace('t', '')}t` : flags.replace('t', ''), q<HTMLSelectElement>('style').value, String(w), ...cols, ...pad(t.calc), ...pad(t.kept)];
+      const want = flags.includes('t');
+      void (async () => {
+        await this.grid.setTable(t.name, parts.map(fieldEsc).join('\t'));
+        if (want !== t.flags.includes('t')) {
+          const now = this.grid.tables().find((x) => x.name === name) ?? t;
+          const p2 = now.line.split('\t').slice(1);
+          p2[2] = want ? `${p2[2]}t` : p2[2].replace('t', '');
+          await this.grid.setTable(now.name, p2.join('\t'));
+        }
+      })().then(close, fail);
+    });
+    return form;
+  }
+
   private validBox(): void {
     const v = this.validForm ??= this.makeValidForm();
     const rule = this.grid.activeRule();
@@ -758,6 +883,15 @@ export class App {
   private async dropList(): Promise<void> {
     const at = this.grid.listButton();
     if (!at) return;
+    const tot = this.grid.totalsCell();
+    if (tot) {
+      const name = tot.cols[this.grid.activeColumn() - tot.area[1]] ?? '';
+      const ref = /^[A-Za-z0-9 ]+$/.test(name) && !/^ | $/.test(name) ? `[${name}]` : `[[${name.replace(/[[\]#'@]/g, "'$&")}]]`;
+      const cell = this.grid.cellRect();
+      const pick = (raw: string) => () => void this.grid.setActive(raw).then(() => this.grid.focus());
+      this.menu.show(cell.left, cell.bottom + 2, [{ label: 'None', run: pick('') }, ...TOTALS.map(([label, n]) => ({ label, run: pick(`=SUBTOTAL(${n},${ref})`) }))], () => this.grid.focus());
+      return;
+    }
     const items = await this.grid.listItems();
     if (!items.length) return;
     if (this.prompt) this.prompt.hidden = true;
@@ -1143,7 +1277,7 @@ export class App {
   private async openWorkbook(id: string, setHash = true): Promise<void> {
     this.flush();
     await this.saving;
-    let doc: WorkbookMeta & { cells: [number, number, string][][]; formats?: [number, number, string][][]; styles?: [number, number, string][][]; merges?: Area[][]; rules?: string[][]; filters?: string[]; validations?: string[][]; links?: [number, number, string][][]; theme?: string; cellStyles?: string[]; views?: SheetView[]; names?: Name[] };
+    let doc: WorkbookMeta & { cells: [number, number, string][][]; formats?: [number, number, string][][]; styles?: [number, number, string][][]; merges?: Area[][]; rules?: string[][]; filters?: string[]; validations?: string[][]; tables?: string[]; links?: [number, number, string][][]; theme?: string; cellStyles?: string[]; views?: SheetView[]; names?: Name[] };
     try {
       doc = await api('GET', `/api/workbooks/${id}`);
     } catch {
@@ -1167,6 +1301,7 @@ export class App {
       if (doc.cells[i]?.length) await e.load(book, doc.cells[i], i);
     }
     for (const [n, f] of doc.names ?? []) await e.defineName(book, n, f).catch(() => []);
+    await e.loadTables(book, doc.tables ?? []);
     const names = doc.names?.length ? await e.names(book) : [];
     this.open = { id, book, title: doc.title, sheets: doc.sheets, views: doc.sheets.map((_, i) => doc.views?.[i] ?? {}), names, macros: !!doc.macros };
     const p = this.p;
@@ -1415,6 +1550,8 @@ export class App {
   private pwForm: PasswordForm | null = null;
   private sortForm: SortForm | null = null;
   private validForm: ValidForm | null = null;
+  private tableForm: HTMLFormElement | null = null;
+  private designForm: HTMLFormElement | null = null;
   private alertForm: AlertForm | null = null;
   private prompt: HTMLElement | null = null;
   private filterForm: FilterForm | null = null;
@@ -1473,6 +1610,21 @@ export class App {
       if (!form.hidden && !form.contains(e.target as Node)) form.hidden = true;
     }, true);
     return { form, text, url, hint };
+  }
+
+  private sendTables(lines: string[]): void {
+    const o = this.open;
+    if (!o) return;
+    this.status('Saving');
+    this.saving = this.saving.then(async () => {
+      try {
+        await api('PUT', `/api/workbooks/${o.id}/tables`, { lines });
+        if (!this.pending.size) this.status('Saved');
+      } catch (err) {
+        this.status('Not saved', true);
+        this.p.save.title = err instanceof Error ? err.message : '';
+      }
+    });
   }
 
   private sendValid(sheet: number, lines: string[]): void {

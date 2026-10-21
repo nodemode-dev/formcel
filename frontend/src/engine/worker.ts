@@ -45,6 +45,11 @@ interface Exports {
   fc_rules(book: number, sheet: number): number;
   fc_set_rules(book: number, sheet: number, lines: number, len: number): number;
   fc_load_rules(book: number, sheet: number, lines: number, len: number): number;
+  fc_tables(book: number): number;
+  fc_load_tables(book: number, lines: number, len: number): number;
+  fc_create_table(book: number, sheet: number, r0: number, c0: number, r1: number, c1: number, header: number): number;
+  fc_set_table(book: number, name: number, nameLen: number, t: number, len: number): number;
+  fc_remove_table(book: number, name: number, len: number): number;
   fc_validations(book: number, sheet: number): number;
   fc_load_validations(book: number, sheet: number, lines: number, len: number): number;
   fc_set_validation(book: number, sheet: number, r0: number, c0: number, r1: number, c1: number, t: number, len: number): number;
@@ -104,7 +109,7 @@ function cells(s: string): Cell[] {
 }
 
 function changed(s: string): Changed[] {
-  return lines(s).filter((l) => !'%#&=^@!~?'.includes(l[0])).map(([sh, r, c, fl, t, f]) => [Number(sh), Number(r), Number(c), unescape(t ?? ''), f === undefined ? undefined : unescape(f), fl.startsWith('n'), colorOf(fl), fl.includes('l')]);
+  return lines(s).filter((l) => !'%#&=^@!~?*'.includes(l[0])).map(([sh, r, c, fl, t, f]) => [Number(sh), Number(r), Number(c), unescape(t ?? ''), f === undefined ? undefined : unescape(f), fl.startsWith('n'), colorOf(fl), fl.includes('l')]);
 }
 
 function formatsOf(s: string, tag = '%'): FormatChange[] {
@@ -123,7 +128,7 @@ function effect(s: string): Effect {
   const fl = /^~\t(\d+)$/m.exec(s);
   const vl = /^\?\t(\d+)$/m.exec(s);
   const styles = lines(s).filter((l) => l[0] === '&').map(([, sh, r, c, raw, shown]) => [Number(sh), Number(r), Number(c), unescape(raw ?? ''), unescape(shown ?? raw ?? '')] as StyleChange);
-  return { shift, changes: changed(s).filter((l) => !Number.isNaN(l[0])), formats: formatsOf(s), styles, merges: m ? Number(m[1]) : null, theme: /^\^$/m.test(s), named: /^@$/m.test(s), rules: rl ? Number(rl[1]) : null, filter: fl ? Number(fl[1]) : null, valid: vl ? Number(vl[1]) : null };
+  return { shift, changes: changed(s).filter((l) => !Number.isNaN(l[0])), formats: formatsOf(s), styles, merges: m ? Number(m[1]) : null, theme: /^\^$/m.test(s), named: /^@$/m.test(s), rules: rl ? Number(rl[1]) : null, filter: fl ? Number(fl[1]) : null, valid: vl ? Number(vl[1]) : null, tables: /^\*$/m.test(s) };
 }
 
 const MERGE_MODES = { center: 0, across: 1, cells: 2, unmerge: 3 } as const;
@@ -204,7 +209,7 @@ function run(x: Exports, req: Request): Value {
     case 'undo':
     case 'redo': {
       const n = req.op === 'undo' ? x.fc_undo(req.book) : x.fc_redo(req.book);
-      return n === -2 ? { changes: [], shift: null, formats: [], styles: [], merges: null, theme: false, named: false, rules: null, filter: null, valid: null } : effect(out(x, n));
+      return n === -2 ? { changes: [], shift: null, formats: [], styles: [], merges: null, theme: false, named: false, rules: null, filter: null, valid: null, tables: false } : effect(out(x, n));
     }
     case 'shift':
       return shiftOf(out(x, x.fc_shift(req.book, req.sheet, req.rows ? 1 : 0, req.at, req.n, req.insert ? 1 : 0)).trim());
@@ -310,6 +315,23 @@ function run(x: Exports, req: Request): Value {
       });
     case 'rules.load':
       return withStrings(x, [req.lines.join('\n')], ([p, l]) => ok(x.fc_load_rules(req.book, req.sheet, p, l), 'The engine refused those rules.'));
+    case 'table.list':
+      return out(x, x.fc_tables(req.book)).split('\n').filter(Boolean);
+    case 'table.load':
+      return withStrings(x, [req.lines.join('\n')], ([p, l]) => ok(x.fc_load_tables(req.book, p, l), 'The engine refused those tables.'));
+    case 'table.create': {
+      const n = x.fc_create_table(req.book, req.sheet, req.r0, req.c0, req.r1, req.c1, req.header ? 1 : 0);
+      if (n === -3) throw new Error('A table cannot overlap another table or merged cells.');
+      return effect(out(x, n));
+    }
+    case 'table.set':
+      return withStrings(x, [req.name, req.line], ([p, l, q, m]) => {
+        const n = x.fc_set_table(req.book, p, l, q, m);
+        if (n === -3) throw new Error('That table name or size is not allowed. Names start with a letter, have no spaces and are not used by another table or name.');
+        return effect(out(x, n));
+      });
+    case 'table.remove':
+      return withStrings(x, [req.name], ([p, l]) => effect(out(x, x.fc_remove_table(req.book, p, l))));
     case 'valid.list':
       return out(x, x.fc_validations(req.book, req.sheet)).split('\n').filter(Boolean);
     case 'valid.load':
