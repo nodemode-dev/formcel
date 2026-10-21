@@ -43,6 +43,9 @@ pub trait Ctx {
     fn cell(&self, sheet: usize, a: Addr) -> Value;
     fn each(&self, sheet: usize, area: Area, f: &mut dyn FnMut(Addr, &Value));
     fn name(&self, name: &str) -> Option<&Expr>;
+    fn name_in(&self, _sheet: usize, name: &str) -> Option<&Expr> {
+        self.name(name)
+    }
     fn spill(&self, _sheet: usize, _a: Addr) -> Option<(u32, u32)> {
         None
     }
@@ -299,7 +302,7 @@ impl<'a> Eval<'a> {
     }
 
     fn user(&self, name: &str) -> bool {
-        crate::formula::FUNCTIONS.binary_search(&name).is_err() && (self.local(name).is_some() || self.ctx.name(name).is_some())
+        crate::formula::FUNCTIONS.binary_search(&name).is_err() && (self.local(name).is_some() || self.ctx.name_in(self.sheet, name).is_some())
     }
 
     fn routed(&self, name: &str) -> bool {
@@ -347,7 +350,7 @@ impl<'a> Eval<'a> {
         if let Some(a) = self.local(name) {
             return Ok(a);
         }
-        let e = self.ctx.name(name).ok_or(ErrKind::Name)?;
+        let e = self.ctx.name_in(self.sheet, name).ok_or(ErrKind::Name)?;
         self.deeper(|| {
             let saved = std::mem::take(&mut *self.env.borrow_mut());
             let a = self.arg(e);
