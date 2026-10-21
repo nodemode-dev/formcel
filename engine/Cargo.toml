@@ -1,0 +1,16 @@
+[workspace]
+resolver = "2"
+members = ["crates/formcel-core", "crates/formcel-wasm", "crates/formcel-py"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+authors = ["nodemode-ai <mackin@nodemode.ai>"]
+repository = "https://github.com/nodemode-ai/formcel"
+
+[profile.release]
+opt-level = "s"
+lto = true
+codegen-units = 1
+panic = "abort"

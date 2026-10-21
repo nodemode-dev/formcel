@@ -1,0 +1,16 @@
+[package]
+name = "formcel-py"
+description = "FormCel engine for the Python engine process, as a native module"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+
+[lib]
+name = "formcel_engine"
+crate-type = ["cdylib"]
+
+[dependencies]
+formcel-core = { path = "../formcel-core" }
+pyo3 = { version = "0.30.1", features = ["extension-module", "abi3-py312"] }

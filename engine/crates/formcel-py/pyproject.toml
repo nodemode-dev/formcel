@@ -1,0 +1,14 @@
+[build-system]
+requires = ["maturin>=1.9,<2"]
+build-backend = "maturin"
+
+[project]
+name = "formcel-engine"
+version = "0.1.0"
+description = "FormCel calculation engine, shared with the window"
+license = { text = "Apache-2.0" }
+requires-python = ">=3.12"
+
+[tool.maturin]
+module-name = "formcel_engine"
+features = ["pyo3/extension-module"]

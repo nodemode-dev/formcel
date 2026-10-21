@@ -1,0 +1,14 @@
+[package]
+name = "formcel-wasm"
+description = "FormCel engine for the window, as a WebAssembly module with a plain C ABI"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+formcel-core = { path = "../formcel-core" }
