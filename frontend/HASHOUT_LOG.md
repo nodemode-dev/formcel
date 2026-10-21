@@ -2,7 +2,7 @@
 
 Living log of comment content and rationale for the window. Source stays comment-free; it lives here.
 
-Current build version: v0.7.0
+Current build version: v0.8.0
 Last updated: 2026-10-21 · formulas
 
 ---
