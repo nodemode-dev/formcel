@@ -3,7 +3,7 @@ import type { Grid, ObjectsHook } from '../grid/grid';
 import { anchorOf, frameOf, fromLine, toLine } from './anchor';
 import { build, parseRangeText, readMatrix } from './data';
 import { renderChart } from './svg';
-import { newId, type FloatObject } from './types';
+import { isFloat, newId, type FloatObject } from './types';
 
 export interface LayerIo {
   book(): number;
@@ -37,6 +37,8 @@ export class ObjectLayer implements ObjectsHook {
   private saveTimer = 0;
   private frameKey = '';
   onEdit: (o: FloatObject) => void = () => undefined;
+  onData: () => void = () => undefined;
+  onAlt: (o: FloatObject) => void = () => undefined;
 
   constructor(private readonly grid: Grid, private readonly eng: EngineClient, private readonly io: LayerIo) {
     this.el = document.createElement('div');
@@ -45,13 +47,14 @@ export class ObjectLayer implements ObjectsHook {
     this.bar = document.createElement('div');
     this.bar.className = 'fc-obj-bar';
     this.bar.hidden = true;
-    this.bar.innerHTML = '<button type="button" class="fc-btn" data-a="edit">Edit</button><button type="button" class="fc-btn" data-a="front">Bring to front</button><button type="button" class="fc-btn" data-a="back">Send to back</button><button type="button" class="fc-btn" data-a="delete">Delete</button>';
+    this.bar.innerHTML = '<button type="button" class="fc-btn" data-a="edit">Edit</button><button type="button" class="fc-btn" data-a="alt">Alt text</button><button type="button" class="fc-btn" data-a="front">Bring to front</button><button type="button" class="fc-btn" data-a="back">Send to back</button><button type="button" class="fc-btn" data-a="delete">Delete</button>';
     this.bar.addEventListener('pointerdown', (e) => e.stopPropagation());
     this.bar.addEventListener('click', (e) => {
       const a = (e.target as HTMLElement).closest<HTMLElement>('[data-a]')?.dataset.a;
       const n = this.selected ? this.nodes.get(this.selected) : null;
       if (!a || !n) return;
       if (a === 'edit') this.onEdit(n.obj);
+      if (a === 'alt') this.onAlt(n.obj);
       if (a === 'delete') this.remove(n.obj.id);
       if (a === 'front' || a === 'back') this.reorder(n.obj.id, a === 'front');
     });
@@ -82,9 +85,13 @@ export class ObjectLayer implements ObjectsHook {
   private commit(): void {
     const sheet = this.sheetNo;
     const list = this.list();
-    for (const o of list) o.anchor = anchorOf(this.grid.rows, this.grid.cols, o);
+    for (const o of list) {
+      if (o.anchor && !this.nodes.has(o.id)) Object.assign(o, frameOf(this.grid.rows, this.grid.cols, o.anchor));
+      o.anchor = anchorOf(this.grid.rows, this.grid.cols, o);
+    }
     void this.eng.setObjects(this.io.book(), sheet, list.map(toLine));
     this.persist();
+    this.onData();
   }
 
   async shifted(sheet: number): Promise<void> {
@@ -98,7 +105,7 @@ export class ObjectLayer implements ObjectsHook {
       this.io.save(sheet, [...next]);
       return;
     }
-    const keep = new Set(next.map((o) => o.id));
+    const keep = new Set(next.filter(isFloat).map((o) => o.id));
     for (const [id, n] of [...this.nodes]) {
       if (keep.has(id)) continue;
       n.el.remove();
@@ -106,10 +113,12 @@ export class ObjectLayer implements ObjectsHook {
       if (this.selected === id) this.select(null);
     }
     next.forEach((o, k) => {
+      if (!isFloat(o)) return;
       const n = this.nodes.get(o.id);
       if (n) {
         n.obj = o;
         this.fill(n);
+        this.describe(n);
         if (o.kind === 'chart') void this.draw(n);
       } else {
         this.mount(o);
@@ -130,10 +139,10 @@ export class ObjectLayer implements ObjectsHook {
     this.select(null);
     for (const n of this.nodes.values()) n.el.remove();
     this.nodes.clear();
-    for (const o of this.list()) this.mount(o);
+    for (const o of this.list()) if (isFloat(o)) this.mount(o);
     this.place();
     this.data();
-    void this.seed(i);
+    void this.seed(i).then(() => this.onData());
   }
 
   paint(): void {
@@ -147,6 +156,15 @@ export class ObjectLayer implements ObjectsHook {
 
   async refresh(): Promise<void> {
     for (const n of this.nodes.values()) if (n.obj.kind === 'chart') await this.draw(n);
+    this.onData();
+  }
+
+  edit(remove: string[], add: FloatObject[]): void {
+    const gone = new Set(remove);
+    const list = this.list();
+    for (let i = list.length - 1; i >= 0; i--) if (gone.has(list[i].id)) list.splice(i, 1);
+    list.push(...add);
+    this.commit();
   }
 
   private key(e: KeyboardEvent): void {
@@ -198,17 +216,32 @@ export class ObjectLayer implements ObjectsHook {
     const i = list.findIndex((x) => x.id === o.id);
     if (i >= 0) list[i] = o;
     this.fill(n);
+    this.describe(n);
     this.commit();
     if (o.kind === 'chart') void this.draw(n);
   }
 
-  setAlt(id: string, text: string): void {
+  setAlt(id: string, text: string, decorative = false): void {
     const o = this.list().find((x) => x.id === id);
     if (!o) return;
-    o.alt = text;
-    const img = this.nodes.get(id)?.body.querySelector('img');
-    if (img) img.alt = text || o.picture?.name || '';
+    o.alt = decorative ? '' : text;
+    if (decorative) o.decorative = true;
+    else delete o.decorative;
+    const n = this.nodes.get(id);
+    if (n) this.describe(n);
     this.commit();
+  }
+
+  private describe(n: Node): void {
+    const o = n.obj;
+    const label = o.alt || (o.kind === 'picture' ? o.picture?.name : o.kind === 'chart' ? o.chart?.title : '') || '';
+    if (o.decorative) n.el.setAttribute('aria-hidden', 'true');
+    else n.el.removeAttribute('aria-hidden');
+    if (label) n.el.setAttribute('aria-label', label);
+    else n.el.removeAttribute('aria-label');
+    n.el.setAttribute('role', o.kind === 'chart' || o.kind === 'picture' ? 'img' : 'group');
+    const img = n.body.querySelector('img');
+    if (img) img.alt = o.decorative ? '' : label;
   }
 
   find(id: string, sheet: number): FloatObject | null {
@@ -294,6 +327,7 @@ export class ObjectLayer implements ObjectsHook {
     this.el.insertBefore(el, this.bar);
     this.nodes.set(o.id, n);
     this.fill(n);
+    this.describe(n);
   }
 
   private fill(n: Node): void {

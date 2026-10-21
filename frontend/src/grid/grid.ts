@@ -16,6 +16,7 @@ import { MAX_COLS, MAX_ROWS, a1, colName, parseRef, rangeText, type Range } from
 import { fillSeries } from './fill';
 import { runCommand } from '../ui/commands';
 import { parseTable, tablePaint, type TableInfo } from './tables';
+import { drawImageCell, IMAGE_CODE } from '../charts/picture';
 import { drawSpark, SPARK_CODE } from '../charts/spark';
 
 export interface ObjectsHook {
@@ -23,6 +24,11 @@ export interface ObjectsHook {
   data(): void;
   sheet(i: number): void;
   shifted?(sheet: number): unknown;
+}
+
+export interface CellDecor {
+  cells(r0: number, r1: number, c0: number, c1: number): [number, number][];
+  paint(ctx: CanvasRenderingContext2D, r: number, c: number, x: number, y: number, w: number, h: number): void;
 }
 
 export interface ObjectFrame {
@@ -143,6 +149,7 @@ export class Grid {
   readonly editor: HTMLTextAreaElement;
   editorHook: ((e: KeyboardEvent) => boolean) | null = null;
   objectsHook: ObjectsHook | null = null;
+  decor: CellDecor | null = null;
 
   objectFrame(): ObjectFrame {
     const z = this.z;
@@ -435,7 +442,16 @@ export class Grid {
     });
   }
 
+  paintHook: (() => void) | null = null;
+
+  visibleWindow(): Range {
+    const rows = this.paneRows(1);
+    const cols = this.paneCols(1);
+    return { r0: this.sh || this.fr ? 0 : rows[0], r1: rows[1], c0: this.sw || this.fc ? 0 : cols[0], c1: cols[1] };
+  }
+
   private paintNow(): void {
+    this.paintHook?.();
     const { ctx, pal, w, h } = this;
     const [rowSets, colSets] = this.bands();
     for (const [ra, rb, , , pr] of rowSets) {
@@ -771,6 +787,13 @@ export class Grid {
       const [x, y, w, h] = this.areaRect(mr0, mc0, mr1, mc1);
       this.cellText(KEY(mr0, mc0), t, x, x + w, y, h);
     }
+    if (this.decor) {
+      for (const [r, c] of this.decor.cells(r0, r1, c0, c1)) {
+        const cw = this.cols.size(c);
+        const rh = this.rows.size(r);
+        if (cw && rh) this.decor.paint(ctx, r, c, this.x(c), this.y(r), cw, rh);
+      }
+    }
     ctx.textBaseline = 'middle';
     ctx.font = '13px Inter, system-ui, -apple-system, "Segoe UI", sans-serif';
     if (!this.styles.size && !this.cfs.size) return;
@@ -899,7 +922,7 @@ export class Grid {
 
   private textSpan(k: number, t: string, r: number, c: number, merged: (r: number, c: number) => boolean): [number, number] {
     const st = this.styleOf(k) ?? PLAIN;
-    if (t.charCodeAt(0) === SPARK_CODE || this.cfs.get(k)?.icon) return [this.x(c), this.x(c) + this.cols.size(c)];
+    if (t.charCodeAt(0) === SPARK_CODE || t.charCodeAt(0) === IMAGE_CODE || this.cfs.get(k)?.icon) return [this.x(c), this.x(c) + this.cols.size(c)];
     let left = this.x(c);
     let right = left + this.cols.size(c);
     if (st.wrap || st.rot || st.vertical || this.nums.has(k)) return [left, right];
@@ -915,6 +938,7 @@ export class Grid {
   private cellText(k: number, t: string, left: number, right: number, yy: number, rh: number): void {
     const { ctx, pal } = this;
     if (t.charCodeAt(0) === SPARK_CODE && drawSpark(ctx, t, left, right, yy, rh, pal.fg)) return;
+    if (t.charCodeAt(0) === IMAGE_CODE && drawImageCell(ctx, t, left, right, yy, rh, () => this.paint(), pal.fg)) return;
     const own = this.styleOf(k) ?? PLAIN;
     const st = this.linked.has(k) ? { ...own, u: true, fc: own.fc ?? pal.link } : own;
     const px = this.font(st);
