@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.18.0 · 2026-10-21
+
+- Number formats per cell. The new Number format button lists General, Number, Currency, Accounting, Percent, Scientific, Fraction, Short date, Day month year, Long date, Time, Time with seconds and Text, and Custom format takes any format code.
+- Excel's shortcuts: Ctrl+Shift+~ General, ! Number, @ Time, # Date, $ Currency, % Percent, ^ Scientific.
+- Increase and decrease decimal places, from the toolbar.
+- Formats are saved in the workbook, undo and redo, and move with inserted and deleted rows and columns. Formatting whole columns or the whole sheet covers the used range.
+- The cell and the formula bar keep what you typed: 0.256 under Percent shows 26% in the cell and 25.6% in the bar. Under Text, `007` stays `007`.
+- Numbers now align right because they are numbers, not because their text looks like one.
+- Not yet: colours from a format code such as `[Red]`. They arrive with font and fill colours.
+
 ## 0.17.0 · 2026-10-21
 
 - Phase 2 (formula engine) is closed; Phase 3 (formatting) begins.
