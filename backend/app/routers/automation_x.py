@@ -1,4 +1,5 @@
 import base64
+import builtins
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
@@ -233,7 +234,7 @@ def v1_clear(wid: str, sheet: str, range: str) -> dict:
     b, i = locate(wid, sheet)
     with b.lock:
         a = area_of(b, i, range)
-    cells = [(r, c, "") for r in range(a[0], a[2] + 1) for c in range(a[1], a[3] + 1)]
+    cells = [(r, c, "") for r in builtins.range(a[0], a[2] + 1) for c in builtins.range(a[1], a[3] + 1)]
     try:
         store().edit(wid, i, cells)
     except PermissionError as e:

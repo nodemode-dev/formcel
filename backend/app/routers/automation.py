@@ -1,11 +1,12 @@
 import secrets
 
-from fastapi import APIRouter, Depends, Header, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, Field
 
 from ..services import aiclient, extpkg, hostcalls, offline_ai, pquery, ranges, webdata
 from ..services.store import store
-from . import automation_x
+from . import automation_x, queries, restapi, settings_x
 
 router = APIRouter(prefix="/api")
 
@@ -161,10 +162,13 @@ def list_extensions() -> list[dict]:
     return extpkg.listing()
 
 
-def guard(authorization: str | None = Header(default=None)) -> None:
+bearer = HTTPBearer(auto_error=False, description="The token made under More, REST API. Calls are open when no token is set.")
+
+
+def guard(cred: HTTPAuthorizationCredentials | None = Depends(bearer)) -> None:
     token = aiclient.load_settings().get("api_token")
-    if token and not secrets.compare_digest((authorization or "").removeprefix("Bearer ").strip(), token):
-        raise HTTPException(401, "Send the API token as Authorization: Bearer TOKEN.")
+    if token and not secrets.compare_digest((cred.credentials if cred else "").encode(), token.encode()):
+        raise HTTPException(401, "Send the API token as Authorization: Bearer TOKEN.", headers={"WWW-Authenticate": "Bearer"})
 
 
 v1 = APIRouter(prefix="/api/v1", tags=["rest"], dependencies=[Depends(guard)])
@@ -254,4 +258,7 @@ def v1_put_values(wid: str, sheet: str, body: ValuesIn, range: str = "A1") -> di
 
 
 router.include_router(automation_x.router)
+router.include_router(queries.router)
+router.include_router(settings_x.router)
 v1.include_router(automation_x.v1)
+v1.include_router(restapi.v1)

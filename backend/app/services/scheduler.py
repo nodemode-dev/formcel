@@ -3,7 +3,7 @@ import re
 import time
 from datetime import datetime
 
-from . import pquery, ranges
+from . import pquery, qtable, ranges
 from .store import store
 
 TICK = 15
@@ -39,6 +39,13 @@ def refresh(wid: str, qid: str) -> dict:
         sheet, cells, last = target_cells(q, result["rows"], b.sheet_names())
     store().edit(wid, sheet, cells)
     with b.lock:
+        if q.get("asTable"):
+            r0, c0 = ranges.parse_cell((q.get("target") or {}).get("cell") or "A1")
+            try:
+                q["tableName"] = qtable.fit_table(b.engine, sheet, r0, c0, last["rows"], last["cols"], q.get("tableName"), result["rows"][0] if result["rows"] else None)
+            except ValueError:
+                pass
+            q["tabled"] = bool(q.get("tableName"))
         q["last"] = last
         q["refreshed"] = time.time()
     store().set_automation(wid, b.auto)

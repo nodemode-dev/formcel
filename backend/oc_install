@@ -18,3 +18,38 @@ if ! command -v cargo >/dev/null 2>&1; then
   exit 1
 fi
 pip install ../engine/crates/formcel-py
+
+install_tesseract() {
+  if command -v tesseract >/dev/null 2>&1; then
+    echo "Tesseract found: $(tesseract --version 2>&1 | head -n 1)"
+    return 0
+  fi
+  echo "Data from a picture needs the Tesseract program (Apache-2.0). Trying to install it."
+  local sudo=""
+  if [ "$(id -u)" -ne 0 ] && command -v sudo >/dev/null 2>&1; then sudo="sudo"; fi
+  if [[ "$OSTYPE" == "darwin"* ]]; then
+    if command -v brew >/dev/null 2>&1; then
+      brew install tesseract && return 0
+    else
+      echo "Homebrew was not found. Install it from https://brew.sh, then run: brew install tesseract"
+      return 0
+    fi
+  elif command -v apt-get >/dev/null 2>&1; then
+    $sudo apt-get install -y tesseract-ocr tesseract-ocr-eng && return 0
+    echo "Run: sudo apt-get install -y tesseract-ocr tesseract-ocr-eng"
+  elif command -v dnf >/dev/null 2>&1; then
+    $sudo dnf install -y tesseract tesseract-langpack-eng && return 0
+    echo "Run: sudo dnf install -y tesseract tesseract-langpack-eng"
+  elif command -v pacman >/dev/null 2>&1; then
+    $sudo pacman -S --noconfirm tesseract tesseract-data-eng && return 0
+    echo "Run: sudo pacman -S tesseract tesseract-data-eng"
+  elif command -v zypper >/dev/null 2>&1; then
+    $sudo zypper --non-interactive install tesseract-ocr tesseract-ocr-traineddata-english && return 0
+    echo "Run: sudo zypper install tesseract-ocr tesseract-ocr-traineddata-english"
+  else
+    echo "Install Tesseract 5 with your package manager, then restart FormCel."
+  fi
+  echo "FormCel works without it; only Data from a picture is unavailable."
+  return 0
+}
+install_tesseract
