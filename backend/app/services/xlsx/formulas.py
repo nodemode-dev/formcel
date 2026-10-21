@@ -193,7 +193,10 @@ def _params(formula: str) -> set[str]:
             continue
         args = [a.strip() for a in _args(formula, m.end() - 1)]
         picks = args[:-1] if fn == "LAMBDA" else args[:-1:2]
-        names.update(a for a in picks if re.fullmatch(r"[A-Za-z_][A-Za-z0-9_.]*", a))
+        for a in picks:
+            m2 = re.fullmatch(r"\[\s*([A-Za-z_][A-Za-z0-9_.]*)\s*\]|([A-Za-z_][A-Za-z0-9_.]*)", a)
+            if m2:
+                names.add(m2.group(1) or m2.group(2))
     return names
 
 
@@ -204,6 +207,7 @@ def to_file(formula: str) -> str:
     def fix(s: str) -> str:
         s = CALL.sub(lambda m: (FUTURE.get(m.group(1).upper(), m.group(1)) if m.group(1).upper() not in params else m.group(1)) + "(", s)
         for p in sorted(params, key=len, reverse=True):
+            s = re.sub(r"(?<=[(,])(\s*)\[\s*(" + re.escape(p) + r")\s*\](?=\s*[,)])", lambda m: m.group(1) + "[_xlpm." + m.group(2) + "]", s, flags=re.I)
             s = re.sub(WORD.format(re.escape(p)), lambda m: "_xlpm." + m.group(1), s, flags=re.I)
             s = re.sub(r"(?<![A-Za-z0-9_.$!])(" + re.escape(p) + r")(?=\s*\()", lambda m: "_xlpm." + m.group(1), s, flags=re.I)
         return ANCHOR_OUT.sub(lambda m: f"_xlfn.ANCHORARRAY({m.group(1)})", _ext_out(s))

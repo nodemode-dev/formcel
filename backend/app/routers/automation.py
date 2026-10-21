@@ -3,7 +3,7 @@ import secrets
 from fastapi import APIRouter, Depends, Header, HTTPException
 from pydantic import BaseModel, Field
 
-from ..services import aiclient, extpkg, hostcalls, offline_ai, pquery, ranges, webdata
+from ..services import aiclient, extbooks, extpkg, hostcalls, offline_ai, pquery, ranges, webdata
 from ..services.store import store
 from . import automation_x
 
@@ -172,15 +172,19 @@ v1 = APIRouter(prefix="/api/v1", tags=["rest"], dependencies=[Depends(guard)])
 
 def settle(b) -> None:
     hostcalls.prepare(b)
+    linked = False
     for _ in range(4):
         with b.lock:
             keys = b.engine.host_pending()
         if not keys:
-            return
+            break
         for k in keys:
             data, _ = hostcalls.resolve(k, books, auto=b.auto)
             with b.lock:
                 b.engine.host_set(k, data)
+            linked = linked or k.startswith("XREF")
+    if linked:
+        extbooks.persist(b)
 
 
 def locate(wid: str, sheet: str):
