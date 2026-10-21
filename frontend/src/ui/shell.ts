@@ -47,7 +47,7 @@ export function mountShell(root: HTMLElement): ShellParts {
         <span class="fc-tool-sep" aria-hidden="true"></span>
         ${tool('view.freeze-top-row', 'freezeRow', 'Freeze top row')}${tool('view.freeze-first-column', 'freezeCol', 'Freeze first column')}${tool('view.freeze-panes', 'freezePanes', 'Freeze panes above and left of the active cell')}${tool('view.unfreeze', 'unfreeze', 'Unfreeze panes')}${tool('view.split', 'split', 'Split into panes at the active cell')}
         <span class="fc-tool-sep" aria-hidden="true"></span>
-        ${tool('file.download-xlsx', 'download', 'Download as Excel workbook (.xlsx)')}
+        ${tool('file.download', 'download', 'Download as .xlsx, .csv or .tsv')}
       </div>
       <div class="fc-formula">
         <input class="fc-namebox" aria-label="Name Box" spellcheck="false" autocomplete="off">

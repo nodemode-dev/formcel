@@ -9,6 +9,25 @@ import type { ShellParts } from './ui/shell';
 import { icon } from './ui/icons';
 import { DATE_PERIODS, describe, parseRule, PRESETS, rangeText, ruleLine, withStop } from './ui/rules';
 
+interface CsvPreview {
+  name: string;
+  delimiter: string;
+  encoding: string;
+  rows: number;
+  columns: { label: string; as: string }[];
+  sample: string[][];
+}
+
+interface CsvForm {
+  form: HTMLFormElement;
+  file: File | null;
+  title: HTMLElement;
+  meta: HTMLElement;
+  delim: HTMLSelectElement;
+  thead: HTMLElement;
+  tbody: HTMLElement;
+}
+
 interface Opened {
   id: string;
   book: number;
@@ -206,7 +225,10 @@ export class App {
     cmd('view.split', 'Split panes', 'Split the sheet above and left of the active cell into panes that scroll on their own, or remove the split. Drag a split bar to move it, double-click it to remove it.', false, () => g.toggleSplit());
     cmd('file.home', 'Home', 'Save and go to the home screen.', false, () => { location.hash = ''; });
     cmd('file.new', 'New blank workbook', 'Create an empty workbook and open it.', true, () => this.create());
-    cmd('file.download-xlsx', 'Download as .xlsx', 'Save a copy of this workbook as an Excel workbook in your downloads.', false, () => this.downloadXlsx());
+    cmd('file.download', 'Download', 'Choose a file format to download this workbook or sheet in.', false, () => this.downloadMenu());
+    cmd('file.download-xlsx', 'Download as .xlsx', 'Save a copy of this workbook as an Excel workbook in your downloads.', false, () => this.download('xlsx'));
+    cmd('file.download-csv', 'Download sheet as .csv', 'Save the values of this sheet, as shown, separated by commas.', false, () => this.download('csv'));
+    cmd('file.download-tsv', 'Download sheet as .tsv', 'Save the values of this sheet, as shown, separated by tabs.', false, () => this.download('tsv'));
     cmd('sheet.add', 'Add a sheet', 'Add a sheet after the last one and show it.', true, () => this.addSheet());
     cmd('rows.insert-above', 'Insert rows above', 'Insert as many rows as are selected, above the selection.', true, () => g.insert(true), 'Mod++');
     cmd('rows.insert-below', 'Insert rows below', 'Insert as many rows as are selected, below the selection.', true, () => g.insert(true, true));
@@ -393,22 +415,116 @@ export class App {
     location.hash = `w-${meta.id}`;
   }
 
-  private async downloadXlsx(): Promise<void> {
+  private downloadMenu(): void {
+    const b = this.button('file.download').getBoundingClientRect();
+    const run = (id: string) => () => runCommand(id).then(() => this.grid.focus());
+    this.menu.show(b.left, b.bottom + 4, [
+      { label: 'Excel workbook (.xlsx)', run: run('file.download-xlsx') },
+      { label: 'This sheet as comma-separated values (.csv)', run: run('file.download-csv') },
+      { label: 'This sheet as tab-separated values (.tsv)', run: run('file.download-tsv') },
+    ], () => this.grid.focus());
+  }
+
+  private async download(kind: 'xlsx' | 'csv' | 'tsv'): Promise<void> {
     const o = this.open;
     if (!o) return;
     this.flush();
     await this.saving;
     const a = document.createElement('a');
-    a.href = `/api/workbooks/${o.id}/export.xlsx`;
+    a.href = kind === 'xlsx' ? `/api/workbooks/${o.id}/export.xlsx` : `/api/workbooks/${o.id}/export.${kind}?sheet=${this.grid.sheetIndex}`;
     a.download = '';
     document.body.appendChild(a);
     a.click();
     a.remove();
   }
 
-  private async importFile(file: File): Promise<void> {
+  private async csvPreview(file: File, delimiter?: string): Promise<CsvPreview | null> {
+    const q = `name=${encodeURIComponent(file.name)}${delimiter ? `&delimiter=${delimiter}` : ''}`;
+    const r = await fetch(`/api/import/preview?${q}`, { method: 'POST', headers: { 'content-type': 'application/octet-stream' }, body: file }).catch(() => null);
+    if (!r || !r.ok) {
+      const detail = r ? await r.json().then((j: { detail?: string }) => j.detail).catch(() => undefined) : undefined;
+      this.home.say(detail ?? `${file.name} could not be read.`, true);
+      return null;
+    }
+    return (await r.json()) as CsvPreview;
+  }
+
+  private async csvBox(file: File): Promise<void> {
+    this.home.say(`Reading ${file.name}`);
+    const pv = await this.csvPreview(file);
+    if (!pv) return;
+    this.home.say('');
+    const f = this.csvForm ??= this.makeCsvForm();
+    f.file = file;
+    f.title.textContent = `Open ${file.name}`;
+    f.delim.value = pv.delimiter;
+    this.fillCsv(f, pv);
+    f.form.hidden = false;
+    f.delim.focus();
+  }
+
+  private fillCsv(f: CsvForm, pv: CsvPreview): void {
+    f.meta.textContent = `${pv.rows.toLocaleString()} row${pv.rows === 1 ? '' : 's'} · ${pv.encoding}`;
+    const head = document.createElement('tr');
+    pv.columns.forEach((c, i) => {
+      const th = document.createElement('th');
+      th.innerHTML = `<select class="fc-csv-as" data-col="${i}" aria-label="Column ${i + 1} as"><option value="general">General</option><option value="text">Text</option></select><span class="fc-csv-kind"></span>`;
+      th.querySelector<HTMLSelectElement>('select')!.value = c.as;
+      th.querySelector('.fc-csv-kind')!.textContent = c.label;
+      head.appendChild(th);
+    });
+    const body = document.createDocumentFragment();
+    for (const row of pv.sample) {
+      const tr = document.createElement('tr');
+      for (let i = 0; i < pv.columns.length; i++) {
+        const td = document.createElement('td');
+        td.textContent = row[i] ?? '';
+        tr.appendChild(td);
+      }
+      body.appendChild(tr);
+    }
+    f.thead.replaceChildren(head);
+    f.tbody.replaceChildren(body);
+  }
+
+  private makeCsvForm(): CsvForm {
+    const form = document.createElement('form');
+    form.className = 'fc-csv';
+    form.hidden = true;
+    form.setAttribute('role', 'dialog');
+    form.setAttribute('aria-label', 'Open a text file');
+    form.innerHTML = '<div class="fc-csv-head"><span class="fc-fmt-title"></span><span class="fc-csv-meta"></span></div><label class="fc-fmt-label fc-csv-delim-label">Separated by<select class="fc-fmt-input fc-csv-delim"><option value="comma">Comma</option><option value="semicolon">Semicolon</option><option value="tab">Tab</option><option value="pipe">Vertical bar</option></select></label><div class="fc-csv-table"><table><thead></thead><tbody></tbody></table></div><span class="fc-fmt-hint">Columns set to Text keep what is written exactly, such as 00123. Formulas in the file stay text.</span><div class="fc-csv-actions"><button type="button" class="fc-btn" data-a="cancel">Cancel</button><button type="submit" class="fc-btn fc-btn-primary">Open</button></div>';
+    document.getElementById('overlay-root')!.appendChild(form);
+    const f: CsvForm = {
+      form, file: null,
+      title: form.querySelector<HTMLElement>('.fc-fmt-title')!,
+      meta: form.querySelector<HTMLElement>('.fc-csv-meta')!,
+      delim: form.querySelector<HTMLSelectElement>('.fc-csv-delim')!,
+      thead: form.querySelector<HTMLElement>('thead')!,
+      tbody: form.querySelector<HTMLElement>('tbody')!,
+    };
+    const close = () => { form.hidden = true; f.file = null; };
+    form.querySelector('[data-a="cancel"]')!.addEventListener('click', close);
+    form.addEventListener('keydown', (e) => { if (e.key === 'Escape') close(); });
+    f.delim.addEventListener('change', () => {
+      if (!f.file) return;
+      void this.csvPreview(f.file, f.delim.value).then((pv) => { if (pv && f.file) this.fillCsv(f, pv); });
+    });
+    form.addEventListener('submit', (e) => {
+      e.preventDefault();
+      if (!f.file) return;
+      const text = [...form.querySelectorAll<HTMLSelectElement>('.fc-csv-as')].filter((s) => s.value === 'text').map((s) => s.dataset.col).join(',');
+      const file = f.file;
+      close();
+      void this.importFile(file, `&delimiter=${f.delim.value}&text=${text}`);
+    });
+    return f;
+  }
+
+  private async importFile(file: File, options?: string): Promise<void> {
+    if (options === undefined && /\.(csv|tsv|txt)$/i.test(file.name)) return this.csvBox(file);
     this.home.say(`Opening ${file.name}`);
-    const r = await fetch(`/api/import?name=${encodeURIComponent(file.name)}`, { method: 'POST', headers: { 'content-type': 'application/octet-stream' }, body: file }).catch(() => null);
+    const r = await fetch(`/api/import?name=${encodeURIComponent(file.name)}${options ?? ''}`, { method: 'POST', headers: { 'content-type': 'application/octet-stream' }, body: file }).catch(() => null);
     if (!r || !r.ok) {
       const detail = r ? await r.json().then((j: { detail?: string }) => j.detail).catch(() => undefined) : undefined;
       this.home.say(detail ?? `${file.name} could not be opened.`, true);
@@ -689,6 +805,7 @@ export class App {
   }
 
   private linkForm: { form: HTMLFormElement; text: HTMLInputElement; url: HTMLInputElement; hint: HTMLElement } | null = null;
+  private csvForm: CsvForm | null = null;
 
   private linkBox(): void {
     const g = this.grid;

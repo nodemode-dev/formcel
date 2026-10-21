@@ -388,3 +388,12 @@ Styles made for a white sheet set dark text colours, for example the headings an
 Home's Open a file button and dropping a file anywhere on Home send the file to `/api/import`. While a file is over Home the page gets a dashed outline drawn with `outline`, so nothing moves. Messages (opening, refused file types) replace the Start page's subtitle text instead of adding a line. When the workbook opens, the save indicator says how many kinds of content were left out, and its tooltip lists them. Download as .xlsx saves pending edits first, then follows a link to the export, so the browser names the file from the workbook title.
 
 Fixed: opening a workbook never renamed the window engine's first sheet, so it stayed Sheet1 there while the engine process had the real name. A formula or name pointing at the first sheet by name (`=Data!B2`) showed #REF! in the window. Found by the .xlsx check, whose first sheet is Data.
+
+### Opening a text file, and the Download menu
+- refers-to: src/app.ts :: csvBox, csvPreview, fillCsv, makeCsvForm, importFile, downloadMenu, download
+- kind: explainer
+- logged: v0.26.0 · 2026-10-21
+
+A .csv, .tsv or .txt file opens a dialog first: the separator (sniffed, and changeable), the row count and encoding, and the first 12 rows under a header row where each column can be General or Text, with the engine process's guess of what the column holds. The dialog is built once in the overlay root; its table sits in a box of fixed height, and a new separator replaces only the table's head and body, so the dialog does not move or resize. Open sends the file again with the choices; nothing is kept on the server between the two calls. Escape and Cancel close it.
+
+The toolbar's download button opens a menu: the workbook as .xlsx, or the current sheet as .csv or .tsv. Each is also a command (`file.download-xlsx`, `file.download-csv`, `file.download-tsv`).

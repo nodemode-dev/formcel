@@ -134,7 +134,7 @@ export class Home {
       </nav>
       <div class="fc-home-body">
         <div data-page="start">
-          <header class="fc-home-head"><div><h1 class="fc-home-title">Hello</h1><p class="fc-home-sub">Start a workbook, pick a template, or carry on where you left off.</p></div><div class="fc-home-actions"><button type="button" class="fc-btn" data-a="openfile">${icon('upload')}Open a file</button><button type="button" class="fc-btn fc-btn-primary" data-a="blank">${icon('plus')}Blank workbook</button><input type="file" class="fc-file" accept=".xlsx,.xlsm" hidden></div></header>
+          <header class="fc-home-head"><div><h1 class="fc-home-title">Hello</h1><p class="fc-home-sub">Start a workbook, pick a template, or carry on where you left off.</p></div><div class="fc-home-actions"><button type="button" class="fc-btn" data-a="openfile">${icon('upload')}Open a file</button><button type="button" class="fc-btn fc-btn-primary" data-a="blank">${icon('plus')}Blank workbook</button><input type="file" class="fc-file" accept=".xlsx,.xlsm,.csv,.tsv,.txt" hidden></div></header>
           <section class="fc-home-section"><div class="fc-home-section-head"><h2>Recent workbooks</h2><button type="button" class="fc-btn fc-btn-ghost" data-go="recent">See all</button></div><div class="fc-cards fc-one-row fc-start-recent">${skel(4)}</div><p class="fc-none fc-start-none" hidden>No workbooks yet. Start a blank one or pick a template.</p></section>
           <section class="fc-home-section"><div class="fc-home-section-head"><h2>Spreadsheet templates</h2><button type="button" class="fc-btn fc-btn-ghost" data-go="templates">See all 36</button></div><div class="fc-cards fc-two-rows fc-start-tpl">${skel(8)}</div></section>
         </div>
