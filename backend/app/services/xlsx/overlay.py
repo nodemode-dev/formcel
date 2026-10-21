@@ -20,7 +20,7 @@ NS_XM = "http://schemas.microsoft.com/office/excel/2006/main"
 SPARK_URI = "{05C60535-1F16-4fd2-B633-F4F43ED7C7EB}"
 DRAWING_REL = NS_REL + "/drawing"
 DRAWING_TYPE = "application/vnd.openxmlformats-officedocument.drawing+xml"
-GEOMETRY = {"rect": "roundRect", "ellipse": "ellipse", "arrow": "rightArrow", "line": "line", "triangle": "triangle", "diamond": "diamond"}
+GEOMETRY = {"button": "roundRect", "rect": "roundRect", "ellipse": "ellipse", "arrow": "rightArrow", "line": "line", "triangle": "triangle", "diamond": "diamond"}
 GEOMETRY_IN = {"roundRect": "rect", "rect": "rect", "ellipse": "ellipse", "rightArrow": "arrow", "triangle": "triangle", "diamond": "diamond", "line": "line", "straightConnector1": "line"}
 SPARK_TYPE = {"line": "", "column": "column", "winloss": "stacked"}
 SPARK_TYPE_IN = {"column": "column", "stacked": "winloss"}
@@ -95,6 +95,11 @@ def _rgb(color: str, fallback: str) -> str:
     return "FF" + _hex(color, fallback)
 
 
+def macro_of(obj: dict) -> str:
+    name = str(obj.get("scriptName") or "").strip()
+    return f"[0]!{re.sub(r'[^A-Za-z0-9_.]', '_', name)}" if name else ""
+
+
 def _shape_xml(obj: dict, ident: int, view: dict) -> str:
     f, t = markers(obj, view)
     w, h = int(obj.get("w", 140) * EMU), int(obj.get("h", 90) * EMU)
@@ -118,8 +123,9 @@ def _shape_xml(obj: dict, ident: int, view: dict) -> str:
         fill = f'<a:solidFill><a:srgbClr val="{_hex(spec.get("fill"), "4E79A7")}"/></a:solidFill>'
         line = f'<a:ln w="12700"><a:solidFill><a:srgbClr val="{_hex(spec.get("stroke"), "2F4B6E")}"/></a:solidFill></a:ln>'
         geom = GEOMETRY.get(spec.get("shape", "rect"), "rect")
-        text_color = "FFFFFF"
-        name = f"Shape {ident}"
+        text_color = _hex(spec.get("color"), "FFFFFF")
+        size = int(float(spec["size"]) * 75) if spec.get("size") else size
+        name = f"Button {ident}" if spec.get("shape") == "button" else f"Shape {ident}"
         nv = "<cNvSpPr/>"
         align = "ctr"
         anchor = "ctr"
@@ -131,7 +137,7 @@ def _shape_xml(obj: dict, ident: int, view: dict) -> str:
     fill_xml = fill if fill else "<a:noFill/>"
     return (
         f'<twoCellAnchor editAs="twoCell" xmlns:a="{NS_A}">{_marker_xml("from", f)}{_marker_xml("to", t)}'
-        f'<sp macro="" textlink=""><nvSpPr><cNvPr id="{ident}" name="{name}"{alt}/>{nv}</nvSpPr>'
+        f'<sp macro={quoteattr(macro_of(obj))} textlink=""><nvSpPr><cNvPr id="{ident}" name="{name}"{alt}/>{nv}</nvSpPr>'
         f'<spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="{w}" cy="{h}"/></a:xfrm><a:prstGeom prst="{geom}"><a:avLst/></a:prstGeom>'
         f"{fill_xml}{line}</spPr>"
         f'<txBody><a:bodyPr vertOverflow="clip" wrap="square" rtlCol="0" anchor="{anchor}"/><a:lstStyle/>{runs}</txBody></sp><clientData/></twoCellAnchor>'
@@ -251,6 +257,19 @@ def _set_alts(xml: str, alts: dict[str, list[str]]) -> str:
     return pattern.sub(fix, xml)
 
 
+def _set_macros(xml: str, names: list[str]) -> str:
+    count = [0]
+
+    def fix(m: re.Match) -> str:
+        i = count[0]
+        count[0] += 1
+        macro = names[i] if i < len(names) else ""
+        attrs = re.sub(r'\s+macro="[^"]*"', "", m.group(1))
+        return f"<pic{attrs} macro={quoteattr(macro)}>" if macro else f"<pic{attrs}>"
+
+    return re.sub(r"<pic\b([^>]*)>", fix, xml)
+
+
 def _apply(files: dict[str, bytes], index: int, plan: dict, name: str, view: dict) -> None:
     sheet = f"xl/worksheets/sheet{index + 1}.xml"
     if sheet not in files:
@@ -264,6 +283,8 @@ def _apply(files: dict[str, bytes], index: int, plan: dict, name: str, view: dic
         xml = files[drawing].decode()
         if any(alts.get(k) for k in alts):
             xml = _set_alts(xml, alts)
+        if any((plan.get("macros") or {}).get("pics") or []):
+            xml = _set_macros(xml, plan["macros"]["pics"])
         if shapes:
             top = max([int(x) for x in re.findall(r'<cNvPr id="(\d+)"', xml)], default=0)
             add = "".join(_shape_xml(obj, top + 1 + k, view) for k, obj in enumerate(shapes))
@@ -280,7 +301,7 @@ def _apply(files: dict[str, bytes], index: int, plan: dict, name: str, view: dic
 
 
 def finish(data: bytes, plans: dict[int, dict], names: list[str], views: list[dict]) -> bytes:
-    if not any(plans.get(i) and (plans[i].get("shapes") or plans[i].get("sparks") or any((plans[i].get("alts") or {}).values())) for i in plans):
+    if not any(plans.get(i) and (plans[i].get("shapes") or plans[i].get("sparks") or any((plans[i].get("alts") or {}).values()) or any((plans[i].get("macros") or {}).get("pics") or [])) for i in plans):
         return data
     with zipfile.ZipFile(io.BytesIO(data)) as z:
         files = {n: z.read(n) for n in z.namelist()}
@@ -381,12 +402,20 @@ def _shape_in(anchor: ET.Element, sp: ET.Element, view: dict, tag: str) -> dict 
     x, y, w, h = _box(f, t, ext, view)
     alt = (c_nv.get("descr") if c_nv is not None else "") or ""
     base = {"x": x, "y": y, "w": w, "h": h, "alt": alt}
+    macro = (sp.get("macro") or "").split("!")[-1].strip()
+    if macro:
+        base["scriptName"] = macro
+    is_button = c_nv is not None and (c_nv.get("name") or "").startswith("Button")
     if text_box and not (sp_pr is not None and _color_in(sp_pr)):
         return {**base, "kind": "text", "text": {"text": text, "size": round(size), "color": color if color and color != "#000000" else ""}}
     if prst == "line" or prst == "straightConnector1" or prst not in GEOMETRY_IN:
         return None
     line_el = _child(sp_pr, "ln") if sp_pr is not None else None
-    return {**base, "kind": "shape", "shape": {"shape": GEOMETRY_IN[prst], "fill": _color_in(sp_pr) or "#4e79a7", "stroke": _color_in(line_el) or "#2f4b6e", "text": text}}
+    shape = {"shape": "button" if is_button else GEOMETRY_IN[prst], "fill": _color_in(sp_pr) or "#4e79a7", "stroke": _color_in(line_el) or "#2f4b6e", "text": text or (c_nv.get("name") if is_button else "")}
+    if is_button:
+        shape["color"] = color or "#ffffff"
+        shape["size"] = round(size)
+    return {**base, "kind": "shape", "shape": shape}
 
 
 def _target(base: str, target: str) -> str:
@@ -503,7 +532,7 @@ class Package:
         self.sheets = _sheet_parts(self.files) if self.files else []
 
     def sheet(self, i: int, name: str, view: dict) -> dict:
-        entry: dict = {"shapes": [], "alts": {"charts": [], "pics": []}, "sparks": []}
+        entry: dict = {"shapes": [], "alts": {"charts": [], "pics": []}, "macros": {"pics": []}, "sparks": []}
         if i >= len(self.sheets):
             return entry
         sheet = self.sheets[i]
@@ -517,6 +546,11 @@ class Package:
                 for k, anchor in enumerate(root):
                     for el in anchor:
                         kind = _tag(el)
+                        if kind == "AlternateContent":
+                            choice = _child(el, "Choice")
+                            inner = _child(choice, "sp") if choice is not None else None
+                            if inner is not None:
+                                el, kind = inner, "sp"
                         if kind == "sp":
                             item = _shape_in(anchor, el, view, kind)
                             if item:
@@ -526,6 +560,8 @@ class Package:
                             nv = _child(el, "nvGraphicFramePr" if kind == "graphicFrame" else "nvPicPr")
                             c = _child(nv, "cNvPr") if nv is not None else None
                             entry["alts"]["charts" if kind == "graphicFrame" else "pics"].append((c.get("descr") or "") if c is not None else "")
+                            if kind == "pic":
+                                entry["macros"]["pics"].append((el.get("macro") or "").split("!")[-1].strip())
         if sheet in self.files:
             try:
                 entry["sparks"] = _sparks_in(ET.fromstring(self.files[sheet]), name, view, f"x{i}")
