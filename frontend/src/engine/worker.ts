@@ -1,4 +1,4 @@
-import type { Cell, Changed, Effect, FormatChange, Request, Response, Shift, StyleChange, Value } from './protocol';
+import type { Cell, CfCell, Changed, Effect, FormatChange, Request, Response, Shift, StyleChange, Value } from './protocol';
 
 interface Exports {
   memory: WebAssembly.Memory;
@@ -39,6 +39,10 @@ interface Exports {
   fc_delete_style(book: number, name: number, len: number): number;
   fc_apply_style(book: number, sheet: number, r0: number, c0: number, r1: number, c1: number, name: number, len: number): number;
   fc_values_in(book: number, sheet: number, r0: number, c0: number, r1: number, c1: number): number;
+  fc_rules(book: number, sheet: number): number;
+  fc_set_rules(book: number, sheet: number, lines: number, len: number): number;
+  fc_load_rules(book: number, sheet: number, lines: number, len: number): number;
+  fc_cf_in(book: number, sheet: number, r0: number, c0: number, r1: number, c1: number): number;
   fc_undo_mark(book: number): number;
   fc_undo_group(book: number, mark: number): number;
   fc_formats_in(book: number, sheet: number, r0: number, c0: number, r1: number, c1: number): number;
@@ -81,7 +85,7 @@ function cells(s: string): Cell[] {
 }
 
 function changed(s: string): Changed[] {
-  return lines(s).filter((l) => !'%#&=^@'.includes(l[0])).map(([sh, r, c, fl, t, f]) => [Number(sh), Number(r), Number(c), unescape(t ?? ''), f === undefined ? undefined : unescape(f), fl.startsWith('n'), colorOf(fl)]);
+  return lines(s).filter((l) => !'%#&=^@!'.includes(l[0])).map(([sh, r, c, fl, t, f]) => [Number(sh), Number(r), Number(c), unescape(t ?? ''), f === undefined ? undefined : unescape(f), fl.startsWith('n'), colorOf(fl)]);
 }
 
 function formatsOf(s: string, tag = '%'): FormatChange[] {
@@ -96,8 +100,9 @@ function shiftOf(line: string): Shift {
 function effect(s: string): Effect {
   const shift = s.startsWith('#') ? shiftOf(s.slice(0, s.indexOf('\n'))) : null;
   const m = /^=\t(\d+)$/m.exec(s);
+  const rl = /^!\t(\d+)$/m.exec(s);
   const styles = lines(s).filter((l) => l[0] === '&').map(([, sh, r, c, raw, shown]) => [Number(sh), Number(r), Number(c), unescape(raw ?? ''), unescape(shown ?? raw ?? '')] as StyleChange);
-  return { shift, changes: changed(s).filter((l) => !Number.isNaN(l[0])), formats: formatsOf(s), styles, merges: m ? Number(m[1]) : null, theme: /^\^$/m.test(s), named: /^@$/m.test(s) };
+  return { shift, changes: changed(s).filter((l) => !Number.isNaN(l[0])), formats: formatsOf(s), styles, merges: m ? Number(m[1]) : null, theme: /^\^$/m.test(s), named: /^@$/m.test(s), rules: rl ? Number(rl[1]) : null };
 }
 
 const MERGE_MODES = { center: 0, across: 1, cells: 2, unmerge: 3 } as const;
@@ -178,7 +183,7 @@ function run(x: Exports, req: Request): Value {
     case 'undo':
     case 'redo': {
       const n = req.op === 'undo' ? x.fc_undo(req.book) : x.fc_redo(req.book);
-      return n === -2 ? { changes: [], shift: null, formats: [], styles: [], merges: null, theme: false, named: false } : effect(out(x, n));
+      return n === -2 ? { changes: [], shift: null, formats: [], styles: [], merges: null, theme: false, named: false, rules: null } : effect(out(x, n));
     }
     case 'shift':
       return shiftOf(out(x, x.fc_shift(req.book, req.sheet, req.rows ? 1 : 0, req.at, req.n, req.insert ? 1 : 0)).trim());
@@ -246,6 +251,18 @@ function run(x: Exports, req: Request): Value {
       return withStrings(x, [req.name], ([p, l]) => effect(styled(x, x.fc_apply_style(req.book, req.sheet, req.r0, req.c0, req.r1, req.c1, p, l))));
     case 'values.read':
       return lines(out(x, x.fc_values_in(req.book, req.sheet, req.r0, req.c0, req.r1, req.c1))).map(([r, c, v]) => [Number(r), Number(c), unescape(v ?? '')] as [number, number, string]);
+    case 'rules.get':
+      return out(x, x.fc_rules(req.book, req.sheet)).split('\n').filter(Boolean);
+    case 'rules.set':
+      return withStrings(x, [req.lines.join('\n')], ([p, l]) => {
+        const n = x.fc_set_rules(req.book, req.sheet, p, l);
+        if (n === -3) throw new Error('That rule is not one FormCel can read. Check its values and formula.');
+        return effect(out(x, n));
+      });
+    case 'rules.load':
+      return withStrings(x, [req.lines.join('\n')], ([p, l]) => ok(x.fc_load_rules(req.book, req.sheet, p, l), 'The engine refused those rules.'));
+    case 'cf.read':
+      return lines(out(x, x.fc_cf_in(req.book, req.sheet, req.r0, req.c0, req.r1, req.c1))).map(([r, c, st, bar, icon]) => [Number(r), Number(c), unescape(st ?? ''), bar ?? '', icon ?? ''] as CfCell);
     case 'undo.mark':
       return ok(x.fc_undo_mark(req.book), 'No such workbook.');
     case 'undo.group':

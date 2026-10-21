@@ -1,6 +1,6 @@
-import type { Area, Cell, Changed, Dir, Edit, Effect, FormatItem, MergeMode, Name, RequestBody, Response, Shift, StyleOp, Value } from './protocol';
+import type { Area, Cell, CfCell, Changed, Dir, Edit, Effect, FormatItem, MergeMode, Name, RequestBody, Response, Shift, StyleOp, Value } from './protocol';
 
-export type { Area, Cell, Changed, Dir, Edit, Effect, FormatChange, FormatItem, MergeMode, Name, Shift, StyleChange, StyleOp } from './protocol';
+export type { Area, Cell, CfCell, Changed, Dir, Edit, Effect, FormatChange, FormatItem, MergeMode, Name, Shift, StyleChange, StyleOp } from './protocol';
 
 type Pending = { resolve: (v: Value) => void; reject: (e: Error) => void };
 
@@ -163,6 +163,22 @@ export class EngineClient {
 
   async readValues(book: number, sheet: number, r0: number, c0: number, r1: number, c1: number): Promise<Edit[]> {
     return (await this.call({ op: 'values.read', book, sheet, r0, c0, r1, c1 })) as Edit[];
+  }
+
+  async rules(book: number, sheet: number): Promise<string[]> {
+    return (await this.call({ op: 'rules.get', book, sheet })) as string[];
+  }
+
+  async setRules(book: number, sheet: number, lines: string[]): Promise<Effect> {
+    return (await this.call({ op: 'rules.set', book, sheet, lines })) as Effect;
+  }
+
+  async loadRules(book: number, sheet: number, lines: string[]): Promise<void> {
+    if (lines.length) await this.call({ op: 'rules.load', book, sheet, lines });
+  }
+
+  async readCf(book: number, sheet: number, r0: number, c0: number, r1: number, c1: number): Promise<CfCell[]> {
+    return (await this.call({ op: 'cf.read', book, sheet, r0, c0, r1, c1 })) as CfCell[];
   }
 
   async undoMark(book: number): Promise<number> {

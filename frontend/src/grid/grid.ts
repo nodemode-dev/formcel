@@ -1,7 +1,13 @@
 import type { Area, Cell, Changed, Dir, Effect, EngineClient, FormatChange, FormatItem, MergeMode, Shift, StyleChange, StyleOp } from '../engine';
 import { light, parseStyle, PLAIN, themeOf, type CellStyle, type Look } from './style';
 
-export type PasteKind = 'all' | 'formulas' | 'values' | 'formats' | 'values-formats' | 'formulas-formats' | 'no-borders' | 'widths';
+interface Mark {
+  style?: CellStyle;
+  bar?: [number, number, string];
+  icon?: [string, number];
+}
+
+export type PasteKind ='all' | 'formulas' | 'values' | 'formats' | 'values-formats' | 'formulas-formats' | 'no-borders' | 'widths';
 const KEEP = '~';
 
 export type BorderKind ='all' | 'outside' | 'inside' | 'top' | 'bottom' | 'left' | 'right' | 'none';
@@ -57,6 +63,7 @@ export interface GridEvents {
   onPainter(state: 'on' | 'sticky' | 'off'): void;
   onLook(): void;
   onPasteMenu(x: number, y: number): void;
+  onRules(sheet: number, lines: string[]): void;
   onView(sheet: number, view: SheetView): void;
   onMenu(kind: MenuKind, x: number, y: number): void;
   onGoto(): void;
@@ -80,6 +87,8 @@ export class Grid {
   private readonly colors = new Map<number, string>();
   private readonly styles = new Map<number, CellStyle>();
   private merges: Area[] = [];
+  private readonly cfs = new Map<number, Mark>();
+  private ruleLines: string[] = [];
   look: Look = themeOf('');
   themeText = '';
   themeNames: string[] = [];
@@ -278,6 +287,7 @@ export class Grid {
     this.nums.clear();
     this.colors.clear();
     this.styles.clear();
+    this.cfs.clear();
     this.wins = [null, null, null, null];
     this.pendingWins = [null, null, null, null];
   }
@@ -328,6 +338,7 @@ export class Grid {
       }
       for (const [r, c, t, f, n, col] of cells) this.store(KEY(r, c), t, f, n, col);
       for (const [r, c, st] of sts) this.styles.set(KEY(r, c), parseStyle(st, this.look));
+      if (this.ruleLines.length) void this.refreshCf(want);
       if (!this.editing && this.ar >= want.r0 && this.ar <= want.r1 && this.ac >= want.c0 && this.ac <= want.c1) this.announce();
       this.paint();
     });
@@ -574,15 +585,15 @@ export class Grid {
     const shown = this.merges.filter(([a, b, cc, d]) => a <= r1 && cc >= r0 && b <= c1 && d >= c0);
     for (const [mr0, mc0, mr1, mc1] of shown) {
       const [x, y, w, h] = this.areaRect(mr0, mc0, mr1, mc1);
-      ctx.fillStyle = this.styles.get(KEY(mr0, mc0))?.bg ?? pal.bg;
+      ctx.fillStyle = this.styleOf(KEY(mr0, mc0))?.bg ?? pal.bg;
       ctx.fillRect(x + 1, y + 1, w - 1, h - 1);
     }
-    if (this.styles.size) {
+    if (this.styles.size || this.cfs.size) {
       for (let r = r0; r <= r1; r++) {
         const rh = this.rows.size(r);
         if (!rh) continue;
         for (let c = c0; c <= c1; c++) {
-          const bg = this.styles.get(KEY(r, c))?.bg;
+          const bg = this.styleOf(KEY(r, c))?.bg;
           const cw = this.cols.size(c);
           if (!bg || !cw || merged(r, c)) continue;
           ctx.fillStyle = bg;
@@ -613,7 +624,7 @@ export class Grid {
     }
     ctx.textBaseline = 'middle';
     ctx.font = '13px Inter, system-ui, -apple-system, "Segoe UI", sans-serif';
-    if (!this.styles.size) return;
+    if (!this.styles.size && !this.cfs.size) return;
     for (let r = r0; r <= r1; r++) {
       const rh = this.rows.size(r);
       if (!rh) continue;
@@ -648,8 +659,26 @@ export class Grid {
     return st.ha ?? (this.nums.has(k) ? 'right' : t === 'TRUE' || t === 'FALSE' || ERRORS.has(t) ? 'center' : 'left');
   }
 
+  private styleOf(k: number): CellStyle | undefined {
+    const base = this.styles.get(k);
+    const cf = this.cfs.get(k)?.style;
+    if (!cf) return base;
+    const b = base ?? PLAIN;
+    return {
+      ...b,
+      b: b.b || cf.b,
+      i: b.i || cf.i,
+      u: b.u || cf.u,
+      s: b.s || cf.s,
+      fc: cf.fc ?? b.fc,
+      bg: cf.bg ?? b.bg,
+      borders: b.borders.map((x, i) => cf.borders[i] ?? x),
+    };
+  }
+
   private textSpan(k: number, t: string, r: number, c: number, merged: (r: number, c: number) => boolean): [number, number] {
-    const st = this.styles.get(k) ?? PLAIN;
+    const st = this.styleOf(k) ?? PLAIN;
+    if (this.cfs.get(k)?.icon) return [this.x(c), this.x(c) + this.cols.size(c)];
     let left = this.x(c);
     let right = left + this.cols.size(c);
     if (st.wrap || st.rot || st.vertical || this.nums.has(k)) return [left, right];
@@ -664,16 +693,27 @@ export class Grid {
 
   private cellText(k: number, t: string, left: number, right: number, yy: number, rh: number): void {
     const { ctx, pal } = this;
-    const st = this.styles.get(k) ?? PLAIN;
+    const st = this.styleOf(k) ?? PLAIN;
     const px = this.font(st);
     const ha = this.align(k, t, st);
-    const pad = 5 + st.indent * INDENT_PX;
+    const mark = this.cfs.get(k);
+    const pad = 5 + st.indent * INDENT_PX + (mark?.icon && ha === 'left' ? 16 : 0);
     const lh = Math.round(px * 1.3);
     const auto = (c: string) => (c === '#000000' ? pal.fg : c);
     ctx.save();
     ctx.beginPath();
     ctx.rect(left + 1, yy, right - left - 2, rh);
     ctx.clip();
+    if (mark?.bar) {
+      const [from, to, color] = mark.bar;
+      const inner = right - left - 4;
+      ctx.globalAlpha = 0.55;
+      ctx.fillStyle = color;
+      ctx.fillRect(left + 2 + from * inner, yy + 3, Math.max(1, (to - from) * inner), rh - 6);
+      ctx.globalAlpha = 1;
+    }
+    if (mark?.icon) drawIcon(ctx, mark.icon[0], mark.icon[1], left + 4, yy + rh / 2);
+    this.font(st);
     ctx.fillStyle = st.fc ? auto(st.fc) : this.colors.get(k) ?? (st.bg ? (light(st.bg) ? '#1a1a1a' : '#f5f5f5') : pal.fg);
     if (st.vertical) {
       ctx.textAlign = 'center';
@@ -714,7 +754,7 @@ export class Grid {
   }
 
   private cellBorders(k: number, x: number, y: number, w: number, h: number): void {
-    const st = this.styles.get(k);
+    const st = this.styleOf(k);
     if (!st || st.borders.every((b) => !b)) return;
     const x0 = Math.round(x) + 0.5;
     const y0 = Math.round(y) + 0.5;
@@ -1107,7 +1147,9 @@ export class Grid {
     this.sheet = sheet;
     this.dropWindows();
     this.merges = [];
+    this.ruleLines = [];
     void this.loadMerges();
+    void this.loadRules();
     void this.loadTheme();
     this.rows.restore(view.rows);
     this.cols.restore(view.cols);
@@ -1201,6 +1243,63 @@ export class Grid {
     await this.setStyles(ops);
   }
 
+  rules(): string[] {
+    return this.ruleLines;
+  }
+
+  selection(): Range {
+    return this.sel();
+  }
+
+  async setRules(lines: string[]): Promise<void> {
+    await this.applyEffect(await this.engine.setRules(this.book, this.sheet, lines));
+  }
+
+  private async loadRules(): Promise<void> {
+    if (this.book < 0) return;
+    const sheet = this.sheet;
+    const lines = await this.engine.rules(this.book, sheet);
+    if (sheet !== this.sheet) return;
+    this.ruleLines = lines;
+    if (!lines.length) {
+      if (this.cfs.size) {
+        this.cfs.clear();
+        this.paint();
+      }
+      return;
+    }
+    await this.refreshCf();
+  }
+
+  private async refreshCf(only?: Range): Promise<void> {
+    const book = this.book;
+    const sheet = this.sheet;
+    const wins = only ? [only] : this.wins.filter((w): w is Range => !!w);
+    const results = await Promise.all(wins.map((w) => this.engine.readCf(book, sheet, w.r0, w.c0, w.r1, w.c1)));
+    if (book !== this.book || sheet !== this.sheet) return;
+    wins.forEach((w, i) => {
+      for (const k of [...this.cfs.keys()]) {
+        const r = Math.floor(k / MAX_COLS);
+        const c = k % MAX_COLS;
+        if (r >= w.r0 && r <= w.r1 && c >= w.c0 && c <= w.c1) this.cfs.delete(k);
+      }
+      for (const [r, c, st, bar, icon] of results[i]) {
+        const m: Mark = {};
+        if (st) m.style = parseStyle(st, this.look);
+        if (bar) {
+          const [f, t, col] = bar.split(',');
+          m.bar = [Number(f), Number(t), `#${col}`];
+        }
+        if (icon) {
+          const [set, n] = icon.split(':');
+          m.icon = [set, Number(n)];
+        }
+        this.cfs.set(KEY(r, c), m);
+      }
+    });
+    this.paint();
+  }
+
   async setTheme(name: string): Promise<void> {
     await this.applyEffect(await this.engine.setTheme(this.book, name));
   }
@@ -1270,6 +1369,7 @@ export class Grid {
     }
     this.fitRows(fit);
     if (changed.length) this.events.onChanged(changed);
+    if (changed.length && this.ruleLines.length) void this.refreshCf();
     const hst = await this.engine.history(this.book);
     this.events.onHistory(hst.undo, hst.redo);
     this.announce();
@@ -1314,6 +1414,12 @@ export class Grid {
       this.paint();
     }
     if (e.theme || e.named) this.events.onLook();
+    if (e.rules !== null) {
+      const sheet = e.rules;
+      const lines = await this.engine.rules(this.book, sheet);
+      if (sheet === this.sheet) await this.loadRules();
+      this.events.onRules(sheet, lines);
+    }
     if (e.merges !== null) {
       const sheet = e.merges;
       const list = await this.engine.merges(this.book, sheet);
@@ -2094,6 +2200,65 @@ export class Grid {
 }
 
 const ARROWS: Record<string, Dir> = { ArrowUp: 'up', ArrowDown: 'down', ArrowLeft: 'left', ArrowRight: 'right' };
+
+const ICON_COLOURS = ['#d9363e', '#e8a33d', '#e6c229', '#7cb342', '#2e9d58'];
+
+function drawIcon(ctx: CanvasRenderingContext2D, set: string, i: number, x: number, cy: number): void {
+  const n = set.startsWith('5') ? 5 : set.startsWith('4') ? 4 : 3;
+  const tone = n === 3 ? [0, 2, 4][i] : n === 4 ? [0, 1, 3, 4][i] : i;
+  ctx.save();
+  ctx.fillStyle = ctx.strokeStyle = ICON_COLOURS[tone] ?? ICON_COLOURS[2];
+  ctx.lineWidth = 2;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  const cx = x + 6;
+  if (set.includes('arrows')) {
+    const angle = n === 3 ? [90, 0, -90][i] : n === 4 ? [90, 45, -45, -90][i] : [90, 45, 0, -45, -90][i];
+    ctx.translate(cx, cy);
+    ctx.rotate((angle * Math.PI) / 180);
+    ctx.beginPath();
+    ctx.moveTo(-5, 0);
+    ctx.lineTo(5, 0);
+    ctx.moveTo(1.5, -3.5);
+    ctx.lineTo(5, 0);
+    ctx.lineTo(1.5, 3.5);
+    ctx.stroke();
+  } else if (set === '3traffic') {
+    ctx.beginPath();
+    ctx.arc(cx, cy, 5, 0, Math.PI * 2);
+    ctx.fill();
+  } else if (set === '3flags') {
+    ctx.fillRect(cx - 4, cy - 6, 1.5, 12);
+    ctx.beginPath();
+    ctx.moveTo(cx - 2.5, cy - 6);
+    ctx.lineTo(cx + 5, cy - 3.5);
+    ctx.lineTo(cx - 2.5, cy - 1);
+    ctx.fill();
+  } else {
+    ctx.beginPath();
+    ctx.arc(cx, cy, 6, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = '#ffffff';
+    ctx.beginPath();
+    if (i === 0) {
+      ctx.moveTo(cx - 2.5, cy - 2.5);
+      ctx.lineTo(cx + 2.5, cy + 2.5);
+      ctx.moveTo(cx + 2.5, cy - 2.5);
+      ctx.lineTo(cx - 2.5, cy + 2.5);
+    } else if (i === 1) {
+      ctx.moveTo(cx, cy - 3);
+      ctx.lineTo(cx, cy + 0.5);
+      ctx.moveTo(cx, cy + 3);
+      ctx.lineTo(cx, cy + 3);
+    } else {
+      ctx.moveTo(cx - 3, cy);
+      ctx.lineTo(cx - 0.5, cy + 2.5);
+      ctx.lineTo(cx + 3, cy - 2.5);
+    }
+    ctx.stroke();
+  }
+  ctx.restore();
+}
 
 const TOGGLE_KEYS: Record<string, 'b' | 'i' | 'u' | 's'> = { KeyB: 'b', Digit2: 'b', KeyI: 'i', Digit3: 'i', KeyU: 'u', Digit4: 'u', Digit5: 's' };
 const OVERFLOW_COLS = 8;

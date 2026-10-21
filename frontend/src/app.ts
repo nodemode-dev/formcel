@@ -6,6 +6,8 @@ import { listCommands, registerCommand, runCommand } from './ui/commands';
 import { Home, type TemplateMeta, type WorkbookMeta } from './ui/home';
 import { Menu, type MenuItem } from './ui/menu';
 import type { ShellParts } from './ui/shell';
+import { icon } from './ui/icons';
+import { DATE_PERIODS, describe, parseRule, PRESETS, rangeText, ruleLine, withStop } from './ui/rules';
 
 interface Opened {
   id: string;
@@ -55,6 +57,24 @@ const ROTATIONS: [string, string][] = [
 function rotationLabel(st: { rot: number; vertical: boolean }): string {
   if (st.vertical) return 'Vertical text';
   return ROTATIONS.find(([, p]) => p === `rot:${st.rot}`)?.[0] ?? (st.rot ? `${st.rot} degrees` : '');
+}
+
+interface RuleAsk {
+  values?: number;
+  date?: boolean;
+  first?: string;
+  formula?: boolean;
+}
+
+interface RuleForm {
+  form: HTMLFormElement;
+  title: HTMLElement;
+  v1: HTMLInputElement;
+  v2: HTMLInputElement;
+  date: HTMLSelectElement;
+  preset: HTMLSelectElement;
+  hint: HTMLElement;
+  kind: string;
 }
 
 const LINES: [string, string][] = [['thin', 'Thin'], ['medium', 'Medium'], ['thick', 'Thick'], ['dashed', 'Dashed'], ['dotted', 'Dotted'], ['double', 'Double']];
@@ -140,6 +160,7 @@ export class App {
       onMerges: (sheet, areas) => this.sendMerges(sheet, areas),
       onLook: () => this.sendLook(),
       onPasteMenu: (x, y) => this.pasteMenu(x, y),
+      onRules: (sheet, lines) => this.sendRules(sheet, lines),
       onPainter: (state) => this.button('format.painter').setAttribute('aria-pressed', String(state !== 'off')),
       onView: (sheet, view) => this.saveView(sheet, view),
       onMenu: (kind, x, y) => this.cellMenu(kind, x, y),
@@ -224,6 +245,8 @@ export class App {
       await g.setFormat('');
       if (this.open) await e.undoGroup(this.open.book, mark);
     });
+    cmd('format.cf', 'Conditional formatting', 'Format cells by rules on their values: highlights, top and bottom, data bars, colour scales, icons and formulas.', true, () => this.cfMenu());
+    cmd('format.cf-manage', 'Manage conditional formatting rules', 'See, reorder, stop and delete the rules on this sheet.', false, () => this.openPanel());
     cmd('format.styles', 'Cell styles', 'Apply a named cell style, or make one from the selection.', true, () => this.stylesMenu());
     cmd('format.theme', 'Theme', 'Choose the workbook theme: the colours and fonts that styles and the default text use.', true, () => this.themeMenu());
     cmd('edit.paste-special', 'Paste special', 'Paste only formulas, values, formats or column widths, or transpose, from the last FormCel copy.', true, () => {
@@ -363,7 +386,7 @@ export class App {
   private async openWorkbook(id: string, setHash = true): Promise<void> {
     this.flush();
     await this.saving;
-    let doc: WorkbookMeta & { cells: [number, number, string][][]; formats?: [number, number, string][][]; styles?: [number, number, string][][]; merges?: Area[][]; theme?: string; cellStyles?: string[]; views?: SheetView[]; names?: Name[] };
+    let doc: WorkbookMeta & { cells: [number, number, string][][]; formats?: [number, number, string][][]; styles?: [number, number, string][][]; merges?: Area[][]; rules?: string[][]; theme?: string; cellStyles?: string[]; views?: SheetView[]; names?: Name[] };
     try {
       doc = await api('GET', `/api/workbooks/${id}`);
     } catch {
@@ -379,6 +402,7 @@ export class App {
       await e.loadFormats(book, i, doc.formats?.[i] ?? []);
       await e.loadStyles(book, i, doc.styles?.[i] ?? []);
       await e.loadMerges(book, i, doc.merges?.[i] ?? []);
+      await e.loadRules(book, i, doc.rules?.[i] ?? []);
       if (doc.cells[i]?.length) await e.load(book, doc.cells[i], i);
     }
     for (const [n, f] of doc.names ?? []) await e.defineName(book, n, f).catch(() => []);
@@ -532,6 +556,220 @@ export class App {
         this.p.save.title = err instanceof Error ? err.message : '';
       }
     });
+  }
+
+  private sendRules(sheet: number, lines: string[]): void {
+    const o = this.open;
+    if (!o) return;
+    this.status('Saving');
+    this.saving = this.saving.then(async () => {
+      try {
+        await api('PUT', `/api/workbooks/${o.id}/rules`, { sheet, lines });
+        if (!this.pending.size) this.status('Saved');
+      } catch (err) {
+        this.status('Not saved', true);
+        this.p.save.title = err instanceof Error ? err.message : '';
+      }
+    });
+    if (this.panel && !this.panel.el.hidden) this.fillPanel();
+  }
+
+  private addRule(kind: string, args: string[], style = ''): Promise<void> {
+    const g = this.grid;
+    return g.setRules([ruleLine(g.selection(), kind, args, style), ...g.rules()]).then(() => g.focus());
+  }
+
+  private cfMenu(): void {
+    const g = this.grid;
+    const [x, y] = this.below('format.cf');
+    const box = (title: string, kind: string, opts: RuleAsk) => () => this.ruleBox(title, kind, opts);
+    const scale = (colors: string) => () => this.addRule('scale', [colors.split(',').length === 3 ? 'low,pctl:50,high' : 'low,high', colors]);
+    const items: MenuItem[] = [
+      { label: 'Greater than...', run: box('Format cells greater than', 'cell:gt', { values: 1 }) },
+      { label: 'Less than...', run: box('Format cells less than', 'cell:lt', { values: 1 }) },
+      { label: 'Between...', run: box('Format cells between', 'cell:between', { values: 2 }) },
+      { label: 'Equal to...', run: box('Format cells equal to', 'cell:eq', { values: 1 }) },
+      { label: 'Text that contains...', run: box('Format cells whose text contains', 'text:contains', { values: 1 }) },
+      { label: 'A date occurring...', run: box('Format cells with a date occurring', 'date', { date: true }) },
+      { label: 'Duplicate values...', run: box('Format duplicate values', 'dup:dup', {}) },
+      { label: 'Unique values...', run: box('Format unique values', 'dup:unique', {}) },
+      { sep: true },
+      { label: 'Top 10 items...', run: box('Format the top items', 'top:top', { values: 1, first: '10' }) },
+      { label: 'Top 10%...', run: box('Format the top percent', 'top:top:%', { values: 1, first: '10' }) },
+      { label: 'Bottom 10 items...', run: box('Format the bottom items', 'top:bottom', { values: 1, first: '10' }) },
+      { label: 'Bottom 10%...', run: box('Format the bottom percent', 'top:bottom:%', { values: 1, first: '10' }) },
+      { label: 'Above average...', run: box('Format values above average', 'avg:above', {}) },
+      { label: 'Below average...', run: box('Format values below average', 'avg:below', {}) },
+      { sep: true },
+      { label: 'Data bars: blue', run: () => this.addRule('bar', ['638ec6', 'low', 'high']) },
+      { label: 'Data bars: green', run: () => this.addRule('bar', ['63c384', 'low', 'high']) },
+      { label: 'Data bars: orange', run: () => this.addRule('bar', ['ffb628', 'low', 'high']) },
+      { label: 'Colour scale: red low, yellow, green high', run: scale('f8696b,ffeb84,63be7b') },
+      { label: 'Colour scale: green low, yellow, red high', run: scale('63be7b,ffeb84,f8696b') },
+      { label: 'Colour scale: white low, green high', run: scale('fcfcff,63be7b') },
+      { label: 'Colour scale: white low, red high', run: scale('fcfcff,f8696b') },
+      { label: 'Icons: 3 arrows', run: () => this.addRule('icons', ['3arrows']) },
+      { label: 'Icons: 3 traffic lights', run: () => this.addRule('icons', ['3traffic']) },
+      { label: 'Icons: 3 flags', run: () => this.addRule('icons', ['3flags']) },
+      { label: 'Icons: 3 symbols', run: () => this.addRule('icons', ['3symbols']) },
+      { label: 'Icons: 5 arrows', run: () => this.addRule('icons', ['5arrows']) },
+      { sep: true },
+      { label: 'New rule with a formula...', run: box('Format cells where this formula is true', 'formula', { values: 1, formula: true }) },
+      { label: 'Manage rules...', run: () => this.openPanel() },
+      { label: 'Clear rules from selected cells', run: () => this.clearRules(true) },
+      { label: 'Clear rules from this sheet', danger: true, run: () => this.clearRules(false) },
+    ];
+    this.menu.show(x, y, items, () => g.focus());
+  }
+
+  private clearRules(selection: boolean): Promise<void> {
+    const g = this.grid;
+    const s = g.selection();
+    const keep = selection ? g.rules().filter((l) => {
+      const a = parseRule(l).area;
+      return a.r1 < s.r0 || a.r0 > s.r1 || a.c1 < s.c0 || a.c0 > s.c1;
+    }) : [];
+    return g.setRules(keep).then(() => g.focus());
+  }
+
+  private ruleForm: RuleForm | null = null;
+
+  private ruleBox(title: string, kind: string, opts: RuleAsk): void {
+    const f = this.ruleForm ??= this.makeRuleForm();
+    const [x, y] = this.below('format.cf');
+    f.form.style.left = `${Math.round(x)}px`;
+    f.form.style.top = `${Math.round(y)}px`;
+    f.title.textContent = title;
+    f.kind = kind;
+    f.v1.parentElement!.hidden = !opts.values;
+    f.v2.parentElement!.hidden = (opts.values ?? 0) < 2;
+    f.date.parentElement!.hidden = !opts.date;
+    f.v1.value = opts.first ?? '';
+    f.v2.value = '';
+    f.v1.placeholder = opts.formula ? '=$B1="Yes"' : 'A value, or a formula starting with =';
+    f.hint.textContent = opts.formula ? 'Write the formula for the first cell of the selection; references move for the other cells.' : '';
+    f.form.dataset.state = '';
+    f.form.hidden = false;
+    (opts.values ? f.v1 : f.preset).focus();
+  }
+
+  private makeRuleForm(): RuleForm {
+    const form = document.createElement('form');
+    form.className = 'fc-fmt-custom';
+    form.hidden = true;
+    form.innerHTML = `<strong class="fc-fmt-title"></strong>
+      <label class="fc-fmt-label">Value<input class="fc-fmt-input fc-rule-v1" spellcheck="false" autocomplete="off"></label>
+      <label class="fc-fmt-label">And<input class="fc-fmt-input fc-rule-v2" spellcheck="false" autocomplete="off"></label>
+      <label class="fc-fmt-label">Period<select class="fc-fmt-input fc-rule-date">${DATE_PERIODS.map(([k, l]) => `<option value="${k}">${l}</option>`).join('')}</select></label>
+      <label class="fc-fmt-label">Format with<select class="fc-fmt-input fc-rule-preset">${PRESETS.map(([l, s]) => `<option value="${s}">${l}</option>`).join('')}</select></label>
+      <span class="fc-fmt-hint" aria-live="polite"></span>
+      <button type="submit" class="fc-btn fc-btn-primary">Add rule</button>`;
+    document.getElementById('overlay-root')!.appendChild(form);
+    const q = <T extends HTMLElement>(s: string) => form.querySelector<T>(s)!;
+    const f: RuleForm = { form, title: q('.fc-fmt-title'), v1: q('.fc-rule-v1'), v2: q('.fc-rule-v2'), date: q('.fc-rule-date'), preset: q('.fc-rule-preset'), hint: q('.fc-fmt-hint'), kind: '' };
+    const close = () => {
+      form.hidden = true;
+      this.grid.focus();
+    };
+    form.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const [kind, a = '', b = ''] = f.kind.split(':');
+      const args = kind === 'cell' ? [a, f.v1.value, f.v2.value]
+        : kind === 'text' ? [a, f.v1.value]
+        : kind === 'date' ? [f.date.value]
+        : kind === 'top' ? [a, f.v1.value, b]
+        : kind === 'formula' ? [f.v1.value.trim().startsWith('=') ? f.v1.value.trim() : `=${f.v1.value.trim()}`]
+        : [a];
+      void this.addRule(kind, args, f.preset.value).then(close, (err: unknown) => {
+        form.dataset.state = 'error';
+        f.hint.textContent = err instanceof Error ? err.message : String(err);
+      });
+    });
+    form.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        close();
+      }
+    });
+    document.addEventListener('pointerdown', (e) => {
+      if (!form.hidden && !form.contains(e.target as Node)) form.hidden = true;
+    }, true);
+    return f;
+  }
+
+  private panel: { el: HTMLElement; list: HTMLElement; title: Text } | null = null;
+
+  private openPanel(): void {
+    if (!this.panel) {
+      const el = document.createElement('section');
+      el.className = 'fc-rules';
+      el.hidden = true;
+      el.setAttribute('aria-label', 'Conditional formatting rules');
+      el.innerHTML = '<header class="fc-rules-head"><strong></strong><button type="button" class="fc-tool" data-act="close" title="Close" aria-label="Close"></button></header><ol class="fc-rules-list"></ol><p class="fc-rules-note">Rules higher in the list win when two set the same thing. New rules go to the top.</p>';
+      el.querySelector('[data-act="close"]')!.innerHTML = icon('close');
+      document.getElementById('overlay-root')!.appendChild(el);
+      const title = el.querySelector('strong')!.appendChild(document.createTextNode(''));
+      const list = el.querySelector<HTMLElement>('.fc-rules-list')!;
+      el.addEventListener('click', (e) => {
+        const b = (e.target as HTMLElement).closest<HTMLElement>('[data-act]');
+        if (!b) return;
+        if (b.dataset.act === 'close') {
+          el.hidden = true;
+          this.grid.focus();
+          return;
+        }
+        const i = Number(b.closest<HTMLElement>('[data-i]')?.dataset.i);
+        const lines = [...this.grid.rules()];
+        if (b.dataset.act === 'up' && i > 0) [lines[i - 1], lines[i]] = [lines[i], lines[i - 1]];
+        else if (b.dataset.act === 'down' && i < lines.length - 1) [lines[i + 1], lines[i]] = [lines[i], lines[i + 1]];
+        else if (b.dataset.act === 'delete') lines.splice(i, 1);
+        else return;
+        void this.grid.setRules(lines);
+      });
+      el.addEventListener('change', (e) => {
+        const box = e.target as HTMLInputElement;
+        const i = Number(box.closest<HTMLElement>('[data-i]')?.dataset.i);
+        const lines = [...this.grid.rules()];
+        if (!Number.isNaN(i) && lines[i]) {
+          lines[i] = withStop(lines[i], box.checked);
+          void this.grid.setRules(lines);
+        }
+      });
+      this.panel = { el, list, title };
+    }
+    this.fillPanel();
+    this.panel.el.hidden = false;
+  }
+
+  private fillPanel(): void {
+    const p = this.panel;
+    if (!p) return;
+    const lines = this.grid.rules();
+    const name = this.open?.sheets[this.grid.sheetIndex] ?? '';
+    if (p.title.nodeValue !== `Rules on ${name}`) p.title.nodeValue = `Rules on ${name}`;
+    const rows = [...p.list.children] as HTMLElement[];
+    lines.forEach((line, i) => {
+      let row = rows[i];
+      if (!row) {
+        row = document.createElement('li');
+        row.className = 'fc-rule';
+        row.innerHTML = '<span class="fc-rule-what"></span><span class="fc-rule-where"></span><label class="fc-rule-stop"><input type="checkbox"> Stop if true</label><span class="fc-rule-acts"><button type="button" class="fc-btn" data-act="up">Up</button><button type="button" class="fc-btn" data-act="down">Down</button><button type="button" class="fc-btn" data-act="delete">Delete</button></span>';
+        p.list.appendChild(row);
+      }
+      row.dataset.i = String(i);
+      const r = parseRule(line);
+      const what = row.querySelector('.fc-rule-what')!;
+      const where = row.querySelector('.fc-rule-where')!;
+      const text = describe(line);
+      if (what.textContent !== text) what.textContent = text;
+      const at = rangeText(r.area);
+      if (where.textContent !== at) where.textContent = at;
+      const box = row.querySelector<HTMLInputElement>('input')!;
+      if (box.checked !== r.stop) box.checked = r.stop;
+    });
+    for (let i = rows.length - 1; i >= lines.length; i--) rows[i].remove();
+    if (!lines.length && !p.list.dataset.empty) p.list.dataset.empty = '1';
+    else if (lines.length && p.list.dataset.empty) delete p.list.dataset.empty;
   }
 
   private sendLook(): void {
