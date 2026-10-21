@@ -27,3 +27,9 @@ FormCel ports code from two sibling repositories by the same owner, both Apache-
 | openpyxl 3.1.5 | MIT | engine process: reading and writing .xlsx (`backend/app/services/xlsx`) |
 | et_xmlfile 2.0.0 | MIT | engine process: XML writing for openpyxl |
 | xlrd 2.0.1 | BSD-3-Clause | engine process: reading legacy .xls (`backend/app/services/xls.py`) |
+| reportlab 4.2.5 | BSD | engine process: PDF export (`backend/app/services/pdf.py`) |
+| Pillow | MIT-CMU (HPND) | engine process: image support for reportlab |
+| chardet | LGPL-2.1 | engine process: a reportlab dependency, installed unmodified as its own package |
+| msoffcrypto-tool 5.4.2 | MIT | engine process: password-protected files (`backend/app/services/crypto.py`) |
+| cryptography | Apache-2.0 or BSD-3-Clause | engine process: used by msoffcrypto-tool |
+| olefile | BSD-2-Clause | engine process: used by msoffcrypto-tool |

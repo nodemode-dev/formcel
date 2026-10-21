@@ -241,6 +241,17 @@ class Store:
                 raise IndexError(sheet)
             return b.title, names[sheet], csvio.write(b.engine.values(sheet), delimiter)
 
+    def export_pdf(self, wid: str, sheet: int | None) -> tuple[str, bytes]:
+        from . import pdf
+
+        b = self._load(wid)
+        with b.lock:
+            b.fit_views()
+            n = len(b.sheet_names())
+            if sheet is not None and not 0 <= sheet < n:
+                raise IndexError(sheet)
+            return b.title, pdf.write(b.engine, b.views, [sheet] if sheet is not None else list(range(n)), b.title)
+
     def export_ods(self, wid: str) -> tuple[str, bytes]:
         from . import ods
 

@@ -6,7 +6,7 @@ import xlrd
 from fastapi import APIRouter, HTTPException, Request, Response
 from pydantic import BaseModel, Field
 
-from ..services import csvio, templates
+from ..services import crypto, csvio, templates
 from ..services.store import store
 
 router = APIRouter(prefix="/api")
@@ -100,6 +100,12 @@ async def import_file(request: Request, name: str = "Imported workbook.xlsx", de
     if ext not in ("xlsx", "xlsm", "xls", "ods"):
         raise HTTPException(415, "FormCel opens .xlsx, .xlsm, .xls, .ods, .csv, .tsv and .txt files.")
     try:
+        data = crypto.unlock(data, request.headers.get("x-formcel-password"))
+    except crypto.PasswordNeeded:
+        raise HTTPException(401, f"{name} is protected with a password.")
+    except crypto.WrongPassword:
+        raise HTTPException(403, "That password does not open the file.")
+    try:
         return store().import_xlsx(data, stem or name, "xlsx" if ext == "xlsm" else ext)
     except (KeyError, ValueError, OSError, zipfile.BadZipFile, xlrd.XLRDError) as e:
         raise HTTPException(422, f"FormCel could not read {name}: {e}")
@@ -116,8 +122,32 @@ def export_xlsx(wid: str) -> Response:
                     headers={"Content-Disposition": f"attachment; filename*=UTF-8''{quote(fname)}.xlsx"})
 
 
+class LockIn(BaseModel):
+    password: str = Field(min_length=1, max_length=255)
+
+
+@router.post("/workbooks/{wid}/export.xlsx")
+def export_locked(wid: str, body: LockIn) -> Response:
+    try:
+        title, data = store().export_xlsx(wid)
+    except (KeyError, FileNotFoundError):
+        raise missing(wid)
+    fname = "".join(ch for ch in title if ch not in '\\/:*?"<>|').strip() or "Workbook"
+    return Response(crypto.lock(data, body.password), media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    headers={"Content-Disposition": f"attachment; filename*=UTF-8''{quote(fname)}.xlsx"})
+
+
 @router.get("/workbooks/{wid}/export.{kind}")
-def export_text(wid: str, kind: str, sheet: int = 0) -> Response:
+def export_text(wid: str, kind: str, sheet: int = 0, scope: str = "sheet") -> Response:
+    if kind == "pdf":
+        try:
+            title, data = store().export_pdf(wid, None if scope == "all" else sheet)
+        except (KeyError, FileNotFoundError):
+            raise missing(wid)
+        except IndexError:
+            raise HTTPException(404, f"No sheet {sheet}.")
+        fname = "".join(ch for ch in title if ch not in '\\/:*?"<>|').strip() or "Workbook"
+        return Response(data, media_type="application/pdf", headers={"Content-Disposition": f"attachment; filename*=UTF-8''{quote(fname)}.pdf"})
     if kind in ("xlsm", "ods"):
         try:
             title, data = store().export_xlsx(wid, macros=True) if kind == "xlsm" else store().export_ods(wid)

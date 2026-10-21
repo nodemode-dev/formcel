@@ -226,7 +226,7 @@ Sizes: a column `width` is in characters of the default font; 7 pixels each is t
 
 Styles: theme colours map from the file's index order (lt1, dk1, lt2, dk2, accents) to FormCel's slots; a tint becomes a percentage. Cell styles are written as named styles (Accent 1 as Accent1) and a cell keeps its own formatting over its style; on the way in, formatting a cell shares with its named style is dropped so the cell says `cs:Name` plus what differs. The default font of the file (font 0) counts as no font setting.
 
-On export the full calculation flag is set, so Excel recalculates on open; cached values are not written. Text kept under merged cells is not written, since a merged cell shows only the contents of its upper-left cell (MS-MERGE).
+On export the full calculation flag is set, so Excel recalculates on open; cached values are not written. From v0.28.0, `@x` is written as `_xlfn.SINGLE(x)` (MS-IMPLICIT: older Excel shows the operator as `_xlfn.SINGLE()`) and `A1#` as `_xlfn.ANCHORARRAY(A1)`, and both are read back the other way. ANCHORARRAY is not on the Microsoft pages read (MS-SPILLOP, MS-IMPLICIT, MS-DANONDA, MS-XLSX functions); it is the name FormCel understands Excel to write. Text kept under merged cells is not written, since a merged cell shows only the contents of its upper-left cell (MS-MERGE).
 
 ### Conditional formatting in .xlsx
 - refers-to: app/services/xlsx/cf.py :: rules_in, rules_out, dxf_tokens, dxf_out; reader.py :: read; writer.py :: write; store.py :: import_xlsx
@@ -278,3 +278,19 @@ xlrd 2.0.1 (BSD) reads .xls files: values as last saved, number formats, merges,
 - logged: v0.27.0 · 2026-10-21
 
 When an opened file has `xl/vbaProject.bin`, the macro parts openpyxl knows to keep (`xl/vba`, VML drawings, form controls, `customUI`, ActiveX, EMF media) plus `[Content_Types].xml` and `_rels/.rels` are stored in the .fcel file under `macros/`. Download as .xlsm writes them back through openpyxl's own macro path, which adds the vbaProject relationship and the macro-enabled content type. FormCel never runs, reads or changes the macro code; a project whose sheets were renamed or removed may not match its code any more.
+
+### PDF export
+- refers-to: app/services/pdf.py :: write, _sheet, family; store.py :: export_pdf; app/routers/workbooks.py :: export_text (pdf)
+- kind: explainer
+- logged: v0.28.0 · 2026-10-21
+
+`GET /api/workbooks/{id}/export.pdf?sheet=N` writes one sheet, `?scope=all` every sheet, with reportlab (BSD; its chardet dependency is LGPL-2.1, used unmodified as a separate package in the engine process). Pages are US Letter portrait with margins of 0.7 inch left and right and 0.75 inch top and bottom, FormCel's choice until Phase 12 brings page setup. The used range is cut into pages down, then across; a sheet wider than a page is scaled down to fit, to no less than half size. Each cell shows its value as FormCel shows it, with bold, italic, underline, strike, size, text colour, fill, borders (dashed, dotted and double drawn as such), alignment, indent, wrap, merges, conditional formatting colours and data bars. Rows with larger or wrapped text grow to fit, as in the grid. Gridlines are not printed. Not drawn yet: rotated and vertical text (drawn level), icon sets, pictures, headers and footers.
+
+Fonts: the PDF needs a font file to show text beyond Latin-1. FormCel does not ship one; it looks for DejaVu Sans, Liberation Sans or Arial in the usual font folders on Linux, macOS and Windows, and falls back to the PDF's built-in Helvetica, which shows Latin-1 only. All text uses that one family; a cell's own typeface is not used.
+
+### Password-protected .xlsx
+- refers-to: app/services/crypto.py :: locked, unlock, lock; app/routers/workbooks.py :: import_file, export_locked
+- kind: explainer
+- logged: v0.28.0 · 2026-10-21
+
+msoffcrypto-tool 5.4.2 (MIT, with cryptography and olefile) opens and makes password-protected Office files. An opened file that is an encrypted package and has no `x-formcel-password` header gets 401; a wrong password gets 403. The password travels in a header on the local connection, never in the address, and is not stored. `POST /api/workbooks/{id}/export.xlsx` with `{"password": ...}` answers the workbook encrypted with that password (Agile encryption, as msoffcrypto writes it). Encrypted .xls files open through the same path.
