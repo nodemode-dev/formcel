@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.27.0 · 2026-10-21
+
+- OpenDocument spreadsheets: open and download .ods, with values, formulas, number formats, cell formatting, merges, links, names, column widths and row heights. Files open in LibreOffice with their values.
+- Legacy Excel .xls files open with their last saved values, number formats, merges and sizes. Formulas in .xls files come in as values.
+- Macros: a .xlsm file's macros are kept, and Download offers .xlsm to save them back. FormCel does not run macros.
+- Not yet: conditional formatting in .ods files, fraction and scaled number formats in .ods (written in a simpler form).
+
 ## 0.26.0 · 2026-10-21
 
 - Conditional formatting now travels in .xlsx files both ways: every kind FormCel has, with its order and Stop If True.
