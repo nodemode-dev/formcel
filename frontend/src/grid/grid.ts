@@ -1,4 +1,4 @@
-import type { Area, Cell, Changed, Dir, Effect, EngineClient, FormatChange, FormatItem, LinkChange, MergeMode, Shift, StyleChange, StyleOp } from '../engine';
+import type { Area, Cell, Changed, Dir, Effect, EngineClient, FormatChange, FormatItem, LinkChange, MergeMode, Shift, SortKeySpec, StyleChange, StyleOp } from '../engine';
 import { light, parseStyle, PLAIN, themeOf, tint, type CellStyle, type Look } from './style';
 
 interface Mark {
@@ -88,7 +88,7 @@ export type Recorded =
   | { k: 'edit'; sheet: number; r: number; c: number; raw: string }
   | { k: 'style'; sheet: number; ops: [number, number, number, number, string][] }
   | { k: 'format'; sheet: number; r0: number; c0: number; r1: number; c1: number; code: string }
-  | { k: 'sort'; sheet: number; r0: number; c0: number; r1: number; c1: number; keys: [number, boolean][]; header: boolean };
+  | { k: 'sort'; sheet: number; r0: number; c0: number; r1: number; c1: number; keys: SortKeySpec[]; header: boolean; across?: boolean };
 
 export interface GridEvents {
   onActive(text: string, ref: string, range: Range): void;
@@ -1044,9 +1044,9 @@ export class Grid {
     return { range: s, header: await this.engine.guessHeader(this.book, this.sheet, s.r0, s.c0, s.r1, s.c1) };
   }
 
-  async sortRange(range: Range, keys: [number, boolean][], header: boolean, caseSensitive = false): Promise<void> {
-    this.recorder?.({ k: 'sort', sheet: this.sheet, r0: range.r0, c0: range.c0, r1: range.r1, c1: range.c1, keys, header });
-    await this.applyEffect(await this.engine.sort(this.book, this.sheet, range.r0, range.c0, range.r1, range.c1, keys, header, caseSensitive));
+  async sortRange(range: Range, keys: SortKeySpec[], header: boolean, caseSensitive = false, across = false): Promise<void> {
+    this.recorder?.({ k: 'sort', sheet: this.sheet, r0: range.r0, c0: range.c0, r1: range.r1, c1: range.c1, keys, header, across });
+    await this.applyEffect(await this.engine.sort(this.book, this.sheet, range.r0, range.c0, range.r1, range.c1, keys, header, caseSensitive, across));
     this.select(range.r0, range.c0, range.r1, range.c1, false);
   }
 

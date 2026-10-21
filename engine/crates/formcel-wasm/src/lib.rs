@@ -472,18 +472,34 @@ pub unsafe extern "C" fn fc_delete_style(id: u32, name: *const u8, len: u32) -> 
 /// `keys` must point at `len` readable bytes.
 #[no_mangle]
 pub unsafe extern "C" fn fc_sort(id: u32, sheet: u32, r0: u32, c0: u32, r1: u32, c1: u32, keys: *const u8, len: u32, header: u32, case: u32) -> i32 {
-    let keys: Vec<formcel_core::sort::SortKey> = text(keys, len)
-        .split(',')
-        .filter_map(|k| {
-            let (c, d) = k.split_once(':')?;
-            Some(formcel_core::sort::SortKey { col: c.parse().ok()?, descending: d == "d" })
-        })
-        .collect();
+    let keys: Vec<formcel_core::sort::SortKey> = text(keys, len).split('\n').filter_map(formcel_core::sort::SortKey::parse).collect();
     let area = formcel_core::formula::Area { r0, c0, r1, c1 };
-    match with_book(id, |wb| wb.sort(sheet as usize, area, &keys, header != 0, case != 0).map(|e| wb.encode(&e))) {
+    match with_book(id, |wb| wb.sort_with(sheet as usize, area, &keys, header != 0, case & 1 != 0, case & 2 != 0).map(|e| wb.encode(&e))) {
         Some(Ok(s)) => emit(&s) as i32,
         Some(Err(formcel_core::EngineError::BadStyle(_))) => -3,
         _ => -1,
+    }
+}
+
+/// The built-in sort lists (days and months, short and long), one line each with the items tab separated.
+#[no_mangle]
+pub extern "C" fn fc_sort_lists() -> i32 {
+    emit(&formcel_core::sort::builtin_lists().iter().map(|l| l.join("\t")).collect::<Vec<_>>().join("\n")) as i32
+}
+
+/// The fill colours (`f`), font colours (`t`) and conditional formatting icons (`i`) in one sort key's column, or row when sorting left to right, one tab separated line each.
+#[no_mangle]
+pub extern "C" fn fc_sort_choices(id: u32, sheet: u32, r0: u32, c0: u32, r1: u32, c1: u32, header: u32, across: u32, key: u32) -> i32 {
+    let area = formcel_core::formula::Area { r0, c0, r1, c1 };
+    match with_book(id, |wb| wb.sort_choices(sheet as usize, area, header != 0, across != 0, key)) {
+        Some((fills, fonts, icons)) => {
+            let mut out = Vec::new();
+            for (tag, list) in [("f", fills), ("t", fonts), ("i", icons)] {
+                out.extend(list.into_iter().map(|v| format!("{tag}\t{v}")));
+            }
+            emit(&out.join("\n")) as i32
+        }
+        None => -1,
     }
 }
 

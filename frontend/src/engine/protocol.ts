@@ -21,7 +21,9 @@ export type Request =
   | { id: number; op: 'style.load'; book: number; sheet: number; cells: Edit[] }
   | { id: number; op: 'tool'; book: number; sheet: number; cmd: string }
   | { id: number; op: 'merge.set'; book: number; sheet: number; r0: number; c0: number; r1: number; c1: number; mode: MergeMode }
-  | { id: number; op: 'sort'; book: number; sheet: number; r0: number; c0: number; r1: number; c1: number; keys: [number, boolean][]; header: boolean; caseSensitive: boolean }
+  | { id: number; op: 'sort'; book: number; sheet: number; r0: number; c0: number; r1: number; c1: number; keys: SortKeySpec[]; header: boolean; caseSensitive: boolean; across?: boolean }
+  | { id: number; op: 'sort.lists' }
+  | { id: number; op: 'sort.choices'; book: number; sheet: number; r0: number; c0: number; r1: number; c1: number; header: boolean; across: boolean; key: number }
   | { id: number; op: 'region'; book: number; sheet: number; row: number; col: number }
   | { id: number; op: 'header'; book: number; sheet: number; r0: number; c0: number; r1: number; c1: number }
   | { id: number; op: 'merge.list'; book: number; sheet: number }
@@ -89,6 +91,8 @@ export type Request =
 export type ProtKind = 'text' | 'load' | 'sheet' | 'book' | 'final' | 'flags' | 'flagsAt' | 'ranges' | 'user' | 'guard' | 'hides' | 'isFinal';
 export type Dir = 'up' | 'down' | 'left' | 'right';
 export type Edit = [row: number, col: number, raw: string];
+
+export type SortKeySpec = [number, boolean] | [number, boolean, 'list' | 'fill' | 'font' | 'icon', string];
 export type Cell = [row: number, col: number, text: string, formula?: string, numeric?: boolean, color?: string, link?: boolean];
 export type Changed = [sheet: number, row: number, col: number, text: string, formula?: string, numeric?: boolean, color?: string, link?: boolean];
 export type LinkChange = [sheet: number, row: number, col: number, target: string];
@@ -134,7 +138,14 @@ export interface WhatIfReply {
 }
 export type Arrow = [fromSheet: number, r0: number, c0: number, r1: number, c1: number, toSheet: number, row: number, col: number, level: number];
 export type EvalStep = [before: string, evaluating: string, after: string];
-export type Value = WhatIfReply | Arrow[] | EvalStep[] | string | number | boolean | number[] | string[] | Cell[] | Changed[] | Name[] | Edit[] | Area[] | CfCell[] | LinkChange[] | [number, number] | Shift | Effect | FilterList | null;
+export type Value = WhatIfReply | Arrow[] | EvalStep[] | string | number | boolean | number[] | string[] | Cell[] | Changed[] | Name[] | Edit[] | Area[] | CfCell[] | LinkChange[] | [number, number] | Shift | Effect | FilterList | DataValue | null;
+
+export interface SortChoices {
+  fills: string[];
+  fonts: string[];
+  icons: string[];
+}
+export type DataValue = string[][] | SortChoices;
 
 export type Response =
   | { id: number; ok: true; value: Value }

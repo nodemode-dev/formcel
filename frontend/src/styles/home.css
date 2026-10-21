@@ -340,9 +340,10 @@
   box-shadow: var(--shadow-md);
 }
 .fc-pw { z-index: var(--z-overlay); top: 20vh; left: 50%; translate: -50% 0; }
-.fc-sort { width: 480px; }
+.fc-sort { width: 640px; max-width: calc(100vw - 16px); }
+.fc-sort-newlist { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--space-2); }
 .fc-sort-levels { display: grid; gap: var(--space-2); max-height: 240px; overflow: auto; }
-.fc-sort-level { display: grid; grid-template-columns: 64px minmax(0, 1fr) minmax(0, 1fr) 28px; gap: var(--space-2); align-items: center; }
+.fc-sort-level { display: grid; grid-template-columns: 64px minmax(0, 1fr) minmax(0, 1.2fr) minmax(0, 1.2fr) 28px; gap: var(--space-2); align-items: center; }
 .fc-sort-by { font-size: var(--text-sm); color: var(--text-secondary); }
 .fc-sort .fc-btn.fc-sort-add { justify-self: start; }
 .fc-sort-check { display: flex; align-items: center; gap: var(--space-2); font-size: var(--text-sm); color: var(--text-secondary); }

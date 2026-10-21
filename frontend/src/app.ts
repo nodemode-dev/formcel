@@ -1,4 +1,5 @@
-import { engine, type Area, type Changed, type Effect, type FormatChange, type LinkChange, type Name, type Shift } from './engine';
+import { engine, type Area, type Changed, type Effect, type FormatChange, type LinkChange, type Name, type Shift, type SortKeySpec } from './engine';
+import { loadSortLists, saveSortList } from './ui/sortlists';
 import { colName, parseRef, type Range } from './grid/a1';
 import { Autocomplete, FUNCTIONS, type Suggestion } from './ui/autocomplete';
 import { Charts } from './charts';
@@ -85,6 +86,9 @@ interface SortForm {
   levels: HTMLElement;
   header: HTMLInputElement;
   caseSensitive: HTMLInputElement;
+  across: HTMLInputElement;
+  newList: HTMLInputElement;
+  lists: string[][];
   hint: HTMLElement;
   range: Range | null;
   names: [number, string][];
@@ -755,12 +759,9 @@ export class App {
     f.range = range;
     f.header.checked = header;
     f.caseSensitive.checked = false;
-    const heads = await engine().readValues(o.book, this.grid.sheetIndex, range.r0, range.c0, range.r0, range.c1);
-    f.names = [];
-    for (let c = range.c0; c <= range.c1; c++) {
-      const h = heads.find(([, cc]) => cc === c)?.[2].replace(/^'/, '') ?? '';
-      f.names.push([c, h]);
-    }
+    f.across.checked = false;
+    f.lists = [...(await engine().sortLists()), ...loadSortLists()];
+    await this.sortNames(f);
     f.levels.replaceChildren();
     const active = this.grid.activeColumn();
     this.addSortLevel(f, active >= range.c0 && active <= range.c1 ? active : range.c0, false);
@@ -771,16 +772,58 @@ export class App {
     f.levels.querySelector('select')?.focus();
   }
 
+  private async sortNames(f: SortForm): Promise<void> {
+    const o = this.open;
+    const range = f.range;
+    if (!o || !range) return;
+    f.names = [];
+    if (f.across.checked) {
+      const heads = await engine().readValues(o.book, this.grid.sheetIndex, range.r0, range.c0, range.r1, range.c0);
+      for (let r = range.r0; r <= range.r1; r++) f.names.push([r, heads.find(([rr]) => rr === r)?.[2].replace(/^'/, '') ?? '']);
+      return;
+    }
+    const heads = await engine().readValues(o.book, this.grid.sheetIndex, range.r0, range.c0, range.r0, range.c1);
+    for (let c = range.c0; c <= range.c1; c++) f.names.push([c, heads.find(([, cc]) => cc === c)?.[2].replace(/^'/, '') ?? '']);
+  }
+
+  private sortLabel(f: SortForm, c: number, h: string): string {
+    if (f.header.checked && h) return h;
+    return f.across.checked ? `Row ${c + 1}` : `Column ${colName(c)}`;
+  }
+
+  private async sortOrderOptions(f: SortForm, row: HTMLElement, pick: string): Promise<void> {
+    const o = this.open;
+    const on = row.querySelector<HTMLSelectElement>('.fc-sort-on')!.value;
+    const dir = row.querySelector<HTMLSelectElement>('.fc-sort-dir')!;
+    const opts: string[] = [];
+    if (on === 'v') {
+      opts.push('<option value="a">A to Z</option>', '<option value="d">Z to A</option>');
+      f.lists.forEach((l, i) => opts.push(`<option value="l:${i}">${escapeHtml(l.slice(0, 4).join(', '))}${l.length > 4 ? ', ...' : ''}</option>`));
+    } else if (o && f.range) {
+      const key = Number(row.querySelector<HTMLSelectElement>('.fc-sort-col')!.value);
+      const r = f.range;
+      const found = await engine().sortChoices(o.book, this.grid.sheetIndex, r.r0, r.c0, r.r1, r.c1, f.header.checked, f.across.checked, key);
+      const list = on === 'fill' ? found.fills : on === 'font' ? found.fonts : found.icons;
+      const none = on === 'fill' ? 'No fill' : on === 'font' ? 'Automatic' : 'No icon';
+      for (const v of list) {
+        const name = v === 'none' || v === 'auto' ? none : v;
+        opts.push(`<option value="${escapeHtml(v)}|top">${escapeHtml(name)} on top</option>`, `<option value="${escapeHtml(v)}|bottom">${escapeHtml(name)} on bottom</option>`);
+      }
+    }
+    dir.innerHTML = opts.join('');
+    dir.value = [...dir.options].some((x) => x.value === pick) ? pick : dir.options[0]?.value ?? '';
+  }
+
   private addSortLevel(f: SortForm, col: number, descending: boolean): void {
     if (f.levels.children.length >= 64) return;
     const row = document.createElement('div');
     row.className = 'fc-sort-level';
     const label = f.levels.children.length ? 'Then by' : 'Sort by';
-    const opts = f.names.map(([c, h]) => `<option value="${c}">${f.header.checked && h ? escapeHtml(h) : `Column ${colName(c)}`}</option>`).join('');
-    row.innerHTML = `<span class="fc-sort-by">${label}</span><select class="fc-fmt-input fc-sort-col" aria-label="${label}">${opts}</select><select class="fc-fmt-input fc-sort-dir" aria-label="Order"><option value="a">A to Z</option><option value="d">Z to A</option></select><button type="button" class="fc-tool" data-a="drop" title="Remove this level" aria-label="Remove this level">${icon('close')}</button>`;
+    const opts = f.names.map(([c, h]) => `<option value="${c}">${escapeHtml(this.sortLabel(f, c, h))}</option>`).join('');
+    row.innerHTML = `<span class="fc-sort-by">${label}</span><select class="fc-fmt-input fc-sort-col" aria-label="${label}">${opts}</select><select class="fc-fmt-input fc-sort-on" aria-label="Sort on"><option value="v">Cell values</option><option value="fill">Cell colour</option><option value="font">Font colour</option><option value="icon">Conditional formatting icon</option></select><select class="fc-fmt-input fc-sort-dir" aria-label="Order"></select><button type="button" class="fc-tool" data-a="drop" title="Remove this level" aria-label="Remove this level">${icon('close')}</button>`;
     row.querySelector<HTMLSelectElement>('.fc-sort-col')!.value = String(col);
-    row.querySelector<HTMLSelectElement>('.fc-sort-dir')!.value = descending ? 'd' : 'a';
     f.levels.appendChild(row);
+    void this.sortOrderOptions(f, row, descending ? 'd' : 'a');
   }
 
   private makeSortForm(): SortForm {
@@ -788,7 +831,7 @@ export class App {
     form.className = 'fc-fmt-custom fc-pw fc-sort';
     form.hidden = true;
     form.setAttribute('role', 'dialog');
-    form.innerHTML = '<span class="fc-fmt-title"></span><div class="fc-sort-levels"></div><button type="button" class="fc-btn fc-sort-add" data-a="add">Add level</button><label class="fc-sort-check"><input type="checkbox" class="fc-sort-header"> My data has headers</label><label class="fc-sort-check"><input type="checkbox" class="fc-sort-case"> Case sensitive</label><span class="fc-fmt-hint" aria-live="polite"></span><div class="fc-csv-actions"><button type="button" class="fc-btn" data-a="cancel">Cancel</button><button type="submit" class="fc-btn fc-btn-primary">Sort</button></div>';
+    form.innerHTML = '<span class="fc-fmt-title"></span><div class="fc-sort-levels"></div><button type="button" class="fc-btn fc-sort-add" data-a="add">Add level</button><label class="fc-sort-check"><input type="checkbox" class="fc-sort-header"> My data has headers</label><label class="fc-sort-check"><input type="checkbox" class="fc-sort-case"> Case sensitive</label><label class="fc-sort-check"><input type="checkbox" class="fc-sort-across"> Sort left to right</label><div class="fc-sort-newlist"><input class="fc-fmt-input fc-sort-list-text" placeholder="New custom list, items separated by commas" aria-label="New custom list" spellcheck="false" autocomplete="off"><button type="button" class="fc-btn" data-a="addlist">Add list</button></div><span class="fc-fmt-hint" aria-live="polite"></span><div class="fc-csv-actions"><button type="button" class="fc-btn" data-a="cancel">Cancel</button><button type="submit" class="fc-btn fc-btn-primary">Sort</button></div>';
     document.getElementById('overlay-root')!.appendChild(form);
     const f: SortForm = {
       form,
@@ -796,15 +839,33 @@ export class App {
       levels: form.querySelector<HTMLElement>('.fc-sort-levels')!,
       header: form.querySelector<HTMLInputElement>('.fc-sort-header')!,
       caseSensitive: form.querySelector<HTMLInputElement>('.fc-sort-case')!,
+      across: form.querySelector<HTMLInputElement>('.fc-sort-across')!,
+      newList: form.querySelector<HTMLInputElement>('.fc-sort-list-text')!,
+      lists: [],
       hint: form.querySelector<HTMLElement>('.fc-fmt-hint')!,
       range: null,
       names: [],
     };
+    const refreshAll = () => { for (const row of f.levels.querySelectorAll<HTMLElement>('.fc-sort-level')) void this.sortOrderOptions(f, row, row.querySelector<HTMLSelectElement>('.fc-sort-dir')!.value); };
     const close = () => { form.hidden = true; this.grid.focus(); };
     form.addEventListener('click', (e) => {
       const a = (e.target as HTMLElement).closest<HTMLElement>('[data-a]')?.dataset.a;
       if (a === 'cancel') close();
       if (a === 'add') this.addSortLevel(f, f.names[Math.min(f.levels.children.length, f.names.length - 1)]?.[0] ?? 0, false);
+      if (a === 'addlist') {
+        const items = f.newList.value.split(',').map((s) => s.trim()).filter(Boolean);
+        if (items.length < 2) {
+          f.form.dataset.state = 'error';
+          f.hint.textContent = 'A custom list needs at least two items.';
+          return;
+        }
+        saveSortList(items);
+        f.lists.push(items);
+        f.newList.value = '';
+        f.form.dataset.state = '';
+        f.hint.textContent = 'List added.';
+        refreshAll();
+      }
       if (a === 'drop' && f.levels.children.length > 1) {
         (e.target as HTMLElement).closest('.fc-sort-level')?.remove();
         const first = f.levels.querySelector('.fc-sort-by');
@@ -815,16 +876,37 @@ export class App {
       for (const sel of f.levels.querySelectorAll<HTMLSelectElement>('.fc-sort-col')) {
         for (const opt of sel.options) {
           const h = f.names.find(([c]) => String(c) === opt.value)?.[1] ?? '';
-          opt.textContent = f.header.checked && h ? h : `Column ${colName(Number(opt.value))}`;
+          opt.textContent = this.sortLabel(f, Number(opt.value), h);
         }
       }
+      refreshAll();
+    });
+    f.across.addEventListener('change', () => {
+      void this.sortNames(f).then(() => {
+        f.levels.replaceChildren();
+        this.addSortLevel(f, f.names[0]?.[0] ?? 0, false);
+      });
+    });
+    form.addEventListener('change', (e) => {
+      const t = e.target as HTMLElement;
+      const row = t.closest<HTMLElement>('.fc-sort-level');
+      if (row && (t.classList.contains('fc-sort-on') || t.classList.contains('fc-sort-col'))) void this.sortOrderOptions(f, row, '');
     });
     form.addEventListener('keydown', (e) => { if (e.key === 'Escape') close(); });
     form.addEventListener('submit', (e) => {
       e.preventDefault();
       if (!f.range) return;
-      const keys = [...f.levels.querySelectorAll('.fc-sort-level')].map((row) => [Number(row.querySelector<HTMLSelectElement>('.fc-sort-col')!.value), row.querySelector<HTMLSelectElement>('.fc-sort-dir')!.value === 'd'] as [number, boolean]);
-      void this.grid.sortRange(f.range, keys, f.header.checked, f.caseSensitive.checked).then(close, (err: unknown) => {
+      const keys = [...f.levels.querySelectorAll('.fc-sort-level')].map((row): SortKeySpec => {
+        const col = Number(row.querySelector<HTMLSelectElement>('.fc-sort-col')!.value);
+        const on = row.querySelector<HTMLSelectElement>('.fc-sort-on')!.value;
+        const pick = row.querySelector<HTMLSelectElement>('.fc-sort-dir')!.value;
+        if (on === 'v') {
+          return pick.startsWith('l:') ? [col, false, 'list', (f.lists[Number(pick.slice(2))] ?? []).join('\u001f')] : [col, pick === 'd'];
+        }
+        const cut = pick.lastIndexOf('|');
+        return [col, pick.slice(cut + 1) === 'bottom', on as 'fill' | 'font' | 'icon', pick.slice(0, cut)];
+      });
+      void this.grid.sortRange(f.range, keys, f.header.checked, f.caseSensitive.checked, f.across.checked).then(close, (err: unknown) => {
         form.dataset.state = 'error';
         f.hint.textContent = err instanceof Error ? err.message : 'Not sorted';
       });
