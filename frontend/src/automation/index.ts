@@ -178,8 +178,8 @@ export class Automation {
     this.runner.stop();
   }
 
-  drain(fresh = false): Promise<void> {
-    return this.calls.drain(fresh, false);
+  drain(fresh = false, all = false): Promise<void> {
+    return this.calls.drain(fresh, all);
   }
 
   edited(changes: Changed[]): void {

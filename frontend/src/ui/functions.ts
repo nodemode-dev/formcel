@@ -8,6 +8,7 @@ export interface FunctionsHost {
   engine: EngineClient;
   book(): number | null;
   say(text: string, bad?: boolean): void;
+  named?(): Suggestion[];
 }
 
 type Field = HTMLInputElement | HTMLTextAreaElement;
@@ -106,7 +107,7 @@ export class Functions {
     this.grab();
     const t = this.target;
     const call = t ? scan(t.value, t.selectionStart ?? t.value.length).call : null;
-    const f = call ? FUNCTIONS.find((x) => x.name === call.name) : undefined;
+    const f = call ? (FUNCTIONS.find((x) => x.name === call.name) ?? this.host.named?.().find((x) => x.name.toUpperCase() === call.name)) : undefined;
     if (!t || !call || !f) {
       this.insertFunction();
       return;

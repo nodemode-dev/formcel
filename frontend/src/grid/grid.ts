@@ -3131,7 +3131,7 @@ export class Grid {
     });
 
     this.editor.addEventListener('blur', () => {
-      if (this.editing) void this.endEdit(true);
+      if (this.editing && !document.querySelector('.fc-modal:not([hidden])')) void this.endEdit(true);
     });
 
     this.editor.addEventListener('input', (e) => void this.suggest(e as InputEvent));
