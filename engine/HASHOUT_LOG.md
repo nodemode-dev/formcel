@@ -373,3 +373,10 @@ HYPERLINK(link_location, [friendly_name]) shows the friendly name, or the link w
 - logged: v0.24.0 · 2026-10-21
 
 A number in a cell with a date or time code is saved and edited as date or time text (`3/4/2026 4:36:03 PM`), as Excel's formula bar shows it. That text keeps whole seconds only, so a value with a fraction of a second, such as an elapsed `[ss].00` time, came back rounded after a save. The text is now used only when reading it back gives the same number; otherwise the plain number is kept. Found by the Formatting check template.
+
+### Typed cells for writing files
+- refers-to: src/lib.rs :: typed, auto_formats; crates/formcel-py/src/lib.rs :: typed, auto_formats, reads_as_text
+- kind: explainer
+- logged: v0.25.0 · 2026-10-21
+
+`typed` lists each stored cell with its kind (`f` formula, `n` number, `t` text, `b` TRUE or FALSE, `e` error) and its plain text, numbers in full precision, so a file writer never has to read numbers back from shown text. `auto_formats` gives the codes for the formats FormCel picked up from typing (currency and percent with their decimals, date, time, date and time), for cells with no code of their own. `reads_as_text` says whether FormCel would keep a typed string as text.

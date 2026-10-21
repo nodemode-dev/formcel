@@ -55,6 +55,17 @@ impl Workbook {
         Ok(cells.into_iter().map(|(a, t)| (a.row, a.col, t)).collect())
     }
 
+    #[pyo3(signature = (sheet = 0))]
+    fn auto_formats(&self, sheet: usize) -> Vec<(u32, u32, String)> {
+        self.inner.auto_formats(sheet).into_iter().map(|(a, c)| (a.row, a.col, c)).collect()
+    }
+
+    #[pyo3(signature = (sheet = 0))]
+    fn typed(&self, sheet: usize) -> PyResult<Vec<(u32, u32, char, String)>> {
+        let cells = self.inner.typed(sheet).map_err(|e| PyValueError::new_err(e.to_string()))?;
+        Ok(cells.into_iter().map(|(a, k, t)| (a.row, a.col, k, t)).collect())
+    }
+
     #[pyo3(signature = (a1, sheet = 0))]
     fn input(&self, a1: &str, sheet: usize) -> PyResult<String> {
         let addr = parse_a1(a1).map_err(|e| PyValueError::new_err(e.to_string()))?;
@@ -319,10 +330,16 @@ fn offset(src: &str, dr: i64, dc: i64) -> String {
     formcel_core::formula::offset_text(src, dr, dc)
 }
 
+#[pyfunction]
+fn reads_as_text(raw: &str) -> bool {
+    !raw.starts_with(['=', '\'']) && matches!(formcel_core::Value::parse_input(raw), formcel_core::Value::Text(_))
+}
+
 #[pymodule]
 fn formcel_engine(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(version, m)?)?;
     m.add_function(wrap_pyfunction!(offset, m)?)?;
+    m.add_function(wrap_pyfunction!(reads_as_text, m)?)?;
     m.add_class::<Workbook>()?;
     m.add("MAX_ROWS", MAX_ROWS)?;
     m.add("MAX_COLS", MAX_COLS)?;

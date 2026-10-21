@@ -729,6 +729,19 @@ impl Workbook {
         out
     }
 
+    pub fn auto_formats(&self, sheet: usize) -> Vec<(Addr, String)> {
+        let code = |f: &Fmt| match *f {
+            Fmt::Currency(d) => format!("$#,##0{}", if d > 0 { format!(".{}", "0".repeat(d as usize)) } else { String::new() }),
+            Fmt::Percent(d) => format!("0{}%", if d > 0 { format!(".{}", "0".repeat(d as usize)) } else { String::new() }),
+            Fmt::Date => "m/d/yyyy".to_string(),
+            Fmt::Time { secs, ampm } => format!("h:mm{}{}", if secs { ":ss" } else { "" }, if ampm { " AM/PM" } else { "" }),
+            Fmt::DateTime { secs, ampm } => format!("m/d/yyyy h:mm{}{}", if secs { ":ss" } else { "" }, if ampm { " AM/PM" } else { "" }),
+        };
+        let mut out: Vec<(Addr, String)> = self.fmts.iter().filter(|((s, a), _)| *s == sheet && !self.codes.contains_key(&(*s, *a))).map(|((_, a), f)| (*a, code(f))).collect();
+        out.sort_by_key(|(a, _)| (a.row, a.col));
+        out
+    }
+
     pub fn load_formats(&mut self, sheet: usize, cells: &[(Addr, String)]) -> Result<usize, EngineError> {
         if sheet >= self.sheets.len() {
             return Err(EngineError::NoSheet(sheet));
@@ -962,6 +975,30 @@ impl Workbook {
                 }
                 let text = self.formulas.get(&(sheet, a)).map_or_else(|| self.const_text(sheet, a, v), Formula::text);
                 out.push((a, text));
+            });
+        }
+        Ok(out)
+    }
+
+    pub fn typed(&self, sheet: usize) -> Result<Vec<(Addr, char, String)>, EngineError> {
+        let s = self.sheets.get(sheet).ok_or(EngineError::NoSheet(sheet))?;
+        let mut out = Vec::with_capacity(s.len());
+        if let Some(bottom) = s.cells.extent() {
+            s.cells.for_each_in(Addr { row: 0, col: 0 }, bottom, |a, v| {
+                if self.spilled.contains_key(&(sheet, a)) {
+                    return;
+                }
+                if let Some(f) = self.formulas.get(&(sheet, a)) {
+                    out.push((a, 'f', f.text()));
+                    return;
+                }
+                out.push(match v {
+                    Value::Number(n) => (a, 'n', format!("{n}")),
+                    Value::Bool(b) => (a, 'b', if *b { "TRUE" } else { "FALSE" }.to_string()),
+                    Value::Error(_) => (a, 'e', v.to_string()),
+                    Value::Text(t) => (a, 't', t.clone()),
+                    Value::Empty => (a, 't', String::new()),
+                });
             });
         }
         Ok(out)
