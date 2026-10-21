@@ -2,8 +2,10 @@
 
 Living log of comment content and rationale for the engine process. Source stays comment-free; it lives here.
 
-Current build version: v0.16.0
-Last updated: 2026-10-21 · conformance template
+Current build version: v0.17.0
+Last updated: 2026-10-21 · conformance template regenerated
+
+- v0.17.0: `conformance.json` was regenerated. TEXT exists now, so all 186 compared cases match. The generator's text and date tests also accept an exact match against the page's result as written, because a formula that returns text such as "11/26/2020" is not equal to the date typed in AB. The runner already compared text before value.
 
 ## v0.16.0 entries
 
