@@ -8,9 +8,9 @@ Version 0.13.0 · Apache-2.0 · macOS, Windows, Linux (browser now, Tauri deskto
 
 ## Status
 
-0.13.0 continues Phase 2 in `DEV_PLAN.md`: FILTER, SORT, SORTBY and UNIQUE, and the LAMBDA helpers MAP, REDUCE, SCAN, BYROW, BYCOL and MAKEARRAY, on top of names, LET and LAMBDA, dynamic arrays, and dates and times. 92 functions; 176 of 181 runnable cases from Microsoft's function pages pass (the 5 others need TEXT, which waits for number formats). All of this sits on Phase 1's grid, files and home.
+0.14.0 continues Phase 2 in `DEV_PLAN.md`: formula autocomplete and argument help, and a checked catalogue of the 92 functions in `docs/functions.json`. It sits on the array functions, LAMBDA, names, dynamic arrays, dates and times, and Phase 1's grid, files and home. 176 of 181 runnable cases from Microsoft's function pages pass; the 5 others need TEXT, which waits for number formats.
 
-| Area | In 0.13.0 |
+| Area | In 0.14.0 |
 | --- | --- |
 | Home | Start, Recent, Templates (category chips and search) and Trash, after formdeck; thumbnails of each workbook's first sheet |
 | Saving | `.fcel` files in `~/FormCel/Workbooks`, saved as you type; rename in the top bar; Trash with restore |
@@ -18,7 +18,7 @@ Version 0.13.0 · Apache-2.0 · macOS, Windows, Linux (browser now, Tauri deskto
 | Templates | 34: six made for FormCel and 28 from form.md 0.46.0 with their data |
 | Formulas | `=` formulas with cell, range, column, row and cross-sheet references, `$` anchors, arithmetic, text and comparison operators, dates and times typed in common forms, array constants such as `{1,2;3,4}`, results of several cells that spill into the cells beside them (`#SPILL!` when something is in the way), workbook names typed in the Name Box and used in formulas (`=SUM(Sales)`), LET for local names and LAMBDA for your own functions (`=LAMBDA(x,x*x)(4)`, or saved under a name and called as `=Square(4)`), 92 functions (math, date and time, aggregation, criteria such as SUMIFS and COUNTIFS, lookups such as VLOOKUP, INDEX, MATCH and XLOOKUP, arrays such as FILTER, SORT, SORTBY, UNIQUE, SEQUENCE and TRANSPOSE, LAMBDA helpers such as MAP, REDUCE and BYROW, logic, text, information), recalculation of dependents through a kept dependency graph (one edit in a 100,000-formula sheet in a few milliseconds), `#REF!` for circular references, references kept right through insert, delete and sheet rename, and the fill handle moving relative references |
 | Engine | Rust core, one build for the window (WebAssembly) and one for the engine process (Python): a chunked cell store for 1,048,576 rows by 16,384 columns, typed input (numbers, text, TRUE and FALSE), undo and redo of 500 steps, batched edits, viewport reads, the used range, Ctrl+arrow data edges, and inserting and deleting rows and columns as one undo step |
-| Grid | Canvas grid with headers and selection of cells, ranges, rows, columns and the whole sheet; arrows, Ctrl+arrows, Ctrl+Home, Ctrl+End, Home, Page Up and Down; typing, F2 and Alt+Enter; Name Box and formula bar; undo, redo, clear; copy, cut and paste of tab-separated text; resizing rows and columns, autofit columns; freeze top row, first column or panes at the active cell; insert, delete, hide and unhide rows and columns; the fill handle (copies, number and date steps, weekday and month names, numbered text) and double-click to fill down; zoom 50% to 200%; right-click menus on cells and headers; outline groups of rows and columns up to 7 levels, with collapse and expand buttons and level buttons; split panes at the active cell that scroll on their own, with draggable split bars |
+| Grid | Canvas grid with headers and selection of cells, ranges, rows, columns and the whole sheet; arrows, Ctrl+arrows, Ctrl+Home, Ctrl+End, Home, Page Up and Down; typing, F2 and Alt+Enter; Name Box and formula bar; formula autocomplete with argument tips in the cell and the formula bar; undo, redo, clear; copy, cut and paste of tab-separated text; resizing rows and columns, autofit columns; freeze top row, first column or panes at the active cell; insert, delete, hide and unhide rows and columns; the fill handle (copies, number and date steps, weekday and month names, numbered text) and double-click to fill down; zoom 50% to 200%; right-click menus on cells and headers; outline groups of rows and columns up to 7 levels, with collapse and expand buttons and level buttons; split panes at the active cell that scroll on their own, with draggable split bars |
 | Speed | 1,000,000 filled rows scroll at a 16.7 ms p95 frame with the CPU slowed 4x |
 | Window | Family theme profiles applied before the first frame, engine status, the engine running in a Web Worker |
 | Engine process | FastAPI on 127.0.0.1:8199: `/api/health`, `/api/version`, `/api/workbooks`, `/api/trash`, `/api/templates`, `/api/commands`; data folder `~/FormCel` |
@@ -30,7 +30,8 @@ Version 0.13.0 · Apache-2.0 · macOS, Windows, Linux (browser now, Tauri deskto
 | Arrows, Shift+arrows | Move, extend the selection |
 | Ctrl+arrows (Cmd on a Mac) | Jump to the edge of the data |
 | Ctrl+Home, Ctrl+End | A1, the last cell of the used range |
-| Enter, Tab (Shift to reverse) | Commit and move |
+| Enter, Tab (Shift to reverse) | Commit and move; Enter after a run of Tabs goes back to the run's first column |
+| Typing a formula | A list of matching functions and names: Up and Down to choose, Tab to insert, Escape to close, Alt+Down to turn it off; inside a function, a tip shows its arguments |
 | F2, or start typing | Edit the cell; Alt+Enter adds a line |
 | Delete | Clear the selection |
 | Ctrl+Z, Ctrl+Y | Undo, redo |
@@ -72,6 +73,7 @@ Nothing listens beyond this computer.
 engine/     Rust workspace: formcel-core (the engine), formcel-wasm (window build), formcel-py (Python build)
 backend/    FastAPI engine process: app/main.py, app/config.py, app/version.py
 frontend/   Vanilla TypeScript and Vite window: src/engine (worker and client), src/ui, src/styles, src/extensions
+docs/       functions.json: every function FormCel computes, its arguments, and whether Excel's and Google Sheets' function lists include it
 ```
 
 ## Licence

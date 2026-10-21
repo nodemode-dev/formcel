@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.14.0 · 2026-10-21
+
+- Formula autocomplete: typing a formula lists the matching functions and workbook names, in the cell and in the formula bar. Up and Down choose, Tab inserts (with the opening bracket for a function), Escape closes the list, and Alt+Down turns it on or off.
+- Argument help: inside a function, a tip shows its arguments with the current one highlighted, and what the function does.
+- `docs/functions.json` lists all 92 functions with their arguments, a one-line summary, and whether Microsoft's and Google's function lists include each (all are on Microsoft's; SORTBY and XMATCH are not on Google's list as fetched).
+
 ## 0.13.0 · 2026-10-21
 
 - FILTER, SORT, SORTBY and UNIQUE: results spill and can be nested, as in `=SORT(FILTER(A2:C99,B2:B99>3),2,-1)`. FILTER shows `#CALC!` when nothing matches, unless it is given a value for that case.
