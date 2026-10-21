@@ -786,6 +786,61 @@ class Store:
             self._write(b)
             return {"sheets": b.sheet_names(), "views": b.views}
 
+    @staticmethod
+    def _free_name(taken: list[str], want: str) -> str:
+        used = {t.lower() for t in taken}
+        base = want[:31]
+        if base.lower() not in used:
+            return base
+        stem = base
+        n = 2
+        while True:
+            tail = f" ({n})"
+            cand = stem[: 31 - len(tail)] + tail
+            if cand.lower() not in used:
+                return cand
+            n += 1
+
+    def copy_sheet(self, wid: str, sheet: int, dest: str | None = None, name: str | None = None, to: int | None = None) -> dict:
+        src = self._load(wid)
+        target = self._load(dest) if dest and dest != wid else src
+        with src.lock:
+            src.fit_views()
+            src.fit_objects()
+            names = src.sheet_names()
+            if not 0 <= sheet < len(names):
+                raise IndexError(sheet)
+            eng = src.engine
+            part = {"cells": eng.cells(sheet), "formats": eng.formats(sheet), "styles": eng.styles(sheet), "merges": eng.merges(sheet), "rules": eng.rules(sheet), "filter": eng.filter(sheet),
+                    "validations": eng.validations(sheet), "links": eng.links(sheet), "view": json.loads(json.dumps(src.views[sheet])), "objects": json.loads(json.dumps(src.objects[sheet]))}
+            notes = [(int(k.split(":")[1]), int(k.split(":")[2]), v["text"], v.get("author", "")) for k, v in src.collab["notes"].items() if int(k.split(":")[0]) == sheet]
+            original = names[sheet]
+        with target.lock:
+            target.fit_views()
+            target.fit_objects()
+            clean = "".join(ch for ch in (name or original) if ch not in "\\/?*[]:").strip() or original
+            title = self._free_name(target.sheet_names(), f"{clean[:27]} (2)" if target is src and not name else clean)
+            e = target.engine
+            idx = e.add_sheet(title)
+            e.load_formats([tuple(c) for c in part["formats"]], idx)
+            e.load_styles([tuple(c) for c in part["styles"]], idx)
+            e.load_merges([tuple(m) for m in part["merges"]], idx)
+            e.load_rules(part["rules"], idx)
+            e.load_filter(part["filter"], idx)
+            e.load_validations(part["validations"], idx)
+            e.load_links([tuple(c) for c in part["links"]], idx)
+            e.load([tuple(c) for c in part["cells"]], idx)
+            target.views.append({**part["view"], "hidden": None})
+            target.objects.append(part["objects"])
+            for r, c, text, author in notes:
+                cb.set_note(target.collab, idx, r, c, text, author)
+            target.modified = now()
+            self._write(target)
+        if to is not None and 0 <= to < idx:
+            self.sheet_op(target.id, "move", idx, to=to)
+            idx = to
+        return {"dest": target.id, "index": idx, "name": title, "sheets": target.sheet_names()}
+
     def rename(self, wid: str, title: str | None = None, sheet: int | None = None, sheet_name: str | None = None) -> dict:
         b = self._load(wid)
         with b.lock:

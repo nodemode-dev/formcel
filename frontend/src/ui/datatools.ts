@@ -47,6 +47,9 @@ export interface DataCtx {
   filterValues(col: number): Promise<{ values: string[]; blanks: boolean }>;
   goTo(sheet: number, row: number, col: number): void;
   names(): [string, string][];
+  workbooks(): Promise<{ id: string; title: string; sheets: string[] }[]>;
+  workbookId(): string;
+  moveCopy(sheet: number, dest: string, name: string, before: number | null, copy: boolean): Promise<string>;
   properties(): Promise<DocProps | null>;
   saveProperties(props: Record<string, string>): Promise<void>;
   jump(text: string): boolean;
@@ -149,6 +152,17 @@ const SPECS: Spec[] = [
       { k: 'op', label: 'Operation', kind: 'select', options: [['none', 'None'], ['add', 'Add'], ['subtract', 'Subtract'], ['multiply', 'Multiply'], ['divide', 'Divide']] },
       { k: 'skip', label: 'Skip blanks', kind: 'check' },
       { k: 'transpose', label: 'Transpose', kind: 'check' },
+    ],
+  },
+  {
+    id: 'movecopy',
+    title: 'Move or Copy',
+    ok: 'OK',
+    fields: [
+      { k: 'book', label: 'To book', kind: 'select' },
+      { k: 'before', label: 'Before sheet', kind: 'select' },
+      { k: 'name', label: 'Name for the copy (blank keeps the name)', kind: 'text' },
+      { k: 'copy', label: 'Create a copy', kind: 'check' },
     ],
   },
   {
@@ -617,6 +631,28 @@ export class DataTools {
       if (op !== 'none' || skip) throw new Error('Operations and skip blanks work with All, Formulas, Values and Formats.');
       await g.pasteSpecial(what as PasteKind, t);
       return '';
+    });
+  }
+
+  async moveCopy(sheet: number): Promise<void> {
+    const here = this.c.workbookId();
+    const books = await this.c.workbooks();
+    const sheets = (id: string) => (id === here ? this.c.sheetNames() : books.find((b) => b.id === id)?.sheets ?? []);
+    const d = this.prepare('movecopy');
+    this.options('movecopy', 'book', [[here, '(this book)'], ...books.filter((b) => b.id !== here).map((b) => [b.id, b.title] as [string, string])], 'none');
+    const refill = () => {
+      const id = d.form.querySelector<HTMLSelectElement>('[data-k="book"]')!.value;
+      this.options('movecopy', 'before', [...sheets(id).map((n, i) => [String(i), n] as [string, string]), ['end', '(move to end)']], 'none');
+      this.put('movecopy', 'before', 'end');
+    };
+    d.form.querySelector<HTMLSelectElement>('[data-k="book"]')!.onchange = refill;
+    this.put('movecopy', 'book', here);
+    refill();
+    this.put('movecopy', 'name', '');
+    this.put('movecopy', 'copy', false);
+    this.show('movecopy', async (v) => {
+      const before = v.before === 'end' ? null : Number(v.before);
+      return this.c.moveCopy(sheet, v.book as string, (v.name as string).trim(), before, v.copy as boolean);
     });
   }
 

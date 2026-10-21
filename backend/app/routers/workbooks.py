@@ -455,6 +455,22 @@ def update_sheet(wid: str, sheet: int, body: SheetUpdateIn) -> dict:
     return sheet_call(wid, "update", sheet, name=body.name, view=body.view)
 
 
+class SheetCopyIn(BaseModel):
+    dest: str | None = None
+    name: str | None = None
+    to: int | None = None
+
+
+@router.post("/workbooks/{wid}/sheets/{sheet}/copy")
+def copy_sheet(wid: str, sheet: int, body: SheetCopyIn) -> dict:
+    try:
+        return store().copy_sheet(wid, sheet, body.dest, body.name, body.to)
+    except (KeyError, FileNotFoundError):
+        raise missing(wid)
+    except (ValueError, IndexError) as e:
+        raise HTTPException(422, f"That sheet could not be copied: {e}")
+
+
 @router.post("/workbooks/{wid}/sheets/{sheet}/move")
 def move_sheet(wid: str, sheet: int, body: SheetMoveIn) -> dict:
     return sheet_call(wid, "move", sheet, to=body.to)

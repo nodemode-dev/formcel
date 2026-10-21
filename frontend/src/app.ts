@@ -362,6 +362,9 @@ export class App {
         return { values: l.values, blanks: l.blanks };
       },
       names: () => this.open?.names ?? [],
+      workbooks: async () => (await api<{ id: string; title: string; sheets: string[] }[]>('GET', '/api/workbooks')).map((b) => ({ id: b.id, title: b.title, sheets: b.sheets })),
+      workbookId: () => this.open?.id ?? '',
+      moveCopy: (sheet, dest, name, before, copy) => this.moveCopySheet(sheet, dest, name, before, copy),
       properties: async () => {
         const o = this.open;
         if (!o) return null;
@@ -2946,6 +2949,8 @@ export class App {
       { label: 'Rename', run: () => this.renameTab(i) },
       { label: 'Move left', disabled: i === 0, run: () => this.moveSheet(i, i - 1) },
       { label: 'Move right', disabled: i === o.sheets.length - 1, run: () => this.moveSheet(i, i + 1) },
+      { label: 'Copy sheet', run: () => void this.moveCopySheet(i, o.id, '', i + 1, true).then((m) => this.status(m)).catch((err: unknown) => this.status(err instanceof Error ? err.message : 'Could not copy the sheet', true)) },
+      { label: 'Move or copy...', run: () => void this.tools.moveCopy(i) },
       { sep: true },
       { label: 'Hide sheet', disabled: o.sheets.filter((_, k) => !o.views[k]?.hidden).length < 2, run: () => this.hideSheet(i, true) },
       ...o.sheets.map((n, k) => ({ n, k })).filter(({ k }) => o.views[k]?.hidden).map(({ n, k }): MenuItem => ({ label: `Unhide ${n}`, run: () => this.hideSheet(k, false) })),
@@ -3003,6 +3008,49 @@ export class App {
     this.showSheet(to);
     this.button('edit.undo').disabled = true;
     this.button('edit.redo').disabled = true;
+  }
+
+  private async moveCopySheet(i: number, dest: string, name: string, before: number | null, copy: boolean): Promise<string> {
+    const o = this.open;
+    if (!o) return '';
+    this.flush();
+    await this.saving;
+    const same = !dest || dest === o.id;
+    if (same && !copy) {
+      const to = before === null ? o.sheets.length - 1 : before > i ? before - 1 : before;
+      if (to !== i) await this.moveSheet(i, to);
+      return `Moved ${o.sheets[to]}.`;
+    }
+    const r = await api<{ dest: string; index: number; name: string; sheets: string[] }>('POST', `/api/workbooks/${o.id}/sheets/${i}/copy`, { dest: same ? null : dest, name: name || null, to: before });
+    if (!same) {
+      if (!copy) await this.deleteSheet(i);
+      return `${copy ? 'Copied' : 'Moved'} ${o.sheets[i] ?? r.name} to ${r.name} in the other workbook.`;
+    }
+    const doc = await api<{ cells: [number, number, string][][]; formats?: [number, number, string][][]; styles?: [number, number, string][][]; merges?: Area[][]; rules?: string[][]; filters?: string[]; validations?: string[][]; links?: [number, number, string][][]; views?: SheetView[]; sheets: string[]; collab?: Parameters<Collab['attach']>[3]; protection?: Parameters<Collab['attach']>[4] }>('GET', `/api/workbooks/${o.id}`);
+    const e = engine();
+    const k = r.index;
+    const last = await e.addSheet(o.book, r.name);
+    await e.loadFormats(o.book, last, doc.formats?.[k] ?? []);
+    await e.loadStyles(o.book, last, doc.styles?.[k] ?? []);
+    await e.loadMerges(o.book, last, doc.merges?.[k] ?? []);
+    await e.loadRules(o.book, last, doc.rules?.[k] ?? []);
+    await e.loadFilter(o.book, last, doc.filters?.[k] ?? '');
+    await e.loadValidations(o.book, last, doc.validations?.[k] ?? []);
+    await e.loadLinks(o.book, last, doc.links?.[k] ?? []);
+    if (doc.cells[k]?.length) await e.load(o.book, doc.cells[k], last);
+    if (k !== last) await e.moveSheet(o.book, last, k);
+    o.sheets = doc.sheets;
+    o.views = doc.sheets.map((_, n) => doc.views?.[n] ?? {});
+    o.pages = doc.sheets.map((_, n) => cleanPage((doc.views?.[n] as { page?: unknown } | undefined)?.page));
+    this.grouped.clear();
+    this.collab.detach();
+    this.collab.attach(o.id, o.book, doc.sheets, doc.collab, doc.protection);
+    await this.charts.layer.open();
+    this.renderTabs();
+    this.showSheet(k);
+    this.button('edit.undo').disabled = true;
+    this.button('edit.redo').disabled = true;
+    return `Copied to ${r.name}.`;
   }
 
   private colourSheet(i: number, colour: string): void {
