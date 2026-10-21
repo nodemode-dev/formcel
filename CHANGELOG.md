@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.31.0 · 2026-10-21
+
+- Filters: Filter on the toolbar, or Ctrl+Shift+L, puts a button on each header of the data around the active cell. A button, or Alt+Down on a header, opens the filter panel: sort by that column, filter by values (with search, Select all and Blanks), by one or two conditions joined by And or Or (equals, begins with, contains, greater than and the rest, with `?` and `*` wildcards), top or bottom N items or percent, above or below average, or by fill or text colour.
+- A column with a filter shows a funnel on its button, and the row numbers turn blue. Reapply filter runs it again over changed data and takes in new rows below; Clear filter shows every row and keeps the buttons. Each change is a step to undo.
+- Rows a filter hides are kept apart from rows hidden by hand, so Unhide does not undo a filter.
+- Filters are saved in .xlsx files (and read from them) as Excel's AutoFilter. PDF leaves out the rows a filter hides; .ods files save those rows hidden. Not yet: date filters, icon filters and filters in .ods files.
+
 ## 0.30.0 · 2026-10-21
 
 - Sorting: Sort A to Z and Sort Z to A by the active column from the toolbar, and a Sort dialog for several levels (Then by), a header row and case-sensitive order. With one cell selected, FormCel sorts the block of data around it and guesses whether its first row is a header.
