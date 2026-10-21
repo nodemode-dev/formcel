@@ -10,6 +10,7 @@ pub mod numfmt;
 pub use numfmt::Fmt;
 mod store;
 pub mod style;
+pub mod theme;
 pub mod wire;
 pub use formula::ErrKind;
 use formula::{Area, Expr};
@@ -51,6 +52,9 @@ impl Value {
     }
 
     fn parse_plain(raw: &str) -> Value {
+        if let Some(rest) = raw.strip_prefix('\'') {
+            return if rest.is_empty() { Value::Empty } else { Value::Text(rest.to_string()) };
+        }
         let t = raw.trim();
         if t.is_empty() {
             return Value::Empty;
@@ -301,10 +305,14 @@ pub struct Effect {
     pub formats: Vec<(usize, Addr, String)>,
     pub styles: Vec<(usize, Addr, String)>,
     pub merges: Option<usize>,
+    pub theme: bool,
+    pub named: bool,
 }
 
 impl Effect {
     fn join(mut self, o: Effect) -> Effect {
+        self.theme |= o.theme;
+        self.named |= o.named;
         self.cells.extend(o.cells);
         self.shift = o.shift.or(self.shift);
         self.formats.extend(o.formats);
@@ -327,6 +335,8 @@ enum Tx {
     Styles(Vec<FormatChange>),
     Merges { sheet: usize, before: Vec<Area>, after: Vec<Area> },
     Group(Vec<Tx>),
+    Theme { before: Box<theme::Theme>, after: Box<theme::Theme> },
+    Named { before: Vec<theme::NamedStyle>, after: Vec<theme::NamedStyle> },
 }
 
 #[derive(Debug)]
@@ -343,6 +353,9 @@ pub struct Workbook {
     names: FastMap<String, (String, Expr)>,
     codes: FastMap<Key, std::sync::Arc<(String, fmtcode::Code)>>,
     styles: FastMap<Key, StyleRef>,
+    theme: theme::Theme,
+    named: Vec<theme::NamedStyle>,
+    named_codes: FastMap<String, std::sync::Arc<(String, fmtcode::Code)>>,
 }
 
 const SPILL_PASSES: usize = 8;
@@ -391,7 +404,170 @@ impl Workbook {
             names: FastMap::default(),
             codes: FastMap::default(),
             styles: FastMap::default(),
+            theme: theme::Theme::default(),
+            named: theme::builtin_styles(),
+            named_codes: FastMap::default(),
         }
+        .with_named_codes()
+    }
+
+    fn with_named_codes(mut self) -> Self {
+        self.rebuild_named_codes();
+        self
+    }
+
+    fn rebuild_named_codes(&mut self) {
+        self.named_codes = self.named.iter().filter_map(|n| n.code.as_ref().and_then(|c| fmtcode::parse(c).map(|p| (n.name.clone(), std::sync::Arc::new((c.clone(), p)))))).collect();
+    }
+
+    pub fn theme_text(&self) -> String {
+        self.theme.text()
+    }
+
+    pub fn theme_names() -> Vec<&'static str> {
+        theme::Theme::names()
+    }
+
+    pub fn load_theme(&mut self, text: &str) -> bool {
+        match theme::Theme::parse(text) {
+            Some(t) => {
+                self.theme = t;
+                true
+            }
+            None => false,
+        }
+    }
+
+    pub fn set_theme(&mut self, text: &str) -> Result<Effect, EngineError> {
+        let t = theme::Theme::parse(text).ok_or_else(|| EngineError::BadStyle(text.to_string()))?;
+        if t != self.theme {
+            let before = std::mem::replace(&mut self.theme, t.clone());
+            self.record(Tx::Theme { before: Box::new(before), after: Box::new(t) });
+        }
+        Ok(Effect { theme: true, ..Effect::default() })
+    }
+
+    pub fn named_lines(&self) -> Vec<String> {
+        self.named.iter().map(|n| n.line()).collect()
+    }
+
+    pub fn load_named(&mut self, lines: &[String]) {
+        let list: Vec<theme::NamedStyle> = lines.iter().filter_map(|l| theme::NamedStyle::parse_line(l)).collect();
+        if !list.is_empty() {
+            self.named = list;
+            self.rebuild_named_codes();
+        }
+    }
+
+    fn set_named(&mut self, after: Vec<theme::NamedStyle>) {
+        let before = std::mem::replace(&mut self.named, after.clone());
+        self.rebuild_named_codes();
+        self.record(Tx::Named { before, after });
+    }
+
+    pub fn values_in(&self, sheet: usize, top: Addr, bottom: Addr) -> Vec<(Addr, String)> {
+        let mut out = Vec::new();
+        if let Some(s) = self.sheets.get(sheet) {
+            s.cells.for_each_in(top, bottom, |a, v| out.push((a, if matches!(v, Value::Text(_)) { format!("'{v}") } else { v.to_string() })));
+        }
+        out
+    }
+
+    pub fn encode(&self, e: &Effect) -> String {
+        wire::encode_effect(e, &|s, a| self.meta(s, a), &|s, a| self.effective_style(s, a).text())
+    }
+
+    pub fn shown_styles_in(&self, sheet: usize, top: Addr, bottom: Addr) -> Vec<(Addr, String)> {
+        self.styles_in(sheet, top, bottom).into_iter().map(|(a, _)| (a, self.effective_style(sheet, a).text())).collect()
+    }
+
+    pub fn effective_style(&self, sheet: usize, a: Addr) -> style::Style {
+        let own = self.styles.get(&(sheet, a)).map(|s| s.1.clone()).unwrap_or_default();
+        match own.named.as_ref().and_then(|n| self.named.iter().find(|d| &d.name == n)) {
+            Some(d) => {
+                let mut e = d.style.overlay(&own);
+                e.named = own.named.clone();
+                e
+            }
+            None => own,
+        }
+    }
+
+    pub fn define_style(&mut self, name: &str, sheet: usize, a: Addr, cats: &str) -> Result<Effect, EngineError> {
+        self.check(sheet, a)?;
+        let name = style::clean_name(name);
+        if name.is_empty() || name.eq_ignore_ascii_case("Normal") {
+            return Err(EngineError::BadStyle(name));
+        }
+        let st = self.effective_style(sheet, a);
+        let code = self.code_of(&(sheet, a)).map(|c| c.0.clone()).unwrap_or_default();
+        let cats = style::Cats::parse(cats);
+        let mut keep = style::Style::default();
+        keep = keep.overlay(&st);
+        let mut drop = style::Cats::ALL;
+        drop.number = false;
+        for (on, c) in [(cats.font, &mut drop.font), (cats.alignment, &mut drop.alignment), (cats.border, &mut drop.border), (cats.fill, &mut drop.fill)] {
+            if on {
+                *c = false;
+            }
+        }
+        keep.clear(drop);
+        keep.normalize();
+        let mut after = self.named.clone();
+        let def = theme::NamedStyle { name: name.clone(), style: keep, code: (cats.number && !code.is_empty()).then(|| code.to_string()), cats, builtin: false };
+        match after.iter_mut().find(|n| n.name.eq_ignore_ascii_case(&name)) {
+            Some(n) => {
+                let builtin = n.builtin;
+                *n = theme::NamedStyle { builtin, ..def };
+            }
+            None => after.push(def),
+        }
+        self.set_named(after);
+        Ok(Effect { named: true, ..Effect::default() })
+    }
+
+    pub fn delete_style(&mut self, name: &str) -> Result<Effect, EngineError> {
+        if name.eq_ignore_ascii_case("Normal") || !self.named.iter().any(|n| n.name == name) {
+            return Err(EngineError::BadStyle(name.to_string()));
+        }
+        let mark = self.undo.len();
+        let mut changes = Vec::new();
+        for (k, st) in &self.styles {
+            if st.1.named.as_deref() == Some(name) {
+                let mut s = st.1.clone();
+                s.named = None;
+                s.normalize();
+                changes.push((*k, Some(st.0.clone()), (!s.is_plain()).then(|| s.text())));
+            }
+        }
+        let mut out = self.apply_styles(&changes, true);
+        if !changes.is_empty() {
+            self.record(Tx::Styles(changes));
+        }
+        let after: Vec<theme::NamedStyle> = self.named.iter().filter(|n| n.name != name).cloned().collect();
+        self.set_named(after);
+        out.named = true;
+        self.group_since(mark);
+        Ok(out)
+    }
+
+    pub fn apply_style(&mut self, sheet: usize, top: Addr, bottom: Addr, name: &str) -> Result<Effect, EngineError> {
+        let def = self.named.iter().find(|n| n.name == name).cloned().ok_or_else(|| EngineError::BadStyle(name.to_string()))?;
+        let normal = def.name == "Normal";
+        let (r0, r1, c0, c1) = self.clip(sheet, top, bottom);
+        let mut items = Vec::new();
+        for r in r0..=r1 {
+            for c in c0..=c1 {
+                let k = (sheet, Addr { row: r, col: c });
+                let mut st = self.styles.get(&k).map(|s| s.1.clone()).unwrap_or_default();
+                st.clear(if normal { style::Cats::ALL } else { def.cats });
+                st.named = (!normal).then(|| def.name.clone());
+                st.normalize();
+                let code = if def.cats.number || normal { None } else { self.codes.get(&k).map(|c| c.0.clone()) };
+                items.push((k.1, Some(st.text()), Some(code.unwrap_or_default())));
+            }
+        }
+        self.put_formats(sheet, &items)
     }
 
     pub fn sheet_count(&self) -> usize {
@@ -468,8 +644,17 @@ impl Workbook {
         self.fmts.get(&(sheet, a)).copied()
     }
 
+    fn code_of(&self, k: &Key) -> Option<&std::sync::Arc<(String, fmtcode::Code)>> {
+        self.codes.get(k).or_else(|| {
+            if self.named_codes.is_empty() {
+                return None;
+            }
+            self.styles.get(k).and_then(|s| s.1.named.as_ref()).and_then(|n| self.named_codes.get(n))
+        })
+    }
+
     fn shown(&self, sheet: usize, a: Addr, v: Value) -> Value {
-        if let Some(c) = self.codes.get(&(sheet, a)) {
+        if let Some(c) = self.code_of(&(sheet, a)) {
             if matches!(v, Value::Number(_) | Value::Text(_)) {
                 if let Some((s, _)) = c.1.render(&v) {
                     return Value::Text(s);
@@ -484,7 +669,14 @@ impl Workbook {
     }
 
     fn const_text(&self, sheet: usize, a: Addr, v: &Value) -> String {
-        let Some(c) = self.codes.get(&(sheet, a)) else { return self.shown(sheet, a, v.clone()).to_string() };
+        let Some(c) = self.code_of(&(sheet, a)) else {
+            if let Value::Text(s) = v {
+                if s.starts_with('\'') || !matches!(Value::parse_input(s), Value::Text(_)) {
+                    return format!("'{s}");
+                }
+            }
+            return self.shown(sheet, a, v.clone()).to_string();
+        };
         let Value::Number(n) = v else { return v.to_string() };
         let n = *n;
         let as_fmt = match c.1.class() {
@@ -500,8 +692,9 @@ impl Workbook {
     pub fn meta(&self, sheet: usize, a: Addr) -> wire::Meta {
         let v = self.sheets.get(sheet).and_then(|s| s.cells.get(a));
         let num = matches!(v, Some(Value::Number(_)));
-        let code = self.codes.get(&(sheet, a));
-        let raw = self.formula_text(sheet, a).or_else(|| (code.is_some() && !self.spilled.contains_key(&(sheet, a))).then(|| self.input(sheet, a)).filter(|s| !s.is_empty()));
+        let code = self.code_of(&(sheet, a));
+        let quoted = matches!(v, Some(Value::Text(s)) if s.starts_with('\'') || !matches!(Value::parse_input(s), Value::Text(_)));
+        let raw = self.formula_text(sheet, a).or_else(|| ((code.is_some() || quoted) && !self.spilled.contains_key(&(sheet, a))).then(|| self.input(sheet, a)).filter(|s| !s.is_empty()));
         let color = code.zip(v).and_then(|(c, v)| c.1.render(v)).and_then(|(_, col)| col).map(fmtcode::Color::rgb);
         (raw, num, color)
     }
@@ -675,7 +868,8 @@ impl Workbook {
         let mut changes = Vec::new();
         for k in order {
             let before = self.styles.get(&k).map(|s| s.0.clone());
-            let st = &work[&k];
+            let mut st = work[&k].clone();
+            st.normalize();
             let after = (!st.is_plain()).then(|| st.text());
             if before != after {
                 changes.push((k, before, after));
@@ -756,7 +950,7 @@ impl Workbook {
     fn set_raw(&mut self, sheet: usize, a: Addr, raw: &str) {
         let k = (sheet, a);
         self.spilled.remove(&k);
-        let as_text = self.codes.get(&k).is_some_and(|c| c.1.class() == fmtcode::Class::Text);
+        let as_text = self.code_of(&k).is_some_and(|c| c.1.class() == fmtcode::Class::Text);
         if as_text {
             if self.formulas.remove(&k).is_some() {
                 self.graph.remove(&k);
@@ -1279,15 +1473,19 @@ impl Workbook {
         for (a, st, code) in items {
             self.check(sheet, *a)?;
             let k = (sheet, *a);
-            let code = code.as_ref().filter(|c| !c.is_empty() && fmtcode::parse(c).is_some()).cloned();
-            let st = st.as_ref().and_then(|t| style::Style::parse(t)).filter(|s| !s.is_plain()).map(|s| s.text());
-            let bc = self.codes.get(&k).map(|c| c.0.clone());
-            if bc != code {
-                codes.push((k, bc, code));
+            if let Some(code) = code {
+                let code = Some(code).filter(|c| !c.is_empty() && fmtcode::parse(c).is_some()).cloned();
+                let bc = self.codes.get(&k).map(|c| c.0.clone());
+                if bc != code {
+                    codes.push((k, bc, code));
+                }
             }
-            let bs = self.styles.get(&k).map(|s| s.0.clone());
-            if bs != st {
-                styles.push((k, bs, st));
+            if let Some(st) = st {
+                let st = style::Style::parse(st).filter(|s| !s.is_plain()).map(|s| s.text());
+                let bs = self.styles.get(&k).map(|s| s.0.clone());
+                if bs != st {
+                    styles.push((k, bs, st));
+                }
             }
         }
         let mark = self.undo.len();
@@ -1448,6 +1646,15 @@ impl Workbook {
                 self.sheets[*sheet].merges = if forward { after.clone() } else { before.clone() };
                 Effect { merges: Some(*sheet), ..Effect::default() }
             }
+            Tx::Theme { before, after } => {
+                self.theme = if forward { (**after).clone() } else { (**before).clone() };
+                Effect { theme: true, ..Effect::default() }
+            }
+            Tx::Named { before, after } => {
+                self.named = if forward { after.clone() } else { before.clone() };
+                self.rebuild_named_codes();
+                Effect { named: true, ..Effect::default() }
+            }
             Tx::Group(txs) => {
                 let mut out = Effect::default();
                 if forward {
@@ -1480,7 +1687,7 @@ impl Workbook {
                 }
                 self.recalc_all();
                 let cells = dropped.iter().map(|(a, _)| (shift.sheet, *a, self.sheets[shift.sheet].cells.get(*a).cloned().unwrap_or(Value::Empty))).collect();
-                Effect { cells, shift: Some(back), merges: Some(shift.sheet), formats: restored.formats, styles: restored.styles }
+                Effect { cells, shift: Some(back), merges: Some(shift.sheet), formats: restored.formats, styles: restored.styles, ..Effect::default() }
             }
         }
     }

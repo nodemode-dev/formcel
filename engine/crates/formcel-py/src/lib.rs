@@ -156,6 +156,49 @@ impl Workbook {
         self.inner.load_merges(sheet, &list).map_err(|e| PyValueError::new_err(e.to_string()))
     }
 
+    fn theme(&self) -> String {
+        self.inner.theme_text()
+    }
+
+    fn load_theme(&mut self, text: &str) -> bool {
+        self.inner.load_theme(text)
+    }
+
+    fn set_theme(&mut self, text: &str) -> PyResult<()> {
+        self.inner.set_theme(text).map(|_| ()).map_err(|e| PyValueError::new_err(e.to_string()))
+    }
+
+    fn cell_styles(&self) -> Vec<String> {
+        self.inner.named_lines()
+    }
+
+    fn load_cell_styles(&mut self, lines: Vec<String>) {
+        self.inner.load_named(&lines)
+    }
+
+    #[pyo3(signature = (name, a1, parts = "nafbp", sheet = 0))]
+    fn define_style(&mut self, name: &str, a1: &str, parts: &str, sheet: usize) -> PyResult<()> {
+        let a = parse_a1(a1).map_err(|e| PyValueError::new_err(e.to_string()))?;
+        self.inner.define_style(name, sheet, a, parts).map(|_| ()).map_err(|e| PyValueError::new_err(e.to_string()))
+    }
+
+    fn delete_style(&mut self, name: &str) -> PyResult<()> {
+        self.inner.delete_style(name).map(|_| ()).map_err(|e| PyValueError::new_err(e.to_string()))
+    }
+
+    #[pyo3(signature = (top, bottom, name, sheet = 0))]
+    fn apply_style(&mut self, top: &str, bottom: &str, name: &str, sheet: usize) -> PyResult<()> {
+        let t = parse_a1(top).map_err(|e| PyValueError::new_err(e.to_string()))?;
+        let b = parse_a1(bottom).map_err(|e| PyValueError::new_err(e.to_string()))?;
+        self.inner.apply_style(sheet, t, b, name).map(|_| ()).map_err(|e| PyValueError::new_err(e.to_string()))
+    }
+
+    #[pyo3(signature = (a1, sheet = 0))]
+    fn effective_style(&self, a1: &str, sheet: usize) -> PyResult<String> {
+        let a = parse_a1(a1).map_err(|e| PyValueError::new_err(e.to_string()))?;
+        Ok(self.inner.effective_style(sheet, a).text())
+    }
+
     fn undo(&mut self) -> Option<Vec<(String, String)>> {
         self.inner.undo().map(|e| pairs(e.cells))
     }

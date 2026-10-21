@@ -159,7 +159,7 @@ pub extern "C" fn fc_sheet_names(id: u32) -> i32 {
 fn history(id: u32, forward: bool) -> i32 {
     let r = with_book(id, |wb| {
         let e = if forward { wb.redo() } else { wb.undo() };
-        e.map(|e| wire::encode_effect(&e, &|s, a| wb.meta(s, a)))
+        e.map(|e| wb.encode(&e))
     });
     match r {
         Some(Some(s)) => emit(&s) as i32,
@@ -217,7 +217,7 @@ pub unsafe extern "C" fn fc_define_name(id: u32, name: *const u8, name_len: u32,
 #[no_mangle]
 pub unsafe extern "C" fn fc_set_format(id: u32, sheet: u32, r0: u32, c0: u32, r1: u32, c1: u32, code: *const u8, len: u32) -> i32 {
     let code = text(code, len).to_string();
-    let r = with_book(id, |wb| wb.set_format(sheet as usize, Addr { row: r0, col: c0 }, Addr { row: r1, col: c1 }, &code).map(|e| wire::encode_effect(&e, &|s, a| wb.meta(s, a))));
+    let r = with_book(id, |wb| wb.set_format(sheet as usize, Addr { row: r0, col: c0 }, Addr { row: r1, col: c1 }, &code).map(|e| wb.encode(&e)));
     match r {
         Some(Ok(s)) => emit(&s) as i32,
         Some(Err(formcel_core::EngineError::BadFormat(_))) => -3,
@@ -261,7 +261,7 @@ pub unsafe extern "C" fn fc_set_styles(id: u32, sheet: u32, ops: *const u8, len:
         let (Some(r0), Some(c0), Some(r1), Some(c1)) = (n(0), n(1), n(2), n(3)) else { return -1 };
         list.push((Addr { row: r0, col: c0 }, Addr { row: r1, col: c1 }, wire::unescape(p.get(4).copied().unwrap_or(""))));
     }
-    match with_book(id, |wb| wb.set_styles(sheet as usize, &list).map(|e| wire::encode_effect(&e, &|s, a| wb.meta(s, a)))) {
+    match with_book(id, |wb| wb.set_styles(sheet as usize, &list).map(|e| wb.encode(&e))) {
         Some(Ok(s)) => emit(&s) as i32,
         Some(Err(formcel_core::EngineError::BadStyle(_))) => -3,
         _ => -1,
@@ -272,7 +272,7 @@ pub unsafe extern "C" fn fc_set_styles(id: u32, sheet: u32, ops: *const u8, len:
 #[no_mangle]
 pub extern "C" fn fc_styles_in(id: u32, sheet: u32, r0: u32, c0: u32, r1: u32, c1: u32) -> i32 {
     let s = sheet as usize;
-    match with_book(id, |wb| wb.styles_in(s, Addr { row: r0, col: c0 }, Addr { row: r1, col: c1 })) {
+    match with_book(id, |wb| wb.shown_styles_in(s, Addr { row: r0, col: c0 }, Addr { row: r1, col: c1 })) {
         Some(list) => {
             let list: Vec<(usize, Addr, String)> = list.into_iter().map(|(a, t)| (s, a, t)).collect();
             emit(&wire::encode_styles('&', Some(s), &list)) as i32
@@ -313,7 +313,7 @@ pub extern "C" fn fc_merge(id: u32, sheet: u32, r0: u32, c0: u32, r1: u32, c1: u
         2 => MergeMode::Cells,
         _ => MergeMode::Unmerge,
     };
-    match with_book(id, |wb| wb.merge(sheet as usize, Addr { row: r0, col: c0 }, Addr { row: r1, col: c1 }, mode).map(|e| wire::encode_effect(&e, &|s, a| wb.meta(s, a)))) {
+    match with_book(id, |wb| wb.merge(sheet as usize, Addr { row: r0, col: c0 }, Addr { row: r1, col: c1 }, mode).map(|e| wb.encode(&e))) {
         Some(Ok(s)) => emit(&s) as i32,
         _ => -1,
     }
@@ -348,7 +348,7 @@ pub unsafe extern "C" fn fc_load_merges(id: u32, sheet: u32, lines: *const u8, l
     }
 }
 
-/// Sets styles and number formats cell by cell from `row\tcol\tstyle\tcode` lines as one undo step.
+/// Sets styles and number formats cell by cell from `row\tcol\tstyle\tcode` lines as one undo step; `~` leaves that part as it is.
 ///
 /// # Safety
 /// `lines` must point at `len` readable bytes.
@@ -358,12 +358,122 @@ pub unsafe extern "C" fn fc_put_formats(id: u32, sheet: u32, lines: *const u8, l
     for l in text(lines, len).split('\n').filter(|l| !l.is_empty()) {
         let p: Vec<&str> = l.splitn(4, '\t').collect();
         let (Some(row), Some(col)) = (p.first().and_then(|s| s.parse().ok()), p.get(1).and_then(|s| s.parse().ok())) else { return -1 };
-        let opt = |i: usize| p.get(i).map(|s| wire::unescape(s));
+        let opt = |i: usize| p.get(i).filter(|s| **s != "~").map(|s| wire::unescape(s));
         items.push((Addr { row, col }, opt(2), opt(3)));
     }
-    match with_book(id, |wb| wb.put_formats(sheet as usize, &items).map(|e| wire::encode_effect(&e, &|s, a| wb.meta(s, a)))) {
+    match with_book(id, |wb| wb.put_formats(sheet as usize, &items).map(|e| wb.encode(&e))) {
         Some(Ok(s)) => emit(&s) as i32,
         _ => -1,
+    }
+}
+
+fn effect_or(r: Option<Result<String, formcel_core::EngineError>>) -> i32 {
+    match r {
+        Some(Ok(s)) => emit(&s) as i32,
+        Some(Err(formcel_core::EngineError::BadStyle(_))) => -3,
+        Some(Err(formcel_core::EngineError::BadFormat(_))) => -4,
+        _ => -1,
+    }
+}
+
+/// The workbook theme as `name;dk1,lt1,dk2,lt2,accent1..6;heading font;body font`, then the built-in theme names, one per line.
+#[no_mangle]
+pub extern "C" fn fc_theme(id: u32) -> i32 {
+    match with_book(id, |wb| format!("{}\n{}\n", wb.theme_text(), Workbook::theme_names().join("\n"))) {
+        Some(s) => emit(&s) as i32,
+        None => -1,
+    }
+}
+
+/// Sets the theme by built-in name or full theme text as one undo step.
+///
+/// # Safety
+/// `t` must point at `len` readable bytes.
+#[no_mangle]
+pub unsafe extern "C" fn fc_set_theme(id: u32, t: *const u8, len: u32) -> i32 {
+    let t = text(t, len).to_string();
+    effect_or(with_book(id, |wb| wb.set_theme(&t).map(|e| wb.encode(&e))))
+}
+
+/// Loads theme text without an undo step.
+///
+/// # Safety
+/// `t` must point at `len` readable bytes.
+#[no_mangle]
+pub unsafe extern "C" fn fc_load_theme(id: u32, t: *const u8, len: u32) -> i32 {
+    let t = text(t, len).to_string();
+    match with_book(id, |wb| wb.load_theme(&t)) {
+        Some(true) => 0,
+        _ => -1,
+    }
+}
+
+/// The named cell styles as `name\tstyle\tcode\tparts\tbuiltin` lines.
+#[no_mangle]
+pub extern "C" fn fc_named(id: u32) -> i32 {
+    match with_book(id, |wb| wb.named_lines().join("\n")) {
+        Some(s) => emit(&s) as i32,
+        None => -1,
+    }
+}
+
+/// Replaces the named cell styles from lines like `fc_named` gives, without an undo step.
+///
+/// # Safety
+/// `lines` must point at `len` readable bytes.
+#[no_mangle]
+pub unsafe extern "C" fn fc_load_named(id: u32, lines: *const u8, len: u32) -> i32 {
+    let list: Vec<String> = text(lines, len).split('\n').filter(|l| !l.is_empty()).map(String::from).collect();
+    match with_book(id, |wb| wb.load_named(&list)) {
+        Some(()) => 0,
+        None => -1,
+    }
+}
+
+/// Creates or updates a named style from one cell's formatting; `parts` lists n a f b p for number, alignment, font, border and fill.
+///
+/// # Safety
+/// `name` and `parts` must point at readable bytes of their lengths.
+#[no_mangle]
+pub unsafe extern "C" fn fc_define_style(id: u32, sheet: u32, row: u32, col: u32, name: *const u8, name_len: u32, parts: *const u8, parts_len: u32) -> i32 {
+    let (name, parts) = (text(name, name_len).to_string(), text(parts, parts_len).to_string());
+    effect_or(with_book(id, |wb| wb.define_style(&name, sheet as usize, Addr { row, col }, &parts).map(|e| wb.encode(&e))))
+}
+
+/// Deletes a named style and removes it from every cell that uses it.
+///
+/// # Safety
+/// `name` must point at `len` readable bytes.
+#[no_mangle]
+pub unsafe extern "C" fn fc_delete_style(id: u32, name: *const u8, len: u32) -> i32 {
+    let name = text(name, len).to_string();
+    effect_or(with_book(id, |wb| wb.delete_style(&name).map(|e| wb.encode(&e))))
+}
+
+/// Applies a named style to a rectangle as one undo step.
+///
+/// # Safety
+/// `name` must point at `len` readable bytes.
+#[no_mangle]
+pub unsafe extern "C" fn fc_apply_style(id: u32, sheet: u32, r0: u32, c0: u32, r1: u32, c1: u32, name: *const u8, len: u32) -> i32 {
+    let name = text(name, len).to_string();
+    effect_or(with_book(id, |wb| wb.apply_style(sheet as usize, Addr { row: r0, col: c0 }, Addr { row: r1, col: c1 }, &name).map(|e| wb.encode(&e))))
+}
+
+/// Stored values inside a rectangle as `row\tcol\tvalue` lines, text prefixed with an apostrophe so it reads back as text.
+#[no_mangle]
+pub extern "C" fn fc_values_in(id: u32, sheet: u32, r0: u32, c0: u32, r1: u32, c1: u32) -> i32 {
+    match with_book(id, |wb| wb.values_in(sheet as usize, Addr { row: r0, col: c0 }, Addr { row: r1, col: c1 })) {
+        Some(list) => {
+            let mut s = String::new();
+            for (a, v) in list {
+                s.push_str(&format!("{}\t{}\t", a.row, a.col));
+                wire::escape(&v, &mut s);
+                s.push('\n');
+            }
+            emit(&s) as i32
+        }
+        None => -1,
     }
 }
 

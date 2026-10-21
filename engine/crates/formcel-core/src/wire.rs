@@ -32,13 +32,25 @@ pub fn encode_formats(formats: &[(usize, Addr, String)]) -> String {
     out
 }
 
-pub fn encode_effect(e: &Effect, fx: FxOf) -> String {
+pub fn encode_effect(e: &Effect, fx: FxOf, shown: &dyn Fn(usize, Addr) -> String) -> String {
     let mut out = e.shift.as_ref().map(encode_shift).unwrap_or_default();
     if let Some(s) = e.merges {
         out.push_str(&format!("=\t{s}\n"));
     }
+    if e.theme {
+        out.push_str("^\n");
+    }
+    if e.named {
+        out.push_str("@\n");
+    }
     out.push_str(&encode_formats(&e.formats));
-    out.push_str(&encode_styles('&', None, &e.styles));
+    for (s, a, raw) in &e.styles {
+        out.push_str(&format!("&\t{s}\t{}\t{}\t", a.row, a.col));
+        escape(raw, &mut out);
+        out.push('\t');
+        escape(&shown(*s, *a), &mut out);
+        out.push('\n');
+    }
     out.push_str(&encode_changed(&e.cells, fx));
     out
 }
