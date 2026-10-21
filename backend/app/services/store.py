@@ -70,7 +70,7 @@ class Store:
         doc = {"format": FORMAT, "version": FORMAT_VERSION, "id": b.id, "title": b.title, "created": b.created,
                "modified": b.modified, "template": b.template, "preview": b.preview(),
                "names": [list(n) for n in b.engine.names()],
-               "sheets": [{"name": n, "view": b.views[i] if i < len(b.views) else {}, "cells": b.engine.cells(i)} for i, n in enumerate(b.sheet_names())]}
+               "sheets": [{"name": n, "view": b.views[i] if i < len(b.views) else {}, "cells": b.engine.cells(i), "formats": b.engine.formats(i)} for i, n in enumerate(b.sheet_names())]}
         target = self.path(b.id)
         tmp = target.with_suffix(".fcel.tmp")
         with zipfile.ZipFile(tmp, "w", zipfile.ZIP_DEFLATED) as z:
@@ -97,6 +97,7 @@ class Store:
                     eng.add_sheet(s["name"])
                 else:
                     eng.rename_sheet(0, s["name"])
+                eng.load_formats([tuple(c) for c in s.get("formats", [])], i)
                 eng.load([tuple(c) for c in s["cells"]], i)
             for name, refers in doc.get("names", []):
                 try:
@@ -146,7 +147,18 @@ class Store:
     def get(self, wid: str) -> dict:
         b = self._load(wid)
         with b.lock:
-            return {**b.meta(), "names": [list(n) for n in b.engine.names()], "cells": [b.engine.cells(i) for i in range(len(b.sheet_names()))]}
+            n = len(b.sheet_names())
+            return {**b.meta(), "names": [list(x) for x in b.engine.names()], "cells": [b.engine.cells(i) for i in range(n)], "formats": [b.engine.formats(i) for i in range(n)]}
+
+    def set_formats(self, wid: str, sheet: int, cells: list[tuple[int, int, str]]) -> dict:
+        b = self._load(wid)
+        with b.lock:
+            if sheet >= len(b.sheet_names()):
+                raise IndexError(sheet)
+            b.engine.load_formats(cells, sheet)
+            b.modified = now()
+            self._write(b)
+            return {"id": b.id, "modified": b.modified}
 
     def set_name(self, wid: str, name: str, refers: str) -> dict:
         b = self._load(wid)

@@ -157,3 +157,12 @@ The process still starts when the Rust module is missing, so health can say so (
 - logged: v0.1.0 · 2026-10-21
 
 Defaults to 127.0.0.1. A deployment that needs another address sets FORMCEL_HOST; the local default never listens on the network.
+
+## app/services/store.py {#store-formats}
+
+### Formats in the file
+- refers-to: app/services/store.py :: _write, _load, get, set_formats; app/routers/workbooks.py :: set_formats
+- kind: explainer
+- logged: v0.18.0 · 2026-10-21
+
+Each sheet in `workbook.json` gains `formats`, a list of `[row, col, code]`. Loading applies the formats before the cells, so a cell under `@` reads `007` back as text and not as 7. `POST /api/workbooks/{id}/formats` takes the same body as `/cells`; an empty code clears that cell's format. The window sends formats before the cells of the same change for the same reason.
