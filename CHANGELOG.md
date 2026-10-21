@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.5.0 · 2026-10-21
+
+- The form family app icon (the owner's artwork): a dark glass sheet with spectrum-gradient cells and a selected cell with its fill handle, as the window's icon.
+- Outline groups: group and ungroup rows or columns (Alt+Shift+Right and Left, or the header menu), up to 7 levels. A gutter shows each group's bracket with a button to collapse or expand it, and numbered buttons show one level at a time. Groups move with inserted and deleted rows and are saved with the sheet.
+- Fixed: clicking soon after typing could put the typed values in the clicked cells, because clicks did not wait for keys still being processed.
+- Fixed: an undo that switched to another sheet reset that sheet's column widths, hidden rows and columns, frozen panes and zoom.
+- Fixed: shift-clicking a row header scrolled the sheet out to column XFD.
+
 ## 0.4.0 · 2026-10-21
 
 - Insert and delete rows and columns (Ctrl+Plus, Ctrl+Minus, or the header menu); cells, sizes and hidden marks move with them, and each is one undo step in the window and the engine process alike.

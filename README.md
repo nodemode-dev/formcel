@@ -8,16 +8,16 @@ Version 0.4.0 · Apache-2.0 · macOS, Windows, Linux (browser now, Tauri desktop
 
 ## Status
 
-0.4.0 completes the third part of Phase 1 in `DEV_PLAN.md`: inserting, deleting and hiding rows and columns, the fill handle, zoom, Go To and a full set of sheet tab actions, on top of 0.3.0's home screen and saving.
+0.5.0 adds outline groups for rows and columns and the form family app icon to 0.4.0's inserting, hiding, fill handle, zoom and sheet tab actions. Split panes and the Phase 1 exit check in `DEV_PLAN.md` come next.
 
-| Area | In 0.4.0 |
+| Area | In 0.5.0 |
 | --- | --- |
 | Home | Start, Recent, Templates (category chips and search) and Trash, after formdeck; thumbnails of each workbook's first sheet |
 | Saving | `.fcel` files in `~/FormCel/Workbooks`, saved as you type; rename in the top bar; Trash with restore |
 | Sheets | Several per workbook, tabs to switch, a button to add one; double-click a tab to rename it; the tab menu moves, colours and deletes; each sheet keeps its sizes, hidden rows and columns, frozen panes and zoom |
 | Templates | 34: six made for FormCel and 28 from form.md 0.46.0 with their data |
 | Engine | Rust core, one build for the window (WebAssembly) and one for the engine process (Python): a chunked cell store for 1,048,576 rows by 16,384 columns, typed input (numbers, text, TRUE and FALSE), undo and redo of 500 steps, batched edits, viewport reads, the used range, Ctrl+arrow data edges, and inserting and deleting rows and columns as one undo step |
-| Grid | Canvas grid with headers and selection of cells, ranges, rows, columns and the whole sheet; arrows, Ctrl+arrows, Ctrl+Home, Ctrl+End, Home, Page Up and Down; typing, F2 and Alt+Enter; Name Box and formula bar; undo, redo, clear; copy, cut and paste of tab-separated text; resizing rows and columns, autofit columns; freeze top row, first column or panes at the active cell; insert, delete, hide and unhide rows and columns; the fill handle (copies, number and date steps, weekday and month names, numbered text) and double-click to fill down; zoom 50% to 200%; right-click menus on cells and headers |
+| Grid | Canvas grid with headers and selection of cells, ranges, rows, columns and the whole sheet; arrows, Ctrl+arrows, Ctrl+Home, Ctrl+End, Home, Page Up and Down; typing, F2 and Alt+Enter; Name Box and formula bar; undo, redo, clear; copy, cut and paste of tab-separated text; resizing rows and columns, autofit columns; freeze top row, first column or panes at the active cell; insert, delete, hide and unhide rows and columns; the fill handle (copies, number and date steps, weekday and month names, numbered text) and double-click to fill down; zoom 50% to 200%; right-click menus on cells and headers; outline groups of rows and columns up to 7 levels, with collapse and expand buttons and level buttons |
 | Speed | 1,000,000 filled rows scroll at a 16.7 ms p95 frame with the CPU slowed 4x |
 | Window | Family theme profiles applied before the first frame, engine status, the engine running in a Web Worker |
 | Engine process | FastAPI on 127.0.0.1:8199: `/api/health`, `/api/version`, `/api/workbooks`, `/api/trash`, `/api/templates`, `/api/commands`; data folder `~/FormCel` |
@@ -40,6 +40,7 @@ Version 0.4.0 · Apache-2.0 · macOS, Windows, Linux (browser now, Tauri desktop
 | Ctrl+wheel | Zoom |
 | F5, Ctrl+G | Go To: type a reference in the Name Box |
 | Drag or double-click the fill handle | Fill the series down or across |
+| Alt+Shift+Right, Alt+Shift+Left | Group, ungroup the selected rows (columns when whole columns are selected) |
 
 ## Quick start
 
