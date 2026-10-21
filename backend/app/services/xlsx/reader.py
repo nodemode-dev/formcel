@@ -113,6 +113,9 @@ def _named(wb, default_font) -> tuple[dict[str, tuple[set[str], str]], list[str]
 def read(data: bytes) -> dict:
     wb = load_workbook(io.BytesIO(data), data_only=False, rich_text=False, keep_links=False, keep_vba=True)
     vba = macro_parts(wb.vba_archive)
+    if wb.vba_archive is not None:
+        wb.vba_archive.close()
+        wb.vba_archive = None
     notes: Counter = Counter()
     default_font = ("Calibri", 11.0)
     try:

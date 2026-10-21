@@ -19,8 +19,73 @@ def _outside(text: str, fn) -> str:
     return "".join(out)
 
 
+REF = r"(?:(?:'(?:[^']|'')+'|[A-Za-z_][A-Za-z0-9_.]*)!)?\$?[A-Z]{1,3}\$?\d+"
+ANCHOR_IN = re.compile(rf"ANCHORARRAY\(\s*({REF})\s*\)", re.I)
+ANCHOR_OUT = re.compile(rf"(?<![A-Za-z0-9_.$])({REF})#")
+
+
+def _close(s: str, open_at: int) -> int:
+    depth, quoted = 0, False
+    for i in range(open_at, len(s)):
+        ch = s[i]
+        if ch == '"':
+            quoted = not quoted
+        elif not quoted and ch in "({":
+            depth += 1
+        elif not quoted and ch in ")}":
+            depth -= 1
+            if depth == 0:
+                return i
+    return len(s) - 1
+
+
+def _singles_in(s: str) -> str:
+    while True:
+        m = re.search(r"(?<![A-Za-z0-9_.])SINGLE\(", s, re.I)
+        if not m:
+            return s
+        end = _close(s, m.end() - 1)
+        inner = s[m.end():end]
+        simple = re.fullmatch(rf"{REF}(?::\$?[A-Z]{{1,3}}\$?\d+)?|[A-Za-z_][A-Za-z0-9_.]*(?:\(.*\))?|\{{.*\}}", inner.strip(), re.S)
+        s = s[:m.start()] + "@" + (inner if simple else f"({inner})") + s[end + 1:]
+
+
+def _singles_out(s: str) -> str:
+    out, i = [], 0
+    while i < len(s):
+        ch = s[i]
+        if ch == '"':
+            j = i + 1
+            while j < len(s) and not (s[j] == '"' and (j + 1 >= len(s) or s[j + 1] != '"')):
+                j += 2 if s[j] == '"' else 1
+            out.append(s[i:j + 1])
+            i = j + 1
+            continue
+        if ch != "@":
+            out.append(ch)
+            i += 1
+            continue
+        j = i + 1
+        if j < len(s) and s[j] in "({":
+            end = _close(s, j)
+            operand = s[j:end + 1]
+        else:
+            m = re.match(rf"{REF}(?::\$?[A-Z]{{1,3}}\$?\d+)?|[A-Za-z_][A-Za-z0-9_.]*", s[j:])
+            operand = m.group(0) if m else ""
+            end = j + len(operand) - 1
+            if end + 1 < len(s) and s[end + 1] == "(":
+                close = _close(s, end + 1)
+                operand = s[j:close + 1]
+                end = close
+        inner = operand[1:-1] if operand.startswith("(") and operand.endswith(")") else operand
+        out.append(f"_xlfn.SINGLE({_singles_out(inner)})")
+        i = end + 1
+    return "".join(out)
+
+
 def from_file(formula: str) -> str:
-    return _outside(formula, lambda s: PREFIX.sub("", s))
+    plain = _outside(formula, lambda s: PREFIX.sub("", s))
+    return _singles_in(_outside(plain, lambda s: ANCHOR_IN.sub(lambda m: m.group(1) + "#", s)))
 
 
 def _args(text: str, open_at: int) -> list[str]:
@@ -65,6 +130,6 @@ def to_file(formula: str) -> str:
         for p in sorted(params, key=len, reverse=True):
             s = re.sub(WORD.format(re.escape(p)), lambda m: "_xlpm." + m.group(1), s, flags=re.I)
             s = re.sub(r"(?<![A-Za-z0-9_.$!])(" + re.escape(p) + r")(?=\s*\()", lambda m: "_xlpm." + m.group(1), s, flags=re.I)
-        return s
+        return ANCHOR_OUT.sub(lambda m: f"_xlfn.ANCHORARRAY({m.group(1)})", s)
 
-    return _outside(formula, fix)
+    return _singles_out(_outside(formula, fix))
