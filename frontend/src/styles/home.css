@@ -270,6 +270,68 @@
 
 .fc-tab[aria-selected="true"] { background: var(--cell-bg); color: var(--text-primary); box-shadow: inset 0 -2px 0 var(--accent-color); }
 
+.fc-menu {
+  position: fixed;
+  z-index: var(--z-dropdown);
+  min-width: 220px;
+  padding: var(--space-1);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-md);
+  background: var(--bg-secondary);
+  box-shadow: var(--shadow-md);
+}
+
+.fc-menu-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  width: 100%;
+  height: 30px;
+  padding: 0 var(--space-2);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-primary);
+  text-align: left;
+  cursor: pointer;
+}
+
+.fc-menu-item:hover:not(:disabled), .fc-menu-item:focus-visible { background: var(--accent-color-dim); outline: none; }
+.fc-menu-item:disabled { color: var(--text-muted); cursor: default; }
+.fc-menu-item.is-danger { color: var(--bad); }
+.fc-menu-keys { font-family: var(--font-mono); font-size: var(--text-xs); color: var(--text-muted); }
+.fc-menu-sep { height: 1px; margin: var(--space-1) 0; background: var(--border-color); }
+.fc-menu-swatches { display: flex; flex-wrap: wrap; gap: 6px; padding: var(--space-1) var(--space-2); }
+
+.fc-swatch {
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 1px solid var(--border-light);
+  border-radius: 50%;
+  background: var(--sw);
+  cursor: pointer;
+}
+
+.fc-swatch[aria-pressed="true"] { outline: 2px solid var(--text-primary); outline-offset: 1px; }
+
+.fc-tab[contenteditable="true"] { outline: 1px solid var(--accent-color); cursor: text; }
+.fc-tab[style*="--tab"] { box-shadow: inset 0 -3px 0 var(--tab); }
+.fc-tab[aria-selected="true"][style*="--tab"] { box-shadow: inset 0 -3px 0 var(--tab), inset 0 3px 0 var(--accent-color-dim); }
+
+.fc-zoom {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: auto;
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+.fc-zoom-val { min-width: 44px; text-align: center; }
+
 @media (max-width: 720px) {
   .fc-home { grid-template-columns: 1fr; }
   .fc-home-nav { flex-direction: row; overflow-x: auto; border-right: 0; border-bottom: 1px solid var(--border-color); }

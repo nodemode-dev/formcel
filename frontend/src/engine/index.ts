@@ -1,6 +1,6 @@
-import type { Cell, Changed, Dir, Edit, RequestBody, Response, Value } from './protocol';
+import type { Cell, Changed, Dir, Edit, Effect, RequestBody, Response, Shift, Value } from './protocol';
 
-export type { Cell, Changed, Dir, Edit } from './protocol';
+export type { Cell, Changed, Dir, Edit, Effect, Shift } from './protocol';
 
 type Pending = { resolve: (v: Value) => void; reject: (e: Error) => void };
 
@@ -60,12 +60,28 @@ export class EngineClient {
     return (await this.call({ op: 'sheet.names', book })) as string[];
   }
 
-  async undo(book: number): Promise<Changed[]> {
-    return (await this.call({ op: 'undo', book })) as Changed[];
+  async undo(book: number): Promise<Effect> {
+    return (await this.call({ op: 'undo', book })) as Effect;
   }
 
-  async redo(book: number): Promise<Changed[]> {
-    return (await this.call({ op: 'redo', book })) as Changed[];
+  async redo(book: number): Promise<Effect> {
+    return (await this.call({ op: 'redo', book })) as Effect;
+  }
+
+  async shift(book: number, sheet: number, rows: boolean, at: number, n: number, insert: boolean): Promise<Shift> {
+    return (await this.call({ op: 'shift', book, sheet, rows, at, n, insert })) as Shift;
+  }
+
+  async deleteSheet(book: number, sheet: number): Promise<void> {
+    await this.call({ op: 'sheet.delete', book, sheet });
+  }
+
+  async moveSheet(book: number, sheet: number, to: number): Promise<void> {
+    await this.call({ op: 'sheet.move', book, sheet, to });
+  }
+
+  async renameSheet(book: number, sheet: number, name: string): Promise<void> {
+    await this.call({ op: 'sheet.rename', book, sheet, name });
   }
 
   async history(book: number): Promise<{ undo: boolean; redo: boolean }> {

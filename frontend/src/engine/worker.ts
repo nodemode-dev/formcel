@@ -1,4 +1,4 @@
-import type { Cell, Changed, Request, Response, Value } from './protocol';
+import type { Cell, Changed, Effect, Request, Response, Shift, Value } from './protocol';
 
 interface Exports {
   memory: WebAssembly.Memory;
@@ -13,6 +13,10 @@ interface Exports {
   fc_load(book: number, sheet: number, edits: number, len: number): number;
   fc_add_sheet(book: number, name: number, len: number): number;
   fc_sheet_names(book: number): number;
+  fc_shift(book: number, sheet: number, rows: number, at: number, n: number, insert: number): number;
+  fc_delete_sheet(book: number, sheet: number): number;
+  fc_move_sheet(book: number, from: number, to: number): number;
+  fc_rename_sheet(book: number, sheet: number, name: number, len: number): number;
   fc_undo(book: number): number;
   fc_redo(book: number): number;
   fc_history(book: number): number;
@@ -41,6 +45,22 @@ function cells(s: string): Cell[] {
 
 function changed(s: string): Changed[] {
   return lines(s).map(([sh, r, c, t]) => [Number(sh), Number(r), Number(c), unescape(t ?? '')]);
+}
+
+function shiftOf(line: string): Shift {
+  const [, sheet, axis, at, delta] = line.split('\t');
+  return { sheet: Number(sheet), rows: axis === 'r', at: Number(at), delta: Number(delta) };
+}
+
+function effect(s: string): Effect {
+  if (!s.startsWith('#')) return { changes: changed(s), shift: null };
+  const nl = s.indexOf('\n');
+  return { shift: shiftOf(s.slice(0, nl)), changes: changed(s.slice(nl + 1)) };
+}
+
+function ok(n: number, what: string): number {
+  if (n < 0) throw new Error(what);
+  return n;
 }
 
 function pair(s: string): [number, number] | null {
@@ -108,8 +128,16 @@ function run(x: Exports, req: Request): Value {
     case 'undo':
     case 'redo': {
       const n = req.op === 'undo' ? x.fc_undo(req.book) : x.fc_redo(req.book);
-      return n === -2 ? [] : changed(out(x, n));
+      return n === -2 ? { changes: [], shift: null } : effect(out(x, n));
     }
+    case 'shift':
+      return shiftOf(out(x, x.fc_shift(req.book, req.sheet, req.rows ? 1 : 0, req.at, req.n, req.insert ? 1 : 0)).trim());
+    case 'sheet.delete':
+      return ok(x.fc_delete_sheet(req.book, req.sheet), 'A workbook keeps at least one sheet.');
+    case 'sheet.move':
+      return ok(x.fc_move_sheet(req.book, req.sheet, req.to), 'That sheet cannot move there.');
+    case 'sheet.rename':
+      return withStrings(x, [req.name], ([p, l]) => ok(x.fc_rename_sheet(req.book, req.sheet, p, l), 'That sheet cannot be renamed.'));
     case 'history':
       return x.fc_history(req.book);
     case 'read':

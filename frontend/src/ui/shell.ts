@@ -16,6 +16,8 @@ export interface ShellParts {
   sheet: HTMLElement;
   tabs: HTMLElement;
   addSheet: HTMLButtonElement;
+  zoom: HTMLElement;
+  zoomVal: HTMLElement;
 }
 
 const tool = (cmd: string, name: Parameters<typeof icon>[0], title: string) =>
@@ -44,7 +46,7 @@ export function mountShell(root: HTMLElement): ShellParts {
         <input class="fc-fbar" aria-label="Formula bar" spellcheck="false" autocomplete="off">
       </div>
       <div class="fc-grid" role="grid" aria-label="Sheet1"></div>
-      <div class="fc-sheetbar"><div class="fc-tabs" role="tablist" aria-label="Sheets"></div><button type="button" class="fc-tool fc-add-sheet" title="Add a sheet" aria-label="Add a sheet">${icon('plus')}</button></div>
+      <div class="fc-sheetbar"><div class="fc-tabs" role="tablist" aria-label="Sheets"></div><button type="button" class="fc-tool fc-add-sheet" title="Add a sheet" aria-label="Add a sheet">${icon('plus')}</button><div class="fc-zoom" role="group" aria-label="Zoom"><button type="button" class="fc-tool" data-zoom="-1" title="Zoom out (Ctrl and scroll)" aria-label="Zoom out">${icon('minus')}</button><span class="fc-zoom-val">100%</span><button type="button" class="fc-tool" data-zoom="1" title="Zoom in (Ctrl and scroll)" aria-label="Zoom in">${icon('plus')}</button></div></div>
     </main>`;
   const status = root.querySelector<HTMLElement>('.fc-status')!;
   const statusText = document.createTextNode('Engine starting');
@@ -64,6 +66,8 @@ export function mountShell(root: HTMLElement): ShellParts {
     sheet: root.querySelector<HTMLElement>('.fc-sheet')!,
     tabs: root.querySelector<HTMLElement>('.fc-tabs')!,
     addSheet: root.querySelector<HTMLButtonElement>('.fc-add-sheet')!,
+    zoom: root.querySelector<HTMLElement>('.fc-zoom')!,
+    zoomVal: root.querySelector<HTMLElement>('.fc-zoom-val')!,
   };
 }
 

@@ -1,6 +1,20 @@
-import type { Cell, Changed, Dir, EngineClient } from '../engine';
-import { Axis } from './axis';
+import type { Cell, Changed, Dir, Effect, EngineClient, Shift } from '../engine';
+import { Axis, type AxisState } from './axis';
 import { MAX_COLS, MAX_ROWS, a1, colName, parseRef, rangeText, type Range } from './a1';
+import { fillSeries } from './fill';
+
+export interface SheetView {
+  rows?: AxisState;
+  cols?: AxisState;
+  fr?: number;
+  fc?: number;
+  zoom?: number;
+  color?: string;
+}
+
+export type MenuKind = 'rows' | 'cols' | 'cells';
+
+export const ZOOMS = [0.5, 0.67, 0.75, 0.9, 1, 1.1, 1.25, 1.5, 1.75, 2];
 
 const HEAD_H = 24;
 const HEAD_W = 60;
@@ -24,6 +38,10 @@ export interface GridEvents {
   onHistory(undo: boolean, redo: boolean): void;
   onChanged(changes: Changed[]): void;
   onSheet(sheet: number): void;
+  onShift(shift: Shift): void;
+  onView(sheet: number, view: SheetView): void;
+  onMenu(kind: MenuKind, x: number, y: number): void;
+  onGoto(): void;
 }
 
 export class Grid {
@@ -51,8 +69,11 @@ export class Grid {
   private raf = 0;
   private queue: Promise<void> = Promise.resolve();
   private sheet = 0;
+  private z = 1;
+  private viewColor: string | undefined;
+  private fillTo: { r: number; c: number } | null = null;
   private pal!: Palette;
-  private drag: null | { kind: 'cells' | 'rows' | 'cols' } | { kind: 'resize-col' | 'resize-row'; index: number; start: number; size: number } = null;
+  private drag: null | { kind: 'cells' | 'rows' | 'cols' | 'fill' } | { kind: 'resize-col' | 'resize-row'; index: number; start: number; size: number } = null;
 
   constructor(
     host: HTMLElement,
@@ -95,12 +116,14 @@ export class Grid {
   private resize(): void {
     const r = this.el.getBoundingClientRect();
     this.dpr = window.devicePixelRatio || 1;
-    this.w = Math.max(1, Math.floor(r.width));
-    this.h = Math.max(1, Math.floor(r.height));
-    this.canvas.width = Math.floor(this.w * this.dpr);
-    this.canvas.height = Math.floor(this.h * this.dpr);
-    this.canvas.style.width = `${this.w}px`;
-    this.canvas.style.height = `${this.h}px`;
+    const cw = Math.max(1, Math.floor(r.width));
+    const ch = Math.max(1, Math.floor(r.height));
+    this.w = cw / this.z;
+    this.h = ch / this.z;
+    this.canvas.width = Math.floor(cw * this.dpr);
+    this.canvas.height = Math.floor(ch * this.dpr);
+    this.canvas.style.width = `${cw}px`;
+    this.canvas.style.height = `${ch}px`;
     this.clampScroll();
     this.paintNow();
   }
@@ -172,7 +195,7 @@ export class Grid {
     const { ctx, pal, w, h } = this;
     const v = this.visible();
     this.ensureData(v);
-    ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
+    ctx.setTransform(this.dpr * this.z, 0, 0, this.dpr * this.z, 0, 0);
     ctx.fillStyle = pal.bg;
     ctx.fillRect(0, 0, w, h);
     const fh = this.frozenH();
@@ -231,11 +254,13 @@ export class Grid {
     for (let r = r0; r <= r1; r++) {
       const yy = this.y(r);
       const rh = this.rows.size(r);
+      if (!rh) continue;
       for (let c = c0; c <= c1; c++) {
         const t = this.cache.get(KEY(r, c));
         if (!t) continue;
         const xx = this.x(c);
         const cw = this.cols.size(c);
+        if (!cw) continue;
         const text = t.split('\n', 1)[0];
         ctx.save();
         ctx.beginPath();
@@ -295,6 +320,21 @@ export class Grid {
         ctx.strokeStyle = pal.edge;
         ctx.lineWidth = 2;
         ctx.strokeRect(x0 + 0.5, y0 + 0.5, x1 - x0 - 1, y1 - y0 - 1);
+        const f = this.fillRange();
+        if (f) {
+          ctx.setLineDash([4, 3]);
+          ctx.lineWidth = 1;
+          const fx0 = this.x(f.c0);
+          const fy0 = this.y(f.r0);
+          ctx.strokeRect(fx0 + 0.5, fy0 + 0.5, this.x(f.c1 + 1) - fx0 - 1, this.y(f.r1 + 1) - fy0 - 1);
+          ctx.setLineDash([]);
+        }
+        if (s.r1 < MAX_ROWS - 1 || s.c1 < MAX_COLS - 1) {
+          ctx.fillStyle = pal.bg;
+          ctx.fillRect(x1 - 4.5, y1 - 4.5, 8, 8);
+          ctx.fillStyle = pal.edge;
+          ctx.fillRect(x1 - 3.5, y1 - 3.5, 6, 6);
+        }
         ctx.restore();
       }
     }
@@ -316,6 +356,7 @@ export class Grid {
       for (let c = ca; c <= cb; c++) {
         const xx = this.x(c);
         const cw = this.cols.size(c);
+        if (!cw) continue;
         if (c >= s.c0 && c <= s.c1) {
           ctx.fillStyle = pal.headOn;
           ctx.fillRect(xx, 0, cw, HEAD_H);
@@ -336,6 +377,7 @@ export class Grid {
       for (let r = ra; r <= rb; r++) {
         const yy = this.y(r);
         const rh = this.rows.size(r);
+        if (!rh) continue;
         if (r >= s.r0 && r <= s.r1) {
           ctx.fillStyle = pal.headOn;
           ctx.fillRect(0, yy, HEAD_W, rh);
@@ -440,6 +482,7 @@ export class Grid {
     this.sx = 0;
     this.sy = 0;
     this.clampScroll();
+    this.emitView();
     this.paint();
   }
 
@@ -447,7 +490,7 @@ export class Grid {
     this.freeze(this.ar, this.ac);
   }
 
-  show(book: number, sheet: number): void {
+  show(book: number, sheet: number, view: SheetView = {}): void {
     if (this.editing) {
       this.editing = false;
       this.editor.hidden = true;
@@ -457,9 +500,16 @@ export class Grid {
     this.cache.clear();
     this.win = { r0: 0, c0: 0, r1: -1, c1: -1 };
     this.pendingWin = null;
-    this.ar = this.ac = this.fr2 = this.fc2 = 0;
+    this.rows.restore(view.rows);
+    this.cols.restore(view.cols);
+    this.fr = view.fr ?? 0;
+    this.fc = view.fc ?? 0;
+    this.z = view.zoom ?? 1;
+    this.viewColor = view.color;
+    this.ar = this.fr2 = this.rows.nextVisible(0, 1);
+    this.ac = this.fc2 = this.cols.nextVisible(0, 1);
     this.sx = this.sy = 0;
-    this.fr = this.fc = 0;
+    this.resize();
     this.announce();
     this.paint();
   }
@@ -503,11 +553,176 @@ export class Grid {
   }
 
   async undo(): Promise<void> {
-    await this.commitEdits(await this.engine.undo(this.book));
+    await this.applyEffect(await this.engine.undo(this.book));
   }
 
   async redo(): Promise<void> {
-    await this.commitEdits(await this.engine.redo(this.book));
+    await this.applyEffect(await this.engine.redo(this.book));
+  }
+
+  private async applyEffect(e: Effect): Promise<void> {
+    if (e.shift) this.afterShift(e.shift);
+    await this.commitEdits(e.changes);
+  }
+
+  private afterShift(s: Shift): void {
+    if (s.sheet !== this.sheet) {
+      this.events.onSheet(s.sheet);
+      this.show(this.book, s.sheet);
+    }
+    (s.rows ? this.rows : this.cols).shift(s.at, s.delta);
+    this.cache.clear();
+    this.win = { r0: 0, c0: 0, r1: -1, c1: -1 };
+    this.pendingWin = null;
+    this.events.onShift(s);
+    this.emitView();
+    this.paint();
+  }
+
+  private wholeRows(): boolean {
+    const s = this.sel();
+    return s.c0 === 0 && s.c1 === MAX_COLS - 1;
+  }
+
+  private wholeCols(): boolean {
+    const s = this.sel();
+    return s.r0 === 0 && s.r1 === MAX_ROWS - 1 && !this.wholeRows();
+  }
+
+  async insert(rows: boolean, after = false): Promise<void> {
+    const s = this.sel();
+    const n = rows ? s.r1 - s.r0 + 1 : s.c1 - s.c0 + 1;
+    const at = rows ? (after ? s.r1 + 1 : s.r0) : (after ? s.c1 + 1 : s.c0);
+    if (n > 10000) return;
+    const sh = await this.engine.shift(this.book, this.sheet, rows, Math.min(at, rows ? MAX_ROWS - 1 : MAX_COLS - 1), n, true);
+    this.afterShift(sh);
+    await this.refreshHistory();
+  }
+
+  async remove(rows: boolean): Promise<void> {
+    const s = this.sel();
+    const n = rows ? s.r1 - s.r0 + 1 : s.c1 - s.c0 + 1;
+    const sh = await this.engine.shift(this.book, this.sheet, rows, rows ? s.r0 : s.c0, n, false);
+    this.afterShift(sh);
+    await this.refreshHistory();
+  }
+
+  async insertAuto(): Promise<void> {
+    await this.insert(!this.wholeCols());
+  }
+
+  async removeAuto(): Promise<void> {
+    await this.remove(!this.wholeCols());
+  }
+
+  hide(rows: boolean, on: boolean): void {
+    const s = this.sel();
+    if (rows) this.rows.setHidden(s.r0, Math.min(s.r1, s.r0 + 100000), on);
+    else this.cols.setHidden(s.c0, Math.min(s.c1, s.c0 + 16384), on);
+    if (on) {
+      if (rows) this.ar = this.fr2 = this.rows.nextVisible(s.r1 + 1 < MAX_ROWS ? s.r1 + 1 : s.r0, 1);
+      else this.ac = this.fc2 = this.cols.nextVisible(s.c1 + 1 < MAX_COLS ? s.c1 + 1 : s.c0, 1);
+    }
+    this.clampScroll();
+    this.emitView();
+    this.announce();
+    this.paint();
+  }
+
+  get zoom(): number {
+    return this.z;
+  }
+
+  setColor(c: string | undefined): void {
+    this.viewColor = c;
+  }
+
+  setZoom(z: number): void {
+    const v = Math.min(2, Math.max(0.5, Math.round(z * 100) / 100));
+    if (v === this.z) return;
+    this.z = v;
+    this.resize();
+    if (this.editing) this.placeEditor();
+    this.emitView();
+  }
+
+  zoomStep(dir: 1 | -1): void {
+    const i = ZOOMS.findIndex((v) => v >= this.z - 0.001);
+    const next = dir > 0 ? ZOOMS.find((v) => v > this.z + 0.001) : [...ZOOMS].reverse().find((v) => v < this.z - 0.001);
+    this.setZoom(next ?? ZOOMS[Math.max(0, i)]);
+  }
+
+  view(): SheetView {
+    return { rows: this.rows.state(), cols: this.cols.state(), fr: this.fr, fc: this.fc, zoom: this.z, color: this.viewColor };
+  }
+
+  private emitView(): void {
+    if (this.book >= 0) this.events.onView(this.sheet, this.view());
+  }
+
+  private async refreshHistory(): Promise<void> {
+    const hst = await this.engine.history(this.book);
+    this.events.onHistory(hst.undo, hst.redo);
+  }
+
+  private fillRange(): Range | null {
+    const t = this.fillTo;
+    if (!t) return null;
+    const s = this.sel();
+    if (t.r > s.r1) return { r0: s.r1 + 1, r1: t.r, c0: s.c0, c1: s.c1 };
+    if (t.r < s.r0) return { r0: t.r, r1: s.r0 - 1, c0: s.c0, c1: s.c1 };
+    if (t.c > s.c1) return { r0: s.r0, r1: s.r1, c0: s.c1 + 1, c1: t.c };
+    if (t.c < s.c0) return { r0: s.r0, r1: s.r1, c0: t.c, c1: s.c0 - 1 };
+    return null;
+  }
+
+  private onFillHandle(px: number, py: number): boolean {
+    const s = this.sel();
+    if (s.r1 === MAX_ROWS - 1 && s.c1 === MAX_COLS - 1) return false;
+    return Math.abs(px - this.x(s.c1 + 1)) <= 5 && Math.abs(py - this.y(s.r1 + 1)) <= 5;
+  }
+
+  async fill(target: Range): Promise<void> {
+    const s = this.sel();
+    const down = target.r0 > s.r1;
+    const up = target.r1 < s.r0;
+    const right = target.c0 > s.c1;
+    const vertical = down || up;
+    const src = await this.engine.read(this.book, s.r0, s.c0, s.r1, s.c1, this.sheet);
+    const map = new Map(src.map(([r, c, t]) => [KEY(r, c), t]));
+    const edits: [number, number, string][] = [];
+    if (vertical) {
+      const n = target.r1 - target.r0 + 1;
+      for (let c = s.c0; c <= s.c1; c++) {
+        let seq: string[] = [];
+        for (let r = s.r0; r <= s.r1; r++) seq.push(map.get(KEY(r, c)) ?? '');
+        if (up) seq = seq.reverse();
+        const out = fillSeries(seq, n);
+        out.forEach((v, i) => edits.push([down ? target.r0 + i : target.r1 - i, c, v]));
+      }
+    } else {
+      const n = target.c1 - target.c0 + 1;
+      for (let r = s.r0; r <= s.r1; r++) {
+        let seq: string[] = [];
+        for (let c = s.c0; c <= s.c1; c++) seq.push(map.get(KEY(r, c)) ?? '');
+        if (!right) seq = seq.reverse();
+        const out = fillSeries(seq, n);
+        out.forEach((v, i) => edits.push([r, right ? target.c0 + i : target.c1 - i, v]));
+      }
+    }
+    if (edits.length) await this.commitEdits(await this.engine.apply(this.book, edits, this.sheet));
+    this.select(Math.min(s.r0, target.r0), Math.min(s.c0, target.c0), Math.max(s.r1, target.r1), Math.max(s.c1, target.c1), false);
+    this.ar = s.r0;
+    this.ac = s.c0;
+  }
+
+  private async fillDownToData(): Promise<void> {
+    const s = this.sel();
+    const probe = s.c0 > 0 ? s.c0 - 1 : s.c1 + 1;
+    if (probe >= MAX_COLS) return;
+    const bottom = await this.engine.edge(this.book, s.r1, probe, 'down', this.sheet);
+    const last = this.cache.get(KEY(s.r1 + 1, probe)) !== undefined || bottom[0] > s.r1 ? bottom[0] : s.r1;
+    if (last > s.r1) await this.fill({ r0: s.r1 + 1, r1: last, c0: s.c0, c1: s.c1 });
   }
 
   private async selectionTSV(): Promise<string> {
@@ -564,10 +779,13 @@ export class Grid {
 
   private placeEditor(): void {
     const st = this.editor.style;
-    st.left = `${this.x(this.ac)}px`;
-    st.top = `${this.y(this.ar)}px`;
-    st.width = `${Math.max(this.cols.size(this.ac), 60)}px`;
-    st.height = `${this.rows.size(this.ar)}px`;
+    const z = this.z;
+    st.left = `${this.x(this.ac) * z}px`;
+    st.top = `${this.y(this.ar) * z}px`;
+    st.width = `${Math.max(this.cols.size(this.ac), 60) * z}px`;
+    st.height = `${Math.max(this.rows.size(this.ar), 16) * z}px`;
+    st.fontSize = `${13 * z}px`;
+    st.lineHeight = `${16 * z}px`;
   }
 
   private async endEdit(commit: boolean, move?: Dir): Promise<void> {
@@ -583,8 +801,12 @@ export class Grid {
 
   private move(dir: Dir, extend: boolean): void {
     const [dr, dc] = dir === 'up' ? [-1, 0] : dir === 'down' ? [1, 0] : dir === 'left' ? [0, -1] : [0, 1];
-    if (extend) this.extendTo(this.fr2 + dr, this.fc2 + dc);
-    else this.select(this.ar + dr, this.ac + dc);
+    const fromR = extend ? this.fr2 : this.ar;
+    const fromC = extend ? this.fc2 : this.ac;
+    const r = dr ? this.rows.nextVisible(clampR(fromR + dr), dr as 1 | -1) : fromR;
+    const c = dc ? this.cols.nextVisible(clampC(fromC + dc), dc as 1 | -1) : fromC;
+    if (extend) this.extendTo(r, c);
+    else this.select(r, c);
   }
 
   private async jump(dir: Dir, extend: boolean): Promise<void> {
@@ -603,6 +825,10 @@ export class Grid {
     el.tabIndex = 0;
     el.addEventListener('wheel', (e) => {
       e.preventDefault();
+      if (e.ctrlKey || e.metaKey) {
+        this.zoomStep(e.deltaY < 0 ? 1 : -1);
+        return;
+      }
       const k = e.deltaMode === 1 ? this.rows.base : e.deltaMode === 2 ? this.h : 1;
       const dx = e.shiftKey && !e.deltaX ? e.deltaY : e.deltaX;
       const dy = e.shiftKey && !e.deltaX ? 0 : e.deltaY;
@@ -624,6 +850,17 @@ export class Grid {
         this.paint();
         return;
       }
+      if (this.drag?.kind === 'fill') {
+        const { row, col } = this.hit(p.x, p.y);
+        const s = this.sel();
+        const dy = row > s.r1 ? row - s.r1 : row < s.r0 ? s.r0 - row : 0;
+        const dx = col > s.c1 ? col - s.c1 : col < s.c0 ? s.c0 - col : 0;
+        this.fillTo = dy >= dx ? { r: row, c: s.c0 } : { r: s.r0, c: col };
+        if (!dy && !dx) this.fillTo = null;
+        this.reveal(row, col);
+        this.paint();
+        return;
+      }
       if (this.drag) {
         const { row, col } = this.hit(p.x, p.y);
         if (this.drag.kind === 'cols') this.extendTo(MAX_ROWS - 1, col);
@@ -632,7 +869,7 @@ export class Grid {
         return;
       }
       const b = this.boundary(p.x, p.y);
-      this.canvas.style.cursor = b ? (b.kind === 'col' ? 'col-resize' : 'row-resize') : 'cell';
+      this.canvas.style.cursor = this.onFillHandle(p.x, p.y) ? 'crosshair' : b ? (b.kind === 'col' ? 'col-resize' : 'row-resize') : 'cell';
     });
 
     el.addEventListener('pointerdown', (e) => {
@@ -642,6 +879,11 @@ export class Grid {
       this.focus();
       const p = this.local(e);
       this.canvas.setPointerCapture(e.pointerId);
+      if (this.onFillHandle(p.x, p.y)) {
+        this.drag = { kind: 'fill' };
+        this.fillTo = null;
+        return;
+      }
       const b = this.boundary(p.x, p.y);
       if (b) {
         this.drag = b.kind === 'col'
@@ -669,18 +911,47 @@ export class Grid {
 
     el.addEventListener('pointerup', (e) => {
       if (this.canvas.hasPointerCapture(e.pointerId)) this.canvas.releasePointerCapture(e.pointerId);
+      const d = this.drag;
       this.drag = null;
+      if (d?.kind === 'fill') {
+        const f = this.fillRange();
+        this.fillTo = null;
+        if (f) this.enqueue(() => this.fill(f));
+        else this.paint();
+      } else if (d?.kind === 'resize-col' || d?.kind === 'resize-row') this.emitView();
     });
 
     el.addEventListener('dblclick', (e) => {
       if (e.target !== this.canvas) return;
       const p = this.local(e);
+      if (this.onFillHandle(p.x, p.y)) {
+        this.enqueue(() => this.fillDownToData());
+        return;
+      }
       const b = this.boundary(p.x, p.y);
-      if (b?.kind === 'col') void this.autofit(b.index);
+      if (b?.kind === 'col') void this.autofit(b.index).then(() => this.emitView());
       else if (b?.kind === 'row') {
         this.rows.setSize(b.index, this.rows.base);
+        this.emitView();
         this.paint();
       } else if (p.x > HEAD_W && p.y > HEAD_H) this.startEdit();
+    });
+
+    el.addEventListener('contextmenu', (e) => {
+      if (e.target !== this.canvas) return;
+      e.preventDefault();
+      const p = this.local(e);
+      const { row, col } = this.hit(p.x, p.y);
+      const s = this.sel();
+      let kind: MenuKind = 'cells';
+      if (p.y < HEAD_H && p.x > HEAD_W) {
+        kind = 'cols';
+        if (!(this.wholeCols() && col >= s.c0 && col <= s.c1)) this.select(0, col, MAX_ROWS - 1, col, false);
+      } else if (p.x < HEAD_W && p.y > HEAD_H) {
+        kind = 'rows';
+        if (!(this.wholeRows() && row >= s.r0 && row <= s.r1)) this.select(row, 0, row, MAX_COLS - 1, false);
+      } else if (!(row >= s.r0 && row <= s.r1 && col >= s.c0 && col <= s.c1)) this.select(row, col);
+      this.events.onMenu(kind, e.clientX, e.clientY);
     });
 
     el.addEventListener('keydown', (e) => {
@@ -737,7 +1008,7 @@ export class Grid {
 
   private local(e: MouseEvent): { x: number; y: number } {
     const r = this.canvas.getBoundingClientRect();
-    return { x: e.clientX - r.left, y: e.clientY - r.top };
+    return { x: (e.clientX - r.left) / this.z, y: (e.clientY - r.top) / this.z };
   }
 
   private enqueue(fn: () => void | Promise<void>): void {
@@ -784,6 +1055,11 @@ export class Grid {
     }
     if (mod) {
       const k = e.key.toLowerCase();
+      if (k === '+' || k === '=') return this.insertAuto();
+      if (k === '-' || k === '_') return this.removeAuto();
+      if (e.code === 'Digit9') return this.hide(true, !e.shiftKey);
+      if (e.code === 'Digit0') return this.hide(false, !e.shiftKey);
+      if (k === 'g') return this.events.onGoto();
       if (k === 'z' && !e.shiftKey) return this.undo();
       if (k === 'y' || k === 'z') return this.redo();
       if (k === 'a') return this.select(0, 0, MAX_ROWS - 1, MAX_COLS - 1, false);
@@ -812,6 +1088,8 @@ export class Grid {
       }
       case 'F2':
         return this.startEdit();
+      case 'F5':
+        return this.events.onGoto();
       case 'Delete':
         return this.clearSelection();
       case 'Backspace':
@@ -830,8 +1108,8 @@ const ARROWS: Record<string, Dir> = { ArrowUp: 'up', ArrowDown: 'down', ArrowLef
 function wants(e: KeyboardEvent): boolean {
   if (ARROWS[e.key]) return true;
   const mod = e.ctrlKey || e.metaKey;
-  if (mod) return !e.altKey && ['z', 'y', 'a', 'home', 'end'].includes(e.key.toLowerCase());
-  if (['Enter', 'Tab', 'Escape', 'Home', 'PageDown', 'PageUp', 'F2', 'Delete', 'Backspace'].includes(e.key)) return true;
+  if (mod) return !e.altKey && (['z', 'y', 'a', 'home', 'end', '+', '=', '-', '_', 'g'].includes(e.key.toLowerCase()) || e.code === 'Digit9' || e.code === 'Digit0');
+  if (['Enter', 'Tab', 'Escape', 'Home', 'PageDown', 'PageUp', 'F2', 'F5', 'Delete', 'Backspace'].includes(e.key)) return true;
   return e.key.length === 1 && !e.altKey;
 }
 

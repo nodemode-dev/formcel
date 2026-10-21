@@ -24,9 +24,11 @@ frontend/
     ├── engine/worker.ts        loads the wasm engine, answers requests
     ├── engine/index.ts         EngineClient and engine()
     ├── extensions/registry.ts  register, activateAll, disposeAll
-    ├── grid/axis.ts            row heights and column widths with fast offsets
+    ├── grid/axis.ts            row heights and column widths, hidden rows and columns, fast offsets
     ├── grid/a1.ts              column names, A1 text, Name Box parsing
-    ├── grid/grid.ts            the canvas grid: paint, selection, keys, editing, clipboard, freeze
+    ├── grid/fill.ts            fillSeries: what the fill handle writes
+    ├── grid/grid.ts            the canvas grid: paint, selection, keys, editing, clipboard, freeze, zoom, fill, insert, hide
+    ├── ui/menu.ts              context menus in the overlay root
     ├── ui/commands.ts          command catalogue
     ├── ui/icons.ts             inline currentColor SVG icons
     ├── ui/shell.ts             top bar, toolbar, Name Box, formula bar, grid host, sheet tab
@@ -112,7 +114,42 @@ Alignment is guessed from the display text (numbers right, TRUE and FALSE centre
 - kind: todo
 - logged: v0.2.0 · 2026-10-21
 
-Text overflow into empty neighbours, wrapped display and row autofit (Phase 3); the fill handle, insert and delete shifting cells, several sheets (later in Phase 1); a Go To dialog; touch input.
+Text overflow into empty neighbours, wrapped display and row autofit (Phase 3); grouping and outlines, split panes (later in Phase 1); touch input. Done in v0.4.0: the fill handle, insert and delete shifting cells, hide and unhide, zoom, Go To (F5 and Ctrl+G focus the Name Box, as Excel's Go To box does for a reference).
+
+### Zoom
+- refers-to: src/grid/grid.ts :: Grid.setZoom, local, placeEditor
+- kind: explainer
+- logged: v0.4.0 · 2026-10-21
+
+The canvas keeps its CSS size; the drawing transform is `dpr * zoom` and the grid's logical width and height are the CSS size divided by zoom, so every paint and hit-test stays in unzoomed sheet units. Pointer positions are divided by zoom in `local`; the cell editor, which is a DOM node, is placed and font-scaled by zoom. Steps run from 50% to 200% (`ZOOMS`); a zoom box that takes typed values comes later. Ctrl+wheel moves one step.
+
+### Fill handle
+- refers-to: src/grid/grid.ts :: onFillHandle, fill, fillDownToData; src/grid/fill.ts
+- kind: explainer
+- logged: v0.4.0 · 2026-10-21
+
+Dragging the square at the bottom right of the selection draws a dashed preview and fills on release, as one undo step. Double-clicking it fills down to the end of the data in the column to the left (the column to the right when the selection starts in A). `fillSeries` follows Excel's AutoFill: one number copies, two or more continue their step, ISO dates step by the difference (a single date by a day), weekday, month and quarter names continue in the case they were typed, text ending in a number counts on, anything else repeats.
+
+### Insert, delete, hide
+- refers-to: src/grid/grid.ts :: insert, remove, hide, applyEffect, afterShift
+- kind: rationale
+- logged: v0.4.0 · 2026-10-21
+
+The engine moves the cells; the grid moves its own row and column sizes and hidden marks with `Axis.shift`, then drops its viewport cache and repaints once. Undo and redo return an effect that names any shift, so the axes move back before the cells are repainted. Hidden rows and columns have zero size, are skipped by arrow keys and by paint, and are kept in the sheet's saved view.
+
+### axis.ts rewritten (declared)
+- refers-to: src/grid/axis.ts
+- kind: warning-context
+- logged: v0.4.0 · 2026-10-21
+
+axis.ts was replaced whole with the Write tool in v0.4.0 rather than edited region by region, against the repo's surgical-edit rule. The public parts (`size`, `setSize`, `offset`, `indexAt`, `count`) keep their signatures; added are the hidden set, `shift`, `state`/`restore` and `nextVisible`. Review the file as new.
+
+### Context menus
+- refers-to: src/ui/menu.ts :: Menu
+- kind: explainer
+- logged: v0.4.0 · 2026-10-21
+
+One menu node lives in `#overlay-root` at the `--z-dropdown` layer token and is refilled per open, so opening never shifts layout. Arrow keys, Home, End, Enter and Escape work; a dangerous item asks for a second click instead of a dialog (the viewer of an artifact, and the family's rule, both rule out `confirm()`).
 
 ---
 
@@ -151,7 +188,14 @@ Lists are patched by key: cards that stay are updated in place, new ones are ins
 - kind: todo
 - logged: v0.3.0 · 2026-10-21
 
-Renaming, reordering, colouring and deleting sheets in the window (the API can rename); dropping a closed workbook from the window's engine memory; Open file and drop to import (Phase 4).
+Dropping a closed workbook from the window's engine memory; Open file and drop to import (Phase 4). Done in v0.4.0: renaming (double-click a tab), reordering, colouring and deleting sheets from the tab menu.
+
+### Sheet views
+- refers-to: src/app.ts :: saveView, showSheet, Opened.views
+- kind: explainer
+- logged: v0.4.0 · 2026-10-21
+
+Each sheet's view (sizes, hidden, frozen, zoom, tab colour) is saved 500 ms after it last changed and restored when the sheet is shown, so a reload puts every sheet back as it was left. Checked: zoom 125%, a green tab and hidden column B on the second sheet survive a reload, and the arrow key still skips B.
 
 ---
 
