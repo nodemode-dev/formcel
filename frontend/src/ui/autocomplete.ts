@@ -206,28 +206,26 @@ export class Autocomplete {
     this.field.dispatchEvent(new Event('input', { bubbles: true }));
   }
 
-  private key(e: KeyboardEvent): void {
+  take(e: KeyboardEvent): boolean {
     if (e.key === 'ArrowDown' && e.altKey) {
-      e.preventDefault();
-      e.stopImmediatePropagation();
       this.enabled = !this.enabled;
       if (this.enabled) this.update();
       else this.hide();
-      return;
+      return true;
     }
-    if (this.list.hidden) return;
+    if (this.list.hidden) return false;
     const n = this.matches.length;
     const page = VISIBLE - 1;
     const moves: Record<string, number> = { ArrowDown: this.sel + 1, ArrowUp: this.sel - 1, Home: 0, End: n - 1, PageDown: this.sel + page, PageUp: this.sel - page };
-    if (e.key in moves) {
-      this.choose(Math.max(0, Math.min(n - 1, moves[e.key])));
-    } else if (e.key === 'Tab' && !e.shiftKey) {
-      this.insert(this.sel);
-    } else if (e.key === 'Escape') {
-      this.hide();
-    } else {
-      return;
-    }
+    if (e.key in moves) this.choose(Math.max(0, Math.min(n - 1, moves[e.key])));
+    else if (e.key === 'Tab' && !e.shiftKey) this.insert(this.sel);
+    else if (e.key === 'Escape') this.hide();
+    else return false;
+    return true;
+  }
+
+  private key(e: KeyboardEvent): void {
+    if (!this.take(e)) return;
     e.preventDefault();
     e.stopImmediatePropagation();
   }

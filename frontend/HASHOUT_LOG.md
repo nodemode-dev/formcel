@@ -2,10 +2,19 @@
 
 Living log of comment content and rationale for the window. Source stays comment-free; it lives here.
 
-Current build version: v0.14.0
-Last updated: 2026-10-21 · formula autocomplete
+Current build version: v0.15.0
+Last updated: 2026-10-21 · autocomplete under fast typing
 
 ---
+
+## Autocomplete under fast typing · v0.15.0 (2026-10-21)
+
+- refers-to: src/grid/grid.ts :: editorHook, startEdit, gridKey; src/ui/autocomplete.ts :: take, key; src/app.ts
+- kind: fix
+
+Keys typed before the cell editor has focus go through the grid's key queue (the typing-race fix from v0.5.0). That path appends them to the editor itself, which fires no `input` event, so autocomplete never saw them, and a queued Tab committed the cell instead of inserting. Found by a window check that typed `=TEXTS` straight after two arrow keys.
+
+The grid now dispatches `input` on the editor wherever it writes the editor's text: `startEdit`, the queued editing keys, and typing into an open editor. It also offers each queued editing key to `editorHook` first. The app points that at the cell editor's `Autocomplete.take`, the same handling the field's own capture listener uses. Verified by typing straight after arrow keys (`shapewin.py`), plus the autocomplete, throttle, typing-race, FILTER, names and slice-three checks.
 
 ## Formula autocomplete and argument help · v0.14.0 (2026-10-21)
 

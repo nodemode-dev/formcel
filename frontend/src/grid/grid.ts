@@ -62,6 +62,7 @@ export class Grid {
   private gw = 0;
   private gh = 0;
   readonly editor: HTMLTextAreaElement;
+  editorHook: ((e: KeyboardEvent) => boolean) | null = null;
   private readonly cache = new Map<number, string>();
   private readonly fx = new Map<number, string>();
   private wins: (Range | null)[] = [null, null, null, null];
@@ -1157,6 +1158,7 @@ export class Grid {
     this.editor.focus({ preventScroll: true });
     const end = this.editor.value.length;
     this.editor.setSelectionRange(end, end);
+    this.editor.dispatchEvent(new Event('input'));
     this.paint();
   }
 
@@ -1473,6 +1475,8 @@ export class Grid {
     const mod = e.ctrlKey || e.metaKey;
     const dir = ARROWS[e.key];
     if (this.editing) {
+      if (this.editorHook?.(e)) return;
+      const before = this.editor.value;
       if (e.key === 'Enter' && e.altKey) this.editor.value += '\n';
       else if (e.key === 'Enter') await this.endEdit(true, e.shiftKey ? 'up' : 'down', 'Enter');
       else if (e.key === 'Tab') await this.endEdit(true, e.shiftKey ? 'left' : 'right', 'Tab');
@@ -1480,6 +1484,7 @@ export class Grid {
       else if (dir && !mod) await this.endEdit(true, dir);
       else if (e.key === 'Backspace') this.editor.value = this.editor.value.slice(0, -1);
       else if (e.key.length === 1 && !mod) this.editor.value += e.key;
+      if (this.editing && this.editor.value !== before) this.editor.dispatchEvent(new Event('input'));
       return;
     }
     if (dir && e.altKey && e.shiftKey && !mod && (dir === 'left' || dir === 'right')) {
@@ -1535,6 +1540,7 @@ export class Grid {
     }
     if (this.editing) {
       this.editor.value += e.key;
+      this.editor.dispatchEvent(new Event('input'));
       return;
     }
     this.startEdit(e.key);

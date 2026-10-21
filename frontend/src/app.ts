@@ -89,7 +89,8 @@ export class App {
     });
     const suggestions = (): Suggestion[] => [...FUNCTIONS, ...(this.open?.names ?? []).map(([name, refers]): Suggestion => ({ name, kind: 'name', summary: refers }))];
     new Autocomplete(p.formulaBar, suggestions);
-    new Autocomplete(this.grid.editor, suggestions);
+    const cellAc = new Autocomplete(this.grid.editor, suggestions);
+    this.grid.editorHook = (e) => cellAc.take(e);
     this.button('edit.undo').disabled = true;
     this.button('edit.redo').disabled = true;
     this.commands();
