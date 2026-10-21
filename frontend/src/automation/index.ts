@@ -11,6 +11,7 @@ import { AssistantTab } from './tabAssistant';
 import { DataTab } from './tabData';
 import { MoreTab } from './tabMore';
 import { ScriptsTab } from './tabScripts';
+import { PyCellEditor } from './pyCell';
 import { ServerTab } from './tabServer';
 import { isAppsScript } from './scriptCheck';
 import { strip } from './tsStrip';
@@ -51,10 +52,12 @@ export class Automation {
   private readonly data: DataTab;
   private readonly more: MoreTab;
   private readonly server: ServerTab;
+  private readonly py: PyCellEditor;
   private readonly panes: Record<string, HTMLElement>;
   private saveTimer = 0;
   private editTimer = 0;
   private drainTimer = 0;
+  private readTimer = 0;
   private customTimer = 0;
   private fns = new Map<string, [Script, string]>();
   private quiet = false;
@@ -72,6 +75,7 @@ export class Automation {
     });
     this.calls = new HostCalls({
       book: () => h.book(),
+      workbook: () => h.id(),
       patch: (c) => h.grid.patch(c),
       custom: (name, args) => {
         const f = this.fns.get(name.toUpperCase());
@@ -100,6 +104,7 @@ export class Automation {
     this.data = new DataTab(env);
     this.more = new MoreTab(env, () => this.scripts.reload());
     this.server = new ServerTab(env);
+    this.py = new PyCellEditor({ grid: h.grid, book: () => h.book(), sheets: () => h.sheets(), status: (t, e) => h.status(t, e), drain: () => this.calls.drain(false, true) });
     this.panel = el('section', 'fc-auto');
     this.panel.hidden = true;
     this.panel.setAttribute('aria-label', 'Automation');
@@ -119,6 +124,7 @@ export class Automation {
     this.layer = el('div', 'fc-btnlayer');
     const root = document.getElementById('overlay-root')!;
     root.appendChild(this.panel);
+    root.appendChild(this.py.root);
     root.appendChild(this.layer);
     this.layer.addEventListener('pointerdown', (e) => this.btnDown(e));
     this.layer.addEventListener('contextmenu', (e) => this.btnMenu(e));
@@ -138,6 +144,7 @@ export class Automation {
       this.show('scripts');
       (this.panes.scripts.querySelector('[data-a="record"]') as HTMLButtonElement).click();
     });
+    registerCommand({ id: 'python.cell', title: 'Python cell', description: 'Edit the active cell as Python: write code with xl() to read ranges and pandas to shape them, and a DataFrame result spills with its headers.', changes: true, keys: 'Ctrl+Alt+Shift+P', run: () => this.py.open() });
     cmd('automate.run', 'Run script', 'Run the script shown in the script editor.', () => void this.scripts.runCurrent());
     cmd('data.refresh', 'Refresh all data', 'Fetch web functions and run every saved query again.', async () => {
       await this.calls.drain(true, true);
@@ -192,6 +199,8 @@ export class Automation {
   edited(changes: Changed[]): void {
     window.clearTimeout(this.drainTimer);
     this.drainTimer = window.setTimeout(() => void this.calls.drain(), 80);
+    window.clearTimeout(this.readTimer);
+    this.readTimer = window.setTimeout(() => void this.calls.drain(false, false, true), 1300);
     if (this.quiet || !this.auto.scripts.some((s) => s.triggers?.edit)) return;
     const [s, r, c] = changes[0] ?? [0, 0, 0];
     window.clearTimeout(this.editTimer);

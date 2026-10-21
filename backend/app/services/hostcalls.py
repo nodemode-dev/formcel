@@ -138,8 +138,34 @@ def prepare(b) -> None:
         _prepared[b.id] = names
 
 
-def python_cell(args: list):
-    from . import pysand
+def py_order(b, keys: list[str]) -> list[str]:
+    where: list[tuple[int, int, int, str]] = []
+    with b.lock:
+        for i in range(len(b.sheet_names())):
+            for item in b.engine.cells(i):
+                f = item[2]
+                if isinstance(f, str) and f.startswith("=") and "PY(" in f.upper():
+                    where.append((i, item[0], item[1], f))
+    where.sort()
+
+    def rank(k: str) -> tuple[int, int, int]:
+        name, args = split_key(k)
+        if name != "PY" or not args:
+            return (-1, 0, 0)
+        code = text_arg(args[0]).replace('"', '""')
+        for s, r, c, f in where:
+            if code in f:
+                return (s, r, c)
+        return (10**6, 0, 0)
+
+    return sorted(keys, key=rank)
+
+
+_py_memo: dict[tuple, tuple[list[tuple[str, str]], str]] = {}
+
+
+def python_cell(args: list, books=None, wid: str = ""):
+    from . import pysand, pyxl
 
     if not args:
         raise ValueError("PY needs code as its first argument")
@@ -147,10 +173,35 @@ def python_cell(args: list):
         return error("#N/A"), "Python cells are off. Turn them on under Data, Python cells."
     code = text_arg(args[0])
     data = [list(a) if isinstance(a, list) else a for a in args[1:]]
+    memo_key = (wid, code, repr(data))
+
+    def read(ref: str) -> dict:
+        if books is None or not wid:
+            raise ValueError("xl() needs the workbook this cell is in")
+        return pyxl.read(books(wid), ref)
+
+    hit = _py_memo.get(memo_key)
+    if hit is not None and wid:
+        try:
+            if all(pyxl.digest(read(r)["rows"]) == d for r, d in hit[0]):
+                return hit[1], ""
+        except Exception:
+            pass
+    seen: list[tuple[str, str]] = []
+
+    def tracked(ref: str) -> dict:
+        got = read(ref)
+        seen.append((ref, pyxl.digest(got["rows"])))
+        return got
+
     try:
-        return encode(norm(pysand.run(code, data))), ""
+        out = encode(norm(pysand.run(code, data, tracked)["value"]))
     except pysand.PyError as e:
         return error("#VALUE!"), f"PY: {e}"
+    if len(_py_memo) > 400:
+        _py_memo.clear()
+    _py_memo[memo_key] = (seen, out)
+    return out, ""
 
 
 def norm(v):
@@ -159,11 +210,11 @@ def norm(v):
     return [[v]]
 
 
-def resolve(key: str, books, fresh: bool = False, auto: dict | None = None) -> tuple[str, str]:
+def resolve(key: str, books, fresh: bool = False, auto: dict | None = None, wid: str = "") -> tuple[str, str]:
     name, args = split_key(key)
     try:
         if name == "PY":
-            r = python_cell(args)
+            r = python_cell(args, books, wid)
             return r if isinstance(r, tuple) else (r, "")
         if name in ("EXTERNALREF", "EXTREF"):
             need(args, 2)

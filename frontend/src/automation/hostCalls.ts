@@ -47,6 +47,7 @@ export function parseKey(key: string): { name: string; args: (Scalar | Scalar[][
 
 export interface CallHooks {
   book(): number;
+  workbook(): string;
   patch(changes: Changed[]): void;
   custom(name: string, args: unknown[]): Promise<unknown>;
   note(text: string): void;
@@ -76,7 +77,7 @@ export class HostCalls {
     this.sent = false;
   }
 
-  async drain(fresh = false, all = false): Promise<void> {
+  async drain(fresh = false, all = false, xl = false): Promise<void> {
     if (this.running) {
       this.again = true;
       return;
@@ -88,7 +89,8 @@ export class HostCalls {
         const book = this.h.book();
         if (book < 0) return;
         const pending = await engine().hostKeys(book, false);
-        const keys = all && round === 0 ? [...new Set([...pending, ...(await engine().hostKeys(book, true))])] : pending;
+        const reads = xl && round === 0 ? (await engine().hostKeys(book, true)).filter((k) => k.startsWith('PY\x1f') && k.includes('xl(')) : [];
+        const keys = all && round === 0 ? [...new Set([...pending, ...(await engine().hostKeys(book, true))])] : [...new Set([...pending, ...reads])];
         if (!keys.length) {
           if (!this.again) return;
           continue;
@@ -98,7 +100,7 @@ export class HostCalls {
         const answers = new Map<string, string>();
         if (web.length) {
           try {
-            const r = await fetch('/api/host/resolve', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ keys: web, fresh }) });
+            const r = await fetch('/api/host/resolve', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ keys: web, fresh, workbook: this.h.workbook() }) });
             const j = (await r.json()) as { results: Record<string, { data: string; note: string }> };
             for (const [k, v] of Object.entries(j.results)) {
               answers.set(k, v.data);

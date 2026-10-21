@@ -7,3 +7,4 @@ reportlab==4.2.5
 msoffcrypto-tool==5.4.2
 PyMySQL==1.2.3
 psycopg[binary]==3.3.6
+pandas==2.3.3
