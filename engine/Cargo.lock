@@ -4,11 +4,11 @@ version = 4
 
 [[package]]
 name = "formcel-core"
-version = "0.28.0"
+version = "0.29.0"
 
 [[package]]
 name = "formcel-py"
-version = "0.28.0"
+version = "0.29.0"
 dependencies = [
  "formcel-core",
  "pyo3",
@@ -16,7 +16,7 @@ dependencies = [
 
 [[package]]
 name = "formcel-wasm"
-version = "0.28.0"
+version = "0.29.0"
 dependencies = [
  "formcel-core",
 ]
