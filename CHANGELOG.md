@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.19.0 · 2026-10-21
+
+- Cell styles from the toolbar: font and size, bold, italic, underline, strikethrough, text colour, fill colour, borders, left, center and right alignment, top, middle and bottom alignment, indent, wrap text, and Clear formats.
+- Borders: all, outside, inside, top, bottom, left, right or none, in thin, medium, thick, dashed, dotted or double lines. Outside borders undo in one step.
+- Excel's shortcuts: Ctrl+B, Ctrl+I, Ctrl+U and Ctrl+5 (also Ctrl+2, 3, 4) turn bold, italic, underline and strikethrough on or off; Ctrl+Shift+& draws an outline border and Ctrl+Shift+_ removes borders.
+- Text now sits at the bottom of its cell, as in Excel, and long text spills into empty cells beside it.
+- Rows grow to fit wrapped text and larger fonts.
+- Colours in number format codes, such as `[Red]` or `[Blue]`, now show.
+- Styles are saved in the workbook, undo and redo, and move with inserted and deleted rows and columns.
+- Not yet: merged cells, rotation, cell styles, themes and the format painter; copying, filling and pasting do not carry styles yet.
+
 ## 0.18.0 · 2026-10-21
 
 - Number formats per cell. The new Number format button lists General, Number, Currency, Accounting, Percent, Scientific, Fraction, Short date, Day month year, Long date, Time, Time with seconds and Text, and Custom format takes any format code.
