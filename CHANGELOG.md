@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.4.0 · 2026-10-21
+
+- Insert and delete rows and columns (Ctrl+Plus, Ctrl+Minus, or the header menu); cells, sizes and hidden marks move with them, and each is one undo step in the window and the engine process alike.
+- Hide and unhide rows and columns (Ctrl+9, Ctrl+0, Shift to unhide); arrow keys skip hidden ones.
+- Fill handle: drag to fill down or across, double-click to fill down to the end of the neighbouring data. Copies single numbers, continues number and date steps, weekday, month and quarter names, and text ending in a number.
+- Zoom from 50% to 200% in the bottom bar or with Ctrl+wheel.
+- Go To: F5 and Ctrl+G put the cursor in the Name Box.
+- Sheet tabs: double-click to rename; a menu to rename, move left or right, pick a colour and delete (with a second click to confirm).
+- Right-click menus on cells, row headers and column headers.
+- Each sheet's sizes, hidden rows and columns, frozen panes, zoom and tab colour are saved in the `.fcel` file and restored on open.
+- Fixed: the engine process could stop answering after its first request on a second thread (the Rust module refused cross-thread use and aborted the process).
+
 ## 0.3.0 · 2026-10-21
 
 - Home screen after formdeck: Start (greeting, Blank workbook, the four most recent workbooks, eight templates), Recent, Templates with category chips and search, and Trash with restore and a two-click delete. Every card shows a thumbnail of its first sheet.
