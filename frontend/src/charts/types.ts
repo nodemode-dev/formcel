@@ -47,6 +47,17 @@ export interface ChartSpec {
 
 export type ObjectKind = 'chart' | 'picture' | 'shape' | 'text';
 
+export interface Anchor {
+  r0: number;
+  c0: number;
+  dy0: number;
+  dx0: number;
+  r1: number;
+  c1: number;
+  dy1: number;
+  dx1: number;
+}
+
 export interface FloatObject {
   id: string;
   kind: ObjectKind;
@@ -54,6 +65,9 @@ export interface FloatObject {
   y: number;
   w: number;
   h: number;
+  anchor?: Anchor;
+  alt?: string;
+  name?: string;
   chart?: ChartSpec;
   picture?: { src: string; name: string };
   shape?: { shape: 'rect' | 'ellipse' | 'arrow'; fill: string; stroke: string; text: string };

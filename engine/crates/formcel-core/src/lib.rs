@@ -13,6 +13,7 @@ mod graph;
 pub mod fmtcode;
 pub mod locale;
 pub mod numfmt;
+pub mod objects;
 pub mod protect;
 pub mod sort;
 pub mod stats;
@@ -222,11 +223,12 @@ pub struct Sheet {
     filter: Option<filter::Filter>,
     valid: Vec<valid::Validation>,
     prot: protect::SheetProt,
+    objects: Vec<objects::Anchor>,
 }
 
 impl Sheet {
     pub fn new(name: &str) -> Self {
-        Sheet { name: name.to_string(), cells: Store::default(), merges: Vec::new(), rules: Vec::new(), filter: None, valid: Vec::new(), prot: protect::SheetProt::default() }
+        Sheet { name: name.to_string(), cells: Store::default(), merges: Vec::new(), rules: Vec::new(), filter: None, valid: Vec::new(), prot: protect::SheetProt::default(), objects: Vec::new() }
     }
 
     pub fn len(&self) -> usize {
@@ -327,6 +329,7 @@ struct Lost {
     valid: Vec<valid::Validation>,
     tables: Vec<table::Table>,
     links: Vec<(Key, Option<String>, Option<String>)>,
+    objects: Vec<objects::Anchor>,
 }
 
 pub type Changed = Vec<(usize, Addr, Value)>;
@@ -353,6 +356,7 @@ pub struct Effect {
     pub filter: Option<usize>,
     pub valid: Option<usize>,
     pub tables: bool,
+    pub objects: Option<usize>,
 }
 
 fn moved_addr(sheet: usize, a: Addr, s: &Shift) -> Option<Addr> {
@@ -380,6 +384,7 @@ impl Effect {
         self.rules = o.rules.or(self.rules);
         self.tables |= o.tables;
         self.valid = o.valid.or(self.valid);
+        self.objects = o.objects.or(self.objects);
         self.filter = o.filter.or(self.filter);
         self.theme |= o.theme;
         self.named |= o.named;
@@ -419,6 +424,7 @@ enum Tx {
     Rules { sheet: usize, before: Vec<cf::Rule>, after: Vec<cf::Rule> },
     Filter { sheet: usize, before: Option<filter::Filter>, after: Option<filter::Filter> },
     Valid { sheet: usize, before: Vec<valid::Validation>, after: Vec<valid::Validation> },
+    Objects { sheet: usize, before: Vec<objects::Anchor>, after: Vec<objects::Anchor> },
     Tables { before: Vec<table::Table>, after: Vec<table::Table> },
     Pivots { before: Vec<pivot::Pivot>, after: Vec<pivot::Pivot> },
     Links(Vec<FormatChange>),
@@ -1520,7 +1526,9 @@ impl Workbook {
     }
 
     fn do_shift(&mut self, s: Shift) -> (Dropped, Rewritten, Lost) {
-        let mut lost_fmt = Lost { merges: self.sheets[s.sheet].merges.clone(), rules: self.sheets[s.sheet].rules.clone(), filter: self.sheets[s.sheet].filter.clone(), valid: self.sheets[s.sheet].valid.clone(), tables: self.tables.clone(), ..Lost::default() };
+        let mut lost_fmt = Lost { merges: self.sheets[s.sheet].merges.clone(), rules: self.sheets[s.sheet].rules.clone(), filter: self.sheets[s.sheet].filter.clone(), valid: self.sheets[s.sheet].valid.clone(), tables: self.tables.clone(), objects: self.sheets[s.sheet].objects.clone(), ..Lost::default() };
+        let anchors = std::mem::take(&mut self.sheets[s.sheet].objects);
+        self.sheets[s.sheet].objects = objects::shift_all(anchors, s);
         self.shift_tables(s);
         self.sheets[s.sheet].prot.shift(s.rows, s.at, s.delta);
         let valid = std::mem::take(&mut self.sheets[s.sheet].valid);
@@ -1914,6 +1922,10 @@ impl Workbook {
                 self.sheets[*sheet].valid = if forward { after.clone() } else { before.clone() };
                 Effect { valid: Some(*sheet), ..Effect::default() }
             }
+            Tx::Objects { sheet, before, after } => {
+                self.sheets[*sheet].objects = if forward { after.clone() } else { before.clone() };
+                Effect { objects: Some(*sheet), ..Effect::default() }
+            }
             Tx::WhatIf { before, after } => {
                 self.whatif_replay(if forward { after } else { before });
                 Effect::default()
@@ -1955,7 +1967,7 @@ impl Workbook {
             Tx::Shift { shift, dropped, rewritten, lost } => {
                 if forward {
                     self.do_shift(*shift);
-                    return Effect { shift: Some(*shift), merges: Some(shift.sheet), ..Effect::default() };
+                    return Effect { shift: Some(*shift), merges: Some(shift.sheet), objects: Some(shift.sheet), ..Effect::default() };
                 }
                 let back = Shift { delta: -shift.delta, ..*shift };
                 self.do_shift(back);
@@ -1963,6 +1975,7 @@ impl Workbook {
                 self.sheets[shift.sheet].rules = lost.rules.clone();
                 self.sheets[shift.sheet].filter = lost.filter.clone();
                 self.sheets[shift.sheet].valid = lost.valid.clone();
+                self.sheets[shift.sheet].objects = lost.objects.clone();
                 self.tables = lost.tables.clone();
                 self.graph.built = false;
                 self.apply_links(&lost.links, false);
@@ -1975,7 +1988,7 @@ impl Workbook {
                 }
                 self.recalc_all();
                 let cells = dropped.iter().map(|(a, _)| (shift.sheet, *a, self.sheets[shift.sheet].cells.get(*a).cloned().unwrap_or(Value::Empty))).collect();
-                Effect { cells, shift: Some(back), merges: Some(shift.sheet), rules: Some(shift.sheet), filter: Some(shift.sheet), valid: Some(shift.sheet), tables: true, formats: restored.formats, styles: restored.styles, ..Effect::default() }
+                Effect { cells, shift: Some(back), merges: Some(shift.sheet), rules: Some(shift.sheet), filter: Some(shift.sheet), valid: Some(shift.sheet), objects: Some(shift.sheet), tables: true, formats: restored.formats, styles: restored.styles, ..Effect::default() }
             }
         }
     }

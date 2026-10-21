@@ -330,6 +330,18 @@ export class EngineClient {
     return (await this.call({ op: 'table.remove', book, name })) as Effect;
   }
 
+  async objectLines(book: number, sheet: number): Promise<string[]> {
+    return (await this.call({ op: 'objects.list', book, sheet })) as string[];
+  }
+
+  async loadObjects(book: number, sheet: number, lines: string[]): Promise<void> {
+    await this.call({ op: 'objects.load', book, sheet, lines });
+  }
+
+  async setObjects(book: number, sheet: number, lines: string[]): Promise<Effect> {
+    return (await this.call({ op: 'objects.set', book, sheet, lines })) as Effect;
+  }
+
   async validations(book: number, sheet: number): Promise<string[]> {
     return (await this.call({ op: 'valid.list', book, sheet })) as string[];
   }

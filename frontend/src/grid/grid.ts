@@ -22,6 +22,7 @@ export interface ObjectsHook {
   paint(): void;
   data(): void;
   sheet(i: number): void;
+  shifted?(sheet: number): unknown;
 }
 
 export interface ObjectFrame {
@@ -2102,6 +2103,7 @@ export class Grid {
     for (const s of e.more ?? []) this.afterShift(s);
     if (e.shift) this.afterShift(e.shift);
     if (e.formats.length) this.events.onFormats(e.formats);
+    if (e.objects != null) void this.objectsHook?.shifted?.(e.objects);
     if (e.styles.length) {
       this.applyStyles(e.styles);
       this.events.onStyles(e.styles.map(([s, r, c, raw]) => [s, r, c, raw]));
@@ -2153,6 +2155,7 @@ export class Grid {
     if (gutter(axis) !== before) this.resize();
     this.dropWindows();
     this.events.onShift(s);
+    void this.objectsHook?.shifted?.(s.sheet);
     void this.loadMerges();
     this.emitView();
     this.paint();

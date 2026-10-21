@@ -65,6 +65,9 @@ interface Exports {
   fc_load_whatif(book: number, lines: number, len: number): number;
   fc_validations(book: number, sheet: number): number;
   fc_load_validations(book: number, sheet: number, lines: number, len: number): number;
+  fc_objects(book: number, sheet: number): number;
+  fc_load_objects(book: number, sheet: number, lines: number, len: number): number;
+  fc_set_objects(book: number, sheet: number, lines: number, len: number): number;
   fc_set_validation(book: number, sheet: number, r0: number, c0: number, r1: number, c1: number, t: number, len: number): number;
   fc_validation_at(book: number, sheet: number, row: number, col: number): number;
   fc_list_items(book: number, sheet: number, row: number, col: number): number;
@@ -232,8 +235,9 @@ function effect(s: string): Effect {
   const rl = /^!\t(\d+)$/m.exec(s);
   const fl = /^~\t(\d+)$/m.exec(s);
   const vl = /^\?\t(\d+)$/m.exec(s);
+  const ob = /^%\t(\d+)$/m.exec(s);
   const styles = lines(s).filter((l) => l[0] === '&').map(([, sh, r, c, raw, shown]) => [Number(sh), Number(r), Number(c), unescape(raw ?? ''), unescape(shown ?? raw ?? '')] as StyleChange);
-  return { shift, more: shifts.slice(0, -1), changes: changed(s).filter((l) => !Number.isNaN(l[0])), formats: formatsOf(s), styles, merges: m ? Number(m[1]) : null, theme: /^\^$/m.test(s), named: /^@$/m.test(s), rules: rl ? Number(rl[1]) : null, filter: fl ? Number(fl[1]) : null, valid: vl ? Number(vl[1]) : null, tables: /^\*$/m.test(s) };
+  return { shift, more: shifts.slice(0, -1), changes: changed(s).filter((l) => !Number.isNaN(l[0])), formats: formatsOf(s), styles, merges: m ? Number(m[1]) : null, theme: /^\^$/m.test(s), named: /^@$/m.test(s), rules: rl ? Number(rl[1]) : null, filter: fl ? Number(fl[1]) : null, valid: vl ? Number(vl[1]) : null, objects: ob ? Number(ob[1]) : null, tables: /^\*$/m.test(s) };
 }
 
 const MERGE_MODES = { center: 0, across: 1, cells: 2, unmerge: 3 } as const;
@@ -492,6 +496,16 @@ function run(x: Exports, req: Request): Value {
       });
     case 'whatif.load':
       return withStrings(x, [req.lines.join('\n')], ([p, l]) => ok(x.fc_load_whatif(req.book, p, l), 'The engine refused those what-if definitions.'));
+    case 'objects.list':
+      return out(x, x.fc_objects(req.book, req.sheet)).split('\n').filter(Boolean);
+    case 'objects.load':
+      return withStrings(x, [req.lines.join('\n')], ([p, l]) => ok(x.fc_load_objects(req.book, req.sheet, p, l), 'The engine refused those objects.'));
+    case 'objects.set':
+      return withStrings(x, [req.lines.join('\n')], ([p, l]) => {
+        const n = x.fc_set_objects(req.book, req.sheet, p, l);
+        if (n < 0) throw new Error('The engine refused those objects.');
+        return effect(out(x, n));
+      });
     case 'valid.list':
       return out(x, x.fc_validations(req.book, req.sheet)).split('\n').filter(Boolean);
     case 'valid.load':

@@ -724,6 +724,41 @@ pub unsafe extern "C" fn fc_load_validations(id: u32, sheet: u32, lines: *const 
     }
 }
 
+/// A sheet's floating object anchors, one line each.
+#[no_mangle]
+pub extern "C" fn fc_objects(id: u32, sheet: u32) -> i32 {
+    match with_book(id, |wb| wb.objects(sheet as usize).join("\n")) {
+        Some(s) => emit(&s) as i32,
+        None => -1,
+    }
+}
+
+/// Loads a sheet's floating object anchors without an undo step.
+///
+/// # Safety
+/// `lines` must point at `len` readable bytes.
+#[no_mangle]
+pub unsafe extern "C" fn fc_load_objects(id: u32, sheet: u32, lines: *const u8, len: u32) -> i32 {
+    let list: Vec<String> = text(lines, len).split('\n').filter(|l| !l.is_empty()).map(String::from).collect();
+    match with_book(id, |wb| wb.load_objects(sheet as usize, &list)) {
+        Some(Ok(n)) => n as i32,
+        _ => -1,
+    }
+}
+
+/// Replaces a sheet's floating object anchors as one undo step.
+///
+/// # Safety
+/// `lines` must point at `len` readable bytes.
+#[no_mangle]
+pub unsafe extern "C" fn fc_set_objects(id: u32, sheet: u32, lines: *const u8, len: u32) -> i32 {
+    let list: Vec<String> = text(lines, len).split('\n').filter(|l| !l.is_empty()).map(String::from).collect();
+    match with_book(id, |wb| wb.set_objects(sheet as usize, &list).map(|e| wb.encode(&e))) {
+        Some(Ok(s)) => emit(&s) as i32,
+        _ => -1,
+    }
+}
+
 /// The validation rule over a cell, as a line, or empty.
 #[no_mangle]
 pub extern "C" fn fc_validation_at(id: u32, sheet: u32, row: u32, col: u32) -> i32 {
