@@ -180,3 +180,10 @@ Each sheet also gains `styles`, a list of `[row, col, style]` in the engine's ca
 - logged: v0.20.0 · 2026-10-21
 
 Each sheet gains `merges`, a list of `[r0, c0, r1, c1]`. `PUT /api/workbooks/{id}/merges` replaces a sheet's whole list; the window sends it after any change that touched merges, including undo, because the engine process only replays inserts and deletes and would otherwise keep merges an undo restored.
+
+### Theme and cell styles in the file
+- refers-to: app/services/store.py :: _write, _load, get, set_look; app/routers/workbooks.py :: set_look, LookIn
+- kind: explainer
+- logged: v0.21.0 · 2026-10-21
+
+`workbook.json` gains `theme` (the theme text) and `cellStyles` (one line per named style). They are loaded before the sheets so number formats from styles apply as cells load. `PUT /api/workbooks/{id}/look` replaces either or both. A file from before v0.21.0 opens with the FormCel theme and the built-in styles.

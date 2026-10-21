@@ -127,6 +127,21 @@ class MergesIn(BaseModel):
     areas: list[tuple[int, int, int, int]] = Field(default_factory=list)
 
 
+class LookIn(BaseModel):
+    theme: str | None = Field(default=None, max_length=2000)
+    cell_styles: list[str] | None = Field(default=None, max_length=2000)
+
+
+@router.put("/workbooks/{wid}/look")
+def set_look(wid: str, body: LookIn) -> dict:
+    try:
+        return store().set_look(wid, body.theme, body.cell_styles)
+    except (KeyError, FileNotFoundError):
+        raise missing(wid)
+    except ValueError as e:
+        raise HTTPException(422, f"That theme or cell style could not be saved: {e}")
+
+
 @router.put("/workbooks/{wid}/merges")
 def set_merges(wid: str, body: MergesIn) -> dict:
     try:

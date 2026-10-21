@@ -70,6 +70,7 @@ class Store:
         doc = {"format": FORMAT, "version": FORMAT_VERSION, "id": b.id, "title": b.title, "created": b.created,
                "modified": b.modified, "template": b.template, "preview": b.preview(),
                "names": [list(n) for n in b.engine.names()],
+               "theme": b.engine.theme(), "cellStyles": b.engine.cell_styles(),
                "sheets": [{"name": n, "view": b.views[i] if i < len(b.views) else {}, "cells": b.engine.cells(i), "formats": b.engine.formats(i), "styles": b.engine.styles(i), "merges": [list(m) for m in b.engine.merges(i)]} for i, n in enumerate(b.sheet_names())]}
         target = self.path(b.id)
         tmp = target.with_suffix(".fcel.tmp")
@@ -92,6 +93,10 @@ class Store:
                 return self.open[wid]
             doc = self._read(self.path(wid))
             eng = formcel_engine.Workbook()
+            if doc.get("theme"):
+                eng.load_theme(doc["theme"])
+            if doc.get("cellStyles"):
+                eng.load_cell_styles(doc["cellStyles"])
             for i, s in enumerate(doc["sheets"]):
                 if i:
                     eng.add_sheet(s["name"])
@@ -150,7 +155,18 @@ class Store:
         b = self._load(wid)
         with b.lock:
             n = len(b.sheet_names())
-            return {**b.meta(), "names": [list(x) for x in b.engine.names()], "cells": [b.engine.cells(i) for i in range(n)], "formats": [b.engine.formats(i) for i in range(n)], "styles": [b.engine.styles(i) for i in range(n)], "merges": [[list(m) for m in b.engine.merges(i)] for i in range(n)]}
+            return {**b.meta(), "names": [list(x) for x in b.engine.names()], "theme": b.engine.theme(), "cellStyles": b.engine.cell_styles(), "cells": [b.engine.cells(i) for i in range(n)], "formats": [b.engine.formats(i) for i in range(n)], "styles": [b.engine.styles(i) for i in range(n)], "merges": [[list(m) for m in b.engine.merges(i)] for i in range(n)]}
+
+    def set_look(self, wid: str, theme: str | None = None, cell_styles: list[str] | None = None) -> dict:
+        b = self._load(wid)
+        with b.lock:
+            if theme is not None and not b.engine.load_theme(theme):
+                raise ValueError("not a theme FormCel can read")
+            if cell_styles is not None:
+                b.engine.load_cell_styles(cell_styles)
+            b.modified = now()
+            self._write(b)
+            return {"id": b.id, "modified": b.modified}
 
     def set_merges(self, wid: str, sheet: int, areas: list[tuple[int, int, int, int]]) -> dict:
         b = self._load(wid)
