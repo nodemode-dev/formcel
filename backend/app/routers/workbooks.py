@@ -112,6 +112,16 @@ def set_formats(wid: str, body: EditIn) -> dict:
         raise HTTPException(422, f"Those formats could not be saved: {e}")
 
 
+@router.post("/workbooks/{wid}/styles")
+def set_styles(wid: str, body: EditIn) -> dict:
+    try:
+        return store().set_formats(wid, body.sheet, body.cells, styles=True)
+    except (KeyError, FileNotFoundError):
+        raise missing(wid)
+    except (IndexError, ValueError) as e:
+        raise HTTPException(422, f"Those styles could not be saved: {e}")
+
+
 @router.put("/workbooks/{wid}/names")
 def set_name(wid: str, body: NameIn) -> dict:
     try:

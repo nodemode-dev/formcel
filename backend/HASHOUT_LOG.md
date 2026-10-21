@@ -166,3 +166,10 @@ Defaults to 127.0.0.1. A deployment that needs another address sets FORMCEL_HOST
 - logged: v0.18.0 · 2026-10-21
 
 Each sheet in `workbook.json` gains `formats`, a list of `[row, col, code]`. Loading applies the formats before the cells, so a cell under `@` reads `007` back as text and not as 7. `POST /api/workbooks/{id}/formats` takes the same body as `/cells`; an empty code clears that cell's format. The window sends formats before the cells of the same change for the same reason.
+
+### Styles in the file
+- refers-to: app/services/store.py :: _write, _load, get, set_formats(styles=True); app/routers/workbooks.py :: set_styles
+- kind: explainer
+- logged: v0.19.0 · 2026-10-21
+
+Each sheet also gains `styles`, a list of `[row, col, style]` in the engine's canonical style text. `POST /api/workbooks/{id}/styles` takes the same body as `/formats` and shares its handler; an empty style clears the cell. Row heights grown for wrapped or large text are saved through the sheet's view like any other row height.
