@@ -76,6 +76,7 @@ export const icons = {
   page: svg('<path d="M7 3.5h7l4 4v13H7z"/><path d="M14 3.5v4h4M9.5 12h5M9.5 15.5h5"/>'),
   access: svg('<circle cx="12" cy="5.5" r="1.75"/><path d="M5 9l7 1.5L19 9M12 10.5v4M9 20l3-5.5 3 5.5"/>'),
   upload: svg('<path d="M12 15V4M7.5 8.5L12 4l4.5 4.5M5 19.5h14"/>'),
+  chevronDown: svg('<path d="M6 9.5l6 6 6-6"/>'),
   script: svg('<path d="M9 7.5L4.5 12 9 16.5M15 7.5l4.5 4.5-4.5 4.5M13.5 5l-3 14"/>'),
   assistant: svg('<path d="M12 4l1.8 5.2L19 11l-5.2 1.8L12 18l-1.8-5.2L5 11l5.2-1.8z"/><path d="M18.5 4v3M17 5.5h3"/>'),
   dataConn: svg('<ellipse cx="12" cy="6.5" rx="7" ry="2.8"/><path d="M5 6.5v11c0 1.5 3.1 2.8 7 2.8s7-1.3 7-2.8v-11M5 12c0 1.5 3.1 2.8 7 2.8s7-1.3 7-2.8"/>'),

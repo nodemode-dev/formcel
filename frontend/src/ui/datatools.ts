@@ -118,6 +118,8 @@ const SPECS: Spec[] = [
       { k: 'transpose', label: 'Transpose', kind: 'check' },
     ],
   },
+  { id: 'inscells', title: 'Insert', ok: 'OK', fields: [{ k: 'how', label: 'Insert', kind: 'select', options: [['right', 'Shift cells right'], ['down', 'Shift cells down'], ['row', 'Entire row'], ['col', 'Entire column']] }] },
+  { id: 'delcells', title: 'Delete', ok: 'OK', fields: [{ k: 'how', label: 'Delete', kind: 'select', options: [['left', 'Shift cells left'], ['up', 'Shift cells up'], ['row', 'Entire row'], ['col', 'Entire column']] }] },
   { id: 'template', title: 'Save as template', ok: 'Save', fields: [{ k: 'name', label: 'Template name', kind: 'text' }, { k: 'desc', label: 'Description', kind: 'text' }] },
   { id: 'fview', title: 'Save filter view', ok: 'Save', fields: [{ k: 'name', label: 'Name', kind: 'text' }] },
   { id: 'slicer', title: 'Insert slicer', ok: 'Insert', fields: [{ k: 'col', label: 'Column', kind: 'select' }] },
@@ -493,7 +495,23 @@ export class DataTools {
     this.show('pasteops', async (v) => this.line(await this.c.grid.pasteWith(v.what as string, v.op as string, v.skip as boolean, v.transpose as boolean)));
   }
 
-  askTemplate(save: (name: string, desc: string) => Promise<string>, title: string): void {
+  cellsDialog(insert: boolean): void {
+    const id = insert ? 'inscells' : 'delcells';
+    this.prepare(id);
+    this.put(id, 'how', insert ? 'down' : 'up');
+    this.show(id, async (v) => {
+      const g = this.c.grid;
+      const how = v.how as string;
+      if (how === 'row' || how === 'col') {
+        await (insert ? g.insert(how === 'row') : g.remove(how === 'row'));
+        return '';
+      }
+      const s = g.selection();
+      return this.line(await g.runTool('shiftcells', this.area(s), how, insert ? '1' : '0'));
+    });
+  }
+
+  askTemplate(save:(name: string, desc: string) => Promise<string>, title: string): void {
     this.prepare('template');
     this.put('template', 'name', title);
     this.put('template', 'desc', '');

@@ -57,8 +57,8 @@
 
 .fc-formula {
   display: grid;
-  grid-template-columns: 112px auto minmax(0, 1fr);
-  align-items: center;
+  grid-template-columns: 112px auto minmax(0, 1fr) auto;
+  align-items: start;
   gap: var(--space-2);
   padding: var(--space-1) var(--space-2);
   border-bottom: 1px solid var(--border-color);
@@ -76,6 +76,44 @@
   color: var(--text-primary);
   font: inherit;
 }
+
+.fc-fbar {
+  display: block;
+  box-sizing: border-box;
+  padding-block: 0;
+  line-height: 24px;
+  resize: none;
+  overflow: hidden;
+  white-space: pre;
+}
+
+.fc-formula[data-open="true"] .fc-fbar {
+  height: var(--fbar-h, 96px);
+  padding-block: 2px;
+  overflow: auto;
+  white-space: pre-wrap;
+}
+
+.fc-fbar-toggle {
+  width: 26px;
+  height: 26px;
+}
+
+.fc-formula[data-open="true"] .fc-fbar-toggle .fc-icon { transform: rotate(180deg); }
+
+.fc-fx { line-height: 26px; }
+
+.fc-fbar-grip {
+  grid-column: 1 / -1;
+  height: 6px;
+  margin-top: -2px;
+  cursor: ns-resize;
+  touch-action: none;
+  border-radius: var(--radius-sm);
+}
+
+.fc-fbar-grip:hover,
+.fc-fbar-grip:active { background: var(--accent-color-dim); }
 
 .fc-namebox {
   font-family: var(--font-mono);

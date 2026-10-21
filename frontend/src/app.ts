@@ -520,6 +520,7 @@ export class App {
       await g.setFormat('');
       if (this.open) await e.undoGroup(this.open.book, mark);
     });
+    cmd('view.formula-bar', 'Expand or collapse formula bar', 'Show the formula bar several lines tall with wrapped text and a drag handle to resize it, or fold it back to one line.', false, () => this.toggleFormulaBar(), 'Mod+Shift+U');
     cmd('edit.link', 'Insert link', 'Link the active cell to a web page, an email address or a place in the workbook, or change its link.', true, () => this.linkBox(), 'Mod+K');
     cmd('edit.link-open', 'Open link', 'Open the link in the active cell. Ctrl+click a linked cell does the same.', false, () => this.grid.linkTarget().then((t) => this.followLink(t)));
     cmd('edit.link-remove', 'Remove link', 'Remove the links from the selected cells and keep their text.', true, () => this.grid.removeLinks());
@@ -678,8 +679,38 @@ export class App {
       p.nameBox.removeAttribute('aria-invalid');
       p.nameBox.value = this.currentRef;
     });
+    p.formulaToggle.addEventListener('click', () => this.toggleFormulaBar());
+    p.formulaGrip.addEventListener('pointerdown', (e) => {
+      e.preventDefault();
+      const y0 = e.clientY;
+      const h0 = p.formulaBar.offsetHeight;
+      const move = (m: PointerEvent) => p.formulaBox.style.setProperty('--fbar-h', `${Math.max(52, Math.min(360, h0 + m.clientY - y0))}px`);
+      const up = () => {
+        window.removeEventListener('pointermove', move);
+        window.removeEventListener('pointerup', up);
+        try {
+          localStorage.setItem('fc-fbar-h', String(p.formulaBar.offsetHeight));
+        } catch {
+          return;
+        }
+      };
+      window.addEventListener('pointermove', move);
+      window.addEventListener('pointerup', up);
+    });
+    try {
+      const h = Number(localStorage.getItem('fc-fbar-h'));
+      if (h >= 52 && h <= 360) p.formulaBox.style.setProperty('--fbar-h', `${h}px`);
+    } catch {
+      p.formulaBox.style.removeProperty('--fbar-h');
+    }
     p.formulaBar.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') {
+      if (e.key === 'Enter' && e.altKey) {
+        e.preventDefault();
+        const f = p.formulaBar;
+        f.setRangeText('\n', f.selectionStart, f.selectionEnd, 'end');
+        f.dispatchEvent(new Event('input'));
+        if (!this.fbarOpen()) this.toggleFormulaBar(true);
+      } else if (e.key === 'Enter') {
         e.preventDefault();
         void this.grid.setActive(p.formulaBar.value).then(() => this.grid.focus());
       } else if (e.key === 'Escape') {
@@ -688,6 +719,23 @@ export class App {
         this.grid.focus();
       }
     });
+  }
+
+  private fbarOpen(): boolean {
+    return this.p.formulaBox.dataset.open === 'true';
+  }
+
+  private toggleFormulaBar(force?: boolean): void {
+    const p = this.p;
+    const on = force ?? !this.fbarOpen();
+    p.formulaBox.dataset.open = String(on);
+    p.formulaBar.wrap = on ? 'soft' : 'off';
+    p.formulaGrip.hidden = !on;
+    p.formulaToggle.setAttribute('aria-expanded', String(on));
+    const label = on ? 'Collapse formula bar (Ctrl+Shift+U)' : 'Expand formula bar (Ctrl+Shift+U)';
+    p.formulaToggle.title = label;
+    p.formulaToggle.setAttribute('aria-label', label.replace(' (Ctrl+Shift+U)', ''));
+    p.formulaBar.focus();
   }
 
   private async route(): Promise<void> {
@@ -2804,11 +2852,7 @@ export class App {
   }
 
   private cellsMenu(insert: boolean): void {
-    const r = this.grid.cellRect();
-    const go = (dir: string) => () => void this.grid.runTool('shiftcells', `${this.grid.selection().r0},${this.grid.selection().c0},${this.grid.selection().r1},${this.grid.selection().c1}`, dir, insert ? '1' : '0').then((m) => this.status(m.split('\n', 1)[0]));
-    this.menu.show(r.left + 20, r.bottom, insert
-      ? [{ label: 'Insert cells, shift cells right', run: go('right') }, { label: 'Insert cells, shift cells down', run: go('down') }]
-      : [{ label: 'Delete cells, shift cells left', run: go('left') }, { label: 'Delete cells, shift cells up', run: go('up') }], () => this.grid.focus());
+    this.tools.cellsDialog(insert);
   }
 
   private async saveTemplate(): Promise<void> {
