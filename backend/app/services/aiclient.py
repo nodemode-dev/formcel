@@ -113,12 +113,16 @@ def add_results(ai: dict, messages: list, reply: dict, results: list[tuple[str, 
             messages.append({"role": "tool", "tool_call_id": i, "content": c})
 
 
-def cell_answer(prompt: str, data: str) -> str:
+def cell_answer(prompt: str, data: list[str]) -> str:
     from .hostcalls import esc
 
     ai = endpoint()
+    if not prompt.strip():
+        raise NotConfigured("AI needs a prompt as its first argument.")
     system = "You answer inside one spreadsheet cell. Reply with the answer only: no preamble, no markdown, one short line unless the prompt asks for more."
-    content = prompt if not data else f"{prompt}\n\nData (tab separated rows):\n{data}"
+    content = prompt
+    for n, block in enumerate(data, 1):
+        content += f"\n\nData {n} (tab separated rows):\n{block}" if len(data) > 1 else f"\n\nData (tab separated rows):\n{block}"
     try:
         reply = turn(ai, system, [{"role": "user", "content": content}], [])
     except ModelError as e:

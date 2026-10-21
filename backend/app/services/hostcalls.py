@@ -117,10 +117,10 @@ def resolve(key: str, books, fresh: bool = False) -> tuple[str, str]:
         if name == "IMPORTRANGE":
             return encode(importrange(args, books)), ""
         if name == "AI":
-            need(args, 1, 1)
-            return aiclient.cell_answer(text_arg(args[0]), text_arg(args[1]) if len(args) > 1 else ""), ""
+            need(args, 1, 7)
+            return aiclient.cell_answer(text_arg(args[0]), [text_arg(a) for a in args[1:] if a != ""]), ""
     except aiclient.NotConfigured as e:
-        return error("#N/A"), str(e)
+        return error("#ERROR!"), str(e)
     except (webdata.FetchError, ValueError, KeyError, IndexError, TypeError) as e:
         code = "#VALUE!" if name in ("WEBSERVICE", "FILTERXML") else "#N/A"
         return error(code), f"{name}: {e}"
