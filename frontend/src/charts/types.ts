@@ -125,8 +125,10 @@ export interface FloatObject {
   inCell?: boolean;
   decorative?: boolean;
   spark?: SparkSpec;
-  shape?: { shape: 'rect' | 'ellipse' | 'arrow'; fill: string; stroke: string; text: string };
+  shape?: { shape: 'rect' | 'ellipse' | 'arrow' | 'button'; fill: string; stroke: string; text: string; color?: string; size?: number };
   text?: { text: string; size: number; color: string };
+  script?: string;
+  scriptName?: string;
 }
 
 export interface SparkSpec {

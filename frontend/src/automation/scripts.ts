@@ -8,6 +8,9 @@ export interface RunHooks {
   title(): string;
   grid: Grid;
   addSheet(name: string): Promise<number>;
+  renameSheet?(index: number, name: string): Promise<void>;
+  deleteSheet?(index: number): Promise<void>;
+  showSheet?(index: number): void;
   log(level: string, text: string): void;
 }
 
@@ -131,9 +134,36 @@ export class ScriptRunner {
         if (!this.h.sheets().includes(op.name)) await this.h.addSheet(op.name);
         continue;
       }
+      if (op.k === 'rename' || op.k === 'delsheet' || op.k === 'activate') {
+        const at = this.h.sheets().indexOf(op.name);
+        if (at < 0) continue;
+        if (op.k === 'rename') await this.h.renameSheet?.(at, op.to);
+        else if (op.k === 'delsheet') await this.h.deleteSheet?.(at);
+        else this.h.showSheet?.(at);
+        continue;
+      }
       const i = this.h.sheets().indexOf(op.sheet);
       if (i < 0) continue;
-      if (op.k === 'format') await g.applyEffect(await e.setFormat(book, i, op.r0, op.c0, op.r1, op.c1, op.code));
+      if (op.k === 'shift') await g.shiftLines(op.rows, op.at, op.n, op.insert, i);
+      else if (op.k === 'cells') {
+        if (i !== g.sheetIndex) this.h.showSheet?.(i);
+        g.select(op.r0, op.c0, op.r1, op.c1, false);
+        await g.runTool('shiftcells', `${op.r0},${op.c0},${op.r1},${op.c1}`, op.dir, op.insert ? '1' : '0');
+      } else if (op.k === 'merge') await g.applyEffect(await e.merge(book, i, op.r0, op.c0, op.r1, op.c1, op.mode));
+      else if (op.k === 'filter') await g.applyEffect(await e.setFilter(book, i, op.text));
+      else if (op.k === 'fill') {
+        if (i !== g.sheetIndex) this.h.showSheet?.(i);
+        const [sr0, sc0, sr1, sc1] = op.src;
+        const [dr0, dc0, dr1, dc1] = op.dest;
+        g.select(sr0, sc0, sr1, sc1, false);
+        if (dr1 > sr1) await g.fill({ r0: sr1 + 1, c0: sc0, r1: dr1, c1: sc1 });
+        else if (dr0 < sr0) await g.fill({ r0: dr0, c0: sc0, r1: sr0 - 1, c1: sc1 });
+        else if (dc1 > sc1) await g.fill({ r0: sr0, c0: sc1 + 1, r1: sr1, c1: dc1 });
+        else if (dc0 < sc0) await g.fill({ r0: sr0, c0: dc0, r1: sr1, c1: sc0 - 1 });
+      } else if (op.k === 'chart') {
+        if (i !== g.sheetIndex) this.h.showSheet?.(i);
+        document.dispatchEvent(new CustomEvent('fc-ai-chart', { detail: { type: op.type, range: op.range, title: op.title, byRows: op.byRows } }));
+      } else if (op.k === 'format') await g.applyEffect(await e.setFormat(book, i, op.r0, op.c0, op.r1, op.c1, op.code));
       else if (op.k === 'style') await g.applyEffect(await e.setStyles(book, i, [[op.r0, op.c0, op.r1, op.c1, op.patch]]));
       else if (op.k === 'sort') await g.applyEffect(await e.sort(book, i, op.r0, op.c0, op.r1, op.c1, op.keys, op.header));
     }

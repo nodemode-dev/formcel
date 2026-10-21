@@ -16,7 +16,7 @@ from openpyxl.drawing.xdr import XDRPositiveSize2D
 from openpyxl.utils import get_column_letter, range_boundaries
 
 from . import chartex, chartstyle
-from .overlay import markers, range_text
+from .overlay import macro_of, markers, range_text
 
 EMU = 9525
 COL_PX = 100
@@ -308,7 +308,7 @@ def picture_out(host, obj: dict, view: dict) -> bool:
 
 
 def objects_out(wb, ws, objects: list[dict], view: dict, notes: Counter | None = None, pivots: dict | None = None) -> dict:
-    plan: dict = {"alts": {"charts": [], "pics": []}, "shapes": [], "sparks": []}
+    plan: dict = {"alts": {"charts": [], "pics": []}, "macros": {"pics": []}, "shapes": [], "sparks": []}
     ranges = {o.get("id"): o for o in objects if o.get("kind") == "range"}
     for obj in objects:
         kind = obj.get("kind")
@@ -325,6 +325,8 @@ def objects_out(wb, ws, objects: list[dict], view: dict, notes: Counter | None =
         ok = chart_out(wb, ws, obj, view, pivots) if kind == "chart" else picture_out(ws, obj, view) if kind == "picture" else False
         if ok:
             plan["alts"]["charts" if kind == "chart" else "pics"].append(str(obj.get("alt") or ""))
+            if kind == "picture":
+                plan["macros"]["pics"].append(macro_of(obj))
         elif notes is not None:
             notes[kind or "object"] += 1
     return plan
@@ -482,6 +484,9 @@ def objects_in(ws, view: dict, notes: Counter, extra: dict | None = None, found:
         pic = {"id": f"x{id(ws) % 10**6}p{i}", "kind": "picture", "x": x, "y": y, "w": w, "h": h, "picture": {"src": f"data:image/{fmt};base64,{base64.b64encode(data).decode()}", "name": f"picture{i + 1}.{fmt}"}}
         if i < len(pic_alts) and pic_alts[i] and pic_alts[i] != "Picture" and len(pic_alts) == len(getattr(ws, "_images", [])):
             pic["alt"] = pic_alts[i]
+        pic_macros = (extra.get("macros") or {}).get("pics") or []
+        if i < len(pic_macros) and pic_macros[i] and len(pic_macros) == len(getattr(ws, "_images", [])):
+            pic["scriptName"] = pic_macros[i]
         out.append(pic)
     out.extend(extra.get("shapes") or [])
     out.extend(extra.get("sparks") or [])

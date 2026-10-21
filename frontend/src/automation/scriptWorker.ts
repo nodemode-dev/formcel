@@ -15,7 +15,16 @@ export type Op =
   | { k: 'sheet'; name: string }
   | { k: 'format'; sheet: string; r0: number; c0: number; r1: number; c1: number; code: string }
   | { k: 'style'; sheet: string; r0: number; c0: number; r1: number; c1: number; patch: string }
-  | { k: 'sort'; sheet: string; r0: number; c0: number; r1: number; c1: number; keys: [number, boolean][]; header: boolean };
+  | { k: 'sort'; sheet: string; r0: number; c0: number; r1: number; c1: number; keys: [number, boolean][]; header: boolean }
+  | { k: 'shift'; sheet: string; rows: boolean; at: number; n: number; insert: boolean }
+  | { k: 'cells'; sheet: string; r0: number; c0: number; r1: number; c1: number; dir: string; insert: boolean }
+  | { k: 'merge'; sheet: string; r0: number; c0: number; r1: number; c1: number; mode: 'cells' | 'across' | 'unmerge' }
+  | { k: 'rename'; name: string; to: string }
+  | { k: 'delsheet'; name: string }
+  | { k: 'activate'; name: string }
+  | { k: 'fill'; sheet: string; src: [number, number, number, number]; dest: [number, number, number, number] }
+  | { k: 'filter'; sheet: string; text: string }
+  | { k: 'chart'; sheet: string; type: string; range: string; title: string; byRows: boolean };
 export type In =
   | { t: 'run'; id: number; code: string; snap: Snapshot; event?: unknown }
   | { t: 'snapshot'; id: number; snap: Snapshot }
@@ -75,7 +84,20 @@ function parseCell(s: string): [number, number] {
   return [Number(m[2]) - 1, col - 1];
 }
 
+function colIndex(s: string): number {
+  let col = 0;
+  for (const ch of s.toUpperCase()) col = col * 26 + (ch.charCodeAt(0) - 64);
+  return col - 1;
+}
+
+const MAX_R = 1048576;
+const MAX_C = 16384;
+
 function parseArea(ref: string): [number, number, number, number] {
+  const rows = /^\$?(\d{1,7}):\$?(\d{1,7})$/.exec(ref.trim());
+  if (rows) return [Math.min(Number(rows[1]), Number(rows[2])) - 1, 0, Math.max(Number(rows[1]), Number(rows[2])) - 1, MAX_C - 1];
+  const cols = /^\$?([A-Za-z]{1,3}):\$?([A-Za-z]{1,3})$/.exec(ref.trim());
+  if (cols) return [0, Math.min(colIndex(cols[1]), colIndex(cols[2])), MAX_R - 1, Math.max(colIndex(cols[1]), colIndex(cols[2]))];
   const [a, b] = ref.split(':');
   const p = parseCell(a);
   const q = b === undefined ? p : parseCell(b);
@@ -106,10 +128,26 @@ class Sheet {
   constructor(public name: string, cells: Cell[]) {
     for (const [r, c, t, f] of cells) this.cells.set(r * 16384 + c, { v: t, f });
   }
+
+  move(map: (r: number, c: number) => [number, number] | null): void {
+    const next = new Map<number, { v: string; f?: string }>();
+    for (const [k, x] of this.cells) {
+      const to = map(Math.floor(k / 16384), k % 16384);
+      if (to) next.set(to[0] * 16384 + to[1], x);
+    }
+    this.cells = next;
+  }
 }
+
+const fieldEsc = (s: string) => s.replace(/\\/g, '\\\\').replace(/\t/g, '\\t').replace(/\n/g, '\\n').replace(/\r/g, '\\r');
+
+const CHART_TYPES: Record<string, string> = {
+  columnclustered: 'column', columnstacked: 'column-stacked', columnstacked100: 'column-100', barclustered: 'bar', barstacked: 'bar-stacked', barstacked100: 'bar-100', line: 'line', area: 'area', areastacked: 'area-stacked', areastacked100: 'area-100', pie: 'pie', doughnut: 'doughnut', xyscatter: 'scatter', bubble: 'bubble', radar: 'radar',
+};
 
 class Ctx {
   sheets = new Map<string, Sheet>();
+  filters = new Map<string, { area: [number, number, number, number]; cols: Map<number, string[]> }>();
   ops: Op[] = [];
   active = '';
   selection: Snapshot['selection'] = null;
@@ -228,8 +266,90 @@ class Range {
     return this;
   }
 
-  clear(): Range {
-    this.put(this.grid(() => ''), false);
+  clear(applyTo = 'All'): Range {
+    const what = String(applyTo).toLowerCase();
+    if (what === 'all' || what === 'contents') {
+      const d = this.data();
+      for (const k of [...d.cells.keys()]) {
+        const r = Math.floor(k / 16384);
+        const c = k % 16384;
+        if (r < this.r0 || r > this.r1 || c < this.c0 || c > this.c1) continue;
+        this.ctx.ops.push({ k: 'edit', sheet: this.sheet, r, c, raw: '' });
+        d.cells.delete(k);
+      }
+    }
+    if (what === 'all' || what === 'formats') {
+      this.style('clear');
+      this.setNumberFormat('');
+    }
+    return this;
+  }
+
+  private wholeRows(): boolean {
+    return this.c0 === 0 && this.c1 === MAX_C - 1;
+  }
+
+  private wholeCols(): boolean {
+    return this.r0 === 0 && this.r1 === MAX_R - 1;
+  }
+
+  insert(shift = 'Down'): Range {
+    const dir = String(shift).toLowerCase() === 'right' ? 'right' : 'down';
+    const d = this.data();
+    if (this.wholeRows()) {
+      const n = this.r1 - this.r0 + 1;
+      this.ctx.ops.push({ k: 'shift', sheet: this.sheet, rows: true, at: this.r0, n, insert: true });
+      d.move((r, c) => [r >= this.r0 ? r + n : r, c]);
+    } else if (this.wholeCols()) {
+      const n = this.c1 - this.c0 + 1;
+      this.ctx.ops.push({ k: 'shift', sheet: this.sheet, rows: false, at: this.c0, n, insert: true });
+      d.move((r, c) => [r, c >= this.c0 ? c + n : c]);
+    } else {
+      this.ctx.ops.push({ k: 'cells', sheet: this.sheet, r0: this.r0, c0: this.c0, r1: this.r1, c1: this.c1, dir, insert: true });
+      const h = this.getRowCount();
+      const w = this.getColumnCount();
+      if (dir === 'down') d.move((r, c) => [c >= this.c0 && c <= this.c1 && r >= this.r0 ? r + h : r, c]);
+      else d.move((r, c) => [r, r >= this.r0 && r <= this.r1 && c >= this.c0 ? c + w : c]);
+    }
+    return this;
+  }
+
+  delete(shift = 'Up'): Range {
+    const dir = String(shift).toLowerCase() === 'left' ? 'left' : 'up';
+    const d = this.data();
+    if (this.wholeRows()) {
+      const n = this.r1 - this.r0 + 1;
+      this.ctx.ops.push({ k: 'shift', sheet: this.sheet, rows: true, at: this.r0, n, insert: false });
+      d.move((r, c) => (r > this.r1 ? [r - n, c] : r >= this.r0 ? null : [r, c]));
+    } else if (this.wholeCols()) {
+      const n = this.c1 - this.c0 + 1;
+      this.ctx.ops.push({ k: 'shift', sheet: this.sheet, rows: false, at: this.c0, n, insert: false });
+      d.move((r, c) => (c > this.c1 ? [r, c - n] : c >= this.c0 ? null : [r, c]));
+    } else {
+      this.ctx.ops.push({ k: 'cells', sheet: this.sheet, r0: this.r0, c0: this.c0, r1: this.r1, c1: this.c1, dir, insert: false });
+      const h = this.getRowCount();
+      const w = this.getColumnCount();
+      const inCols = (c: number) => c >= this.c0 && c <= this.c1;
+      const inRows = (r: number) => r >= this.r0 && r <= this.r1;
+      if (dir === 'up') d.move((r, c) => (!inCols(c) ? [r, c] : r > this.r1 ? [r - h, c] : r >= this.r0 ? null : [r, c]));
+      else d.move((r, c) => (!inRows(r) ? [r, c] : c > this.c1 ? [r, c - w] : c >= this.c0 ? null : [r, c]));
+    }
+    return this;
+  }
+
+  merge(across = false): Range {
+    this.ctx.ops.push({ k: 'merge', sheet: this.sheet, r0: this.r0, c0: this.c0, r1: this.r1, c1: this.c1, mode: across ? 'across' : 'cells' });
+    return this;
+  }
+
+  unmerge(): Range {
+    this.ctx.ops.push({ k: 'merge', sheet: this.sheet, r0: this.r0, c0: this.c0, r1: this.r1, c1: this.c1, mode: 'unmerge' });
+    return this;
+  }
+
+  autoFill(destination: Range | string, _type = 'FillDefault'): Range {
+    const dest = typeof destination === 'string' ? new Worksheet(this.ctx, this.sheet).getRange(destination) : destination;
+    this.ctx.ops.push({ k: 'fill', sheet: this.sheet, src: [this.r0, this.c0, this.r1, this.c1], dest: [dest.r0, dest.c0, dest.r1, dest.c1] });
     return this;
   }
 
@@ -296,6 +416,87 @@ class Worksheet {
       c1 = Math.max(c1, k % 16384);
     }
     return new Range(this.ctx, this.name, 0, 0, r1, c1);
+  }
+
+  setName(to: string): Worksheet {
+    const s = this.ctx.sheets.get(this.name);
+    if (!s) throw new Error(`The sheet ${this.name} does not exist.`);
+    if (to !== this.name && this.ctx.sheets.has(to)) throw new Error(`A sheet named ${to} already exists.`);
+    const next = new Map<string, Sheet>();
+    for (const [k, v] of this.ctx.sheets) next.set(k === this.name ? to : k, v);
+    s.name = to;
+    this.ctx.sheets = next;
+    if (this.ctx.active === this.name) this.ctx.active = to;
+    this.ctx.ops.push({ k: 'rename', name: this.name, to });
+    this.name = to;
+    return this;
+  }
+
+  delete(): void {
+    if (this.ctx.sheets.size < 2) throw new Error('A workbook needs at least one sheet.');
+    this.ctx.sheets.delete(this.name);
+    this.ctx.ops.push({ k: 'delsheet', name: this.name });
+    if (this.ctx.active === this.name) this.ctx.active = this.ctx.sheets.keys().next().value ?? '';
+  }
+
+  activate(): Worksheet {
+    this.ctx.active = this.name;
+    this.ctx.ops.push({ k: 'activate', name: this.name });
+    return this;
+  }
+
+  getAutoFilter() {
+    const key = this.name;
+    const emit = () => {
+      const f = this.ctx.filters.get(key);
+      const text = f ? `area\t${f.area.join(',')}\n${[...f.cols].sort((a, b) => a[0] - b[0]).map(([c, fields]) => `col\t${c}\t${fields.map(fieldEsc).join('\t')}\n`).join('')}` : '';
+      this.ctx.ops.push({ k: 'filter', sheet: key, text });
+    };
+    const area = (range: Range | string): [number, number, number, number] => {
+      const r = typeof range === 'string' ? this.getRange(range) : range;
+      return [r.r0, r.c0, r.r1, r.c1];
+    };
+    return {
+      apply: (range: Range | string, columnIndex?: number, criteria?: { filterOn?: string; values?: string[]; blanks?: boolean; fields?: string[] }) => {
+        const a = area(range);
+        const cur = this.ctx.filters.get(key);
+        const same = cur && cur.area.every((x, i) => x === a[i]);
+        const f = same ? cur : { area: a, cols: new Map<number, string[]>() };
+        this.ctx.filters.set(key, f);
+        if (columnIndex !== undefined && criteria) {
+          if (criteria.filterOn === 'Values') f.cols.set(columnIndex, ['values', criteria.blanks === false ? '0' : '1', ...(criteria.values ?? []).map(String)]);
+          else if (criteria.fields) f.cols.set(columnIndex, criteria.fields.map(String));
+        }
+        emit();
+      },
+      clearCriteria: () => {
+        const f = this.ctx.filters.get(key);
+        if (f) f.cols.clear();
+        emit();
+      },
+      remove: () => {
+        this.ctx.filters.delete(key);
+        emit();
+      },
+    };
+  }
+
+  addChart(type: string, source: Range | string, seriesBy = 'Auto') {
+    const range = typeof source === 'string' ? source.replace(/^.*!/, '') : source.getLocalAddress();
+    const op = { k: 'chart' as const, sheet: this.name, type: CHART_TYPES[String(type).toLowerCase()] ?? String(type).toLowerCase(), range, title: '', byRows: String(seriesBy).toLowerCase() === 'rows' };
+    this.ctx.ops.push(op);
+    const chart = {
+      setTitle: (text: string) => {
+        op.title = text;
+        return chart;
+      },
+      getTitle: () => ({
+        setText: (text: string) => {
+          op.title = text;
+        },
+      }),
+    };
+    return chart;
   }
 }
 

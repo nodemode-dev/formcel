@@ -77,6 +77,10 @@ export type Request =
   | { id: number; op: 'link.remove'; book: number; sheet: number; r0: number; c0: number; r1: number; c1: number }
   | { id: number; op: 'link.take'; book: number }
   | { id: number; op: 'link.load'; book: number; sheet: number; cells: Edit[] }
+  | { id: number; op: 'chip.list'; book: number; sheet: number }
+  | { id: number; op: 'chip.set'; book: number; sheet: number; row: number; col: number; chips: string }
+  | { id: number; op: 'chip.take'; book: number }
+  | { id: number; op: 'chip.load'; book: number; sheet: number; cells: Edit[] }
   | { id: number; op: 'undo.mark'; book: number }
   | { id: number; op: 'undo.group'; book: number; mark: number }
   | { id: number; op: 'format.read'; book: number; sheet: number; r0: number; c0: number; r1: number; c1: number }

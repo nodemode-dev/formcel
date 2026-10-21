@@ -23,6 +23,8 @@ export class ScriptsTab {
   private diagKey = '\u0000';
   private diagTimer = 0;
   private recording: Recorded[] | null = null;
+  private startNames: string[] = [];
+  private origin: { sheet: number; r: number; c: number } | undefined;
   private lineCount = 0;
   private timers = new Map<string, number>();
 
@@ -199,10 +201,13 @@ export class ScriptsTab {
     const g = this.env.grid;
     if (!this.recording) {
       this.recording = [];
+      this.startNames = this.env.sheets().slice();
+      const [r, c] = g.activeCell();
+      this.origin = { sheet: g.sheetIndex, r, c };
       g.recorder = (a) => this.recording?.push(a);
       this.rec.setAttribute('aria-pressed', 'true');
       setText(this.rec, 'Stop recording');
-      setText(this.hint, 'Recording. Edit cells, change formats, or sort; each action is written into a new script.');
+      setText(this.hint, 'Recording. Edit cells, insert or delete rows, columns and cells, merge, fill, clear, filter, sort, add a chart or change sheets; each action is written into a new script.');
       return;
     }
     g.recorder = null;
@@ -217,18 +222,15 @@ export class ScriptsTab {
     const names = this.env.sheets();
     const n = this.env.auto.scripts.filter((s) => s.name.startsWith('Recorded')).length + 1;
     const relative = this.root.querySelector<HTMLInputElement>('[data-t="relative"]')?.checked ?? false;
-    this.create(generate(acts, (i) => names[i] ?? names[0], `Recorded actions ${n}`, relative), `Recorded actions ${n}`);
+    this.create(generate(acts, (i) => names[i] ?? names[0], `Recorded actions ${n}`, relative, this.startNames, this.origin),`Recorded actions ${n}`);
     setText(this.hint, `Recorded ${acts.length} action${acts.length === 1 ? '' : 's'}. Run it to replay them.`);
   }
 
   private addButton(): void {
     const s = this.current();
     if (!s) return;
-    const r = this.env.grid.el.getBoundingClientRect();
-    this.env.auto.buttons.push({ id: uid(), label: s.name || 'Run', script: s.id, x: Math.round(r.width / 2 - 50), y: 48 });
-    this.env.changed();
-    setText(this.hint, `A button for ${s.name} is on the sheet. Drag it to move it; right-click it to change or remove it.`);
-    document.dispatchEvent(new CustomEvent('fc-buttons'));
+    document.dispatchEvent(new CustomEvent('fc-insert-button', { detail: { label: s.name || 'Run', script: s.id } }));
+    setText(this.hint, `A button for ${s.name} is on the sheet. Ctrl+click it to select it, then drag it, resize it, choose Format button for its text and colours, or delete it.`);
   }
 
   private scanTimer = 0;

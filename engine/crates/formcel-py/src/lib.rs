@@ -332,6 +332,24 @@ impl Workbook {
         n
     }
 
+    #[pyo3(signature = (sheet = 0))]
+    fn chips(&self, sheet: usize) -> Vec<(u32, u32, String)> {
+        self.inner.chips_of(sheet).into_iter().map(|(a, t)| (a.row, a.col, t)).collect()
+    }
+
+    #[pyo3(signature = (sheet = 0))]
+    fn chip_links(&self, sheet: usize) -> Vec<(u32, u32, String)> {
+        self.inner.chip_links(sheet).into_iter().map(|(a, t)| (a.row, a.col, t)).collect()
+    }
+
+    #[pyo3(signature = (cells, sheet = 0))]
+    fn load_chips(&mut self, cells: Vec<(u32, u32, String)>, sheet: usize) -> PyResult<usize> {
+        let cells: Vec<(Addr, String)> = cells.into_iter().map(|(row, col, t)| (Addr { row, col }, t)).collect();
+        let n = self.inner.load_chips(sheet, &cells).map_err(|e| PyValueError::new_err(e.to_string()));
+        self.inner.take_chip_changes();
+        n
+    }
+
     #[pyo3(signature = (a1, target, display = None, sheet = 0))]
     fn set_link(&mut self, a1: &str, target: &str, display: Option<&str>, sheet: usize) -> PyResult<()> {
         let a = parse_a1(a1).map_err(|e| PyValueError::new_err(e.to_string()))?;

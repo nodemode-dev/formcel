@@ -3,6 +3,8 @@ import { loadSortLists, saveSortList } from './ui/sortlists';
 import { cascadeDates, collectDates, dateTree, DATE_FILTERS, iconSwatch } from './ui/filterx';
 import { colName, parseRef, type Range } from './grid/a1';
 import { Autocomplete, FUNCTIONS, type Suggestion } from './ui/autocomplete';
+import { ChipPicker } from './ui/chippicker';
+import { chipHref } from './grid/smartchips';
 import { Charts } from './charts';
 import type { FloatObject } from './charts/types';
 import { Automation } from './automation';
@@ -388,6 +390,11 @@ export class App {
       },
       onTableKey: () => void runCommand('table.create'),
       onLinks: (changes) => this.sendLinks(changes),
+      onChips: (changes) => this.sendChips(changes),
+      onChipOpen: (_r, _c, chip) => {
+        const href = chipHref(chip);
+        if (href) window.open(href, '_blank', 'noopener');
+      },
       onOpenLink: () => void this.grid.linkTarget().then((t) => this.followLink(t)),
       onLinkBox: () => this.linkBox(),
       onPainter: (state) => this.button('format.painter').setAttribute('aria-pressed', String(state !== 'off')),
@@ -483,7 +490,7 @@ export class App {
     new Autocomplete(p.formulaBar, suggestions, tableHints);
     const cellAc = new Autocomplete(this.grid.editor, suggestions, tableHints);
     this.grid.editorHook = (e) => cellAc.take(e);
-    this.charts = new Charts(this.grid, engine(), {
+    new ChipPicker(this.grid.editor, () => this.collab?.knownPeople() ?? [], (chip, at, replaced) => this.grid.addEditChip(chip, at, replaced));    this.charts = new Charts(this.grid, engine(), {
       book: () => this.open?.book ?? -1,
       sheetNames: () => this.open?.sheets ?? [],
       active: () => !!this.open,
@@ -501,6 +508,10 @@ export class App {
         if (d) await this.pivotApply((book) => engine().setPivot(book, name, formatPivot({ ...d, filters: d.filters.map((f) => (f.field === field ? { field, items } : f)) })));
       },
       say: (t) => this.status(t),
+      timeline: (sheet) => this.open?.views[sheet]?.timeline ?? null,
+      saveTimeline: (sheet, view) => this.patchView(sheet, { timeline: view }),
+      scripts: () => this.auto.scriptList(),
+      runScript: (id, name) => this.auto.runForObject(id, name),
     });
     document.addEventListener('fc-ai-pivot', (e) => {
       const d = (e as CustomEvent<{ src: string; layout: string }>).detail;
@@ -613,7 +624,7 @@ export class App {
       e.preventDefault();
       this.collab.refused(e.reason.message);
     });
-    this.auto = new Automation({ grid: this.grid, book: () => this.open?.book ?? -1, id: () => this.open?.id ?? '', sheets: () => this.open?.sheets ?? [], title: () => this.open?.title ?? '', status: (t, e) => this.status(t, e), addSheet: (n) => this.addSheetNamed(n) });
+    this.auto = new Automation({ grid: this.grid, book: () => this.open?.book ?? -1, id: () => this.open?.id ?? '', sheets: () => this.open?.sheets ?? [], title: () => this.open?.title ?? '', status: (t, e) => this.status(t, e), addSheet: (n) => this.addSheetNamed(n), renameSheet: async (i, n) => this.renameSheetTo(i, n), deleteSheet: (i) => this.deleteSheet(i), showSheet: (i) => this.showSheet(i) });
     this.commands();
     this.calc.commands((id, title, description, changes, run, keys) => registerCommand({ id, title, description, changes, run, keys }));
     this.collab.commands((id, title, description, changes, run, keys) => registerCommand({ id, title, description, changes, run, keys }));
@@ -2296,6 +2307,7 @@ export class App {
       await e.loadValidations(book, i, doc.validations?.[i] ?? []);
       await e.loadLinks(book, i, doc.links?.[i] ?? []);
       if (doc.cells[i]?.length) await e.load(book, doc.cells[i], i);
+      await e.loadChips(book, i, (doc as { chips?: [number, number, string][][] }).chips?.[i] ?? []);
     }
     for (const [n, f] of doc.names ?? []) await e.defineName(book, n, f).catch(() => []);
     for (const [n, c] of doc.nameNotes ?? []) await e.nameComment(book, n, c).catch(() => undefined);
@@ -2478,7 +2490,7 @@ export class App {
     const o = this.open;
     if (!o) return;
     const old = o.views[sheet] ?? {};
-    o.views[sheet] = { ...view, hidden: old.hidden, fviews: old.fviews, sviews: old.sviews, slicers: old.slicers };
+    o.views[sheet] = { ...view, hidden: old.hidden, fviews: old.fviews, sviews: old.sviews, slicers: old.slicers, timeline: old.timeline };
     this.zoomLabel();
     if (this.preview) void this.refreshBreaks();
     window.clearTimeout(this.viewTimers.get(sheet));
@@ -2553,6 +2565,28 @@ export class App {
       }
     });
     this.linkChip();
+  }
+
+  private sendChips(changes: LinkChange[]): void {
+    const o = this.open;
+    if (!o) return;
+    const bySheet = new Map<number, [number, number, string][]>();
+    for (const [s, r, c, t] of changes) {
+      let list = bySheet.get(s);
+      if (!list) bySheet.set(s, (list = []));
+      list.push([r, c, t]);
+    }
+    this.flush();
+    this.status('Saving');
+    this.saving = this.saving.then(async () => {
+      try {
+        for (const [sheet, cells] of bySheet) await api('POST', `/api/workbooks/${o.id}/cellchips`, { sheet, cells });
+        if (!this.pending.size) this.status('Saved');
+      } catch (err) {
+        this.status('Not saved', true);
+        this.p.save.title = err instanceof Error ? err.message : '';
+      }
+    });
   }
 
   private followLink(target: string): void {
@@ -3594,6 +3628,7 @@ export class App {
     const t = this.p.tabs.querySelector<HTMLElement>(`[data-sheet="${i}"]`);
     const name = raw.replace(/[\\/?*[\]:]/g, '').trim().slice(0, 31);
     if (!o || !name || name === o.sheets[i] || o.sheets.some((s) => s.toLowerCase() === name.toLowerCase())) return;
+    this.grid.recorder?.({ k: 'sheetop', op: 'rename', sheet: i, name: o.sheets[i], to: name });
     o.sheets[i] = name;
     if (t) t.textContent = name;
     void engine().renameSheet(o.book, i, name).then(() => this.refreshNames());
@@ -3616,6 +3651,7 @@ export class App {
       if (!commit || !name || name === before || o.sheets.includes(name)) {
         t.textContent = before;
       } else {
+        this.grid.recorder?.({ k: 'sheetop', op: 'rename', sheet: i, name: before, to: name });
         o.sheets[i] = name;
         t.textContent = name;
         void engine().renameSheet(o.book, i, name).then(() => this.refreshNames());
@@ -3676,6 +3712,7 @@ export class App {
     await e.loadValidations(o.book, last, doc.validations?.[k] ?? []);
     await e.loadLinks(o.book, last, doc.links?.[k] ?? []);
     if (doc.cells[k]?.length) await e.load(o.book, doc.cells[k], last);
+    await e.loadChips(o.book, last, (doc as { chips?: [number, number, string][][] }).chips?.[k] ?? []);
     if (k !== last) await e.moveSheet(o.book, last, k);
     o.sheets = doc.sheets;
     o.views = doc.sheets.map((_, n) => doc.views?.[n] ?? {});
@@ -3703,6 +3740,7 @@ export class App {
   private async deleteSheet(i: number): Promise<void> {
     const o = this.open;
     if (!o || o.sheets.length === 1) return;
+    this.grid.recorder?.({ k: 'sheetop', op: 'delete', sheet: i, name: o.sheets[i] });
     this.flush();
     await this.saving;
     await engine().deleteSheet(o.book, i);
@@ -3739,6 +3777,7 @@ export class App {
     let n = o.sheets.length + 1;
     while (o.sheets.includes(`Sheet${n}`)) n++;
     const name = `Sheet${n}`;
+    this.grid.recorder?.({ k: 'sheetop', op: 'add', sheet: o.sheets.length, name });
     await api('POST', `/api/workbooks/${o.id}/sheets`, { name });
     const i = await engine().addSheet(o.book, name);
     o.sheets.push(name);

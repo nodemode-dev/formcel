@@ -265,6 +265,7 @@ impl Workbook {
         let mut edits = Vec::new();
         let mut formats = Vec::new();
         let mut links_after = Vec::new();
+        let mut chips_after = Vec::new();
         for (i, &src) in perm.iter().enumerate() {
             let dst = first + i as u32;
             if src == dst {
@@ -281,6 +282,7 @@ impl Workbook {
                 let code = self.codes.get(&(sheet, from)).map(|c| c.0.clone()).unwrap_or_default();
                 formats.push((to, Some(style), Some(code)));
                 links_after.push(((sheet, to), self.links.get(&(sheet, from)).cloned()));
+                chips_after.push(((sheet, to), self.chips.get(&(sheet, from)).cloned()));
             }
         }
         let mark = self.undo_mark();
@@ -293,6 +295,15 @@ impl Workbook {
         if !changes.is_empty() {
             let e = self.apply_links(&changes, true);
             self.record(Tx::Links(changes));
+            out = out.join(Effect { cells: self.present(e.cells), ..e });
+        }
+        let moves: Vec<_> = chips_after.into_iter().filter_map(|(k, after)| {
+            let before = self.chips.get(&k).cloned();
+            (before != after).then_some((k, before, after))
+        }).collect();
+        if !moves.is_empty() {
+            let e = self.apply_chips(&moves, true);
+            self.record(Tx::Chips(moves));
             out = out.join(Effect { cells: self.present(e.cells), ..e });
         }
         self.undo_group(mark);

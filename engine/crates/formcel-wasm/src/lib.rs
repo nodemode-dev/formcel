@@ -1057,6 +1057,67 @@ pub unsafe extern "C" fn fc_load_links(id: u32, sheet: u32, lines: *const u8, le
     }
 }
 
+/// The smart chips of a sheet as `row\tcol\tchips` lines.
+#[no_mangle]
+pub extern "C" fn fc_chips_of(id: u32, sheet: u32) -> i32 {
+    match with_book(id, |wb| {
+        let mut s = String::new();
+        for (a, t) in wb.chips_of(sheet as usize) {
+            s.push_str(&format!("{}\t{}\t", a.row, a.col));
+            wire::escape(&t, &mut s);
+            s.push('\n');
+        }
+        s
+    }) {
+        Some(s) => emit(&s) as i32,
+        None => -1,
+    }
+}
+
+/// Sets the chips of one cell as one undo step; an empty list removes them.
+///
+/// # Safety
+/// `chips` must point at `len` readable bytes.
+#[no_mangle]
+pub unsafe extern "C" fn fc_set_chips(id: u32, sheet: u32, row: u32, col: u32, chips: *const u8, len: u32) -> i32 {
+    let chips = text(chips, len).to_string();
+    effect_or(with_book(id, |wb| wb.set_chips(sheet as usize, Addr { row, col }, &chips).map(|e| wb.encode(&e))))
+}
+
+/// Chip changes since the last call, as `sheet\trow\tcol\tchips` lines (empty chips: removed).
+#[no_mangle]
+pub extern "C" fn fc_take_chips(id: u32) -> i32 {
+    match with_book(id, |wb| {
+        let mut s = String::new();
+        for (sh, a, t) in wb.take_chip_changes() {
+            s.push_str(&format!("{sh}\t{}\t{}\t", a.row, a.col));
+            wire::escape(&t, &mut s);
+            s.push('\n');
+        }
+        s
+    }) {
+        Some(s) => emit(&s) as i32,
+        None => -1,
+    }
+}
+
+/// Loads `row\tcol\tchips` lines without an undo step.
+///
+/// # Safety
+/// `lines` must point at `len` readable bytes.
+#[no_mangle]
+pub unsafe extern "C" fn fc_load_chips(id: u32, sheet: u32, lines: *const u8, len: u32) -> i32 {
+    let Some(cells) = wire::decode_edits(text(lines, len)) else { return -1 };
+    match with_book(id, |wb| {
+        let n = wb.load_chips(sheet as usize, &cells);
+        wb.take_chip_changes();
+        n
+    }) {
+        Some(Ok(n)) => n as i32,
+        _ => -1,
+    }
+}
+
 /// The current length of the undo history, to pass to `fc_undo_group` later.
 #[no_mangle]
 pub extern "C" fn fc_undo_mark(id: u32) -> i32 {

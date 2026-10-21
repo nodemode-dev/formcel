@@ -111,7 +111,8 @@ def write(eng, views: list[dict], vba: dict[str, bytes] | None = None, objects: 
             apply_out(cell, ";".join(t for t in st.split(";") if not t.startswith("cs:")), body, heading)
             if cs in named and eng.format_code(a1, i) is None:
                 cell.number_format = named[cs]
-        for r, c, target in eng.links(i):
+        own = {(r, c) for r, c, _ in eng.links(i)}
+        for r, c, target in [*eng.links(i), *[x for x in eng.chip_links(i) if (x[0], x[1]) not in own]]:
             cell = ws.cell(row=r + 1, column=c + 1)
             if target.startswith("#"):
                 cell.hyperlink = Hyperlink(ref=cell.coordinate, location=target[1:])

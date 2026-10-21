@@ -157,3 +157,60 @@ export function askAlt(title: string, current: string, decorative: boolean): Pro
     modal.open(area);
   });
 }
+
+export function askScript(choices: { id: string; name: string }[], current: string): Promise<string | null> {
+  return new Promise((resolve) => {
+    let settled = false;
+    const finish = (v: string | null) => {
+      if (settled) return;
+      settled = true;
+      modal.close();
+      resolve(v);
+    };
+    const modal = makeModal('Assign script', { onClose: () => finish(null) });
+    const pick = select([['', 'None'], ...choices.map((c): [string, string] => [c.id, c.name])], current);
+    pick.setAttribute('aria-label', 'Script to run when the object is clicked');
+    const note = el('p', 'fc-fmt-hint', choices.length ? 'Click the object to run the script. Hold Ctrl while clicking to select the object instead.' : 'This workbook has no scripts yet. Open Automate, write or record one, then assign it here.');
+    modal.body.append(field('Script', pick), note, actions('Assign', () => finish(pick.value), () => finish(null)));
+    modal.open(pick);
+  });
+}
+
+export interface ButtonFormat {
+  text: string;
+  fill: string;
+  stroke: string;
+  color: string;
+  size: number;
+}
+
+export function askButton(current: ButtonFormat): Promise<ButtonFormat | null> {
+  return new Promise((resolve) => {
+    let settled = false;
+    const finish = (v: ButtonFormat | null) => {
+      if (settled) return;
+      settled = true;
+      modal.close();
+      resolve(v);
+    };
+    const modal = makeModal('Format button', { onClose: () => finish(null) });
+    const text = input(current.text, 'Button text');
+    const fill = color(current.fill);
+    const stroke = color(current.stroke);
+    const text_color = color(current.color);
+    const size = input(String(current.size), '14');
+    size.inputMode = 'numeric';
+    const ok = () => {
+      const n = Math.round(Number(size.value));
+      finish({ text: text.value, fill: fill.value, stroke: stroke.value, color: text_color.value, size: Number.isFinite(n) ? Math.min(72, Math.max(8, n)) : current.size });
+    };
+    modal.body.append(field('Text', text), field('Fill colour', fill), field('Border colour', stroke), field('Text colour', text_color), field('Text size in pixels', size), actions('OK', ok, () => finish(null)));
+    modal.el.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && (e.target as HTMLElement).tagName === 'INPUT' && (e.target as HTMLInputElement).type !== 'color') {
+        e.preventDefault();
+        ok();
+      }
+    });
+    modal.open(text);
+  });
+}
