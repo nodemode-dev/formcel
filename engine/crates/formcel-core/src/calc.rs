@@ -282,6 +282,7 @@ impl Workbook {
                 self.load_arrays(sheet, &list).to_string()
             }
             "spillat" => self.spill_at(sheet, at(2, 3)).map(|(a, cse)| format!("{}\t{}", area_line(a), if cse { "a" } else { "s" })).unwrap_or_default(),
+            "spills" => self.spill_list(sheet).into_iter().map(|(a, cse)| format!("{}\t{}", area_line(a), if cse { "a" } else { "s" })).collect::<Vec<_>>().join("\n"),
             "spillwhy" => self.spill_reason(sheet, at(2, 3)).map(|(m, b)| format!("{m}\t{}", b.map_or(String::new(), |a| format!("{}{}", col_name(a.col), a.row + 1)))).unwrap_or_default(),
             "check" => self.errcheck_lines(sheet, at(2, 3), at(4, 5)),
             "ignore" => {

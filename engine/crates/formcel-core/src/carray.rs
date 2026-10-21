@@ -43,7 +43,9 @@ impl Workbook {
     }
 
     pub fn load_arrays(&mut self, sheet: usize, list: &[Area]) -> usize {
-        let mut seeds = Vec::new();
+        let mut seeds: Vec<Key> = self.arrays.keys().filter(|k| k.0 == sheet && self.formulas.contains_key(*k)).copied().collect();
+        self.arrays.retain(|k, _| k.0 != sheet);
+        let mut loaded = 0;
         for ar in list {
             let k = (sheet, Addr { row: ar.r0, col: ar.c0 });
             if ar.r1 < ar.r0 || ar.c1 < ar.c0 || ar.r1 >= MAX_ROWS || ar.c1 >= MAX_COLS || !self.formulas.contains_key(&k) {
@@ -54,11 +56,12 @@ impl Workbook {
             }
             self.arrays.insert(k, (ar.r1 - ar.r0 + 1, ar.c1 - ar.c0 + 1));
             seeds.push(k);
+            loaded += 1;
         }
         if !seeds.is_empty() {
             self.recalc(&seeds);
         }
-        seeds.len()
+        loaded
     }
 
     pub(crate) fn fill_array(&mut self, k: Key, o: Out) -> Value {
@@ -249,6 +252,12 @@ impl Workbook {
             return None;
         }
         Some((area_of(k, (h, w)), self.arrays.contains_key(&k)))
+    }
+
+    pub fn spill_list(&self, sheet: usize) -> Vec<(Area, bool)> {
+        let mut out: Vec<(Area, bool)> = self.spills.keys().filter(|k| k.0 == sheet).filter_map(|k| self.spill_at(sheet, k.1)).collect();
+        out.sort_by_key(|(a, _)| (a.r0, a.c0));
+        out
     }
 
     pub fn spill_reason(&self, sheet: usize, a: Addr) -> Option<(String, Option<Addr>)> {

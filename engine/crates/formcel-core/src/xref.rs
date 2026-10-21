@@ -180,7 +180,11 @@ impl Workbook {
                     let mut l = format!("cell\t{i}\t");
                     wire::escape(sheet, &mut l);
                     l.push_str(&format!("\t{r}\t{c}\t"));
-                    wire::escape(&host::token(v), &mut l);
+                    let raw = host::token(v);
+                    let (kind, body) = raw.split_at(2);
+                    let mut tok = String::from(kind);
+                    wire::escape(body, &mut tok);
+                    wire::escape(&tok, &mut l);
                     out.push(l);
                 }
             }
