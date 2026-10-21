@@ -28,7 +28,11 @@ class AutomationIn(BaseModel):
 @router.put("/workbooks/{wid}/automation")
 def put_automation(wid: str, body: AutomationIn) -> dict:
     try:
-        return store().set_automation(wid, body.model_dump())
+        auto = body.model_dump()
+        kept = (books(wid).auto or {}).get("server")
+        if kept:
+            auto["server"] = kept
+        return store().set_automation(wid, auto)
     except (KeyError, FileNotFoundError):
         raise missing(wid)
 

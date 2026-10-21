@@ -19,10 +19,14 @@ const LITERALS: [RegExp, string][] = [
   [/\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*:\s*boolean\s*=\s*(?:["'`]|-?\d)/, 'boolean'],
 ];
 
+export function isAppsScript(code: string): boolean {
+  return /\b(?:SpreadsheetApp|PropertiesService|UrlFetchApp|ScriptApp)\b/.test(code) && !/\bExcelScript\b/.test(code);
+}
+
 export function check(code: string): Diagnostic[] {
   const out: Diagnostic[] = [];
   const lines = code.split('\n');
-  const custom = /@customfunction/.test(code);
+  const custom = /@customfunction/.test(code) || isAppsScript(code);
   if (!custom && !/\bfunction\s+main\s*\(/.test(code)) out.push({ line: 1, level: 'error', message: 'Write function main(workbook: ExcelScript.Workbook) { ... } so there is something to run.' });
   const main = /\bfunction\s+main\s*\(([^)]*)\)/.exec(code);
   if (main && main[1].trim() && !/^\s*[A-Za-z_$][\w$]*\s*(:\s*ExcelScript\.Workbook)?\s*(,.*)?$/.test(main[1])) out.push({ line: lineOf(code, main.index), level: 'error', message: 'The first parameter of main is the workbook: workbook: ExcelScript.Workbook.' });

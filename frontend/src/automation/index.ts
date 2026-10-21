@@ -11,6 +11,8 @@ import { AssistantTab } from './tabAssistant';
 import { DataTab } from './tabData';
 import { MoreTab } from './tabMore';
 import { ScriptsTab } from './tabScripts';
+import { ServerTab } from './tabServer';
+import { isAppsScript } from './scriptCheck';
 import { strip } from './tsStrip';
 
 export interface AppHooks {
@@ -24,7 +26,7 @@ export interface AppHooks {
 }
 
 function compiled(s: Script): Script {
-  if (!/@customfunction/.test(s.code)) {
+  if (!/@customfunction/.test(s.code) && !isAppsScript(s.code)) {
     const rest = { ...s };
     delete rest.js;
     return rest;
@@ -36,7 +38,7 @@ function compiled(s: Script): Script {
   }
 }
 
-const TABS: [string, string][] = [['scripts', 'Scripts'], ['assistant', 'Assistant'], ['data', 'Data'], ['more', 'More']];
+const TABS: [string, string][] = [['scripts', 'Scripts'], ['server', 'Triggers'], ['assistant', 'Assistant'], ['data', 'Data'], ['more', 'More']];
 
 export class Automation {
   private readonly auto: Auto = blankAuto();
@@ -48,6 +50,7 @@ export class Automation {
   private readonly assistant: AssistantTab;
   private readonly data: DataTab;
   private readonly more: MoreTab;
+  private readonly server: ServerTab;
   private readonly panes: Record<string, HTMLElement>;
   private saveTimer = 0;
   private editTimer = 0;
@@ -96,12 +99,13 @@ export class Automation {
     this.assistant = new AssistantTab(env);
     this.data = new DataTab(env);
     this.more = new MoreTab(env, () => this.scripts.reload());
+    this.server = new ServerTab(env);
     this.panel = el('section', 'fc-auto');
     this.panel.hidden = true;
     this.panel.setAttribute('aria-label', 'Automation');
     this.panel.innerHTML = `<header class="fc-auto-head"><div class="fc-auto-tabs" role="tablist">${TABS.map(([k, l]) => `<button type="button" class="fc-auto-tab" role="tab" data-tab="${k}">${l}</button>`).join('')}</div><button type="button" class="fc-tool" data-act="close" title="Close" aria-label="Close">${icon('close')}</button></header><div class="fc-auto-body"></div>`;
     const body = this.panel.querySelector<HTMLElement>('.fc-auto-body')!;
-    this.panes = { scripts: this.scripts.root, assistant: this.assistant.root, data: this.data.root, more: this.more.root };
+    this.panes = { scripts: this.scripts.root, assistant: this.assistant.root, data: this.data.root, server: this.server.root, more: this.more.root };
     for (const p of Object.values(this.panes)) {
       p.hidden = true;
       body.appendChild(p);
@@ -147,6 +151,7 @@ export class Automation {
     this.panel.hidden = false;
     if (tab === 'assistant') void this.assistant.load();
     if (tab === 'more') void this.more.load();
+    if (tab === 'server') void this.server.load();
     if (tab === 'data') this.data.reload();
   }
 
@@ -164,6 +169,7 @@ export class Automation {
     void this.calls.drain();
     this.customSoon();
     window.setTimeout(() => {
+      this.server.opened();
       for (const s of this.auto.scripts) if (s.triggers?.open) void this.runScript(s.id, { type: 'open' });
       this.data.openOnOpen();
     }, 600);
@@ -174,6 +180,7 @@ export class Automation {
     this.panel.hidden = true;
     this.layer.hidden = true;
     this.scripts.stopTimers();
+    this.server.stop();
     this.data.stop();
     this.runner.stop();
   }
@@ -196,6 +203,7 @@ export class Automation {
   private async runScript(id: string, event?: unknown): Promise<RunResult> {
     const s = this.auto.scripts.find((x) => x.id === id);
     if (!s) return { ok: false, error: 'That script no longer exists.' };
+    if (isAppsScript(s.code)) return this.runOnEngine(s);
     this.quiet = true;
     try {
       const r = await this.runner.run(s.code, event);
@@ -212,6 +220,26 @@ export class Automation {
     }
   }
 
+  private async runOnEngine(s: Script): Promise<RunResult> {
+    const names = [...s.code.matchAll(/(?:^|\n)\s*function\s+([A-Za-z_$][\w$]*)\s*\(/g)].map((m) => m[1]);
+    const fn = names.includes('main') ? 'main' : names.find((n) => !/^on(Open|Edit|Change|Install)$/.test(n)) ?? names[0];
+    if (!fn) return { ok: false, error: 'Write a function to run.' };
+    await this.saveNow();
+    try {
+      const r = await api<{ ok: boolean; error: string; logs: string[]; toasts: { message: string }[]; alerts: string[]; result: unknown }>('POST', `/api/workbooks/${this.openId}/server-scripts/run`, { fn, args: [] });
+      for (const l of r.logs) this.scripts.log('log', l);
+      for (const t of r.toasts) this.h.status(t.message);
+      for (const a of r.alerts) this.h.status(a);
+      if (!r.ok) {
+        this.scripts.log('error', r.error);
+        this.h.status(`${s.name}: ${r.error}`.slice(0, 140), true);
+      }
+      return { ok: r.ok, error: r.error, result: r.result ?? undefined };
+    } catch (err) {
+      return { ok: false, error: err instanceof Error ? err.message : String(err) };
+    }
+  }
+
   private customSoon(): void {
     window.clearTimeout(this.customTimer);
     this.customTimer = window.setTimeout(async () => {
@@ -223,15 +251,18 @@ export class Automation {
     }, 300);
   }
 
-  private persist(): void {
+  private async saveNow(): Promise<void> {
     window.clearTimeout(this.saveTimer);
     const id = this.openId;
-    this.saveTimer = window.setTimeout(() => {
-      if (!id || id !== this.openId) return;
-      const { queries, buttons, settings } = this.auto;
-      const scripts = this.auto.scripts.map((s) => compiled(s));
-      void api('PUT', `/api/workbooks/${id}/automation`, { scripts, queries, buttons, settings }).catch((err: unknown) => this.h.status(err instanceof Error ? err.message : 'Scripts were not saved', true));
-    }, 700);
+    if (!id) return;
+    const { queries, buttons, settings } = this.auto;
+    const scripts = this.auto.scripts.map((s) => compiled(s));
+    await api('PUT', `/api/workbooks/${id}/automation`, { scripts, queries, buttons, settings }).catch((err: unknown) => this.h.status(err instanceof Error ? err.message : 'Scripts were not saved', true));
+  }
+
+  private persist(): void {
+    window.clearTimeout(this.saveTimer);
+    this.saveTimer = window.setTimeout(() => void this.saveNow(), 700);
   }
 
   private paintButtons(): void {
