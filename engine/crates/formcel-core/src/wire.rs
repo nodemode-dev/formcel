@@ -4,7 +4,7 @@ pub fn encode_shift(s: &Shift) -> String {
     format!("#\t{}\t{}\t{}\t{}\n", s.sheet, if s.rows { 'r' } else { 'c' }, s.at, s.delta)
 }
 
-pub type Meta = (Option<String>, bool, Option<u32>);
+pub type Meta = (Option<String>, bool, Option<u32>, bool);
 pub type FxOf<'a> = &'a dyn Fn(usize, Addr) -> Meta;
 
 pub fn encode_styles(tag: char, sheet: Option<usize>, styles: &[(usize, Addr, String)]) -> String {
@@ -89,13 +89,16 @@ pub fn unescape(s: &str) -> String {
     out
 }
 
-fn line(out: &mut String, a: Addr, v: &Value, (fx, num, color): Meta) {
+fn line(out: &mut String, a: Addr, v: &Value, (fx, num, color, link): Meta) {
     out.push_str(&a.row.to_string());
     out.push('\t');
     out.push_str(&a.col.to_string());
     out.push('\t');
     if num {
         out.push('n');
+    }
+    if link {
+        out.push('l');
     }
     if let Some(c) = color {
         out.push_str(&format!("c{c:06x}"));

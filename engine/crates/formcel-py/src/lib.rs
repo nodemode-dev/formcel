@@ -200,6 +200,38 @@ impl Workbook {
     }
 
     #[pyo3(signature = (sheet = 0))]
+    fn links(&self, sheet: usize) -> Vec<(u32, u32, String)> {
+        self.inner.links(sheet).into_iter().map(|(a, t)| (a.row, a.col, t)).collect()
+    }
+
+    #[pyo3(signature = (cells, sheet = 0))]
+    fn load_links(&mut self, cells: Vec<(u32, u32, String)>, sheet: usize) -> PyResult<usize> {
+        let cells: Vec<(Addr, String)> = cells.into_iter().map(|(row, col, t)| (Addr { row, col }, t)).collect();
+        let n = self.inner.load_links(sheet, &cells).map_err(|e| PyValueError::new_err(e.to_string()));
+        self.inner.take_link_changes();
+        n
+    }
+
+    #[pyo3(signature = (a1, target, display = None, sheet = 0))]
+    fn set_link(&mut self, a1: &str, target: &str, display: Option<&str>, sheet: usize) -> PyResult<()> {
+        let a = parse_a1(a1).map_err(|e| PyValueError::new_err(e.to_string()))?;
+        self.inner.set_link(sheet, a, target, display).map(|_| ()).map_err(|e| PyValueError::new_err(e.to_string()))
+    }
+
+    #[pyo3(signature = (a1, sheet = 0))]
+    fn link_at(&self, a1: &str, sheet: usize) -> PyResult<Option<String>> {
+        let a = parse_a1(a1).map_err(|e| PyValueError::new_err(e.to_string()))?;
+        Ok(self.inner.link_at(sheet, a))
+    }
+
+    #[pyo3(signature = (top, bottom, sheet = 0))]
+    fn remove_links(&mut self, top: &str, bottom: &str, sheet: usize) -> PyResult<()> {
+        let t = parse_a1(top).map_err(|e| PyValueError::new_err(e.to_string()))?;
+        let b = parse_a1(bottom).map_err(|e| PyValueError::new_err(e.to_string()))?;
+        self.inner.remove_links(sheet, t, b).map(|_| ()).map_err(|e| PyValueError::new_err(e.to_string()))
+    }
+
+    #[pyo3(signature = (sheet = 0))]
     fn rules(&self, sheet: usize) -> Vec<String> {
         self.inner.rule_lines(sheet)
     }

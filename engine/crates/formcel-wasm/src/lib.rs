@@ -528,6 +528,66 @@ pub extern "C" fn fc_cf_in(id: u32, sheet: u32, r0: u32, c0: u32, r1: u32, c1: u
     }
 }
 
+/// The link of one cell, from the cell or from a HYPERLINK formula; empty when there is none.
+#[no_mangle]
+pub extern "C" fn fc_link_at(id: u32, sheet: u32, row: u32, col: u32) -> i32 {
+    match with_book(id, |wb| wb.link_at(sheet as usize, Addr { row, col }).unwrap_or_default()) {
+        Some(s) => emit(&s) as i32,
+        None => -1,
+    }
+}
+
+/// Links one cell, and sets its text when `display` is given (`has_display` 1), as one undo step; -3 for a target FormCel does not link.
+///
+/// # Safety
+/// `target` and `display` must point at readable bytes of their lengths.
+#[no_mangle]
+pub unsafe extern "C" fn fc_set_link(id: u32, sheet: u32, row: u32, col: u32, target: *const u8, target_len: u32, display: *const u8, display_len: u32, has_display: u32) -> i32 {
+    let target = text(target, target_len).to_string();
+    let display = text(display, display_len).to_string();
+    effect_or(with_book(id, |wb| wb.set_link(sheet as usize, Addr { row, col }, &target, (has_display == 1).then_some(display.as_str())).map(|e| wb.encode(&e))))
+}
+
+/// Removes the links of a rectangle and keeps the text, as one undo step.
+#[no_mangle]
+pub extern "C" fn fc_remove_links(id: u32, sheet: u32, r0: u32, c0: u32, r1: u32, c1: u32) -> i32 {
+    effect_or(with_book(id, |wb| wb.remove_links(sheet as usize, Addr { row: r0, col: c0 }, Addr { row: r1, col: c1 }).map(|e| wb.encode(&e))))
+}
+
+/// Link changes since the last call, as `sheet\trow\tcol\ttarget` lines (empty target: removed).
+#[no_mangle]
+pub extern "C" fn fc_take_links(id: u32) -> i32 {
+    match with_book(id, |wb| {
+        let mut s = String::new();
+        for (sh, a, t) in wb.take_link_changes() {
+            s.push_str(&format!("{sh}\t{}\t{}\t", a.row, a.col));
+            wire::escape(&t, &mut s);
+            s.push('\n');
+        }
+        s
+    }) {
+        Some(s) => emit(&s) as i32,
+        None => -1,
+    }
+}
+
+/// Loads `row\tcol\ttarget` lines without an undo step.
+///
+/// # Safety
+/// `lines` must point at `len` readable bytes.
+#[no_mangle]
+pub unsafe extern "C" fn fc_load_links(id: u32, sheet: u32, lines: *const u8, len: u32) -> i32 {
+    let Some(cells) = wire::decode_edits(text(lines, len)) else { return -1 };
+    match with_book(id, |wb| {
+        let n = wb.load_links(sheet as usize, &cells);
+        wb.take_link_changes();
+        n
+    }) {
+        Some(Ok(n)) => n as i32,
+        _ => -1,
+    }
+}
+
 /// The current length of the undo history, to pass to `fc_undo_group` later.
 #[no_mangle]
 pub extern "C" fn fc_undo_mark(id: u32) -> i32 {

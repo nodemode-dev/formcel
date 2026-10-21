@@ -681,6 +681,20 @@ impl<'a> Eval<'a> {
                     };
                     num(r / m)
                 }
+                "HYPERLINK" => {
+                    if !count(1, 2) {
+                        return Err(ErrKind::Na);
+                    }
+                    let link = self.t(a, 0)?;
+                    match a.get(1).filter(|e| !matches!(e, Expr::Missing)) {
+                        Some(e) => match self.scalar(e) {
+                            Value::Error(k) => return Err(k),
+                            Value::Empty => Value::Text(link),
+                            v => v,
+                        },
+                        None => Value::Text(link),
+                    }
+                }
                 "LEN" => Value::Number(self.t(a, 0)?.chars().count() as f64),
                 "UPPER" => Value::Text(self.t(a, 0)?.to_uppercase()),
                 "LOWER" => Value::Text(self.t(a, 0)?.to_lowercase()),

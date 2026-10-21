@@ -4,6 +4,7 @@ use std::fmt;
 
 pub mod cf;
 pub mod eval;
+pub mod link;
 pub mod formula;
 mod graph;
 pub mod fmtcode;
@@ -292,6 +293,7 @@ struct Lost {
     styles: Vec<(Key, Option<String>, Option<String>)>,
     merges: Vec<Area>,
     rules: Vec<cf::Rule>,
+    links: Vec<(Key, Option<String>, Option<String>)>,
 }
 
 pub type Changed = Vec<(usize, Addr, Value)>;
@@ -346,6 +348,7 @@ enum Tx {
     Theme { before: Box<theme::Theme>, after: Box<theme::Theme> },
     Named { before: Vec<theme::NamedStyle>, after: Vec<theme::NamedStyle> },
     Rules { sheet: usize, before: Vec<cf::Rule>, after: Vec<cf::Rule> },
+    Links(Vec<FormatChange>),
 }
 
 #[derive(Debug)]
@@ -365,6 +368,8 @@ pub struct Workbook {
     theme: theme::Theme,
     named: Vec<theme::NamedStyle>,
     named_codes: FastMap<String, std::sync::Arc<(String, fmtcode::Code)>>,
+    links: FastMap<Key, String>,
+    link_log: Vec<(usize, Addr, String)>,
 }
 
 const SPILL_PASSES: usize = 8;
@@ -416,6 +421,8 @@ impl Workbook {
             theme: theme::Theme::default(),
             named: theme::builtin_styles(),
             named_codes: FastMap::default(),
+            links: FastMap::default(),
+            link_log: Vec::new(),
         }
         .with_named_codes()
     }
@@ -642,10 +649,14 @@ impl Workbook {
             }
             seeds.push((sheet, *a));
         }
+        let mark = self.undo.len();
+        let edited: Vec<Addr> = tx.iter().map(|c| c.addr).collect();
         if !tx.is_empty() {
             self.record(Tx::Cells(tx));
         }
         let changed = self.recalc(&seeds);
+        self.auto_links(sheet, &edited);
+        self.group_since(mark);
         Ok(self.present(changed))
     }
 
@@ -705,7 +716,7 @@ impl Workbook {
         let quoted = matches!(v, Some(Value::Text(s)) if s.starts_with('\'') || !matches!(Value::parse_input(s), Value::Text(_)));
         let raw = self.formula_text(sheet, a).or_else(|| ((code.is_some() || quoted) && !self.spilled.contains_key(&(sheet, a))).then(|| self.input(sheet, a)).filter(|s| !s.is_empty()));
         let color = code.zip(v).and_then(|(c, v)| c.1.render(v)).and_then(|(_, col)| col).map(fmtcode::Color::rgb);
-        (raw, num, color)
+        (raw, num, color, self.has_link(sheet, a))
     }
 
     pub fn format_code(&self, sheet: usize, a: Addr) -> Option<String> {
@@ -1394,6 +1405,18 @@ impl Workbook {
                 None => lost_fmt.styles.push(((sh, a), Some(st.0.clone()), None)),
             }
         }
+        let links: Vec<(Key, String)> = self.links.iter().filter(|((sh, _), _)| *sh == s.sheet).map(|(k, t)| (*k, t.clone())).collect();
+        for (k, _) in &links {
+            self.links.remove(k);
+        }
+        for ((sh, a), t) in links {
+            match moved(a) {
+                Some(b) => {
+                    self.links.insert((sh, b), t);
+                }
+                None => lost_fmt.links.push(((sh, a), Some(t), None)),
+            }
+        }
         if s.delta > 0 && s.at > 0 {
             self.inherit(s);
         }
@@ -1558,6 +1581,12 @@ impl Workbook {
                 self.styles.insert((n, a), st);
             }
         }
+        let old = std::mem::take(&mut self.links);
+        for ((s, a), t) in old {
+            if let Some(n) = map(s) {
+                self.links.insert((n, a), t);
+            }
+        }
     }
 
     pub fn insert(&mut self, sheet: usize, rows: bool, at: u32, n: u32) -> Result<Shift, EngineError> {
@@ -1657,6 +1686,7 @@ impl Workbook {
                 self.sheets[*sheet].merges = if forward { after.clone() } else { before.clone() };
                 Effect { merges: Some(*sheet), ..Effect::default() }
             }
+            Tx::Links(changes) => self.apply_links(changes, forward),
             Tx::Rules { sheet, before, after } => {
                 self.sheets[*sheet].rules = if forward { after.clone() } else { before.clone() };
                 Effect { rules: Some(*sheet), ..Effect::default() }
@@ -1694,6 +1724,7 @@ impl Workbook {
                 self.do_shift(back);
                 self.sheets[shift.sheet].merges = lost.merges.clone();
                 self.sheets[shift.sheet].rules = lost.rules.clone();
+                self.apply_links(&lost.links, false);
                 let restored = self.apply_formats(&lost.codes, false).join(self.apply_styles(&lost.styles, false));
                 for (s, a, raw) in rewritten {
                     self.set_raw(*s, *a, raw);
