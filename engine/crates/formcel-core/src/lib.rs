@@ -228,11 +228,12 @@ pub struct Sheet {
     valid: Vec<valid::Validation>,
     prot: protect::SheetProt,
     objects: Vec<objects::Anchor>,
+    hand_hidden: Vec<u32>,
 }
 
 impl Sheet {
     pub fn new(name: &str) -> Self {
-        Sheet { name: name.to_string(), cells: Store::default(), merges: Vec::new(), rules: Vec::new(), filter: None, valid: Vec::new(), prot: protect::SheetProt::default(), objects: Vec::new() }
+        Sheet { name: name.to_string(), cells: Store::default(), merges: Vec::new(), rules: Vec::new(), filter: None, valid: Vec::new(), prot: protect::SheetProt::default(), objects: Vec::new(), hand_hidden: Vec::new() }
     }
 
     pub fn len(&self) -> usize {
@@ -510,6 +511,10 @@ impl eval::Ctx for Workbook {
 
     fn sheet_total(&self) -> usize {
         self.sheets.len()
+    }
+
+    fn hidden_row(&self, sheet: usize, row: u32) -> bool {
+        self.sheets.get(sheet).is_some_and(|s| s.hand_hidden.binary_search(&row).is_ok())
     }
 
     fn subtotal_at(&self, sheet: usize, a: Addr) -> bool {

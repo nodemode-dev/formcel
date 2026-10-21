@@ -8,12 +8,46 @@ export interface Suggestion {
   help?: string;
   category?: string;
   insert?: string;
+  table?: string;
 }
 
 export interface TableHint {
   name: string;
   cols: string[];
 }
+
+export interface Structured {
+  start: number;
+  partial: string;
+  table: string | null;
+}
+
+export function structuredContext(text: string, caret: number): Structured | null {
+  if (!text.startsWith('=')) return null;
+  const s = text.slice(0, caret);
+  const lb = s.lastIndexOf('[');
+  if (lb < 0 || lb < s.lastIndexOf(']')) return null;
+  const open = s.slice(0, lb);
+  if ((open.match(/"/g)?.length ?? 0) % 2 === 1) return null;
+  let depth = 0;
+  let table: string | null = null;
+  for (let j = lb; j >= 0; j--) {
+    const c = s[j];
+    if (c === ']') depth++;
+    else if (c === '[') {
+      if (depth === 0) {
+        const m = /([A-Za-z_][A-Za-z0-9_.]*)$/.exec(s.slice(0, j));
+        if (m) {
+          table = m[1];
+          break;
+        }
+      } else depth--;
+    }
+  }
+  return { start: lb + 1, partial: s.slice(lb + 1), table };
+}
+
+const escapeColumn = (name: string) => name.replace(/(['[\]#])/g, "'$1");
 
 interface Scan {
   word: { start: number; text: string } | null;
@@ -338,7 +372,7 @@ export class Autocomplete {
     if (!m || !w) return;
     const v = this.field.value;
     const caret = this.field.selectionStart ?? v.length;
-    const add = m.name + (m.kind === 'function' && v[caret] !== '(' ? '(' : '');
+    const add = m.kind === 'column' ? escapeColumn(m.name) + (v[caret] === ']' ? '' : ']') : m.name + (m.kind === 'function' && v[caret] !== '(' ? '(' : m.kind === 'table' && v[caret] !== '[' ? '[' : '');
     this.field.value = v.slice(0, w.start) + add + v.slice(caret);
     const pos = w.start + add.length;
     this.field.setSelectionRange(pos, pos);

@@ -31,6 +31,8 @@ interface Exports {
   fc_merges(book: number, sheet: number): number;
   fc_sort(book: number, sheet: number, r0: number, c0: number, r1: number, c1: number, keys: number, len: number, header: number, caseSensitive: number): number;
   fc_region(book: number, sheet: number, row: number, col: number): number;
+  fc_sort_lists(): number;
+  fc_sort_choices(book: number, sheet: number, r0: number, c0: number, r1: number, c1: number, header: number, across: number, key: number): number;
   fc_guess_header(book: number, sheet: number, r0: number, c0: number, r1: number, c1: number): number;
   fc_load_merges(book: number, sheet: number, lines: number, len: number): number;
   fc_put_formats(book: number, sheet: number, lines: number, len: number): number;
@@ -73,11 +75,13 @@ interface Exports {
   fc_set_validation(book: number, sheet: number, r0: number, c0: number, r1: number, c1: number, t: number, len: number): number;
   fc_validation_at(book: number, sheet: number, row: number, col: number): number;
   fc_list_items(book: number, sheet: number, row: number, col: number): number;
+  fc_invalid_in(book: number, sheet: number, r0: number, c0: number, r1: number, c1: number): number;
   fc_check_input(book: number, sheet: number, row: number, col: number, raw: number, len: number): number;
   fc_filter(book: number, sheet: number): number;
   fc_set_filter(book: number, sheet: number, t: number, len: number): number;
   fc_load_filter(book: number, sheet: number, t: number, len: number): number;
   fc_reapply_filter(book: number, sheet: number): number;
+  fc_set_hidden_rows(book: number, sheet: number, t: number, len: number): number;
   fc_tool(book: number, sheet: number, cmd: number, len: number): number;
   fc_filter_values(book: number, sheet: number, col: number): number;
   fc_cf_in(book: number, sheet: number, r0: number, c0: number, r1: number, c1: number): number;
@@ -382,12 +386,21 @@ function run(x: Exports, req: Request): Value {
     case 'merge.set':
       return effect(out(x, x.fc_merge(req.book, req.sheet, req.r0, req.c0, req.r1, req.c1, MERGE_MODES[req.mode])));
     case 'sort': {
-      const keys = req.keys.map(([c, d]) => `${c}:${d ? 'd' : 'a'}`).join(',');
+      const keys = req.keys.map(([c, d, kind, arg]) => `${c}:${d ? 'd' : 'a'}${kind ? `:${kind}:${escape(arg ?? '')}` : ''}`).join('\n');
       return withStrings(x, [keys], ([p, l]) => {
-        const n = x.fc_sort(req.book, req.sheet, req.r0, req.c0, req.r1, req.c1, p, l, req.header ? 1 : 0, req.caseSensitive ? 1 : 0);
+        const n = x.fc_sort(req.book, req.sheet, req.r0, req.c0, req.r1, req.c1, p, l, req.header ? 1 : 0, (req.caseSensitive ? 1 : 0) | (req.across ? 2 : 0));
         if (n === -3) throw new Error('Unmerge the cells in the range to sort it.');
         return effect(out(x, n));
       });
+    }
+    case 'sort.lists':
+      return lines(out(x, x.fc_sort_lists()));
+    case 'sort.choices': {
+      const found = { fills: [] as string[], fonts: [] as string[], icons: [] as string[] };
+      for (const [tag, v] of lines(out(x, x.fc_sort_choices(req.book, req.sheet, req.r0, req.c0, req.r1, req.c1, req.header ? 1 : 0, req.across ? 1 : 0, req.key)))) {
+        (tag === 'f' ? found.fills : tag === 't' ? found.fonts : found.icons).push(v ?? '');
+      }
+      return found;
     }
     case 'region':
       return out(x, x.fc_region(req.book, req.sheet, req.row, req.col)).split(',').map(Number) as [number, number, number, number, number];
@@ -524,6 +537,8 @@ function run(x: Exports, req: Request): Value {
       return out(x, x.fc_validation_at(req.book, req.sheet, req.row, req.col));
     case 'valid.items':
       return out(x, x.fc_list_items(req.book, req.sheet, req.row, req.col)).split('\n').filter((l) => l !== '').map(unescape);
+    case 'valid.invalid':
+      return lines(out(x, x.fc_invalid_in(req.book, req.sheet, req.r0, req.c0, req.r1, req.c1))).map(([r, c]) => [Number(r), Number(c)]);
     case 'valid.check':
       return withStrings(x, [req.raw], ([p, l]) => out(x, x.fc_check_input(req.book, req.sheet, req.row, req.col, p, l)));
     case 'filter.get':
@@ -538,6 +553,8 @@ function run(x: Exports, req: Request): Value {
       return withStrings(x, [req.text], ([p, l]) => ok(x.fc_load_filter(req.book, req.sheet, p, l), 'The engine refused that filter.'));
     case 'filter.reapply':
       return effect(out(x, x.fc_reapply_filter(req.book, req.sheet)));
+    case 'rows.hidden':
+      return withStrings(x, [req.text], ([p, l]) => effect(out(x, x.fc_set_hidden_rows(req.book, req.sheet, p, l))));
     case 'tool':
       return withStrings(x, [req.cmd], ([p, l]) => {
         const text = out(x, x.fc_tool(req.book, req.sheet, p, l));
@@ -546,9 +563,11 @@ function run(x: Exports, req: Request): Value {
         return { ...effect(text.slice(cut + 1)), message: unescape(text.slice(0, cut)) };
       });
     case 'filter.values': {
-      const list: FilterList = { values: [], blanks: false, more: false, fills: [], fonts: [] };
-      for (const [k, v] of lines(out(x, x.fc_filter_values(req.book, req.sheet, req.col)))) {
-        if (k === 'v') list.values.push(unescape(v ?? ''));
+      const list: FilterList = { values: [], blanks: false, more: false, fills: [], fonts: [], days: [], icons: [] };
+      for (const [k, v, m, d] of lines(out(x, x.fc_filter_values(req.book, req.sheet, req.col)))) {
+        if (k === 'd') list.days.push([Number(v), Number(m), Number(d)]);
+        else if (k === 'i') list.icons.push(v ?? '');
+        else if (k === 'v') list.values.push(unescape(v ?? ''));
         else if (k === 'b') list.blanks = true;
         else if (k === 'm') list.more = true;
         else if (k === 'f') list.fills.push(v ?? '');

@@ -197,6 +197,18 @@ fn range_of(s: &str) -> Option<(usize, Area)> {
     (n.len() == 5 && n[1] <= n[3] && n[2] <= n[4]).then(|| (n[0] as usize, Area { r0: n[1], c0: n[2], r1: n[3], c1: n[4] }))
 }
 
+fn link_formula(func: &str, refs: &[String]) -> String {
+    let name = match func {
+        "count" => "COUNTA",
+        "countnums" => "COUNT",
+        "average" => "AVERAGE",
+        "max" => "MAX",
+        "min" => "MIN",
+        _ => "SUM",
+    };
+    format!("={name}({})", refs.join(","))
+}
+
 fn fold(func: &str, vals: &[f64], filled: usize) -> Option<f64> {
     match func {
         "count" => Some(filled as f64),
@@ -213,6 +225,13 @@ impl Workbook {
     fn txt(&self, sheet: usize, ad: Addr) -> String {
         let v = self.sheets[sheet].cells.get(ad).cloned().unwrap_or(Value::Empty);
         self.shown(sheet, ad, v).to_string()
+    }
+
+    fn source_ref(&self, sheet: usize, ad: Addr) -> String {
+        let name = &self.sheets[sheet].name;
+        let plain = name.chars().all(|c| c.is_alphanumeric() || c == '_') && !name.starts_with(|c: char| c.is_ascii_digit());
+        let at = format!("${}${}", col_name(ad.col), ad.row + 1);
+        if plain { format!("{name}!{at}") } else { format!("'{}'!{at}", name.replace('\'', "''")) }
     }
 
     fn cell_val(&self, sheet: usize, ad: Addr) -> Value {
@@ -305,6 +324,7 @@ impl Workbook {
             "localform" => Ok((Effect::default(), say(&crate::formlocale::convert(arg(&p, 2), arg(&p, 1) == "to")))),
             "fmtpreview" => self.t_fmtpreview(sheet, &p),
             "fmtspecials" => self.t_fmtspecials(sheet, &p),
+            "copyvalid" => self.t_copyvalid(sheet, &p),
             _ => bad("unknown tool"),
         };
         self.undo_group(mark);
@@ -517,6 +537,7 @@ impl Workbook {
         let (top, left) = (flag(p, 3), flag(p, 4));
         let (dr, dc): (u32, u32) = (arg(p, 5).parse().unwrap_or(0), arg(p, 6).parse().unwrap_or(0));
         let ranges: Vec<(usize, Area)> = arg(p, 7).split(';').filter_map(range_of).collect();
+        let link = flag(p, 8);
         if ranges.is_empty() {
             return bad("add at least one range");
         }
@@ -539,22 +560,24 @@ impl Workbook {
                 for c in 0..=(f.c1 - f.c0) {
                     let mut vals = Vec::new();
                     let mut filled = 0;
+                    let mut links = Vec::new();
                     for (s, ar) in &ranges {
                         if ar.r0 + r <= ar.r1 && ar.c0 + c <= ar.c1 {
                             let (n, fl) = num(self, *s, a(ar.r0 + r, ar.c0 + c));
                             vals.extend(n);
                             filled += usize::from(fl);
+                            links.push(self.source_ref(*s, a(ar.r0 + r, ar.c0 + c)));
                         }
                     }
                     if let Some(v) = fold(&func, &vals, filled) {
-                        edits.push((a(dr + r, dc + c), Value::Number(v).to_string()));
+                        edits.push((a(dr + r, dc + c), if link { link_formula(&func, &links) } else { Value::Number(v).to_string() }));
                     }
                 }
             }
         } else {
             let mut rows: Vec<String> = Vec::new();
             let mut cols: Vec<String> = Vec::new();
-            let mut cellvals: HashMap<(usize, usize), (Vec<f64>, usize)> = HashMap::new();
+            let mut cellvals: HashMap<(usize, usize), (Vec<f64>, usize, Vec<String>)> = HashMap::new();
             for (s, ar) in &ranges {
                 let (r0, c0) = (ar.r0 + u32::from(top), ar.c0 + u32::from(left));
                 for r in r0..=ar.r1 {
@@ -573,6 +596,7 @@ impl Workbook {
                         let e = cellvals.entry((ri, ci)).or_default();
                         e.0.extend(n);
                         e.1 += usize::from(fl);
+                        e.2.push(self.source_ref(*s, a(r, c)));
                     }
                 }
             }
@@ -587,9 +611,9 @@ impl Workbook {
                     edits.push((a(dr + ro + i as u32, dc), quote(l)));
                 }
                 for j in 0..cols.len() {
-                    if let Some((vals, filled)) = cellvals.get(&(i, j)) {
+                    if let Some((vals, filled, links)) = cellvals.get(&(i, j)) {
                         if let Some(v) = fold(&func, vals, *filled) {
-                            edits.push((a(dr + ro + i as u32, dc + co + j as u32), Value::Number(v).to_string()));
+                            edits.push((a(dr + ro + i as u32, dc + co + j as u32), if link { link_formula(&func, links) } else { Value::Number(v).to_string() }));
                         }
                     }
                 }
@@ -685,6 +709,16 @@ impl Workbook {
         Ok((out, say(&format!("Added {} subtotals and a grand total.\nclear\t{first}\t{}\n{}", g, grand, lines.join("\n")))))
     }
 
+    fn adv_formula(&self, sheet: usize, src: &str, dr: u32, at: Addr) -> bool {
+        let Some(mut e) = crate::formula::parse(src.trim_start().strip_prefix('=').unwrap_or(src)) else { return false };
+        crate::formula::offset(&mut e, i64::from(dr), 0);
+        match crate::eval::Eval::new(self, sheet).placed(at).scalar(&e) {
+            Value::Bool(b) => b,
+            Value::Number(n) => n != 0.0,
+            _ => false,
+        }
+    }
+
     fn t_advfilter(&mut self, sheet: usize, p: &[String]) -> Out {
         let (Some(list), Some(crit)) = (area_of(arg(p, 1)), area_of(arg(p, 2))) else { return bad("bad range") };
         let copy = arg(p, 3) == "copy";
@@ -702,7 +736,12 @@ impl Workbook {
                 || (crit.r0 + 1..=crit.r1).any(|cr| {
                     (crit.c0..=crit.c1).all(|cc| {
                         let text = self.txt(sheet, a(cr, cc));
-                        let Some(col) = maps[(cc - crit.c0) as usize] else { return true };
+                        let Some(col) = maps[(cc - crit.c0) as usize] else {
+                            return match self.formula_text(sheet, a(cr, cc)) {
+                                Some(src) if !src.is_empty() => self.adv_formula(sheet, &src, r - (list.r0 + 1), a(r, list.c0)),
+                                _ => true,
+                            };
+                        };
                         text.trim().is_empty() || crit_hit(&self.cell_val(sheet, a(r, col)), &self.txt(sheet, a(r, col)), &text)
                     })
                 });
@@ -909,14 +948,16 @@ impl Workbook {
     fn t_checkbox(&mut self, sheet: usize, p: &[String]) -> Out {
         let Some(area) = area_of(arg(p, 1)) else { return bad("bad range") };
         let on = flag(p, 2);
-        let mut out = self.set_validation(sheet, area, if on { "checkbox\t\t\t\tb\tstop" } else { "" })?;
+        let (checked, unchecked) = (arg(p, 3).trim(), arg(p, 4).trim());
+        let spec = format!("checkbox\t\t{}\t{}\tb\tstop", say(checked), say(unchecked));
+        let mut out = self.set_validation(sheet, area, if on { &spec } else { "" })?;
         if on {
             let mut edits = Vec::new();
             let last = area.r1.min(area.r0 + 20_000);
             for r in area.r0..=last {
                 for c in area.c0..=area.c1 {
                     if matches!(self.cell_val(sheet, a(r, c)), Value::Empty) {
-                        edits.push((a(r, c), "FALSE".to_string()));
+                        edits.push((a(r, c), if unchecked.is_empty() { "FALSE".to_string() } else { unchecked.to_string() }));
                     }
                 }
             }
@@ -925,12 +966,43 @@ impl Workbook {
         Ok((out, say(if on { "Checkboxes inserted." } else { "Checkboxes removed." })))
     }
 
+    fn t_copyvalid(&mut self, sheet: usize, p: &[String]) -> Out {
+        let (Some(src), Ok(dr), Ok(dc)) = (area_of(arg(p, 1)), arg(p, 2).parse::<u32>(), arg(p, 3).parse::<u32>()) else { return bad("bad range") };
+        let ss = arg(p, 4).parse::<usize>().ok().filter(|s| *s < self.sheets.len()).unwrap_or(sheet);
+        let dest = Area { r0: dr, c0: dc, r1: (dr + src.r1 - src.r0).min(crate::MAX_ROWS - 1), c1: (dc + src.c1 - src.c0).min(crate::MAX_COLS - 1) };
+        let mut out = self.set_validation(sheet, dest, "")?;
+        let mut n = 0;
+        for v in self.sheets[ss].valid.clone() {
+            let (r0, r1, c0, c1) = (v.area.r0.max(src.r0), v.area.r1.min(src.r1), v.area.c0.max(src.c0), v.area.c1.min(src.c1));
+            let to = Area { r0: r0 - src.r0 + dr, c0: c0 - src.c0 + dc, r1: (r1 + dr).saturating_sub(src.r0), c1: (c1 + dc).saturating_sub(src.c0) };
+            if r0 > r1 || c0 > c1 || to.r1 >= crate::MAX_ROWS || to.c1 >= crate::MAX_COLS {
+                continue;
+            }
+            let shift_r = i64::from(r0) - i64::from(v.area.r0) + i64::from(dr) - i64::from(src.r0);
+            let shift_c = i64::from(c0) - i64::from(v.area.c0) + i64::from(dc) - i64::from(src.c0);
+            let mut moved = v.clone();
+            for f in [&mut moved.a, &mut moved.b] {
+                if f.trim_start().starts_with('=') {
+                    *f = offset_text(f, shift_r, shift_c);
+                }
+            }
+            let line = moved.line();
+            out = out.join(self.set_validation(sheet, to, line.split_once('\t').map_or("", |x| x.1))?);
+            n += 1;
+        }
+        Ok((out, say(&format!("Pasted {n} validation rules."))))
+    }
+
     fn t_paste(&mut self, sheet: usize, p: &[String]) -> Out {
         let (Some(src), Ok(dr), Ok(dc)) = (area_of(arg(p, 1)), arg(p, 2).parse::<u32>(), arg(p, 3).parse::<u32>()) else { return bad("bad range") };
         let what = arg(p, 4).to_string();
         let op = arg(p, 5).to_string();
         let skip = flag(p, 6);
         let transpose = flag(p, 7);
+        if what == "validation" {
+            let q: Vec<String> = ["copyvalid", arg(p, 1), arg(p, 2), arg(p, 3), arg(p, 8)].iter().map(|s| s.to_string()).collect();
+            return self.t_copyvalid(sheet, &q);
+        }
         let ss = arg(p, 8).parse::<usize>().ok().filter(|s| *s < self.sheets.len()).unwrap_or(sheet);
         let (h, w) = (src.r1 - src.r0 + 1, src.c1 - src.c0 + 1);
         let mut edits = Vec::new();
@@ -946,7 +1018,7 @@ impl Workbook {
                 if skip && src_empty {
                     continue;
                 }
-                if matches!(what.as_str(), "all" | "values" | "formulas" | "validation" | "comments") || what.is_empty() {
+                if matches!(what.as_str(), "all" | "values" | "formulas" | "comments") || what.is_empty() {
                     let mut raw = match what.as_str() {
                         "values" => self.plain(ss, from),
                         _ => {
@@ -1022,6 +1094,7 @@ impl Workbook {
         let rule = match base {
             "checkbox" => Some("checkbox\t\t\t\tb\tstop".to_string()),
             "dropdown" => Some(format!("list\t\t{}\t\tbd\tstop", rest.replace('|', ","))),
+            "people" => Some(format!("custom\t\t=ISNUMBER(FIND(\"@\",{}{}))\t\tbec\twarning\t\t\tThat is not a person\tUse an email address such as name@example.com.", col_name(ca.c0), d0 + 1)),
             "" | "text" | "number" | "date" => Some(String::new()),
             _ => None,
         };
@@ -1060,6 +1133,7 @@ impl Workbook {
             "number" => matches!(v, Value::Number(_)) && !fmt.is_some_and(|f| f.is_date()),
             "date" => matches!(v, Value::Number(_)) && fmt.is_some_and(|f| f.is_date()),
             "checkbox" => matches!(v, Value::Bool(_)),
+            "people" => matches!(&v, Value::Text(s) if s.contains('@')),
             _ => true,
         };
         let msg = if fits { String::new() } else { format!("Column {head} expects a {} value.", kind.split(':').next().unwrap_or("")) };

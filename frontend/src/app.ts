@@ -1,4 +1,6 @@
-import { engine, type Area, type Changed, type Effect, type FormatChange, type LinkChange, type Name, type Shift } from './engine';
+import { engine, type Area, type Changed, type Effect, type FormatChange, type LinkChange, type Name, type Shift, type SortKeySpec } from './engine';
+import { loadSortLists, saveSortList } from './ui/sortlists';
+import { cascadeDates, collectDates, dateTree, DATE_FILTERS, iconSwatch } from './ui/filterx';
 import { colName, parseRef, type Range } from './grid/a1';
 import { Autocomplete, FUNCTIONS, type Suggestion } from './ui/autocomplete';
 import { Charts } from './charts';
@@ -6,7 +8,7 @@ import type { FloatObject } from './charts/types';
 import { Automation } from './automation';
 import { Grid, type BorderKind, type MenuKind, type PasteKind, type SheetView } from './grid/grid';
 import { paint } from './grid/style';
-import { TABLE_STYLES } from './grid/tables';
+import { TABLE_STYLES, customId, parseCustom } from './grid/tables';
 import { listCommands, registerCommand, runCommand } from './ui/commands';
 import { Home, type TemplateMeta, type WorkbookMeta } from './ui/home';
 import { Menu, type MenuItem } from './ui/menu';
@@ -45,6 +47,7 @@ interface FilterForm {
   title: HTMLElement;
   colors: HTMLElement;
   op1: HTMLSelectElement;
+  dateOps: HTMLOptGroupElement;
   v1: HTMLInputElement;
   join: HTMLSelectElement;
   op2: HTMLSelectElement;
@@ -58,7 +61,7 @@ interface FilterForm {
 const FILTER_OPS: [string, string][] = [
   ['', 'None'], ['eq', 'Equals'], ['ne', 'Does not equal'], ['gt', 'Greater than'], ['ge', 'Greater than or equal to'], ['lt', 'Less than'], ['le', 'Less than or equal to'],
   ['begins', 'Begins with'], ['notbegins', 'Does not begin with'], ['ends', 'Ends with'], ['notends', 'Does not end with'], ['contains', 'Contains'], ['notcontains', 'Does not contain'],
-  ['top', 'Top N items'], ['bottom', 'Bottom N items'], ['top%', 'Top N percent'], ['bottom%', 'Bottom N percent'], ['above', 'Above average'], ['below', 'Below average'],
+  ['between', 'Between'], ['top', 'Top N items'], ['bottom', 'Bottom N items'], ['top%', 'Top N percent'], ['bottom%', 'Bottom N percent'], ['above', 'Above average'], ['below', 'Below average'],
 ];
 
 const fieldEsc = (s: string) => s.replace(/\\/g, '\\\\').replace(/\t/g, '\\t').replace(/\n/g, '\\n').replace(/\r/g, '\\r');
@@ -70,6 +73,9 @@ interface ValidForm {
   labelA: HTMLElement;
   labelB: HTMLElement;
   hint: HTMLElement;
+  colors: HTMLElement;
+  colorKey: string;
+  saved: string;
 }
 
 interface AlertForm {
@@ -81,7 +87,7 @@ interface AlertForm {
   done: ((c: 'retry' | 'accept' | 'cancel') => void) | null;
 }
 
-const VALID_KINDS: [string, string][] = [['any', 'Any value'], ['whole', 'Whole number'], ['decimal', 'Decimal'], ['list', 'List'], ['date', 'Date'], ['time', 'Time'], ['length', 'Text length'], ['custom', 'Custom']];
+const VALID_KINDS: [string, string][] = [['any', 'Any value'], ['whole', 'Whole number'], ['decimal', 'Decimal'], ['list', 'List'], ['date', 'Date'], ['time', 'Time'], ['length', 'Text length'], ['custom', 'Custom'], ['checkbox', 'Checkbox']];
 const VALID_OPS: [string, string][] = [['between', 'between'], ['notbetween', 'not between'], ['eq', 'equal to'], ['ne', 'not equal to'], ['gt', 'greater than'], ['lt', 'less than'], ['ge', 'greater than or equal to'], ['le', 'less than or equal to']];
 const TOTALS: [string, number][] = [['Average', 101], ['Count', 103], ['Count Numbers', 102], ['Max', 104], ['Min', 105], ['Sum', 109], ['StdDev', 107], ['Var', 110]];
 const ALERT_TEXT ='The value you entered is not allowed in this cell.';
@@ -92,6 +98,9 @@ interface SortForm {
   levels: HTMLElement;
   header: HTMLInputElement;
   caseSensitive: HTMLInputElement;
+  across: HTMLInputElement;
+  newList: HTMLInputElement;
+  lists: string[][];
   hint: HTMLElement;
   range: Range | null;
   names: [number, string][];
@@ -351,7 +360,7 @@ export class App {
       onPasteMenu: (x, y) => this.pasteMenu(x, y),
       onRules: (sheet, lines) => this.sendRules(sheet, lines),
       onFilter: (sheet, text) => {
-        this.sendFilter(sheet, text);
+        if (!this.tools.isTemp(sheet)) this.sendFilter(sheet, text);
         void this.tools.refreshSlicers();
       },
       onFilterMenu: (col) => void this.filterBox(col),
@@ -390,6 +399,7 @@ export class App {
       sheetNames: () => this.open?.sheets ?? [],
       views: () => this.open?.views ?? [],
       patchView: (s, part) => this.patchView(s, part),
+      workbookId: () => this.open?.id ?? '',
       headers: async (r) => {
         const o = this.open;
         const out: string[] = Array.from({ length: r.c1 - r.c0 + 1 }, () => '');
@@ -404,7 +414,6 @@ export class App {
       },
       names: () => this.open?.names ?? [],
       workbooks: async () => (await api<{ id: string; title: string; sheets: string[] }[]>('GET', '/api/workbooks')).map((b) => ({ id: b.id, title: b.title, sheets: b.sheets })),
-      workbookId: () => this.open?.id ?? '',
       moveCopy: (sheet, dest, name, before, copy) => this.moveCopySheet(sheet, dest, name, before, copy),
       properties: async () => {
         const o = this.open;
@@ -423,6 +432,17 @@ export class App {
       goTo: (s, r, c) => {
         if (s !== this.grid.sheetIndex) this.showSheet(s);
         this.grid.goTo(`${colName(c)}${r + 1}`);
+      },
+      pivots: () => this.pivotDefs().map((d) => ({ name: d.name, filters: d.filters })),
+      pivotFields: async (name) => parseFields(await engine().pivotFields(this.open?.book ?? -1, name)).fields.map((f) => f.name),
+      pivotItems: (name, field) => engine().pivotItems(this.open?.book ?? -1, name, field),
+      pivotFilter: async (name, field, items) => {
+        const d = this.pivotDefs().find((x) => x.name === name);
+        if (!d) return;
+        const had = d.filters.some((f) => f.field === field);
+        if (!had && !items.length) return;
+        const next: PivotDef = { ...d, filters: had ? d.filters.map((f) => (f.field === field ? { field, items } : f)) : [...d.filters, { field, items }] };
+        await this.pivotApply((book) => engine().setPivot(book, name, formatPivot(next)));
       },
       tableAt: () => {
         const t = this.grid.activeTable();
@@ -721,6 +741,8 @@ export class App {
     cmd('data.advanced-filter', 'Advanced filter', 'Filter a list in place or copy the matching records elsewhere using a criteria range, with unique records only if you want.', true, () => T().advancedFilter());
     cmd('data.flash-auto', 'Automatically Flash Fill', 'Turn on or off the grey Flash Fill suggestion that appears under an example you type next to your data; Enter accepts it, Esc or any other key dismisses it.', false, () => this.toggleFlashAuto());
     cmd('data.flash-fill', 'Flash Fill', 'Fill the cells next to your data by following the pattern of the examples you typed.', true, () => T().flashFill(), 'Mod+E');
+    cmd('data.circle-invalid', 'Circle invalid data', 'Draw a red circle around every cell whose value breaks its data validation rule.', true, () => this.grid.circleInvalid().then((n) => this.status(n ? `${n} cell${n === 1 ? '' : 's'} circled.` : 'No invalid data found.')));
+    cmd('data.clear-circles', 'Clear validation circles', 'Remove the red circles drawn by Circle invalid data.', true, () => this.grid.clearCircles());
     cmd('data.checkbox-insert', 'Insert checkboxes', 'Turn the selected cells into checkboxes that hold TRUE or FALSE. Click one or press Space to toggle it.', true, () => T().checkboxes(true));
     cmd('data.checkbox-remove', 'Remove checkboxes', 'Turn the selected checkbox cells back into plain cells.', true, () => T().checkboxes(false));
     cmd('data.column-type', 'Table column type', 'Set a type for a table column: text, number, date, dropdown or checkbox. Entries of another type ask before they are kept.', true, () => T().columnType());
@@ -958,6 +980,7 @@ export class App {
     this.collab.detach();
     this.auto.closed();
     this.grouped.clear();
+    this.tools.resetTemp();
     this.tools.syncSlicers();
     p.sheet.hidden = true;
     p.home.hidden = false;
@@ -1007,12 +1030,9 @@ export class App {
     f.range = range;
     f.header.checked = header;
     f.caseSensitive.checked = false;
-    const heads = await engine().readValues(o.book, this.grid.sheetIndex, range.r0, range.c0, range.r0, range.c1);
-    f.names = [];
-    for (let c = range.c0; c <= range.c1; c++) {
-      const h = heads.find(([, cc]) => cc === c)?.[2].replace(/^'/, '') ?? '';
-      f.names.push([c, h]);
-    }
+    f.across.checked = false;
+    f.lists = [...(await engine().sortLists()), ...loadSortLists()];
+    await this.sortNames(f);
     f.levels.replaceChildren();
     const active = this.grid.activeColumn();
     this.addSortLevel(f, active >= range.c0 && active <= range.c1 ? active : range.c0, false);
@@ -1023,16 +1043,58 @@ export class App {
     f.levels.querySelector('select')?.focus();
   }
 
+  private async sortNames(f: SortForm): Promise<void> {
+    const o = this.open;
+    const range = f.range;
+    if (!o || !range) return;
+    f.names = [];
+    if (f.across.checked) {
+      const heads = await engine().readValues(o.book, this.grid.sheetIndex, range.r0, range.c0, range.r1, range.c0);
+      for (let r = range.r0; r <= range.r1; r++) f.names.push([r, heads.find(([rr]) => rr === r)?.[2].replace(/^'/, '') ?? '']);
+      return;
+    }
+    const heads = await engine().readValues(o.book, this.grid.sheetIndex, range.r0, range.c0, range.r0, range.c1);
+    for (let c = range.c0; c <= range.c1; c++) f.names.push([c, heads.find(([, cc]) => cc === c)?.[2].replace(/^'/, '') ?? '']);
+  }
+
+  private sortLabel(f: SortForm, c: number, h: string): string {
+    if (f.header.checked && h) return h;
+    return f.across.checked ? `Row ${c + 1}` : `Column ${colName(c)}`;
+  }
+
+  private async sortOrderOptions(f: SortForm, row: HTMLElement, pick: string): Promise<void> {
+    const o = this.open;
+    const on = row.querySelector<HTMLSelectElement>('.fc-sort-on')!.value;
+    const dir = row.querySelector<HTMLSelectElement>('.fc-sort-dir')!;
+    const opts: string[] = [];
+    if (on === 'v') {
+      opts.push('<option value="a">A to Z</option>', '<option value="d">Z to A</option>');
+      f.lists.forEach((l, i) => opts.push(`<option value="l:${i}">${escapeHtml(l.slice(0, 4).join(', '))}${l.length > 4 ? ', ...' : ''}</option>`));
+    } else if (o && f.range) {
+      const key = Number(row.querySelector<HTMLSelectElement>('.fc-sort-col')!.value);
+      const r = f.range;
+      const found = await engine().sortChoices(o.book, this.grid.sheetIndex, r.r0, r.c0, r.r1, r.c1, f.header.checked, f.across.checked, key);
+      const list = on === 'fill' ? found.fills : on === 'font' ? found.fonts : found.icons;
+      const none = on === 'fill' ? 'No fill' : on === 'font' ? 'Automatic' : 'No icon';
+      for (const v of list) {
+        const name = v === 'none' || v === 'auto' ? none : v;
+        opts.push(`<option value="${escapeHtml(v)}|top">${escapeHtml(name)} on top</option>`, `<option value="${escapeHtml(v)}|bottom">${escapeHtml(name)} on bottom</option>`);
+      }
+    }
+    dir.innerHTML = opts.join('');
+    dir.value = [...dir.options].some((x) => x.value === pick) ? pick : dir.options[0]?.value ?? '';
+  }
+
   private addSortLevel(f: SortForm, col: number, descending: boolean): void {
     if (f.levels.children.length >= 64) return;
     const row = document.createElement('div');
     row.className = 'fc-sort-level';
     const label = f.levels.children.length ? 'Then by' : 'Sort by';
-    const opts = f.names.map(([c, h]) => `<option value="${c}">${f.header.checked && h ? escapeHtml(h) : `Column ${colName(c)}`}</option>`).join('');
-    row.innerHTML = `<span class="fc-sort-by">${label}</span><select class="fc-fmt-input fc-sort-col" aria-label="${label}">${opts}</select><select class="fc-fmt-input fc-sort-dir" aria-label="Order"><option value="a">A to Z</option><option value="d">Z to A</option></select><button type="button" class="fc-tool" data-a="drop" title="Remove this level" aria-label="Remove this level">${icon('close')}</button>`;
+    const opts = f.names.map(([c, h]) => `<option value="${c}">${escapeHtml(this.sortLabel(f, c, h))}</option>`).join('');
+    row.innerHTML = `<span class="fc-sort-by">${label}</span><select class="fc-fmt-input fc-sort-col" aria-label="${label}">${opts}</select><select class="fc-fmt-input fc-sort-on" aria-label="Sort on"><option value="v">Cell values</option><option value="fill">Cell colour</option><option value="font">Font colour</option><option value="icon">Conditional formatting icon</option></select><select class="fc-fmt-input fc-sort-dir" aria-label="Order"></select><button type="button" class="fc-tool" data-a="drop" title="Remove this level" aria-label="Remove this level">${icon('close')}</button>`;
     row.querySelector<HTMLSelectElement>('.fc-sort-col')!.value = String(col);
-    row.querySelector<HTMLSelectElement>('.fc-sort-dir')!.value = descending ? 'd' : 'a';
     f.levels.appendChild(row);
+    void this.sortOrderOptions(f, row, descending ? 'd' : 'a');
   }
 
   private makeSortForm(): SortForm {
@@ -1040,7 +1102,7 @@ export class App {
     form.className = 'fc-fmt-custom fc-pw fc-sort';
     form.hidden = true;
     form.setAttribute('role', 'dialog');
-    form.innerHTML = '<span class="fc-fmt-title"></span><div class="fc-sort-levels"></div><button type="button" class="fc-btn fc-sort-add" data-a="add">Add level</button><label class="fc-sort-check"><input type="checkbox" class="fc-sort-header"> My data has headers</label><label class="fc-sort-check"><input type="checkbox" class="fc-sort-case"> Case sensitive</label><span class="fc-fmt-hint" aria-live="polite"></span><div class="fc-csv-actions"><button type="button" class="fc-btn" data-a="cancel">Cancel</button><button type="submit" class="fc-btn fc-btn-primary">Sort</button></div>';
+    form.innerHTML = '<span class="fc-fmt-title"></span><div class="fc-sort-levels"></div><button type="button" class="fc-btn fc-sort-add" data-a="add">Add level</button><label class="fc-sort-check"><input type="checkbox" class="fc-sort-header"> My data has headers</label><label class="fc-sort-check"><input type="checkbox" class="fc-sort-case"> Case sensitive</label><label class="fc-sort-check"><input type="checkbox" class="fc-sort-across"> Sort left to right</label><div class="fc-sort-newlist"><input class="fc-fmt-input fc-sort-list-text" placeholder="New custom list, items separated by commas" aria-label="New custom list" spellcheck="false" autocomplete="off"><button type="button" class="fc-btn" data-a="addlist">Add list</button></div><span class="fc-fmt-hint" aria-live="polite"></span><div class="fc-csv-actions"><button type="button" class="fc-btn" data-a="cancel">Cancel</button><button type="submit" class="fc-btn fc-btn-primary">Sort</button></div>';
     document.getElementById('overlay-root')!.appendChild(form);
     const f: SortForm = {
       form,
@@ -1048,15 +1110,33 @@ export class App {
       levels: form.querySelector<HTMLElement>('.fc-sort-levels')!,
       header: form.querySelector<HTMLInputElement>('.fc-sort-header')!,
       caseSensitive: form.querySelector<HTMLInputElement>('.fc-sort-case')!,
+      across: form.querySelector<HTMLInputElement>('.fc-sort-across')!,
+      newList: form.querySelector<HTMLInputElement>('.fc-sort-list-text')!,
+      lists: [],
       hint: form.querySelector<HTMLElement>('.fc-fmt-hint')!,
       range: null,
       names: [],
     };
+    const refreshAll = () => { for (const row of f.levels.querySelectorAll<HTMLElement>('.fc-sort-level')) void this.sortOrderOptions(f, row, row.querySelector<HTMLSelectElement>('.fc-sort-dir')!.value); };
     const close = () => { form.hidden = true; this.grid.focus(); };
     form.addEventListener('click', (e) => {
       const a = (e.target as HTMLElement).closest<HTMLElement>('[data-a]')?.dataset.a;
       if (a === 'cancel') close();
       if (a === 'add') this.addSortLevel(f, f.names[Math.min(f.levels.children.length, f.names.length - 1)]?.[0] ?? 0, false);
+      if (a === 'addlist') {
+        const items = f.newList.value.split(',').map((s) => s.trim()).filter(Boolean);
+        if (items.length < 2) {
+          f.form.dataset.state = 'error';
+          f.hint.textContent = 'A custom list needs at least two items.';
+          return;
+        }
+        saveSortList(items);
+        f.lists.push(items);
+        f.newList.value = '';
+        f.form.dataset.state = '';
+        f.hint.textContent = 'List added.';
+        refreshAll();
+      }
       if (a === 'drop' && f.levels.children.length > 1) {
         (e.target as HTMLElement).closest('.fc-sort-level')?.remove();
         const first = f.levels.querySelector('.fc-sort-by');
@@ -1067,16 +1147,37 @@ export class App {
       for (const sel of f.levels.querySelectorAll<HTMLSelectElement>('.fc-sort-col')) {
         for (const opt of sel.options) {
           const h = f.names.find(([c]) => String(c) === opt.value)?.[1] ?? '';
-          opt.textContent = f.header.checked && h ? h : `Column ${colName(Number(opt.value))}`;
+          opt.textContent = this.sortLabel(f, Number(opt.value), h);
         }
       }
+      refreshAll();
+    });
+    f.across.addEventListener('change', () => {
+      void this.sortNames(f).then(() => {
+        f.levels.replaceChildren();
+        this.addSortLevel(f, f.names[0]?.[0] ?? 0, false);
+      });
+    });
+    form.addEventListener('change', (e) => {
+      const t = e.target as HTMLElement;
+      const row = t.closest<HTMLElement>('.fc-sort-level');
+      if (row && (t.classList.contains('fc-sort-on') || t.classList.contains('fc-sort-col'))) void this.sortOrderOptions(f, row, '');
     });
     form.addEventListener('keydown', (e) => { if (e.key === 'Escape') close(); });
     form.addEventListener('submit', (e) => {
       e.preventDefault();
       if (!f.range) return;
-      const keys = [...f.levels.querySelectorAll('.fc-sort-level')].map((row) => [Number(row.querySelector<HTMLSelectElement>('.fc-sort-col')!.value), row.querySelector<HTMLSelectElement>('.fc-sort-dir')!.value === 'd'] as [number, boolean]);
-      void this.grid.sortRange(f.range, keys, f.header.checked, f.caseSensitive.checked).then(close, (err: unknown) => {
+      const keys = [...f.levels.querySelectorAll('.fc-sort-level')].map((row): SortKeySpec => {
+        const col = Number(row.querySelector<HTMLSelectElement>('.fc-sort-col')!.value);
+        const on = row.querySelector<HTMLSelectElement>('.fc-sort-on')!.value;
+        const pick = row.querySelector<HTMLSelectElement>('.fc-sort-dir')!.value;
+        if (on === 'v') {
+          return pick.startsWith('l:') ? [col, false, 'list', (f.lists[Number(pick.slice(2))] ?? []).join('\u001f')] : [col, pick === 'd'];
+        }
+        const cut = pick.lastIndexOf('|');
+        return [col, pick.slice(cut + 1) === 'bottom', on as 'fill' | 'font' | 'icon', pick.slice(0, cut)];
+      });
+      void this.grid.sortRange(f.range, keys, f.header.checked, f.caseSensitive.checked, f.across.checked).then(close, (err: unknown) => {
         form.dataset.state = 'error';
         f.hint.textContent = err instanceof Error ? err.message : 'Not sorted';
       });
@@ -1131,14 +1232,56 @@ export class App {
     const q = <T extends HTMLElement>(k: string) => f.querySelector<T>(`[data-k="${k}"]`)!;
     f.dataset.table = t.name;
     q<HTMLInputElement>('name').value = t.name;
+    const parsed = parseCustom(t.style);
+    if (parsed) this.useCustomStyle(q<HTMLSelectElement>('style'), t.style);
     q<HTMLSelectElement>('style').value = t.style;
+    if (parsed) {
+      q<HTMLInputElement>('cname').value = parsed.name;
+      q<HTMLInputElement>('chead').value = `#${parsed.head}`;
+      q<HTMLInputElement>('cband').value = `#${parsed.band}`;
+      q<HTMLInputElement>('ctext').value = `#${parsed.text}`;
+    }
     const [r0, c0, r1, c1] = t.area;
     q<HTMLInputElement>('range').value = `${colName(c0)}${r0 + 1}:${colName(c1)}${r1 + 1}`;
     for (const [k, ch] of [['totals', 't'], ['rows', 'r'], ['cols', 'c'], ['first', 'f'], ['last', 'l'], ['button', 'b']]) q<HTMLInputElement>(k).checked = t.flags.includes(ch);
+    const holder = q<HTMLElement>('types');
+    holder.replaceChildren();
+    const kinds = ['text', 'number', 'date', 'dropdown', 'checkbox', 'people'];
+    t.cols.forEach((name, i) => {
+      const cur = t.types[i] ?? '';
+      const base = cur.split(':')[0] || 'text';
+      const row = document.createElement('div');
+      row.className = 'fc-tabled-type';
+      const label = document.createElement('span');
+      label.textContent = name || `Column ${i + 1}`;
+      const sel = document.createElement('select');
+      sel.className = 'fc-fmt-input';
+      sel.dataset.col = String(i);
+      sel.dataset.was = cur;
+      for (const k of kinds) sel.add(new Option(k[0].toUpperCase() + k.slice(1), k, false, k === base));
+      const items = document.createElement('input');
+      items.className = 'fc-fmt-input';
+      items.placeholder = 'Items, separated by commas';
+      items.value = cur.split(':').slice(1).join(':').replace(/\|/g, ', ');
+      items.hidden = base !== 'dropdown';
+      sel.addEventListener('change', () => { items.hidden = sel.value !== 'dropdown'; });
+      row.append(label, sel, items);
+      holder.appendChild(row);
+    });
     f.querySelector<HTMLElement>('.fc-fmt-hint')!.textContent = '';
     f.dataset.state = '';
     f.hidden = false;
     q<HTMLInputElement>('name').select();
+  }
+
+  private useCustomStyle(sel: HTMLSelectElement, id: string): void {
+    const group = sel.querySelector<HTMLElement>('[data-k="customgroup"]')!;
+    let opt = Array.from(group.querySelectorAll('option')).find((o) => o.value === id);
+    if (!opt) {
+      opt = new Option(parseCustom(id)?.name ?? id, id);
+      group.appendChild(opt);
+    }
+    sel.value = id;
   }
 
   private makeDesignForm(): HTMLFormElement {
@@ -1146,9 +1289,10 @@ export class App {
     form.className = 'fc-fmt-custom fc-pw fc-tabled';
     form.hidden = true;
     form.setAttribute('role', 'dialog');
-    const styles = TABLE_STYLES.map(([id, label]) => `<option value="${id}">${label}</option>`).join('');
+    const group = (k: string) => `<optgroup label="${k}">${TABLE_STYLES.filter(([id]) => id.startsWith(`TableStyle${k}`)).map(([id, label]) => `<option value="${id}">${label}</option>`).join('')}</optgroup>`;
+    const styles = `<option value="None">None</option>${group('Light')}${group('Medium')}${group('Dark')}<optgroup label="Custom" data-k="customgroup"></optgroup>`;
     const box = (k: string, label: string) => `<label class="fc-sort-check"><input type="checkbox" data-k="${k}"> ${label}</label>`;
-    form.innerHTML = `<span class="fc-fmt-title">Table design</span><label class="fc-fmt-label">Table name<input class="fc-fmt-input" data-k="name" spellcheck="false" autocomplete="off"></label><label class="fc-fmt-label">Table style<select class="fc-fmt-input" data-k="style">${styles}</select></label><label class="fc-fmt-label">Resize table (keep the top-left cell)<input class="fc-fmt-input" data-k="range" spellcheck="false" autocomplete="off"></label><div class="fc-tabled-opts">${box('totals', 'Total row')}${box('rows', 'Banded rows')}${box('cols', 'Banded columns')}${box('first', 'First column')}${box('last', 'Last column')}${box('button', 'Filter button')}</div><span class="fc-fmt-hint" aria-live="polite"></span><div class="fc-csv-actions"><button type="button" class="fc-btn" data-a="convert">Convert to range</button><button type="button" class="fc-btn" data-a="cancel">Cancel</button><button type="submit" class="fc-btn fc-btn-primary">OK</button></div>`;
+    form.innerHTML = `<span class="fc-fmt-title">Table design</span><label class="fc-fmt-label">Table name<input class="fc-fmt-input" data-k="name" spellcheck="false" autocomplete="off"></label><label class="fc-fmt-label">Table style<select class="fc-fmt-input" data-k="style">${styles}</select></label><label class="fc-fmt-label">Resize table (keep the top-left cell)<input class="fc-fmt-input" data-k="range" spellcheck="false" autocomplete="off"></label><div class="fc-tabled-opts">${box('totals', 'Total row')}${box('rows', 'Banded rows')}${box('cols', 'Banded columns')}${box('first', 'First column')}${box('last', 'Last column')}${box('button', 'Filter button')}</div><div class="fc-tabled-custom"><input class="fc-fmt-input" data-k="cname" placeholder="Custom style name" spellcheck="false" autocomplete="off"><label>Header <input type="color" data-k="chead" value="#1f6feb"></label><label>Bands <input type="color" data-k="cband" value="#dbe7fb"></label><label>Header text <input type="color" data-k="ctext" value="#ffffff"></label><button type="button" class="fc-btn" data-a="customstyle">Use custom style</button></div><span class="fc-fmt-title">Column types</span><div class="fc-tabled-types" data-k="types"></div><div class="fc-tabled-tools"><button type="button" class="fc-btn" data-a="dedupe">Remove duplicates</button><button type="button" class="fc-btn" data-a="pivot">Summarize with PivotTable</button><button type="button" class="fc-btn" data-a="slicer">Insert slicer</button></div><span class="fc-fmt-hint" aria-live="polite"></span><div class="fc-csv-actions"><button type="button" class="fc-btn" data-a="convert">Convert to range</button><button type="button" class="fc-btn" data-a="cancel">Cancel</button><button type="submit" class="fc-btn fc-btn-primary">OK</button></div>`;
     document.getElementById('overlay-root')!.appendChild(form);
     const q = <T extends HTMLElement>(k: string) => form.querySelector<T>(`[data-k="${k}"]`)!;
     const hint = form.querySelector<HTMLElement>('.fc-fmt-hint')!;
@@ -1160,6 +1304,16 @@ export class App {
     form.addEventListener('click', (e) => {
       const a = (e.target as HTMLElement).closest<HTMLElement>('[data-a]')?.dataset.a;
       if (a === 'cancel') close();
+      if (a === 'customstyle') {
+        const hex = (k: string) => q<HTMLInputElement>(k).value.slice(1);
+        const name = q<HTMLInputElement>('cname').value.trim();
+        if (!name) return fail(new Error('Name the custom style.'));
+        this.useCustomStyle(q<HTMLSelectElement>('style'), customId({ name, head: hex('chead'), band: hex('cband'), text: hex('ctext') }));
+      }
+      if (a === 'dedupe' || a === 'pivot' || a === 'slicer') {
+        close();
+        void runCommand(a === 'dedupe' ? 'data.dedupe' : a === 'pivot' ? 'pivot.create' : 'data.slicer');
+      }
       if (a === 'convert') {
         const t = this.grid.tables().find((x) => x.name === form.dataset.table);
         if (!t) return;
@@ -1189,10 +1343,18 @@ export class App {
       const w = r.c1 - r.c0 + 1;
       const cols = Array.from({ length: w }, (_, i) => t.cols[i] ?? '');
       const pad = (list: string[]) => Array.from({ length: w }, (_, i) => list[i] ?? '');
-      const parts = [name, `${r.r0},${r.c0},${r1},${r.c1}`, t.flags.includes('t') ? `${flags.replace('t', '')}t` : flags.replace('t', ''), q<HTMLSelectElement>('style').value, String(w), ...cols, ...pad(t.calc), ...pad(t.kept)];
+      const parts = [name, `${r.r0},${r.c0},${r1},${r.c1}`, t.flags.includes('t') ? `${flags.replace('t', '')}t` : flags.replace('t', ''), q<HTMLSelectElement>('style').value, String(w), ...cols, ...pad(t.calc), ...pad(t.kept), ...pad(t.types)];
       const want = flags.includes('t');
+      const picks: [number, string][] = [];
+      for (const sel of form.querySelectorAll<HTMLSelectElement>('[data-col]')) {
+        const items = (sel.nextElementSibling as HTMLInputElement).value.split(',').map((s) => s.trim()).filter(Boolean).join('|');
+        const kind = sel.value === 'dropdown' ? `dropdown:${items}` : sel.value === 'text' && !sel.dataset.was ? '' : sel.value;
+        if (sel.value === 'dropdown' && !items) return fail(new Error('Type the dropdown items.'));
+        if (kind !== (sel.dataset.was ?? '') && Number(sel.dataset.col) < w) picks.push([Number(sel.dataset.col), kind]);
+      }
       void (async () => {
         await this.grid.setTable(t.name, parts.map(fieldEsc).join('\t'));
+        for (const [col, kind] of picks) await this.grid.runTool('tabletype', name, String(col), kind);
         if (want !== t.flags.includes('t')) {
           const now = this.grid.tables().find((x) => x.name === name) ?? t;
           const p2 = now.line.split('\t').slice(1);
@@ -1209,7 +1371,7 @@ export class App {
     const rule = this.grid.activeRule();
     const s = this.grid.selection();
     v.title.textContent = `Data validation for ${colName(s.c0)}${s.r0 + 1}${s.r0 === s.r1 && s.c0 === s.c1 ? '' : `:${colName(s.c1)}${s.r1 + 1}`}`;
-    const [, kind = 'any', op = 'between', a = '', b = '', flags = 'bde', style = 'stop', pt = '', pm = '', et = '', em = ''] = rule ?? [];
+    const [, kind = 'any', op = 'between', a = '', b = '', flags = 'bde', style = 'stop', pt = '', pm = '', et = '', em = '', colors = ''] = rule ?? [];
     const f = v.f;
     f.kind.value = kind;
     f.op.value = op || 'between';
@@ -1219,6 +1381,11 @@ export class App {
     (f.drop as HTMLInputElement).checked = !rule || flags.includes('d');
     (f.prompt as HTMLInputElement).checked = !rule || flags.includes('p');
     (f.alert as HTMLInputElement).checked = !rule || flags.includes('e');
+    (f.chips as HTMLInputElement).checked = flags.includes('c');
+    (f.multi as HTMLInputElement).checked = flags.includes('m');
+    v.saved = colors;
+    v.colorKey = '';
+    v.colors.replaceChildren();
     f.style.value = style;
     f.pt.value = pt;
     f.pm.value = pm;
@@ -1240,15 +1407,50 @@ export class App {
   private validSync(v: ValidForm): void {
     const kind = v.f.kind.value;
     const op = v.f.op.value;
-    const ranged = !['any', 'list', 'custom'].includes(kind);
+    const ranged = !['any', 'list', 'custom', 'checkbox'].includes(kind);
     const two = ranged && (op === 'between' || op === 'notbetween');
     v.f.op.disabled = !ranged;
     v.f.a.disabled = kind === 'any';
-    v.f.b.disabled = !two;
+    v.f.b.disabled = !two && kind !== 'checkbox';
     v.f.drop.disabled = kind !== 'list';
+    v.f.chips.disabled = kind !== 'list';
+    v.f.multi.disabled = kind !== 'list';
+    v.f.blank.disabled = kind === 'checkbox';
+    const chips = kind === 'list' && (v.f.chips as HTMLInputElement).checked;
+    v.colors.hidden = !chips;
+    if (chips) void this.validColors(v);
     const word = kind === 'date' ? ['Start date', 'End date', 'Date'] : kind === 'time' ? ['Start time', 'End time', 'Time'] : kind === 'length' ? ['Minimum length', 'Maximum length', 'Length'] : ['Minimum', 'Maximum', 'Value'];
-    v.labelA.textContent = kind === 'list' ? 'Source (items separated by commas, or a range such as =$E$1:$E$9)' : kind === 'custom' ? 'Formula (TRUE when the value is allowed)' : kind === 'any' ? 'Value' : two ? word[0] : word[2];
-    v.labelB.textContent = word[1];
+    v.labelA.textContent = kind === 'list' ? 'Source (items separated by commas, or a range such as =$E$1:$E$9)' : kind === 'custom' ? 'Formula (TRUE when the value is allowed)' : kind === 'checkbox' ? 'Checked value (blank for TRUE)' : kind === 'any' ? 'Value' : two ? word[0] : word[2];
+    v.labelB.textContent = kind === 'checkbox' ? 'Unchecked value (blank for FALSE)' : word[1];
+  }
+
+  private async validColors(v: ValidForm): Promise<void> {
+    const a = v.f.a.value.trim();
+    const typed = a.startsWith('=') ? await this.grid.listItems() : a.split(',').map((s) => s.trim()).filter(Boolean);
+    const items = [...new Set(typed)];
+    const key = items.join('\u001f');
+    if (key === v.colorKey) return;
+    v.colorKey = key;
+    const prev = new Map<string, string>();
+    for (const part of v.saved.split(';')) {
+      const [k, c] = part.split('=');
+      if (k && c) prev.set(k.trim().toLowerCase(), c.trim());
+    }
+    for (const input of v.colors.querySelectorAll<HTMLInputElement>('input[data-item]')) prev.set(input.dataset.item!.toLowerCase(), input.value);
+    const palette = ['#d2e3fc', '#ceead6', '#fce8b2', '#fad2cf', '#e8d0f4', '#d1e7e9', '#fde2c5', '#e0e3e7'];
+    v.colors.replaceChildren(...items.slice(0, 60).map((item, i) => {
+      const row = document.createElement('label');
+      row.className = 'fc-valid-color';
+      const input = document.createElement('input');
+      input.type = 'color';
+      input.dataset.item = item;
+      const saved = prev.get(item.toLowerCase()) ?? palette[i % palette.length];
+      input.value = /^#[0-9a-f]{6}$/i.test(saved) ? saved : palette[i % palette.length];
+      const name = document.createElement('span');
+      name.textContent = item;
+      row.append(input, name);
+      return row;
+    }));
   }
 
   private makeValidForm(): ValidForm {
@@ -1258,14 +1460,14 @@ export class App {
     form.setAttribute('role', 'dialog');
     const opt = (list: [string, string][]) => list.map(([k, l]) => `<option value="${k}">${l}</option>`).join('');
     form.innerHTML = `<span class="fc-fmt-title"></span><div class="fc-valid-tabs" role="tablist"><button type="button" role="tab" class="fc-btn" data-tab="settings">Settings</button><button type="button" role="tab" class="fc-btn" data-tab="input">Input message</button><button type="button" role="tab" class="fc-btn" data-tab="error">Error alert</button></div>
-<div class="fc-valid-panel" data-panel="settings"><label class="fc-fmt-label">Allow<select class="fc-fmt-input" data-k="kind">${opt(VALID_KINDS)}</select></label><label class="fc-fmt-label">Data<select class="fc-fmt-input" data-k="op">${opt(VALID_OPS)}</select></label><label class="fc-fmt-label"><span class="fc-valid-a"></span><input class="fc-fmt-input" data-k="a" spellcheck="false" autocomplete="off"></label><label class="fc-fmt-label"><span class="fc-valid-b"></span><input class="fc-fmt-input" data-k="b" spellcheck="false" autocomplete="off"></label><label class="fc-sort-check"><input type="checkbox" data-k="blank"> Ignore blank</label><label class="fc-sort-check"><input type="checkbox" data-k="drop"> In-cell dropdown</label></div>
+<div class="fc-valid-panel" data-panel="settings"><label class="fc-fmt-label">Allow<select class="fc-fmt-input" data-k="kind">${opt(VALID_KINDS)}</select></label><label class="fc-fmt-label">Data<select class="fc-fmt-input" data-k="op">${opt(VALID_OPS)}</select></label><label class="fc-fmt-label"><span class="fc-valid-a"></span><input class="fc-fmt-input" data-k="a" spellcheck="false" autocomplete="off"></label><label class="fc-fmt-label"><span class="fc-valid-b"></span><input class="fc-fmt-input" data-k="b" spellcheck="false" autocomplete="off"></label><label class="fc-sort-check"><input type="checkbox" data-k="blank"> Ignore blank</label><label class="fc-sort-check"><input type="checkbox" data-k="drop"> In-cell dropdown</label><label class="fc-sort-check"><input type="checkbox" data-k="chips"> Show items as coloured chips</label><label class="fc-sort-check"><input type="checkbox" data-k="multi"> Allow multiple selections</label><div class="fc-valid-colors" hidden></div></div>
 <div class="fc-valid-panel" data-panel="input" hidden><label class="fc-sort-check"><input type="checkbox" data-k="prompt"> Show input message when cell is selected</label><label class="fc-fmt-label">Title<input class="fc-fmt-input" data-k="pt" maxlength="225" autocomplete="off"></label><label class="fc-fmt-label">Input message<textarea class="fc-fmt-input fc-valid-text" data-k="pm" maxlength="225"></textarea></label></div>
 <div class="fc-valid-panel" data-panel="error" hidden><label class="fc-sort-check"><input type="checkbox" data-k="alert"> Show error alert after invalid data is entered</label><label class="fc-fmt-label">Style<select class="fc-fmt-input" data-k="style"><option value="stop">Stop</option><option value="warning">Warning</option><option value="info">Information</option></select></label><label class="fc-fmt-label">Title<input class="fc-fmt-input" data-k="et" maxlength="225" autocomplete="off"></label><label class="fc-fmt-label">Error message<textarea class="fc-fmt-input fc-valid-text" data-k="em" maxlength="225"></textarea></label></div>
 <span class="fc-fmt-hint" aria-live="polite"></span><div class="fc-csv-actions"><button type="button" class="fc-btn" data-a="clear">Clear all</button><button type="button" class="fc-btn" data-a="cancel">Cancel</button><button type="submit" class="fc-btn fc-btn-primary">OK</button></div>`;
     document.getElementById('overlay-root')!.appendChild(form);
     const f: ValidForm['f'] = {};
     for (const el of form.querySelectorAll<HTMLInputElement>('[data-k]')) f[el.dataset.k!] = el;
-    const v: ValidForm = { form, title: form.querySelector('.fc-fmt-title')!, f, labelA: form.querySelector('.fc-valid-a')!, labelB: form.querySelector('.fc-valid-b')!, hint: form.querySelector('.fc-fmt-hint')! };
+    const v: ValidForm = { form, title: form.querySelector('.fc-fmt-title')!, f, labelA: form.querySelector('.fc-valid-a')!, labelB: form.querySelector('.fc-valid-b')!, hint: form.querySelector('.fc-fmt-hint')!, colors: form.querySelector('.fc-valid-colors')!, colorKey: '', saved: '' };
     const close = () => { form.hidden = true; this.grid.focus(); };
     const fail = (err: unknown) => {
       form.dataset.state = 'error';
@@ -1283,14 +1485,20 @@ export class App {
       e.preventDefault();
       const kind = f.kind.value;
       const a = f.a.value.trim();
+      if (kind === 'checkbox') {
+        const s = this.grid.selection();
+        void this.grid.runTool('checkbox', `${s.r0},${s.c0},${s.r1},${s.c1}`, '1', a, f.b.value.trim()).then(close, fail);
+        return;
+      }
       if (kind !== 'any' && !a) {
         form.dataset.state = 'error';
         v.hint.textContent = kind === 'list' ? 'Enter the items or a range for the list.' : kind === 'custom' ? 'Enter a formula.' : 'Enter a value.';
         return;
       }
-      const flags = [['blank', 'b'], ['drop', 'd'], ['prompt', 'p'], ['alert', 'e']].filter(([k]) => (f[k] as HTMLInputElement).checked && !f[k].disabled).map(([, c]) => c).join('');
+      const flags = [['blank', 'b'], ['drop', 'd'], ['prompt', 'p'], ['alert', 'e'], ['chips', 'c'], ['multi', 'm']].filter(([k]) => (f[k] as HTMLInputElement).checked && !f[k].disabled).map(([, c]) => c).join('');
       const formula = kind === 'custom' && !a.startsWith('=') ? `=${a}` : a;
-      const parts = [kind, f.op.disabled ? '' : f.op.value, kind === 'any' ? '' : formula, f.b.disabled ? '' : f.b.value.trim(), flags, f.style.value, f.pt.value, f.pm.value, f.et.value, f.em.value];
+      const chipColors = flags.includes('c') ? [...v.colors.querySelectorAll<HTMLInputElement>('input[data-item]')].map((i) => `${i.dataset.item!.replace(/[;=]/g, ' ')}=${i.value}`).join(';') : '';
+      const parts = [kind, f.op.disabled ? '' : f.op.value, kind === 'any' ? '' : formula, f.b.disabled ? '' : f.b.value.trim(), flags, f.style.value, f.pt.value, f.pm.value, f.et.value, f.em.value, chipColors];
       void this.grid.setValidation(parts.map(fieldEsc).join('\t')).then(close, fail);
     });
     return v;
@@ -1368,13 +1576,27 @@ export class App {
       const ref = /^[A-Za-z0-9 ]+$/.test(name) && !/^ | $/.test(name) ? `[${name}]` : `[[${name.replace(/[[\]#'@]/g, "'$&")}]]`;
       const cell = this.grid.cellRect();
       const pick = (raw: string) => () => void this.grid.setActive(raw).then(() => this.grid.focus());
-      this.menu.show(cell.left, cell.bottom + 2, [{ label: 'None', run: pick('') }, ...TOTALS.map(([label, n]) => ({ label, run: pick(`=SUBTOTAL(${n},${ref})`) }))], () => this.grid.focus());
+      this.menu.show(cell.left, cell.bottom + 2, [{ label: 'None', run: pick('') }, ...TOTALS.map(([label, n]) => ({ label, run: pick(`=SUBTOTAL(${n},${ref})`) })), { sep: true }, { label: 'More functions (custom formula)', run: () => this.tools.customTotal(`=SUM(${ref})`) }], () => this.grid.focus());
       return;
     }
     const items = await this.grid.listItems();
     if (!items.length) return;
     if (this.prompt) this.prompt.hidden = true;
     const cell = this.grid.cellRect();
+    const rule = this.grid.activeRule();
+    if (rule && rule[1] === 'list' && (rule[5] ?? '').includes('m')) {
+      const o = this.open;
+      const cur = o ? (await engine().readValues(o.book, this.grid.sheetIndex, this.grid.activeRow(), this.grid.activeColumn(), this.grid.activeRow(), this.grid.activeColumn()))[0]?.[2] ?? '' : '';
+      const chosen = new Set(cur.replace(/^'/, '').split(',').map((s) => s.trim()).filter(Boolean));
+      const toggle = (label: string) => () => {
+        if (chosen.has(label)) chosen.delete(label);
+        else chosen.add(label);
+        const value = items.filter((i) => chosen.has(i)).join(', ');
+        void this.grid.setActive(value).then(() => this.dropList());
+      };
+      this.menu.show(cell.left, cell.bottom + 2, items.map((label) => ({ label: `${chosen.has(label) ? '[x]' : '[ ]'} ${label}`, run: toggle(label) })), () => this.grid.focus());
+      return;
+    }
     this.menu.show(cell.left, cell.bottom + 2, items.map((label) => ({ label, run: () => void this.grid.setActive(label).then(() => this.grid.focus()) })), () => this.grid.focus());
   }
 
@@ -1413,10 +1635,17 @@ export class App {
     const head = (await engine().readValues(o.book, this.grid.sheetIndex, info.area.r0, col, info.area.r0, col))[0]?.[2].replace(/^'/, '');
     f.title.textContent = head ? `Filter ${head}` : `Filter column ${colName(col)}`;
     const keep = crit?.[0] === 'values' ? new Set(crit.slice(2).map((s) => s.toLowerCase())) : null;
-    const blanksOn = crit?.[0] === 'values' ? crit[1] === '1' : true;
-    const items = list.values.map((v) => `<label class="fc-filter-item"><input type="checkbox" value="${escapeHtml(v)}"${!keep || keep.has(v.toLowerCase()) ? ' checked' : ''}> <span>${escapeHtml(v)}</span></label>`);
-    if (list.blanks) items.push(`<label class="fc-filter-item"><input type="checkbox" data-blank="1"${blanksOn ? ' checked' : ''}> <span>(Blanks)</span></label>`);
-    f.list.innerHTML = items.join('');
+    const blanksOn = crit?.[0] === 'values' || crit?.[0] === 'dates' ? crit[1] === '1' : true;
+    const dated = list.days.length > 0;
+    f.list.dataset.mode = dated ? 'dates' : '';
+    f.dateOps.hidden = f.dateOps.disabled = !dated;
+    if (dated) {
+      f.list.innerHTML = dateTree(list.days, crit?.[0] === 'dates' ? new Set(crit.slice(2)) : null, list.blanks, blanksOn);
+    } else {
+      const items = list.values.map((v) => `<label class="fc-filter-item"><input type="checkbox" value="${escapeHtml(v)}"${!keep || keep.has(v.toLowerCase()) ? ' checked' : ''}> <span>${escapeHtml(v)}</span></label>`);
+      if (list.blanks) items.push(`<label class="fc-filter-item"><input type="checkbox" data-blank="1"${blanksOn ? ' checked' : ''}> <span>(Blanks)</span></label>`);
+      f.list.innerHTML = items.join('');
+    }
     f.hint.textContent = list.more ? 'Showing the first 10,000 different entries.' : '';
     f.search.value = '';
     const swatch = (kind: 'fill' | 'font', v: string) => {
@@ -1429,7 +1658,16 @@ export class App {
     if (list.fills.length > 1) rows.push(`<span class="fc-sort-by">By fill colour</span><div class="fc-filter-swatches">${list.fills.map((v) => swatch('fill', v)).join('')}</div>`);
     if (list.fonts.length > 1) rows.push(`<span class="fc-sort-by">By text colour</span><div class="fc-filter-swatches">${list.fonts.map((v) => swatch('font', v)).join('')}</div>`);
     f.colors.innerHTML = rows.join('');
-    f.colors.hidden = !rows.length;
+    if (list.icons.length > 1) {
+      const label = document.createElement('span');
+      label.className = 'fc-sort-by';
+      label.textContent = 'By icon';
+      const box = document.createElement('div');
+      box.className = 'fc-filter-swatches';
+      for (const id of list.icons) box.appendChild(iconSwatch(id, 'Cells with this icon'));
+      f.colors.append(label, box);
+    }
+    f.colors.hidden = !f.colors.childElementCount;
     f.op1.value = f.op2.value = '';
     f.v1.value = f.v2.value = '';
     f.join.value = 'and';
@@ -1439,7 +1677,12 @@ export class App {
       f.v1.value = crit[3] ?? '';
       f.op2.value = crit[4] ?? '';
       f.v2.value = crit[5] ?? '';
-    } else if (crit?.[0] === 'top') {
+      if (crit[1] !== 'or' && crit[2] === 'ge' && crit[4] === 'le') {
+        f.op1.value = 'between';
+        f.op2.value = '';
+      }
+    } else if (crit?.[0] === 'dyn') f.op1.value = `dyn:${crit[1] ?? ''}`;
+    else if (crit?.[0] === 'top') {
       f.op1.value = (crit[1] === 'bottom' ? 'bottom' : 'top') + (crit[3] === '%' ? '%' : '');
       f.v1.value = crit[2] ?? '10';
     } else if (crit?.[0] === 'avg') f.op1.value = crit[1] === 'below' ? 'below' : 'above';
@@ -1454,10 +1697,11 @@ export class App {
 
   private filterSync(f: FilterForm): void {
     const op = f.op1.value;
-    const single = !op || ['top', 'bottom', 'top%', 'bottom%', 'above', 'below'].includes(op);
-    f.v1.disabled = !op || op === 'above' || op === 'below';
+    const between = op === 'between';
+    const single = !op || between || op.startsWith('dyn:') || ['top', 'bottom', 'top%', 'bottom%', 'above', 'below'].includes(op);
+    f.v1.disabled = !op || op === 'above' || op === 'below' || op.startsWith('dyn:');
     f.join.disabled = f.op2.disabled = single;
-    f.v2.disabled = single || !f.op2.value;
+    f.v2.disabled = between ? false : single || !f.op2.value;
     const boxes = [...f.list.querySelectorAll<HTMLInputElement>('.fc-filter-item:not([hidden]) input')];
     const on = boxes.filter((b) => b.checked).length;
     f.all.checked = on === boxes.length && on > 0;
@@ -1469,7 +1713,7 @@ export class App {
     form.className = 'fc-fmt-custom fc-filter';
     form.hidden = true;
     form.setAttribute('role', 'dialog');
-    const ops = FILTER_OPS.map(([v, l]) => `<option value="${v}">${l}</option>`).join('');
+    const ops = FILTER_OPS.map(([v, l]) => `<option value="${v}">${l}</option>`).join('') + `<optgroup label="Date filters" data-dates hidden disabled>${DATE_FILTERS.map(([v, l]) => `<option value="${v}">${l}</option>`).join('')}</optgroup>`;
     const ops2 = FILTER_OPS.slice(0, 13).map(([v, l]) => `<option value="${v}">${l}</option>`).join('');
     form.innerHTML = `<span class="fc-fmt-title"></span><div class="fc-filter-sorts"><button type="button" class="fc-btn" data-a="asc">${icon('sortAsc')} Sort A to Z</button><button type="button" class="fc-btn" data-a="desc">${icon('sortDesc')} Sort Z to A</button></div><div class="fc-filter-colors" hidden></div><span class="fc-sort-by">By condition</span><div class="fc-filter-cond"><select class="fc-fmt-input" data-k="op1" aria-label="Condition">${ops}</select><input class="fc-fmt-input" data-k="v1" aria-label="Value" spellcheck="false" autocomplete="off"><select class="fc-fmt-input" data-k="join" aria-label="Join"><option value="and">And</option><option value="or">Or</option></select><select class="fc-fmt-input" data-k="op2" aria-label="Second condition">${ops2}</select><input class="fc-fmt-input" data-k="v2" aria-label="Second value" spellcheck="false" autocomplete="off"></div><span class="fc-sort-by">By values</span><input type="search" class="fc-fmt-input fc-filter-search" placeholder="Search" aria-label="Search values" spellcheck="false" autocomplete="off"><label class="fc-sort-check"><input type="checkbox" class="fc-filter-all"> Select all</label><div class="fc-filter-list" role="group" aria-label="Values"></div><span class="fc-fmt-hint" aria-live="polite"></span><div class="fc-csv-actions"><button type="button" class="fc-btn" data-a="clear">Clear</button><button type="button" class="fc-btn" data-a="cancel">Cancel</button><button type="submit" class="fc-btn fc-btn-primary">OK</button></div>`;
     document.getElementById('overlay-root')!.appendChild(form);
@@ -1480,6 +1724,7 @@ export class App {
       title: q('.fc-fmt-title'),
       colors: q('.fc-filter-colors'),
       op1: q('[data-k="op1"]'),
+      dateOps: q('optgroup[data-dates]'),
       v1: q('[data-k="v1"]'),
       join: q('[data-k="join"]'),
       op2: q('[data-k="op2"]'),
@@ -1500,9 +1745,19 @@ export class App {
       if (a === 'cancel') close();
       if (a === 'clear') done(this.filterWith(f.col));
       if (a === 'asc' || a === 'desc') done(this.grid.sortFilterColumn(f.col, a === 'desc'));
-      if (a === 'fill' || a === 'font') done(this.filterWith(f.col, [a, b!.dataset.v ?? '']));
+      if (a === 'fill' || a === 'font' || a === 'icon') done(this.filterWith(f.col, [a, b!.dataset.v ?? '']));
+      if (a === 'twist') {
+        const kids = b!.closest('.fc-filter-node')?.querySelector<HTMLElement>(':scope > .fc-filter-kids');
+        if (kids) {
+          kids.hidden = !kids.hidden;
+          b!.setAttribute('aria-expanded', String(!kids.hidden));
+          b!.setAttribute('aria-label', kids.hidden ? 'Expand' : 'Collapse');
+        }
+      }
     });
     form.addEventListener('change', (e) => {
+      const t = e.target as HTMLInputElement;
+      if (f.list.dataset.mode === 'dates' && t.dataset.key) cascadeDates(t);
       if (e.target === f.all) {
         for (const box of f.list.querySelectorAll<HTMLInputElement>('.fc-filter-item:not([hidden]) input')) box.checked = f.all.checked;
       }
@@ -1528,10 +1783,17 @@ export class App {
         }
         return done(this.filterWith(f.col, ['top', op.startsWith('bottom') ? 'bottom' : 'top', String(n), op.endsWith('%') ? '%' : '']));
       }
+      if (op.startsWith('dyn:')) return done(this.filterWith(f.col, ['dyn', op.slice(4)]));
+      if (op === 'between') return done(this.filterWith(f.col, ['cond', 'and', 'ge', f.v1.value, 'le', f.v2.value]));
       if (op) {
         const parts = ['cond', f.join.value, op, f.v1.value];
         if (f.op2.value) parts.push(f.op2.value, f.v2.value);
         return done(this.filterWith(f.col, parts));
+      }
+      if (f.list.dataset.mode === 'dates' && !f.search.value.trim()) {
+        const got = collectDates(f.list);
+        if (got.all) return done(this.filterWith(f.col));
+        return done(this.filterWith(f.col, ['dates', got.blanks ? '1' : '0', ...got.keys]));
       }
       const boxes = [...f.list.querySelectorAll<HTMLInputElement>('.fc-filter-item input')];
       const searching = !!f.search.value.trim();
@@ -1953,10 +2215,12 @@ export class App {
     this.renderTabs();
     await this.charts.layer.open();
     this.audit.load((doc.watches ?? []) as [number, number, number][]);
+    this.tools.resetTemp();
     this.showSheet(0);
     this.button('edit.undo').disabled = true;
     this.button('edit.redo').disabled = true;
     this.grid.focus();
+    window.setTimeout(() => void this.tools.openLink((i) => this.showSheet(i)), 300);
     this.auto.opened(id, (doc as unknown as { automation?: Parameters<Automation['opened']>[1] }).automation);
     if (setHash && location.hash !== `#w-${id}`) location.hash = `w-${id}`;
     this.collab.attach(id, book, doc.sheets, doc.collab, doc.protection);
@@ -2101,10 +2365,11 @@ export class App {
     const o = this.open;
     if (!o) return;
     const old = o.views[sheet] ?? {};
-    o.views[sheet] = { ...view, hidden: old.hidden, fviews: old.fviews, slicers: old.slicers };
+    o.views[sheet] = { ...view, hidden: old.hidden, fviews: old.fviews, sviews: old.sviews, slicers: old.slicers };
     this.zoomLabel();
     if (this.preview) void this.refreshBreaks();
     window.clearTimeout(this.viewTimers.get(sheet));
+    if (this.tools.isTemp(sheet)) return;
     this.viewTimers.set(sheet, window.setTimeout(() => {
       void api('PATCH', `/api/workbooks/${o.id}/sheets/${sheet}`, { view }).catch(() => this.status('View not saved', true));
     }, 500));
@@ -2382,6 +2647,7 @@ export class App {
       this.pivotBusy = false;
     }
     await this.pivotSync();
+    void this.tools.refreshSlicers();
   }
 
   private pivotAuto(changes: Changed[]): void {
@@ -2793,6 +3059,7 @@ export class App {
       { label: 'Values and number formats', run: run('values-formats') },
       { label: 'All except borders', run: run('no-borders') },
       { label: 'Column widths', run: run('widths') },
+      { label: 'Validation', run: () => void g.pasteWith('validation', 'none', false, false).then((m) => { if (m) this.status(m); done(); }) },
       { sep: true },
       { label: 'Transpose', run: run('all', true) },
       { label: 'Values, transposed', run: run('values', true) },
@@ -3096,6 +3363,8 @@ export class App {
       { label: 'Filter views', run: run('data.filter-views') },
       { label: 'Insert slicer', run: run('data.slicer') },
       { sep: true },
+      { label: 'Circle invalid data', run: run('data.circle-invalid') },
+      { label: 'Clear validation circles', run: run('data.clear-circles') },
       { label: 'Insert checkboxes', run: run('data.checkbox-insert') },
       { label: 'Remove checkboxes', run: run('data.checkbox-remove') },
       { label: 'Table column type', run: run('data.column-type') },

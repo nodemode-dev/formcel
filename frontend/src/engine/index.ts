@@ -1,6 +1,6 @@
-import type { Arrow, EvalStep, Area, Cell, CfCell, Changed, Dir, Edit, Effect, FilterList, FormatItem, LinkChange, MergeMode, Name, NameRow, RequestBody, Response, Shift, StyleOp, Value, WhatIfReply } from './protocol';
+import type { Arrow, EvalStep, Area, Cell, CfCell, Changed, Dir, Edit, Effect, FilterList, FormatItem, LinkChange, MergeMode, Name, NameRow, RequestBody, Response, Shift, SortChoices, SortKeySpec, StyleOp, Value, WhatIfReply } from './protocol';
 
-export type { Arrow, EvalStep, Area, Cell, CfCell, Changed, Dir, Edit, Effect, FilterList, FormatChange, FormatItem, LinkChange, MergeMode, Name, NameRow, Shift, StyleChange, StyleOp } from './protocol';
+export type { Arrow, EvalStep, Area, Cell, CfCell, Changed, Dir, Edit, Effect, FilterList, FormatChange, FormatItem, LinkChange, MergeMode, Name, NameRow, Shift, SortKeySpec, StyleChange, StyleOp } from './protocol';
 
 type Pending = { resolve: (v: Value) => void; reject: (e: Error) => void };
 
@@ -164,8 +164,16 @@ export class EngineClient {
     return (await this.call({ op: 'merge.set', book, sheet, r0, c0, r1, c1, mode })) as Effect;
   }
 
-  async sort(book: number, sheet: number, r0: number, c0: number, r1: number, c1: number, keys: [number, boolean][], header: boolean, caseSensitive = false): Promise<Effect> {
-    return (await this.call({ op: 'sort', book, sheet, r0, c0, r1, c1, keys, header, caseSensitive })) as Effect;
+  async sort(book: number, sheet: number, r0: number, c0: number, r1: number, c1: number, keys: SortKeySpec[], header: boolean, caseSensitive = false, across = false): Promise<Effect> {
+    return (await this.call({ op: 'sort', book, sheet, r0, c0, r1, c1, keys, header, caseSensitive, across })) as Effect;
+  }
+
+  async sortLists(): Promise<string[][]> {
+    return (await this.call({ op: 'sort.lists' })) as string[][];
+  }
+
+  async sortChoices(book: number, sheet: number, r0: number, c0: number, r1: number, c1: number, header: boolean, across: boolean, key: number): Promise<SortChoices> {
+    return (await this.call({ op: 'sort.choices', book, sheet, r0, c0, r1, c1, header, across, key })) as SortChoices;
   }
 
   async region(book: number, sheet: number, row: number, col: number): Promise<{ area: Area; header: boolean }> {
@@ -366,6 +374,10 @@ export class EngineClient {
     return (await this.call({ op: 'valid.items', book, sheet, row, col })) as string[];
   }
 
+  async invalidIn(book: number, sheet: number, r0: number, c0: number, r1: number, c1: number): Promise<[number, number][]> {
+    return (await this.call({ op: 'valid.invalid', book, sheet, r0, c0, r1, c1 })) as [number, number][];
+  }
+
   async checkInput(book: number, sheet: number, row: number, col: number, raw: string): Promise<string> {
     return (await this.call({ op: 'valid.check', book, sheet, row, col, raw })) as string;
   }
@@ -385,6 +397,18 @@ export class EngineClient {
   async tool(book: number, sheet: number, ...fields: string[]): Promise<Effect> {
     const cmd = fields.map((f) => f.replace(/\\/g, '\\\\').replace(/\t/g, '\\t').replace(/\n/g, '\\n').replace(/\r/g, '\\r')).join('\t');
     return (await this.call({ op: 'tool', book, sheet, cmd })) as Effect;
+  }
+
+  async setHiddenRows(book: number, sheet: number, rows: number[]): Promise<Effect> {
+    const sorted = [...rows].sort((a, b) => a - b);
+    const parts: string[] = [];
+    for (let i = 0; i < sorted.length; ) {
+      let j = i;
+      while (j + 1 < sorted.length && sorted[j + 1] === sorted[j] + 1) j++;
+      parts.push(i === j ? String(sorted[i]) : `${sorted[i]}-${sorted[j]}`);
+      i = j + 1;
+    }
+    return (await this.call({ op: 'rows.hidden', book, sheet, text: parts.join(',') })) as Effect;
   }
 
   async reapplyFilter(book: number, sheet: number): Promise<Effect> {

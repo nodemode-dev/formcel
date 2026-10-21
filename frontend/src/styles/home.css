@@ -349,9 +349,10 @@
   box-shadow: var(--shadow-md);
 }
 .fc-pw { z-index: var(--z-overlay); top: 20vh; left: 50%; translate: -50% 0; }
-.fc-sort { width: 480px; }
+.fc-sort { width: 640px; max-width: calc(100vw - 16px); }
+.fc-sort-newlist { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--space-2); }
 .fc-sort-levels { display: grid; gap: var(--space-2); max-height: 240px; overflow: auto; }
-.fc-sort-level { display: grid; grid-template-columns: 64px minmax(0, 1fr) minmax(0, 1fr) 28px; gap: var(--space-2); align-items: center; }
+.fc-sort-level { display: grid; grid-template-columns: 64px minmax(0, 1fr) minmax(0, 1.2fr) minmax(0, 1.2fr) 28px; gap: var(--space-2); align-items: center; }
 .fc-sort-by { font-size: var(--text-sm); color: var(--text-secondary); }
 .fc-sort .fc-btn.fc-sort-add { justify-self: start; }
 .fc-sort-check { display: flex; align-items: center; gap: var(--space-2); font-size: var(--text-sm); color: var(--text-secondary); }
@@ -363,6 +364,9 @@
 .fc-valid-tabs .fc-btn[aria-selected="true"] { border-color: var(--accent-color); color: var(--text-primary); }
 .fc-valid-panel { display: grid; align-content: start; gap: var(--space-2); min-height: 300px; }
 .fc-valid-panel :disabled { opacity: 0.5; }
+.fc-valid-colors { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-1) var(--space-3); max-height: 120px; overflow: auto; }
+.fc-valid-color { display: flex; align-items: center; gap: var(--space-2); font-size: var(--text-sm); }
+.fc-valid-color input { width: 28px; height: 20px; padding: 0; border: 1px solid var(--border-light); background: transparent; }
 .fc-valid-text { height: 96px; padding: var(--space-2); resize: none; font: inherit; }
 .fc-alert { width: 400px; }
 .fc-alert-body { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: var(--space-3); align-items: start; }
@@ -387,6 +391,12 @@
 .fc-filter-list { display: grid; align-content: start; height: 180px; overflow: auto; padding: var(--space-1); border: 1px solid var(--border-light); border-radius: var(--radius-sm); background: var(--bg-primary); }
 .fc-filter-item { display: flex; align-items: center; gap: var(--space-2); min-height: 24px; font-size: var(--text-sm); white-space: nowrap; }
 .fc-filter-item span { overflow: hidden; text-overflow: ellipsis; }
+.fc-filter-row { display: flex; align-items: center; gap: var(--space-1); }
+.fc-filter-kids { margin-left: var(--space-4); }
+.fc-filter-twist, .fc-filter-twist-gap { flex: none; width: 16px; height: 16px; }
+.fc-filter-twist { position: relative; padding: 0; border: 0; background: transparent; color: var(--text-secondary); cursor: pointer; }
+.fc-filter-twist::before { content: ''; position: absolute; left: 5px; top: 3px; border-style: solid; border-width: 5px 0 5px 6px; border-color: transparent transparent transparent currentColor; }
+.fc-filter-twist[aria-expanded="true"]::before { left: 3px; top: 5px; border-width: 6px 5px 0 5px; border-color: currentColor transparent transparent transparent; }
 .fc-filter .fc-csv-actions .fc-btn { flex: 1; }
 .fc-csv-head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-3); }
 .fc-csv-meta { font-size: var(--text-sm); color: var(--text-muted); }
@@ -569,3 +579,9 @@
 .fc-pvt-sugg[data-empty="1"]::before { content: "Recommendations appear when the source has text and number columns."; font-size: var(--text-xs); color: var(--text-muted); }
 .fc-pvt-pick { justify-self: stretch; height: 24px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left; font-size: var(--text-xs); }
 .fc-pvt-dialog .fc-pvt-pick { justify-self: stretch; }
+.fc-tabled-types { display: grid; gap: var(--space-1); max-height: 160px; overflow-y: auto; }
+.fc-tabled-type { display: grid; grid-template-columns: 1fr 110px; gap: var(--space-1); align-items: center; }
+.fc-tabled-type input { grid-column: 1 / -1; }
+.fc-tabled-tools { display: flex; flex-wrap: wrap; gap: var(--space-1); }
+.fc-tabled-custom { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-1); align-items: center; }
+.fc-tabled-custom label { display: flex; gap: var(--space-1); align-items: center; }

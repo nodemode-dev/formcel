@@ -1,4 +1,5 @@
 import type { Grid, PasteKind, SheetView } from '../grid/grid';
+import type { AxisState } from '../grid/axis';
 import { colName, parseRef, rangeText, type Range } from '../grid/a1';
 import type { Menu, MenuItem } from './menu';
 
@@ -43,6 +44,11 @@ export interface DataCtx {
   sheetNames(): string[];
   views(): SheetView[];
   patchView(sheet: number, part: Partial<SheetView>): void;
+  workbookId(): string;
+  pivots(): { name: string; filters: { field: string; items: string[] }[] }[];
+  pivotFields(name: string): Promise<string[]>;
+  pivotItems(name: string, field: string): Promise<string[]>;
+  pivotFilter(name: string, field: string, items: string[]): Promise<void>;
   headers(range: Range): Promise<string[]>;
   filterValues(col: number): Promise<{ values: string[]; blanks: boolean }>;
   goTo(sheet: number, row: number, col: number): void;
@@ -65,6 +71,8 @@ const unesc = (s: string) => s.replace(/\\(.)/g, (_, ch: string) => (ch === 't' 
 const FUNCS: [string, string][] = [['sum', 'Sum'], ['count', 'Count'], ['average', 'Average'], ['max', 'Max'], ['min', 'Min']];
 const SUB_FUNCS: [string, string][] = [['sum', 'Sum'], ['count', 'Count'], ['countnums', 'Count numbers'], ['average', 'Average'], ['max', 'Max'], ['min', 'Min'], ['product', 'Product'], ['stdev', 'StdDev'], ['stdevp', 'StdDevP'], ['var', 'Var'], ['varp', 'VarP']];
 const COL_TYPES: [string, string][] = [['', 'Any'], ['text', 'Text'], ['number', 'Number'], ['date', 'Date'], ['dropdown', 'Dropdown'], ['checkbox', 'Checkbox']];
+
+const SLICER_STYLES: [string, string][] = [['accent', 'Accent'], ['light', 'Light'], ['dark', 'Dark'], ['green', 'Green'], ['orange', 'Orange']];
 
 const SPECS: Spec[] = [
   { id: 'dedupe', title: 'Remove duplicates', ok: 'Remove duplicates', fields: [{ k: 'range', label: 'Range', kind: 'text' }, { k: 'header', label: 'My data has headers', kind: 'check' }, { k: 'cols', label: 'Columns', kind: 'group' }] },
@@ -94,6 +102,7 @@ const SPECS: Spec[] = [
       { k: 'by', label: 'Combine by', kind: 'select', options: [['pos', 'Position'], ['labels', 'Labels']] },
       { k: 'top', label: 'Top row labels', kind: 'check' },
       { k: 'left', label: 'Left column labels', kind: 'check' },
+      { k: 'link', label: 'Create links to source data', kind: 'check' },
       { k: 'dest', label: 'Destination (first cell)', kind: 'text' },
     ],
   },
@@ -118,7 +127,7 @@ const SPECS: Spec[] = [
     fields: [
       { k: 'action', label: 'Action', kind: 'select', options: [['inplace', 'Filter the list, in place'], ['copy', 'Copy to another location']] },
       { k: 'list', label: 'List range (with headers)', kind: 'text' },
-      { k: 'crit', label: 'Criteria range (headers and rows)', kind: 'text' },
+      { k: 'crit', label: 'Criteria range (headers and rows; a formula under a blank header is a formula criterion)', kind: 'text' },
       { k: 'dest', label: 'Copy to (first cell)', kind: 'text' },
       { k: 'unique', label: 'Unique records only', kind: 'check' },
     ],
@@ -248,8 +257,11 @@ const SPECS: Spec[] = [
   { id: 'inscells', title: 'Insert', ok: 'OK', fields: [{ k: 'how', label: 'Insert', kind: 'select', options: [['right', 'Shift cells right'], ['down', 'Shift cells down'], ['row', 'Entire row'], ['col', 'Entire column']] }] },
   { id: 'delcells', title: 'Delete', ok: 'OK', fields: [{ k: 'how', label: 'Delete', kind: 'select', options: [['left', 'Shift cells left'], ['up', 'Shift cells up'], ['row', 'Entire row'], ['col', 'Entire column']] }] },
   { id: 'template', title: 'Save as template', ok: 'Save', fields: [{ k: 'name', label: 'Template name', kind: 'text' }, { k: 'desc', label: 'Description', kind: 'text' }] },
-  { id: 'fview', title: 'Save filter view', ok: 'Save', fields: [{ k: 'name', label: 'Name', kind: 'text' }] },
-  { id: 'slicer', title: 'Insert slicer', ok: 'Insert', fields: [{ k: 'col', label: 'Column', kind: 'select' }] },
+  { id: 'fview', title: 'Save filter view', ok: 'Save', fields: [{ k: 'name', label: 'Name', kind: 'text' }, { k: 'where', label: 'Keep it', kind: 'select', options: [['file', 'In the file, for everyone who opens it'], ['mine', 'For me only, in this browser']] }] },
+  { id: 'scaption', title: 'Slicer caption', ok: 'Rename', fields: [{ k: 'name', label: 'Caption', kind: 'text' }] },
+  { id: 'sview', title: 'Save sheet view', ok: 'Save', fields: [{ k: 'name', label: 'Name', kind: 'text' }] },
+  { id: 'totalfn', title: 'Total row formula', ok: 'Set', fields: [{ k: 'formula', label: 'Formula for this total cell (structured references such as [Sales] are allowed)', kind: 'text' }] },
+  { id: 'slicer', title: 'Insert slicer', ok: 'Insert', fields: [{ k: 'src', label: 'Slice', kind: 'select' }, { k: 'col', label: 'Column or field', kind: 'select' }, { k: 'style', label: 'Style', kind: 'select', options: SLICER_STYLES }] },
 ];
 
 function fieldHtml(f: Field): string {
@@ -495,6 +507,7 @@ export class DataTools {
     this.put('consolidate', 'by', 'pos');
     this.put('consolidate', 'top', false);
     this.put('consolidate', 'left', false);
+    this.put('consolidate', 'link', false);
     this.put('consolidate', 'dest', `${colName(sel.c0)}${sel.r0 + 1}`);
     this.show('consolidate', async (v) => {
       const lines = (v.refs as string).split('\n').map((l) => l.trim()).filter(Boolean);
@@ -505,7 +518,7 @@ export class DataTools {
       });
       const dest = this.cellOf(v.dest as string);
       if (!dest) throw new Error('Type the destination cell, such as H1.');
-      return this.line(await this.c.grid.runTool('consolidate', v.func as string, v.by as string, v.top ? '1' : '0', v.left ? '1' : '0', String(dest[0]), String(dest[1]), refs.join(';')));
+      return this.line(await this.c.grid.runTool('consolidate', v.func as string, v.by as string, v.top ? '1' : '0', v.left ? '1' : '0', String(dest[0]), String(dest[1]), refs.join(';'), v.link ? '1' : '0'));
     });
   }
 
@@ -828,23 +841,178 @@ export class DataTools {
     });
   }
 
+  customTotal(initial: string): void {
+    this.prepare('totalfn');
+    this.put('totalfn', 'formula', initial);
+    this.show('totalfn', async (v) => {
+      const f = (v.formula as string).trim();
+      if (!f) throw new Error('Type a formula.');
+      await this.c.grid.setActive(f.startsWith('=') ? f : `=${f}`);
+      return '';
+    });
+  }
+
   private views(): { name: string; text: string }[] {
     return this.c.views()[this.c.grid.sheetIndex]?.fviews ?? [];
+  }
+
+  private readonly temp = new Map<number, { text: string; rows: AxisState; cols: AxisState; label: string }>();
+  private bar: HTMLElement | null = null;
+
+  private mineKey(): string {
+    return `fc.fviews:${this.c.workbookId()}:${this.c.sheetNames()[this.c.grid.sheetIndex] ?? ''}`;
+  }
+
+  private mine(): { name: string; text: string }[] {
+    try {
+      const v: unknown = JSON.parse(localStorage.getItem(this.mineKey()) ?? '[]');
+      return Array.isArray(v) ? v.filter((x): x is { name: string; text: string } => typeof x?.name === 'string' && typeof x?.text === 'string') : [];
+    } catch {
+      return [];
+    }
+  }
+
+  private keepMine(list: { name: string; text: string }[]): void {
+    try {
+      localStorage.setItem(this.mineKey(), JSON.stringify(list));
+    } catch {
+      this.c.status('This browser would not keep the view.', true);
+    }
+  }
+
+  isTemp(sheet: number): boolean {
+    return this.temp.has(sheet);
+  }
+
+  resetTemp(): void {
+    this.temp.clear();
+    this.syncBar();
+  }
+
+  private syncBar(): void {
+    const t = this.temp.get(this.c.grid.sheetIndex);
+    if (!t) {
+      if (this.bar) this.bar.hidden = true;
+      return;
+    }
+    if (!this.bar) {
+      const bar = document.createElement('div');
+      bar.className = 'fc-viewbar';
+      bar.setAttribute('role', 'status');
+      bar.innerHTML = '<span class="fc-viewbar-text"></span><button type="button" class="fc-btn" data-a="exit">Exit view</button>';
+      bar.addEventListener('click', (e) => {
+        if ((e.target as HTMLElement).closest('[data-a="exit"]')) void this.exitTemp();
+      });
+      document.getElementById('overlay-root')!.appendChild(bar);
+      this.bar = bar;
+    }
+    this.bar.querySelector<HTMLElement>('.fc-viewbar-text')!.textContent = `${t.label}: your own view of this sheet, not saved and not seen by anyone else.`;
+    this.bar.hidden = false;
+  }
+
+  private baseText(): string {
+    return (this.c.grid.filterInfo()?.text ?? '').split('\n').filter((l) => !l.startsWith('hidden\t')).join('\n');
+  }
+
+  private async startTemp(label: string, text: string | null, axes?: { rows: AxisState; cols: AxisState }): Promise<void> {
+    const g = this.c.grid;
+    const sheet = g.sheetIndex;
+    if (!this.temp.has(sheet)) this.temp.set(sheet, { text: this.baseText(), ...g.axes(), label });
+    else this.temp.get(sheet)!.label = label;
+    if (text !== null) await g.setFilter(text);
+    if (axes) g.applyAxes(axes.rows, axes.cols);
+    this.syncBar();
+  }
+
+  async exitTemp(): Promise<void> {
+    const g = this.c.grid;
+    const sheet = g.sheetIndex;
+    const t = this.temp.get(sheet);
+    if (!t) return;
+    this.temp.delete(sheet);
+    await g.setFilter(t.text);
+    g.applyAxes(t.rows, t.cols);
+    this.syncBar();
+    this.c.status('Back to the shared view.');
+  }
+
+  private linkOf(text: string): string {
+    const payload = JSON.stringify({ s: this.c.sheetNames()[this.c.grid.sheetIndex] ?? '', t: text });
+    const b64 = btoa(String.fromCharCode(...new TextEncoder().encode(payload))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+    return `${location.origin}${location.pathname}?view=${b64}${location.hash}`;
+  }
+
+  private async copyLink(text: string): Promise<void> {
+    const link = this.linkOf(text);
+    try {
+      await navigator.clipboard.writeText(link);
+      this.c.status('Link to the view copied.');
+    } catch {
+      this.c.status('Copy was blocked; the link is in the address bar.', true);
+      history.replaceState(null, '', link);
+    }
+  }
+
+  async openLink(showSheet: (i: number) => void): Promise<void> {
+    const raw = new URLSearchParams(location.search).get('view');
+    if (!raw) return;
+    history.replaceState(null, '', `${location.pathname}${location.hash}`);
+    try {
+      const bin = atob(raw.replace(/-/g, '+').replace(/_/g, '/'));
+      const data = JSON.parse(new TextDecoder().decode(Uint8Array.from(bin, (ch) => ch.charCodeAt(0)))) as { s?: string; t?: string };
+      const i = this.c.sheetNames().indexOf(data.s ?? '');
+      if (i < 0 || typeof data.t !== 'string') throw new Error('bad');
+      if (i !== this.c.grid.sheetIndex) showSheet(i);
+      await new Promise((r) => window.setTimeout(r, 200));
+      await this.startTemp('Shared view', data.t);
+    } catch {
+      this.c.status('The link to a view could not be read.', true);
+    }
   }
 
   filterViewsMenu(x: number, y: number): void {
     const g = this.c.grid;
     const sheet = g.sheetIndex;
     const list = this.views();
-    const items: MenuItem[] = [{ label: 'Save current filter as a view', run: () => this.saveView() }];
-    if (list.length) items.push({ sep: true });
-    for (const v of list) items.push({ label: `Open view: ${v.name}`, run: () => g.setFilter(v.text) });
-    if (list.length) {
+    const mine = this.mine();
+    const items: MenuItem[] = [{ label: 'Start a temporary view', run: () => this.startTemp('Temporary view', null) }, { label: 'Save current filter as a view', run: () => this.saveView() }];
+    if (list.length || mine.length) items.push({ sep: true });
+    for (const v of list) items.push({ label: `Open view: ${v.name}`, run: () => this.startTemp(v.name, v.text) });
+    for (const v of mine) items.push({ label: `Open my view: ${v.name}`, run: () => this.startTemp(v.name, v.text) });
+    if (list.length || mine.length) {
       items.push({ sep: true });
+      for (const v of [...list, ...mine]) items.push({ label: `Copy link to view: ${v.name}`, run: () => this.copyLink(v.text) });
       for (const v of list) items.push({ label: `Delete view: ${v.name}`, danger: true, run: () => this.c.patchView(sheet, { fviews: this.views().filter((o) => o.name !== v.name) }) });
+      for (const v of mine) items.push({ label: `Delete my view: ${v.name}`, danger: true, run: () => this.keepMine(this.mine().filter((o) => o.name !== v.name)) });
     }
-    items.push({ sep: true }, { label: 'Exit filter view', run: () => g.setFilter('') });
+    const sv = this.c.views()[sheet]?.sviews ?? [];
+    items.push({ sep: true }, { label: 'Sheet view: Default', run: () => this.startTemp('Default view', '', this.openAxes()) });
+    for (const v of sv) items.push({ label: `Sheet view: ${v.name}`, run: () => this.startTemp(v.name, v.text, { rows: v.rows, cols: v.cols }) });
+    items.push({ label: 'Save current layout as a sheet view', run: () => this.saveSheetView() });
+    for (const v of sv) items.push({ label: `Delete sheet view: ${v.name}`, danger: true, run: () => this.c.patchView(sheet, { sviews: (this.c.views()[sheet]?.sviews ?? []).filter((o) => o.name !== v.name) }) });
+    items.push({ sep: true }, { label: this.temp.has(sheet) ? 'Exit view' : 'Clear filter', run: () => (this.temp.has(sheet) ? this.exitTemp() : g.setFilter('')) });
     this.c.menu.show(x, y, items);
+  }
+
+  private openAxes(): { rows: AxisState; cols: AxisState } {
+    const a = this.c.grid.axes();
+    return { rows: { ...a.rows, hidden: [] }, cols: { ...a.cols, hidden: [] } };
+  }
+
+  private saveSheetView(): void {
+    const g = this.c.grid;
+    const sheet = g.sheetIndex;
+    const text = this.baseText();
+    const axes = g.axes();
+    this.prepare('sview');
+    this.put('sview', 'name', `View ${(this.c.views()[sheet]?.sviews ?? []).length + 1}`);
+    this.show('sview', async (v) => {
+      const name = (v.name as string).trim();
+      if (!name) throw new Error('Give the view a name.');
+      const old = this.c.views()[sheet]?.sviews ?? [];
+      this.c.patchView(sheet, { sviews: [...old.filter((o) => o.name !== name), { name, text, rows: axes.rows, cols: axes.cols }] });
+      return `Saved sheet view ${name}.`;
+    });
   }
 
   private saveView(): void {
@@ -855,36 +1023,63 @@ export class DataTools {
     }
     const sheet = this.c.grid.sheetIndex;
     this.prepare('fview');
-    this.put('fview', 'name', `Filter view ${this.views().length + 1}`);
+    this.put('fview', 'name', `Filter view ${this.views().length + this.mine().length + 1}`);
+    this.put('fview', 'where', 'file');
     this.show('fview', async (v) => {
       const name = (v.name as string).trim();
       if (!name) throw new Error('Give the view a name.');
       const text = info.text.split('\n').filter((l) => !l.startsWith('hidden\t')).join('\n');
+      if (v.where === 'mine') {
+        this.keepMine([...this.mine().filter((o) => o.name !== name), { name, text }]);
+        return `Saved filter view ${name} for you in this browser.`;
+      }
       this.c.patchView(sheet, { fviews: [...this.views().filter((o) => o.name !== name), { name, text }] });
-      return `Saved filter view ${name}.`;
+      return `Saved filter view ${name} in the file.`;
     });
   }
 
-  insertSlicer(): void {
+  async insertSlicer(): Promise<void> {
     const info = this.c.grid.filterInfo();
-    if (!info) {
-      this.c.status('Turn on filter buttons for the data first (Filter or a table).', true);
+    const pivots = this.c.pivots();
+    if (!info && !pivots.length) {
+      this.c.status('Turn on filter buttons for the data first (Filter or a table), or make a PivotTable.', true);
       return;
     }
     const sheet = this.c.grid.sheetIndex;
-    this.prepare('slicer');
-    this.c.headers({ r0: info.area.r0, c0: info.area.c0, r1: info.area.r0, c1: info.area.c1 }).then((heads) => {
-      this.options('slicer', 'col', heads.map((h, i) => [String(info.area.c0 + i), h || `Column ${colName(info.area.c0 + i)}`]), 'none');
-      this.put('slicer', 'col', String(Math.max(info.area.c0, Math.min(info.area.c1, this.c.grid.selection().c0))));
-      this.show('slicer', async (v) => {
+    const d = this.prepare('slicer');
+    const heads = info ? await this.c.headers({ r0: info.area.r0, c0: info.area.c0, r1: info.area.r0, c1: info.area.c1 }).catch(() => [] as string[]) : [];
+    const fields = new Map<string, string[]>();
+    for (const p of pivots) fields.set(p.name, await this.c.pivotFields(p.name).catch(() => [] as string[]));
+    const srcs: [string, string][] = [...(info ? ([['', 'Filter or table on this sheet']] as [string, string][]) : []), ...pivots.map((p): [string, string] => [p.name, `PivotTable ${p.name}`])];
+    this.options('slicer', 'src', srcs, 'none');
+    const fill = () => {
+      const src = d.form.querySelector<HTMLSelectElement>('[data-k="src"]')!.value;
+      if (src === '' && info) {
+        this.options('slicer', 'col', heads.map((h, i): [string, string] => [String(info.area.c0 + i), h || `Column ${colName(info.area.c0 + i)}`]), 'none');
+        this.put('slicer', 'col', String(Math.max(info.area.c0, Math.min(info.area.c1, this.c.grid.selection().c0))));
+      } else this.options('slicer', 'col', (fields.get(src) ?? []).map((f): [string, string] => [f, f]), 'none');
+    };
+    this.put('slicer', 'src', srcs[0][0]);
+    fill();
+    d.form.querySelector<HTMLSelectElement>('[data-k="src"]')!.onchange = fill;
+    this.put('slicer', 'style', 'accent');
+    this.show('slicer', async (v) => {
+      const src = v.src as string;
+      const list = this.c.views()[sheet]?.slicers ?? [];
+      const at = { x: 120 + list.length * 24, y: 150 + list.length * 24 };
+      const id = Math.random().toString(36).slice(2, 9);
+      let spec: NonNullable<SheetView['slicers']>[number];
+      if (src === '' && info) {
         const col = Number(v.col);
-        const title = heads[col - info.area.c0] || `Column ${colName(col)}`;
-        const list = this.c.views()[sheet]?.slicers ?? [];
-        this.c.patchView(sheet, { slicers: [...list, { id: Math.random().toString(36).slice(2, 9), col, title, x: 120 + list.length * 24, y: 150 + list.length * 24 }] });
-        this.syncSlicers();
-        return `Slicer added for ${title}.`;
-      });
-    }, () => undefined);
+        spec = { id, col, title: heads[col - info.area.c0] || `Column ${colName(col)}`, ...at, style: v.style as string };
+      } else {
+        if (!v.col) throw new Error('This PivotTable has no fields to slice.');
+        spec = { id, col: -1, title: v.col as string, ...at, style: v.style as string, pivot: src, field: v.col as string };
+      }
+      this.c.patchView(sheet, { slicers: [...list, spec] });
+      this.syncSlicers();
+      return `Slicer added for ${spec.title}.`;
+    });
   }
 
   private host(): HTMLElement {
@@ -897,6 +1092,7 @@ export class DataTools {
   }
 
   syncSlicers(): void {
+    this.syncBar();
     const sheet = this.c.grid.sheetIndex;
     const list = this.c.views()[sheet]?.slicers ?? [];
     const keep = new Set(list.map((s) => s.id));
@@ -917,6 +1113,13 @@ export class DataTools {
       el.style.top = `${s.y}px`;
       el.querySelector<HTMLElement>('.fc-slicer-title')!.textContent = s.title;
       el.dataset.col = String(s.col);
+      el.dataset.pivot = s.pivot ?? '';
+      el.dataset.field = s.field ?? '';
+      el.dataset.style = s.style ?? 'accent';
+      el.style.setProperty('--slicer-cols', String(s.cols ?? 1));
+      el.style.width = `${Math.max(200, (s.cols ?? 1) * 110 + 16)}px`;
+      const multi = el.querySelector<HTMLElement>('[data-a="multi"]')!;
+      multi.setAttribute('aria-pressed', String(!!s.multi));
       el.hidden = false;
     }
     void this.refreshSlicers();
@@ -930,7 +1133,7 @@ export class DataTools {
     const el = document.createElement('div');
     el.className = 'fc-slicer';
     el.dataset.id = id;
-    el.innerHTML = `<div class="fc-slicer-head"><span class="fc-slicer-title"></span><button type="button" class="fc-tool" data-a="clear" title="Clear filter" aria-label="Clear filter">&times;</button><button type="button" class="fc-tool" data-a="drop" title="Delete slicer" aria-label="Delete slicer">Delete</button></div><div class="fc-slicer-list"></div>`;
+    el.innerHTML = `<div class="fc-slicer-head"><span class="fc-slicer-title"></span><button type="button" class="fc-tool" data-a="multi" aria-pressed="false" title="Multi-select: click several items" aria-label="Multi-select">Multi</button><button type="button" class="fc-tool" data-a="clear" title="Clear filter" aria-label="Clear filter">&times;</button><button type="button" class="fc-tool" data-a="more" title="Slicer settings" aria-label="Slicer settings">...</button></div><div class="fc-slicer-list"></div>`;
     const head = el.querySelector<HTMLElement>('.fc-slicer-head')!;
     head.addEventListener('pointerdown', (e) => {
       if ((e.target as HTMLElement).closest('button')) return;
@@ -954,15 +1157,50 @@ export class DataTools {
     el.addEventListener('click', (e) => {
       const t = e.target as HTMLElement;
       const a = t.closest<HTMLElement>('[data-a]')?.dataset.a;
-      const col = Number(el.dataset.col);
-      if (a === 'drop') {
-        const sheet = this.c.grid.sheetIndex;
-        this.c.patchView(sheet, { slicers: (this.c.views()[sheet]?.slicers ?? []).filter((s) => s.id !== id) });
-        this.syncSlicers();
-      } else if (a === 'clear') void this.slicerSet(col, null);
-      else if (t.closest('.fc-slicer-item')) void this.slicerToggle(col, (t.closest('.fc-slicer-item') as HTMLElement).dataset.v ?? '');
+      if (a === 'multi') this.patchSlicer(id, { multi: el.querySelector('[data-a="multi"]')!.getAttribute('aria-pressed') !== 'true' });
+      else if (a === 'more') {
+        const r = (t.closest('button') as HTMLElement).getBoundingClientRect();
+        this.slicerMenu(id, r.left, r.bottom);
+      } else if (a === 'clear') void this.slicerSet(el, null);
+      else if (t.closest('.fc-slicer-item')) {
+        const many = el.querySelector('[data-a="multi"]')!.getAttribute('aria-pressed') === 'true' || e.ctrlKey || e.metaKey || e.shiftKey;
+        void this.slicerToggle(el, (t.closest('.fc-slicer-item') as HTMLElement).dataset.v ?? '', many);
+      }
     });
     return el;
+  }
+
+  private patchSlicer(id: string, part: Partial<NonNullable<SheetView['slicers']>[number]>): void {
+    const sheet = this.c.grid.sheetIndex;
+    this.c.patchView(sheet, { slicers: (this.c.views()[sheet]?.slicers ?? []).map((s) => (s.id === id ? { ...s, ...part } : s)) });
+    this.syncSlicers();
+  }
+
+  private slicerMenu(id: string, x: number, y: number): void {
+    const sheet = this.c.grid.sheetIndex;
+    const cur = (this.c.views()[sheet]?.slicers ?? []).find((s) => s.id === id);
+    if (!cur) return;
+    const items: MenuItem[] = [];
+    for (const n of [1, 2, 3, 4]) items.push({ label: `${(cur.cols ?? 1) === n ? '[x]' : '[ ]'} ${n} column${n === 1 ? '' : 's'}`, run: () => this.patchSlicer(id, { cols: n }) });
+    items.push({ sep: true });
+    for (const [v, t] of SLICER_STYLES) items.push({ label: `${(cur.style ?? 'accent') === v ? '[x]' : '[ ]'} Style: ${t}`, run: () => this.patchSlicer(id, { style: v }) });
+    items.push({ sep: true }, { label: 'Rename caption', run: () => this.renameSlicer(id, cur.title) });
+    items.push({ label: 'Delete slicer', danger: true, run: () => {
+      this.c.patchView(sheet, { slicers: (this.c.views()[sheet]?.slicers ?? []).filter((s) => s.id !== id) });
+      this.syncSlicers();
+    } });
+    this.c.menu.show(x, y, items);
+  }
+
+  private renameSlicer(id: string, title: string): void {
+    this.prepare('scaption');
+    this.put('scaption', 'name', title);
+    this.show('scaption', async (v) => {
+      const name = (v.name as string).trim();
+      if (!name) throw new Error('Type a caption.');
+      this.patchSlicer(id, { title: name });
+      return 'Caption changed.';
+    });
   }
 
   private current(col: number): { on: boolean; keep: string[]; blanks: boolean } {
@@ -972,19 +1210,41 @@ export class DataTools {
     return { on: false, blanks: true, keep: [] };
   }
 
-  private async slicerToggle(col: number, v: string): Promise<void> {
-    const cur = this.current(col);
-    const all = (await this.c.filterValues(col)).values;
-    const keep = new Set(cur.on ? cur.keep.map((s) => s.toLowerCase()) : []);
-    const k = v.toLowerCase();
-    if (!cur.on) keep.add(k);
-    else if (keep.has(k)) keep.delete(k);
-    else keep.add(k);
-    const kept = all.filter((a) => keep.has(a.toLowerCase()));
-    await this.slicerSet(col, kept.length === 0 || kept.length === all.length ? null : kept);
+  private pivotState(el: HTMLElement): { all: Promise<string[]>; keep: string[] } | null {
+    const name = el.dataset.pivot;
+    const field = el.dataset.field ?? '';
+    if (!name) return null;
+    const def = this.c.pivots().find((p) => p.name === name);
+    return { all: this.c.pivotItems(name, field).catch(() => [] as string[]), keep: def?.filters.find((f) => f.field === field)?.items ?? [] };
   }
 
-  private async slicerSet(col: number, keep: string[] | null): Promise<void> {
+  private async slicerToggle(el: HTMLElement, v: string, many: boolean): Promise<void> {
+    const col = Number(el.dataset.col);
+    const pv = this.pivotState(el);
+    const cur = pv ? { on: pv.keep.length > 0, keep: pv.keep } : this.current(col);
+    const all = pv ? await pv.all : (await this.c.filterValues(col)).values;
+    const k = v.toLowerCase();
+    const keep = new Set(cur.on ? cur.keep.map((s) => s.toLowerCase()) : []);
+    if (many) {
+      if (!cur.on) keep.add(k);
+      else if (keep.has(k)) keep.delete(k);
+      else keep.add(k);
+    } else if (cur.on && keep.size === 1 && keep.has(k)) keep.clear();
+    else {
+      keep.clear();
+      keep.add(k);
+    }
+    const kept = all.filter((a) => keep.has(a.toLowerCase()));
+    await this.slicerSet(el, kept.length === 0 || kept.length === all.length ? null : kept);
+  }
+
+  private async slicerSet(el: HTMLElement, keep: string[] | null): Promise<void> {
+    if (el.dataset.pivot) {
+      await this.c.pivotFilter(el.dataset.pivot, el.dataset.field ?? '', keep ?? []);
+      await this.refreshSlicers();
+      return;
+    }
+    const col = Number(el.dataset.col);
     const info = this.c.grid.filterInfo();
     if (!info) return;
     const a = info.area;
@@ -999,8 +1259,9 @@ export class DataTools {
     for (const el of this.slicerEls.values()) {
       if (el.hidden) continue;
       const col = Number(el.dataset.col);
-      const { values } = await this.c.filterValues(col).catch(() => ({ values: [] as string[] }));
-      const cur = this.current(col);
+      const pv = this.pivotState(el);
+      const values = pv ? await pv.all : (await this.c.filterValues(col).catch(() => ({ values: [] as string[] }))).values;
+      const cur = pv ? { on: pv.keep.length > 0, keep: pv.keep } : this.current(col);
       const keep = new Set(cur.keep.map((s) => s.toLowerCase()));
       const list = el.querySelector<HTMLElement>('.fc-slicer-list')!;
       const have = [...list.children] as HTMLButtonElement[];

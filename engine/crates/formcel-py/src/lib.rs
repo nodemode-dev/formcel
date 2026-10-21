@@ -234,7 +234,7 @@ impl Workbook {
     fn sort(&mut self, top: &str, bottom: &str, keys: Vec<(u32, bool)>, header: bool, case: bool, sheet: usize) -> PyResult<usize> {
         let t = parse_a1(top).map_err(|e| PyValueError::new_err(e.to_string()))?;
         let b = parse_a1(bottom).map_err(|e| PyValueError::new_err(e.to_string()))?;
-        let keys: Vec<formcel_core::sort::SortKey> = keys.into_iter().map(|(col, descending)| formcel_core::sort::SortKey { col, descending }).collect();
+        let keys: Vec<formcel_core::sort::SortKey> = keys.into_iter().map(|(col, descending)| formcel_core::sort::SortKey::value(col, descending)).collect();
         let area = formcel_core::formula::Area { r0: t.row, c0: t.col, r1: b.row, c1: b.col };
         self.inner.sort(sheet, area, &keys, header, case).map(|e| e.cells.len()).map_err(|e| PyValueError::new_err(e.to_string()))
     }

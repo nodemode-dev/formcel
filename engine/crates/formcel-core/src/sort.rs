@@ -2,10 +2,58 @@ use crate::formula::{offset_text, Area};
 use crate::{eval, Addr, Effect, EngineError, Tx, Value, Workbook};
 use std::cmp::Ordering;
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug, Default, PartialEq)]
+pub enum SortBy {
+    #[default]
+    Value,
+    List(Vec<String>),
+    Fill(String),
+    Font(String),
+    Icon(String),
+}
+
+#[derive(Clone, Debug)]
 pub struct SortKey {
     pub col: u32,
     pub descending: bool,
+    pub by: SortBy,
+}
+
+impl SortKey {
+    pub fn value(col: u32, descending: bool) -> SortKey {
+        SortKey { col, descending, by: SortBy::Value }
+    }
+
+    pub fn parse(item: &str) -> Option<SortKey> {
+        let mut p = item.splitn(4, ':');
+        let col = p.next()?.parse().ok()?;
+        let descending = p.next()? == "d";
+        let kind = p.next().unwrap_or("v");
+        let arg = crate::wire::unescape(p.next().unwrap_or(""));
+        let by = match kind {
+            "v" => SortBy::Value,
+            "list" => SortBy::List(arg.split('\u{1f}').map(String::from).filter(|s| !s.is_empty()).collect()),
+            "fill" => SortBy::Fill(arg),
+            "font" => SortBy::Font(arg),
+            "icon" => SortBy::Icon(arg),
+            _ => return None,
+        };
+        Some(SortKey { col, descending, by })
+    }
+}
+
+const DAYS: [&str; 7] = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+const MONTHS: [&str; 12] = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+
+pub fn builtin_lists() -> Vec<Vec<String>> {
+    let short = |full: &[&str]| full.iter().map(|d| d[..3].to_string()).collect::<Vec<_>>();
+    vec![short(&DAYS), DAYS.iter().map(|d| d.to_string()).collect(), short(&MONTHS), MONTHS.iter().map(|d| d.to_string()).collect()]
+}
+
+enum Prep {
+    Plain(Vec<Value>),
+    Listed(Vec<Option<usize>>, Vec<Value>),
+    Hit(Vec<bool>),
 }
 
 fn rank(v: &Value) -> u8 {
@@ -96,26 +144,115 @@ impl Workbook {
     }
 
     pub fn sort(&mut self, sheet: usize, area: Area, keys: &[SortKey], header: bool, case: bool) -> Result<Effect, EngineError> {
+        self.sort_with(sheet, area, keys, header, case, false)
+    }
+
+    fn prep_key(&self, sheet: usize, area: Area, first: u32, across: bool, k: &SortKey) -> Prep {
+        let at = |line: u32| if across { Addr { row: k.col, col: line } } else { Addr { row: line, col: k.col } };
+        let last = if across { area.c1 } else { area.r1 };
+        let values: Vec<Value> = (first..=last).map(|l| self.sheets[sheet].cells.get(at(l)).cloned().unwrap_or(Value::Empty)).collect();
+        match &k.by {
+            SortBy::Value => Prep::Plain(values),
+            SortBy::List(items) => {
+                let low: Vec<String> = items.iter().map(|s| s.trim().to_lowercase()).collect();
+                let ranks = (first..=last)
+                    .map(|l| {
+                        let shown = self.shown(sheet, at(l), self.sheets[sheet].cells.get(at(l)).cloned().unwrap_or(Value::Empty)).to_string().trim().to_lowercase();
+                        low.iter().position(|s| *s == shown)
+                    })
+                    .collect();
+                Prep::Listed(ranks, values)
+            }
+            SortBy::Fill(want) | SortBy::Font(want) | SortBy::Icon(want) => {
+                let cf: std::collections::HashMap<(u32, u32), crate::cf::Paint> = self.cf_in(sheet, at(first), at(last)).into_iter().map(|(a, p)| ((a.row, a.col), p)).collect();
+                let hit = (first..=last)
+                    .map(|l| {
+                        let a = at(l);
+                        let (fill, font, icon) = self.paint_of(sheet, a, cf.get(&(a.row, a.col)));
+                        match k.by {
+                            SortBy::Icon(_) => icon == *want,
+                            SortBy::Fill(_) => fill == *want,
+                            _ => font == *want,
+                        }
+                    })
+                    .collect();
+                Prep::Hit(hit)
+            }
+        }
+    }
+
+    fn paint_of(&self, sheet: usize, a: Addr, paint: Option<&crate::cf::Paint>) -> (String, String, String) {
+        let mut st = self.effective_style(sheet, a);
+        if let Some(s) = paint.and_then(|p| p.style.as_ref()) {
+            st = st.overlay(s);
+        }
+        let icon = paint.and_then(|p| p.icon.as_ref()).map_or_else(|| "none".to_string(), |(set, i)| format!("{set}:{i}"));
+        (st.fill.map(|p| p.text()).unwrap_or_else(|| "none".into()), st.color.map(|p| p.text()).unwrap_or_else(|| "auto".into()), icon)
+    }
+
+    pub fn sort_choices(&self, sheet: usize, area: Area, header: bool, across: bool, key: u32) -> (Vec<String>, Vec<String>, Vec<String>) {
+        if sheet >= self.sheets.len() {
+            return Default::default();
+        }
+        let (lo, hi) = if across { (area.c0, area.c1) } else { (area.r0, area.r1) };
+        let first = lo + u32::from(header);
+        if first > hi {
+            return Default::default();
+        }
+        let at = |line: u32| if across { Addr { row: key, col: line } } else { Addr { row: line, col: key } };
+        let cf: std::collections::HashMap<(u32, u32), crate::cf::Paint> = self.cf_in(sheet, at(first), at(hi)).into_iter().map(|(a, p)| ((a.row, a.col), p)).collect();
+        let (mut fills, mut fonts, mut icons) = (Vec::new(), Vec::new(), Vec::new());
+        for l in first..=hi.min(first + 50_000) {
+            let a = at(l);
+            let (fill, font, icon) = self.paint_of(sheet, a, cf.get(&(a.row, a.col)));
+            for (list, v) in [(&mut fills, fill), (&mut fonts, font), (&mut icons, icon)] {
+                if !list.contains(&v) {
+                    list.push(v);
+                }
+            }
+        }
+        (fills, fonts, icons)
+    }
+
+    pub fn sort_with(&mut self, sheet: usize, area: Area, keys: &[SortKey], header: bool, case: bool, across: bool) -> Result<Effect, EngineError> {
         self.check(sheet, Addr { row: area.r1, col: area.c1 })?;
         let mut area = area;
         if let Some(end) = self.sheets[sheet].cells.extent() {
             area.r1 = area.r1.min(end.row);
             area.c1 = area.c1.min(end.col);
         }
-        let first = area.r0 + u32::from(header);
-        if first >= area.r1 || keys.is_empty() || area.c0 > area.c1 {
+        let (lo, hi) = if across { (area.c0, area.c1) } else { (area.r0, area.r1) };
+        let (po0, po1) = if across { (area.r0, area.r1) } else { (area.c0, area.c1) };
+        let first = lo + u32::from(header);
+        if first >= hi || keys.is_empty() || area.c0 > area.c1 {
             return Ok(Effect::default());
         }
         let hits = |m: &Area| m.r0 <= area.r1 && m.r1 >= area.r0 && m.c0 <= area.c1 && m.c1 >= area.c0;
         if self.sheets[sheet].merges.iter().any(hits) {
             return Err(EngineError::BadStyle("merged cells in the sort range".into()));
         }
-        let rows: Vec<u32> = (first..=area.r1).collect();
-        let value = |r: u32, c: u32| self.sheets[sheet].cells.get(Addr { row: r, col: c }).cloned().unwrap_or(Value::Empty);
+        let rows: Vec<u32> = (first..=hi).collect();
+        let preps: Vec<Prep> = keys.iter().map(|k| self.prep_key(sheet, area, first, across, k)).collect();
         let mut perm = rows.clone();
         perm.sort_by(|&x, &y| {
-            for k in keys {
-                let o = order(&value(x, k.col), &value(y, k.col), k.descending, case);
+            let (ix, iy) = ((x - first) as usize, (y - first) as usize);
+            for (k, p) in keys.iter().zip(&preps) {
+                let o = match p {
+                    Prep::Plain(v) => order(&v[ix], &v[iy], k.descending, case),
+                    Prep::Listed(r, v) => match (r[ix], r[iy]) {
+                        (Some(a), Some(b)) => {
+                            let o = a.cmp(&b);
+                            if k.descending { o.reverse() } else { o }
+                        }
+                        (Some(_), None) => if k.descending { Ordering::Greater } else { Ordering::Less },
+                        (None, Some(_)) => if k.descending { Ordering::Less } else { Ordering::Greater },
+                        (None, None) => order(&v[ix], &v[iy], k.descending, case),
+                    },
+                    Prep::Hit(h) => {
+                        let o = h[iy].cmp(&h[ix]);
+                        if k.descending { o.reverse() } else { o }
+                    }
+                };
                 if o != Ordering::Equal {
                     return o;
                 }
@@ -133,10 +270,12 @@ impl Workbook {
             if src == dst {
                 continue;
             }
-            for c in area.c0..=area.c1 {
-                let (from, to) = (Addr { row: src, col: c }, Addr { row: dst, col: c });
+            for c in po0..=po1 {
+                let place = |line: u32| if across { Addr { row: c, col: line } } else { Addr { row: line, col: c } };
+                let (from, to) = (place(src), place(dst));
                 let raw = self.input(sheet, from);
-                let raw = if raw.starts_with('=') { offset_text(&raw, i64::from(dst) - i64::from(src), 0) } else { raw };
+                let shift = i64::from(dst) - i64::from(src);
+                let raw = if raw.starts_with('=') { if across { offset_text(&raw, 0, shift) } else { offset_text(&raw, shift, 0) } } else { raw };
                 edits.push((to, raw));
                 let style = self.styles.get(&(sheet, from)).map(|s| s.0.clone()).unwrap_or_default();
                 let code = self.codes.get(&(sheet, from)).map(|c| c.0.clone()).unwrap_or_default();

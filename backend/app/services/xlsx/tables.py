@@ -1,5 +1,9 @@
+import re
 from collections import Counter
 
+from openpyxl.styles import Font, PatternFill
+from openpyxl.styles.differential import DifferentialStyle
+from openpyxl.styles.table import TableStyle, TableStyleElement
 from openpyxl.utils import get_column_letter, range_boundaries
 from openpyxl.worksheet.filters import AutoFilter
 from openpyxl.worksheet.table import Table, TableColumn, TableFormula, TableStyleInfo
@@ -7,7 +11,50 @@ from openpyxl.worksheet.table import Table, TableColumn, TableFormula, TableStyl
 from .cf import esc
 from .formulas import from_file
 
-STYLES = {"TableStyleLight1", "TableStyleLight9", "TableStyleLight15", "TableStyleMedium2", "TableStyleMedium4", "TableStyleMedium9", "TableStyleMedium14", "TableStyleDark1"}
+_BUILTIN = re.compile(r"^TableStyle(?:Light(?:[1-9]|1\d|2[01])|Medium(?:[1-9]|1\d|2[0-8])|Dark(?:[1-9]|1[01]))$")
+
+
+def valid_style(name: str) -> bool:
+    return bool(_BUILTIN.match(name)) or name == "None"
+
+
+def _hex(color) -> str | None:
+    rgb = getattr(color, "rgb", None)
+    return rgb[-6:].upper() if isinstance(rgb, str) and len(rgb) >= 6 else None
+
+
+def _custom_in(wb, name: str) -> str | None:
+    lst = getattr(wb, "_table_styles", None)
+    ts = next((x for x in (lst.tableStyle if lst is not None else []) if x.name == name), None)
+    if ts is None:
+        return None
+    dxfs = wb._differential_styles.styles
+    pick: dict = {}
+    for el in ts.tableStyleElement:
+        if el.dxfId is not None and 0 <= el.dxfId < len(dxfs):
+            pick[el.type] = dxfs[el.dxfId]
+    head, band = pick.get("headerRow"), pick.get("firstRowStripe")
+    fill = lambda d: _hex(d.fill.bgColor) or _hex(d.fill.fgColor) if d is not None and d.fill is not None else None
+    h, b = fill(head), fill(band)
+    if h is None and b is None:
+        return None
+    text = _hex(head.font.color) if head is not None and head.font is not None and head.font.color is not None else None
+    safe = name.replace(":", " ").replace("\t", " ").strip()[:40] or "Custom"
+    return f"Custom:{safe}:{h or '1F6FEB'}:{b or 'DBE7FB'}:{text or 'FFFFFF'}"
+
+
+def _custom_out(wb, ident: str) -> str:
+    _, name, head, band, text = ident.split(":")
+    lst = wb._table_styles
+    if not any(x.name == name for x in lst.tableStyle):
+        def dx(fill=None, font=None):
+            wb._differential_styles.add(DifferentialStyle(fill=fill, font=font))
+            return len(wb._differential_styles.styles) - 1
+        solid = lambda h: PatternFill(patternType="solid", fgColor="FF" + h, bgColor="FF" + h)
+        els = [TableStyleElement(type="headerRow", dxfId=dx(solid(head), Font(bold=True, color="FF" + text))),
+               TableStyleElement(type="firstRowStripe", dxfId=dx(solid(band)))]
+        lst.tableStyle.append(TableStyle(name=name, pivot=False, count=len(els), tableStyleElement=els))
+    return name
 
 
 def _unesc(s: str) -> str:
@@ -55,9 +102,9 @@ def tables_in(wb, sheet_index: dict, notes: Counter) -> list[str]:
                 continue
             calc = ["=" + from_file(c.calculatedColumnFormula.attr_text if hasattr(c.calculatedColumnFormula, "attr_text") else str(c.calculatedColumnFormula)) if c.calculatedColumnFormula is not None else "" for c in t.tableColumns]
             si = t.tableStyleInfo
-            style = si.name if si is not None and si.name in STYLES else "TableStyleMedium2"
-            if si is not None and si.name and si.name not in STYLES:
-                notes["table styles FormCel does not have shown as Medium 2"] += 1
+            style = si.name if si is not None and valid_style(si.name) else (_custom_in(wb, si.name) if si is not None and si.name else None) or "TableStyleMedium2"
+            if si is not None and si.name and style == "TableStyleMedium2" and si.name != style:
+                notes["table styles FormCel could not read shown as Medium 2"] += 1
             flags = ("t" if t.totalsRowCount else "") + ("r" if si is None or si.showRowStripes else "") + ("c" if si is not None and si.showColumnStripes else "")
             flags += ("f" if si is not None and si.showFirstColumn else "") + ("l" if si is not None and si.showLastColumn else "") + ("b" if t.autoFilter is not None else "")
             n = len(cols)
@@ -78,7 +125,7 @@ def tables_out(wb, eng) -> dict:
         flags = t["flags"]
         tb = Table(id=k + 1, displayName=t["name"], name=t["name"], ref=ref_of(r0, c0, r1, c1),
                    totalsRowCount=1 if "t" in flags else None, totalsRowShown=False if "t" not in flags else None)
-        tb.tableStyleInfo = TableStyleInfo(name=t["style"], showFirstColumn="f" in flags, showLastColumn="l" in flags, showRowStripes="r" in flags, showColumnStripes="c" in flags)
+        tb.tableStyleInfo = TableStyleInfo(name=_custom_out(wb, t["style"]) if t["style"].startswith("Custom:") else (None if t["style"] == "None" else t["style"]), showFirstColumn="f" in flags, showLastColumn="l" in flags, showRowStripes="r" in flags, showColumnStripes="c" in flags)
         for j, name in enumerate(t["cols"]):
             col = TableColumn(id=j + 1, name=name)
             first = ws.cell(row=r0 + 2, column=c0 + j + 1).value
