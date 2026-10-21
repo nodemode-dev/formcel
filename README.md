@@ -8,15 +8,15 @@ Version 0.9.0 · Apache-2.0 · macOS, Windows, Linux (browser now, Tauri desktop
 
 ## Status
 
-0.9.0 continues Phase 2 in `DEV_PLAN.md`: 60 functions, checked against the worked examples on Microsoft's function pages (123 of 129 runnable cases pass), on top of Phase 1's grid, files and home.
+0.10.0 continues Phase 2 in `DEV_PLAN.md`: dates and times, currency and percent kept as typed, and 76 functions checked against the worked examples on Microsoft's function pages (125 of 131 runnable cases pass), on top of Phase 1's grid, files and home.
 
-| Area | In 0.9.0 |
+| Area | In 0.10.0 |
 | --- | --- |
 | Home | Start, Recent, Templates (category chips and search) and Trash, after formdeck; thumbnails of each workbook's first sheet |
 | Saving | `.fcel` files in `~/FormCel/Workbooks`, saved as you type; rename in the top bar; Trash with restore |
 | Sheets | Several per workbook, tabs to switch, a button to add one; double-click a tab to rename it; the tab menu moves, colours and deletes; each sheet keeps its sizes, hidden rows and columns, frozen panes and zoom |
 | Templates | 34: six made for FormCel and 28 from form.md 0.46.0 with their data |
-| Formulas | `=` formulas with cell, range, column, row and cross-sheet references, `$` anchors, arithmetic, text and comparison operators, 60 functions (math, aggregation, criteria such as SUMIFS and COUNTIFS, lookups such as VLOOKUP, INDEX, MATCH and XLOOKUP, logic, text, information), recalculation of dependents through a kept dependency graph (one edit in a 100,000-formula sheet in a few milliseconds), `#REF!` for circular references, references kept right through insert, delete and sheet rename, and the fill handle moving relative references |
+| Formulas | `=` formulas with cell, range, column, row and cross-sheet references, `$` anchors, arithmetic, text and comparison operators, dates and times typed in common forms, 76 functions (math, date and time, aggregation, criteria such as SUMIFS and COUNTIFS, lookups such as VLOOKUP, INDEX, MATCH and XLOOKUP, logic, text, information), recalculation of dependents through a kept dependency graph (one edit in a 100,000-formula sheet in a few milliseconds), `#REF!` for circular references, references kept right through insert, delete and sheet rename, and the fill handle moving relative references |
 | Engine | Rust core, one build for the window (WebAssembly) and one for the engine process (Python): a chunked cell store for 1,048,576 rows by 16,384 columns, typed input (numbers, text, TRUE and FALSE), undo and redo of 500 steps, batched edits, viewport reads, the used range, Ctrl+arrow data edges, and inserting and deleting rows and columns as one undo step |
 | Grid | Canvas grid with headers and selection of cells, ranges, rows, columns and the whole sheet; arrows, Ctrl+arrows, Ctrl+Home, Ctrl+End, Home, Page Up and Down; typing, F2 and Alt+Enter; Name Box and formula bar; undo, redo, clear; copy, cut and paste of tab-separated text; resizing rows and columns, autofit columns; freeze top row, first column or panes at the active cell; insert, delete, hide and unhide rows and columns; the fill handle (copies, number and date steps, weekday and month names, numbered text) and double-click to fill down; zoom 50% to 200%; right-click menus on cells and headers; outline groups of rows and columns up to 7 levels, with collapse and expand buttons and level buttons; split panes at the active cell that scroll on their own, with draggable split bars |
 | Speed | 1,000,000 filled rows scroll at a 16.7 ms p95 frame with the CPU slowed 4x |

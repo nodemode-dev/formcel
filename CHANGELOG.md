@@ -1,9 +1,17 @@
 # Changelog
 
+## 0.10.0 · 2026-10-21
+
+- Dates and times: type `2026-10-21`, `10/21/2026`, `12/8/08`, `October 21, 2026`, `21-Oct-2026`, `13:45`, `1:30 PM` or a date with a time, and the cell holds a date serial (Excel's 1900 system) shown as a date or time. Date arithmetic works (`=A1+30`).
+- Currency and percent keep their look: `$1,234.50` and `15%` show as typed while holding numbers. Formulas pick up a date, time or currency look from what they compute.
+- 16 date and time functions: DATE, YEAR, MONTH, DAY, HOUR, MINUTE, SECOND, WEEKDAY, TODAY, NOW, TIME, DATEVALUE, TIMEVALUE, EDATE, EOMONTH, DAYS (76 functions in all). TODAY and NOW follow the computer's local clock and update on every change.
+- The fill handle continues m/d/yyyy dates; dates, times, currency and percent line up on the right.
+- Conformance with Microsoft's function pages: 125 pass (the date cases now run), 6 still need unbuilt features, 1 case is inconsistent on the page itself, 5 have their data only in a picture.
+
 ## 0.9.0 · 2026-10-21
 
 - Conformance with Microsoft's function pages: every example table on the page of each function FormCel has was run through the engine as published. 123 cases pass; the 6 that fail need array constants, references returned by functions, multi-area references or INDEX with row 0, all still to come; 8 are skipped (dates, or data only in a picture). The report is in the planning sidecar.
-- Typing `$1,234.50`, `-$5` or `50%` stores a number (1234.5, -5, 0.5); typing an error such as `#N/A` stores that error. Number formats that show the `$` or `%` again come with formatting.
+- Typing `$1,234.50`, `-$5` or `50%` stores a number (1234.5, -5, 0.5); typing an error such as `#N/A` stores that error. (0.10.0 shows the `$` and `%` again.)
 - New: ISNA, ISERR, ISLOGICAL, ISREF, ISNONTEXT (60 functions in all).
 
 ## 0.8.0 · 2026-10-21
