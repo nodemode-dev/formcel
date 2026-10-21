@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.28.0 · 2026-10-21
+
+- PDF: download this sheet or every sheet as a PDF, laid out on Letter pages with the cells' formatting, merges, conditional formatting colours and data bars. Wide sheets are scaled to fit.
+- Passwords: password-protected .xlsx (and .xls) files ask for their password when opened, and Download can save an .xlsx that needs a password to open.
+- Formulas: the spilled range operator, `=SUM(A1#)`, refers to everything a formula in A1 spills, and the implicit intersection operator, `=@A1:A10`, picks the value on the formula's own row. Both are kept in .xlsx files.
+- Not yet: rotated text, icon sets and pictures in PDFs; page setup (margins, orientation, print areas) comes with Phase 12.
+
 ## 0.27.0 · 2026-10-21
 
 - OpenDocument spreadsheets: open and download .ods, with values, formulas, number formats, cell formatting, merges, links, names, column widths and row heights. Files open in LibreOffice with their values.
