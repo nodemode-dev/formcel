@@ -16,6 +16,7 @@ export const MAX_LEVEL = 7;
 export class Axis {
   private readonly sizes = new Map<number, number>();
   private readonly hidden = new Set<number>();
+  private filtered = new Set<number>();
   private readonly levels = new Map<number, number>();
   private readonly folded = new Map<number, number>();
   private runCache: OutlineRun[] | null = null;
@@ -29,11 +30,24 @@ export class Axis {
   ) {}
 
   size(i: number): number {
-    return this.hidden.has(i) ? 0 : this.sizes.get(i) ?? this.base;
+    return this.hidden.has(i) || this.filtered.has(i) ? 0 : this.sizes.get(i) ?? this.base;
   }
 
   isHidden(i: number): boolean {
     return this.hidden.has(i);
+  }
+
+  isFiltered(i: number): boolean {
+    return this.filtered.has(i);
+  }
+
+  private gone(i: number): boolean {
+    return this.hidden.has(i) || this.filtered.has(i);
+  }
+
+  setFiltered(rows: Iterable<number>): void {
+    this.filtered = new Set(rows);
+    this.rebuild();
   }
 
   hasHidden(a: number, b: number): boolean {
@@ -42,7 +56,7 @@ export class Axis {
   }
 
   private rebuild(): void {
-    this.keys = [...new Set([...this.sizes.keys(), ...this.hidden])].sort((a, b) => a - b);
+    this.keys = [...new Set([...this.sizes.keys(), ...this.hidden, ...this.filtered])].sort((a, b) => a - b);
     let acc = 0;
     this.deltas = this.keys.map((k) => (acc += this.size(k) - this.base));
   }
@@ -219,10 +233,10 @@ export class Axis {
 
   nextVisible(i: number, dir: 1 | -1): number {
     let k = i;
-    while (this.hidden.has(k) && k + dir >= 0 && k + dir < this.count) k += dir;
-    if (this.hidden.has(k)) {
+    while (this.gone(k) && k + dir >= 0 && k + dir < this.count) k += dir;
+    if (this.gone(k)) {
       k = i;
-      while (this.hidden.has(k) && k - dir >= 0 && k - dir < this.count) k -= dir;
+      while (this.gone(k) && k - dir >= 0 && k - dir < this.count) k -= dir;
     }
     return k;
   }

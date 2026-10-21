@@ -35,6 +35,9 @@ export type Request =
   | { id: number; op: 'values.read'; book: number; sheet: number; r0: number; c0: number; r1: number; c1: number }
   | { id: number; op: 'rules.get'; book: number; sheet: number }
   | { id: number; op: 'rules.set' | 'rules.load'; book: number; sheet: number; lines: string[] }
+  | { id: number; op: 'filter.get' | 'filter.reapply'; book: number; sheet: number }
+  | { id: number; op: 'filter.set' | 'filter.load'; book: number; sheet: number; text: string }
+  | { id: number; op: 'filter.values'; book: number; sheet: number; col: number }
   | { id: number; op: 'cf.read'; book: number; sheet: number; r0: number; c0: number; r1: number; c1: number }
   | { id: number; op: 'link.at'; book: number; sheet: number; row: number; col: number }
   | { id: number; op: 'link.set'; book: number; sheet: number; row: number; col: number; target: string; display?: string }
@@ -77,11 +80,19 @@ export interface Effect {
   theme: boolean;
   named: boolean;
   rules: number | null;
+  filter: number | null;
+}
+export interface FilterList {
+  values: string[];
+  blanks: boolean;
+  more: boolean;
+  fills: string[];
+  fonts: string[];
 }
 export type CfCell = [row: number, col: number, style: string, bar: string, icon: string];
 export type StyleChange = [sheet: number, row: number, col: number, raw: string, shown: string];
 export type Name = [name: string, refers: string];
-export type Value = string | number | boolean | number[] | string[] | Cell[] | Changed[] | Name[] | Edit[] | Area[] | CfCell[] | LinkChange[] | [number, number] | Shift | Effect | null;
+export type Value = string | number | boolean | number[] | string[] | Cell[] | Changed[] | Name[] | Edit[] | Area[] | CfCell[] | LinkChange[] | [number, number] | Shift | Effect | FilterList | null;
 
 export type Response =
   | { id: number; ok: true; value: Value }

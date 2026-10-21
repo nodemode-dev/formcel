@@ -347,6 +347,21 @@
 .fc-sort .fc-btn.fc-sort-add { justify-self: start; }
 .fc-sort-check { display: flex; align-items: center; gap: var(--space-2); font-size: var(--text-sm); color: var(--text-secondary); }
 .fc-pw .fc-csv-actions .fc-btn { justify-self: auto; }
+.fc-filter { width: 300px; }
+.fc-filter.fc-fmt-custom .fc-btn { justify-self: stretch; }
+.fc-filter-sorts { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-2); }
+.fc-filter-sorts .fc-btn { display: inline-flex; align-items: center; justify-content: center; gap: var(--space-1); }
+.fc-filter-colors { display: grid; gap: var(--space-1); }
+.fc-filter-swatches { display: flex; flex-wrap: wrap; gap: var(--space-1); }
+.fc-filter-swatch { display: inline-grid; place-items: center; width: 22px; height: 22px; padding: 0; border: 1px solid var(--border-light); border-radius: var(--radius-sm); background: transparent; color: var(--text-primary); font-weight: 600; cursor: pointer; }
+.fc-filter-swatch:hover, .fc-filter-swatch:focus-visible { outline: 2px solid var(--accent-color); outline-offset: 1px; }
+.fc-filter-cond { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--space-1); }
+.fc-filter-cond [data-k="join"] { grid-column: 1 / -1; width: 80px; }
+.fc-filter-cond :disabled { opacity: 0.5; }
+.fc-filter-list { display: grid; align-content: start; height: 180px; overflow: auto; padding: var(--space-1); border: 1px solid var(--border-light); border-radius: var(--radius-sm); background: var(--bg-primary); }
+.fc-filter-item { display: flex; align-items: center; gap: var(--space-2); min-height: 24px; font-size: var(--text-sm); white-space: nowrap; }
+.fc-filter-item span { overflow: hidden; text-overflow: ellipsis; }
+.fc-filter .fc-csv-actions .fc-btn { flex: 1; }
 .fc-csv-head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-3); }
 .fc-csv-meta { font-size: var(--text-sm); color: var(--text-muted); }
 .fc-csv-delim-label { width: 200px; }

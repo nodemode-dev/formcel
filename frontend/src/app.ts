@@ -2,6 +2,7 @@ import { engine, type Area, type Changed, type FormatChange, type LinkChange, ty
 import { colName, type Range } from './grid/a1';
 import { Autocomplete, FUNCTIONS, type Suggestion } from './ui/autocomplete';
 import { Grid, type BorderKind, type MenuKind, type PasteKind, type SheetView } from './grid/grid';
+import { paint } from './grid/style';
 import { listCommands, registerCommand, runCommand } from './ui/commands';
 import { Home, type TemplateMeta, type WorkbookMeta } from './ui/home';
 import { Menu, type MenuItem } from './ui/menu';
@@ -17,6 +18,30 @@ interface CsvPreview {
   columns: { label: string; as: string }[];
   sample: string[][];
 }
+
+interface FilterForm {
+  form: HTMLFormElement;
+  col: number;
+  title: HTMLElement;
+  colors: HTMLElement;
+  op1: HTMLSelectElement;
+  v1: HTMLInputElement;
+  join: HTMLSelectElement;
+  op2: HTMLSelectElement;
+  v2: HTMLInputElement;
+  search: HTMLInputElement;
+  all: HTMLInputElement;
+  list: HTMLElement;
+  hint: HTMLElement;
+}
+
+const FILTER_OPS: [string, string][] = [
+  ['', 'None'], ['eq', 'Equals'], ['ne', 'Does not equal'], ['gt', 'Greater than'], ['ge', 'Greater than or equal to'], ['lt', 'Less than'], ['le', 'Less than or equal to'],
+  ['begins', 'Begins with'], ['notbegins', 'Does not begin with'], ['ends', 'Ends with'], ['notends', 'Does not end with'], ['contains', 'Contains'], ['notcontains', 'Does not contain'],
+  ['top', 'Top N items'], ['bottom', 'Bottom N items'], ['top%', 'Top N percent'], ['bottom%', 'Bottom N percent'], ['above', 'Above average'], ['below', 'Below average'],
+];
+
+const fieldEsc = (s: string) => s.replace(/\\/g, '\\\\').replace(/\t/g, '\\t').replace(/\n/g, '\\n').replace(/\r/g, '\\r');
 
 interface SortForm {
   form: HTMLFormElement;
@@ -209,6 +234,9 @@ export class App {
       onLook: () => this.sendLook(),
       onPasteMenu: (x, y) => this.pasteMenu(x, y),
       onRules: (sheet, lines) => this.sendRules(sheet, lines),
+      onFilter: (sheet, text) => this.sendFilter(sheet, text),
+      onFilterMenu: (col) => void this.filterBox(col),
+      onFilterKey: () => void runCommand('data.filter'),
       onLinks: (changes) => this.sendLinks(changes),
       onOpenLink: () => void this.grid.linkTarget().then((t) => this.followLink(t)),
       onLinkBox: () => this.linkBox(),
@@ -319,6 +347,9 @@ export class App {
     cmd('data.sort-asc', 'Sort A to Z', 'Sort the rows of the selection, or the data around the active cell, by the active column, smallest first.', true, () => this.sorted(g.quickSort(false)));
     cmd('data.sort-desc', 'Sort Z to A', 'Sort the rows of the selection, or the data around the active cell, by the active column, largest first.', true, () => this.sorted(g.quickSort(true)));
     cmd('data.sort', 'Custom sort', 'Sort by several columns, each A to Z or Z to A, with or without a header row.', true, () => this.sortBox());
+    cmd('data.filter', 'Filter', 'Add filter buttons to the header row of the data around the active cell, or take them off.', true, () => this.toggleFilter(), 'Mod+Shift+L');
+    cmd('data.filter-clear', 'Clear filter', 'Show every row again and keep the filter buttons.', true, () => this.filterWith(null));
+    cmd('data.filter-reapply', 'Reapply filter', 'Run the filter again over the current values, taking in rows added below it.', true, () => g.reapplyFilter());
     cmd('format.merge', 'Merge cells', 'Merge the selected cells into one, or split a merged cell.', true, () => this.mergeMenu());
     cmd('format.merge-center', 'Merge and center', 'Merge the selection into one cell and center its text. Only the upper-left value is kept.', true, () => g.merge('center'));
     cmd('format.merge-across', 'Merge across', 'Merge each selected row into one cell.', true, () => g.merge('across'));
@@ -542,6 +573,171 @@ export class App {
     return f;
   }
 
+  private async toggleFilter(): Promise<void> {
+    const g = this.grid;
+    if (g.filterInfo()) return g.setFilter('');
+    const { range } = await g.sortTarget();
+    if (range.r1 <= range.r0) {
+      this.status('Select a range with a header row and data under it', true);
+      return;
+    }
+    await g.setFilter(`area\t${range.r0},${range.c0},${range.r1},${range.c1}\n`);
+  }
+
+  private async filterWith(col: number | null, parts?: string[]): Promise<void> {
+    const info = this.grid.filterInfo();
+    if (!info) return;
+    const a = info.area;
+    let text = `area\t${a.r0},${a.c0},${a.r1},${a.c1}\n`;
+    if (col !== null) {
+      for (const [c, p] of info.cols) if (c !== col) text += `col\t${c}\t${p.map(fieldEsc).join('\t')}\n`;
+      if (parts) text += `col\t${col}\t${parts.map(fieldEsc).join('\t')}\n`;
+    }
+    await this.grid.setFilter(text);
+  }
+
+  private async filterBox(col: number): Promise<void> {
+    const o = this.open;
+    const info = this.grid.filterInfo();
+    const at = this.grid.filterButton(col);
+    if (!o || !info || !at) return;
+    const f = this.filterForm ??= this.makeFilterForm();
+    const list = await engine().filterValues(o.book, this.grid.sheetIndex, col);
+    const crit = info.cols.get(col);
+    f.col = col;
+    const head = (await engine().readValues(o.book, this.grid.sheetIndex, info.area.r0, col, info.area.r0, col))[0]?.[2].replace(/^'/, '');
+    f.title.textContent = head ? `Filter ${head}` : `Filter column ${colName(col)}`;
+    const keep = crit?.[0] === 'values' ? new Set(crit.slice(2).map((s) => s.toLowerCase())) : null;
+    const blanksOn = crit?.[0] === 'values' ? crit[1] === '1' : true;
+    const items = list.values.map((v) => `<label class="fc-filter-item"><input type="checkbox" value="${escapeHtml(v)}"${!keep || keep.has(v.toLowerCase()) ? ' checked' : ''}> <span>${escapeHtml(v)}</span></label>`);
+    if (list.blanks) items.push(`<label class="fc-filter-item"><input type="checkbox" data-blank="1"${blanksOn ? ' checked' : ''}> <span>(Blanks)</span></label>`);
+    f.list.innerHTML = items.join('');
+    f.hint.textContent = list.more ? 'Showing the first 10,000 different entries.' : '';
+    f.search.value = '';
+    const swatch = (kind: 'fill' | 'font', v: string) => {
+      const none = v === 'none' || v === 'auto';
+      const css = none ? 'transparent' : paint(v, this.grid.look);
+      const label = kind === 'fill' ? (none ? 'No fill' : 'Cells with this fill') : none ? 'Automatic text colour' : 'Text in this colour';
+      return `<button type="button" class="fc-filter-swatch" data-a="${kind}" data-v="${escapeHtml(v)}" title="${label}" aria-label="${label}"${kind === 'fill' ? ` style="background:${css}"` : ''}>${kind === 'font' ? `<span style="color:${none ? 'currentColor' : css}">A</span>` : ''}</button>`;
+    };
+    const rows: string[] = [];
+    if (list.fills.length > 1) rows.push(`<span class="fc-sort-by">By fill colour</span><div class="fc-filter-swatches">${list.fills.map((v) => swatch('fill', v)).join('')}</div>`);
+    if (list.fonts.length > 1) rows.push(`<span class="fc-sort-by">By text colour</span><div class="fc-filter-swatches">${list.fonts.map((v) => swatch('font', v)).join('')}</div>`);
+    f.colors.innerHTML = rows.join('');
+    f.colors.hidden = !rows.length;
+    f.op1.value = f.op2.value = '';
+    f.v1.value = f.v2.value = '';
+    f.join.value = 'and';
+    if (crit?.[0] === 'cond') {
+      f.join.value = crit[1] === 'or' ? 'or' : 'and';
+      f.op1.value = crit[2] ?? '';
+      f.v1.value = crit[3] ?? '';
+      f.op2.value = crit[4] ?? '';
+      f.v2.value = crit[5] ?? '';
+    } else if (crit?.[0] === 'top') {
+      f.op1.value = (crit[1] === 'bottom' ? 'bottom' : 'top') + (crit[3] === '%' ? '%' : '');
+      f.v1.value = crit[2] ?? '10';
+    } else if (crit?.[0] === 'avg') f.op1.value = crit[1] === 'below' ? 'below' : 'above';
+    this.filterSync(f);
+    f.form.dataset.state = '';
+    const w = 300;
+    f.form.style.left = `${Math.max(8, Math.min(at.left, innerWidth - w - 8))}px`;
+    f.form.style.top = `${Math.max(8, Math.min(at.bottom + 4, innerHeight - 520))}px`;
+    f.form.hidden = false;
+    f.search.focus();
+  }
+
+  private filterSync(f: FilterForm): void {
+    const op = f.op1.value;
+    const single = !op || ['top', 'bottom', 'top%', 'bottom%', 'above', 'below'].includes(op);
+    f.v1.disabled = !op || op === 'above' || op === 'below';
+    f.join.disabled = f.op2.disabled = single;
+    f.v2.disabled = single || !f.op2.value;
+    const boxes = [...f.list.querySelectorAll<HTMLInputElement>('.fc-filter-item:not([hidden]) input')];
+    const on = boxes.filter((b) => b.checked).length;
+    f.all.checked = on === boxes.length && on > 0;
+    f.all.indeterminate = on > 0 && on < boxes.length;
+  }
+
+  private makeFilterForm(): FilterForm {
+    const form = document.createElement('form');
+    form.className = 'fc-fmt-custom fc-filter';
+    form.hidden = true;
+    form.setAttribute('role', 'dialog');
+    const ops = FILTER_OPS.map(([v, l]) => `<option value="${v}">${l}</option>`).join('');
+    const ops2 = FILTER_OPS.slice(0, 13).map(([v, l]) => `<option value="${v}">${l}</option>`).join('');
+    form.innerHTML = `<span class="fc-fmt-title"></span><div class="fc-filter-sorts"><button type="button" class="fc-btn" data-a="asc">${icon('sortAsc')} Sort A to Z</button><button type="button" class="fc-btn" data-a="desc">${icon('sortDesc')} Sort Z to A</button></div><div class="fc-filter-colors" hidden></div><span class="fc-sort-by">By condition</span><div class="fc-filter-cond"><select class="fc-fmt-input" data-k="op1" aria-label="Condition">${ops}</select><input class="fc-fmt-input" data-k="v1" aria-label="Value" spellcheck="false" autocomplete="off"><select class="fc-fmt-input" data-k="join" aria-label="Join"><option value="and">And</option><option value="or">Or</option></select><select class="fc-fmt-input" data-k="op2" aria-label="Second condition">${ops2}</select><input class="fc-fmt-input" data-k="v2" aria-label="Second value" spellcheck="false" autocomplete="off"></div><span class="fc-sort-by">By values</span><input type="search" class="fc-fmt-input fc-filter-search" placeholder="Search" aria-label="Search values" spellcheck="false" autocomplete="off"><label class="fc-sort-check"><input type="checkbox" class="fc-filter-all"> Select all</label><div class="fc-filter-list" role="group" aria-label="Values"></div><span class="fc-fmt-hint" aria-live="polite"></span><div class="fc-csv-actions"><button type="button" class="fc-btn" data-a="clear">Clear</button><button type="button" class="fc-btn" data-a="cancel">Cancel</button><button type="submit" class="fc-btn fc-btn-primary">OK</button></div>`;
+    document.getElementById('overlay-root')!.appendChild(form);
+    const q = <T extends HTMLElement>(s: string) => form.querySelector<T>(s)!;
+    const f: FilterForm = {
+      form,
+      col: 0,
+      title: q('.fc-fmt-title'),
+      colors: q('.fc-filter-colors'),
+      op1: q('[data-k="op1"]'),
+      v1: q('[data-k="v1"]'),
+      join: q('[data-k="join"]'),
+      op2: q('[data-k="op2"]'),
+      v2: q('[data-k="v2"]'),
+      search: q('.fc-filter-search'),
+      all: q('.fc-filter-all'),
+      list: q('.fc-filter-list'),
+      hint: q('.fc-fmt-hint'),
+    };
+    const close = () => { form.hidden = true; this.grid.focus(); };
+    const done = (p: Promise<void>) => void p.then(close, (err: unknown) => {
+      form.dataset.state = 'error';
+      f.hint.textContent = err instanceof Error ? err.message : 'Not filtered';
+    });
+    form.addEventListener('click', (e) => {
+      const b = (e.target as HTMLElement).closest<HTMLElement>('[data-a]');
+      const a = b?.dataset.a;
+      if (a === 'cancel') close();
+      if (a === 'clear') done(this.filterWith(f.col));
+      if (a === 'asc' || a === 'desc') done(this.grid.sortFilterColumn(f.col, a === 'desc'));
+      if (a === 'fill' || a === 'font') done(this.filterWith(f.col, [a, b!.dataset.v ?? '']));
+    });
+    form.addEventListener('change', (e) => {
+      if (e.target === f.all) {
+        for (const box of f.list.querySelectorAll<HTMLInputElement>('.fc-filter-item:not([hidden]) input')) box.checked = f.all.checked;
+      }
+      this.filterSync(f);
+    });
+    f.search.addEventListener('input', () => {
+      const s = f.search.value.trim().toLowerCase();
+      for (const item of f.list.children as HTMLCollectionOf<HTMLElement>) item.hidden = !!s && !item.textContent!.toLowerCase().includes(s);
+      this.filterSync(f);
+    });
+    form.addEventListener('keydown', (e) => { if (e.key === 'Escape') close(); });
+    document.addEventListener('pointerdown', (e) => { if (!form.hidden && !form.contains(e.target as Node)) form.hidden = true; });
+    form.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const op = f.op1.value;
+      if (op === 'above' || op === 'below') return done(this.filterWith(f.col, ['avg', op]));
+      if (op.startsWith('top') || op.startsWith('bottom')) {
+        const n = Number(f.v1.value);
+        if (!(n >= 1 && n <= 500)) {
+          form.dataset.state = 'error';
+          f.hint.textContent = 'Enter a number from 1 to 500.';
+          return;
+        }
+        return done(this.filterWith(f.col, ['top', op.startsWith('bottom') ? 'bottom' : 'top', String(n), op.endsWith('%') ? '%' : '']));
+      }
+      if (op) {
+        const parts = ['cond', f.join.value, op, f.v1.value];
+        if (f.op2.value) parts.push(f.op2.value, f.v2.value);
+        return done(this.filterWith(f.col, parts));
+      }
+      const boxes = [...f.list.querySelectorAll<HTMLInputElement>('.fc-filter-item input')];
+      const searching = !!f.search.value.trim();
+      const on = boxes.filter((b) => b.checked && !(searching && (b.closest('.fc-filter-item') as HTMLElement).hidden));
+      if (!searching && on.length === boxes.length) return done(this.filterWith(f.col));
+      const blank = on.some((b) => b.dataset.blank);
+      done(this.filterWith(f.col, ['values', blank ? '1' : '0', ...on.filter((b) => !b.dataset.blank).map((b) => b.value)]));
+    });
+    return f;
+  }
+
   private downloadMenu(): void {
     const b = this.button('file.download').getBoundingClientRect();
     const run = (id: string) => () => runCommand(id).then(() => this.grid.focus());
@@ -755,7 +951,7 @@ export class App {
   private async openWorkbook(id: string, setHash = true): Promise<void> {
     this.flush();
     await this.saving;
-    let doc: WorkbookMeta & { cells: [number, number, string][][]; formats?: [number, number, string][][]; styles?: [number, number, string][][]; merges?: Area[][]; rules?: string[][]; links?: [number, number, string][][]; theme?: string; cellStyles?: string[]; views?: SheetView[]; names?: Name[] };
+    let doc: WorkbookMeta & { cells: [number, number, string][][]; formats?: [number, number, string][][]; styles?: [number, number, string][][]; merges?: Area[][]; rules?: string[][]; filters?: string[]; links?: [number, number, string][][]; theme?: string; cellStyles?: string[]; views?: SheetView[]; names?: Name[] };
     try {
       doc = await api('GET', `/api/workbooks/${id}`);
     } catch {
@@ -773,6 +969,7 @@ export class App {
       await e.loadStyles(book, i, doc.styles?.[i] ?? []);
       await e.loadMerges(book, i, doc.merges?.[i] ?? []);
       await e.loadRules(book, i, doc.rules?.[i] ?? []);
+      await e.loadFilter(book, i, doc.filters?.[i] ?? '');
       await e.loadLinks(book, i, doc.links?.[i] ?? []);
       if (doc.cells[i]?.length) await e.load(book, doc.cells[i], i);
     }
@@ -1024,6 +1221,7 @@ export class App {
   private csvForm: CsvForm | null = null;
   private pwForm: PasswordForm | null = null;
   private sortForm: SortForm | null = null;
+  private filterForm: FilterForm | null = null;
 
   private linkBox(): void {
     const g = this.grid;
@@ -1079,6 +1277,21 @@ export class App {
       if (!form.hidden && !form.contains(e.target as Node)) form.hidden = true;
     }, true);
     return { form, text, url, hint };
+  }
+
+  private sendFilter(sheet: number, text: string): void {
+    const o = this.open;
+    if (!o) return;
+    this.status('Saving');
+    this.saving = this.saving.then(async () => {
+      try {
+        await api('PUT', `/api/workbooks/${o.id}/filter`, { sheet, text });
+        if (!this.pending.size) this.status('Saved');
+      } catch (err) {
+        this.status('Not saved', true);
+        this.p.save.title = err instanceof Error ? err.message : '';
+      }
+    });
   }
 
   private sendRules(sheet: number, lines: string[]): void {

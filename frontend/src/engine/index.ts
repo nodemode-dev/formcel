@@ -1,6 +1,6 @@
-import type { Area, Cell, CfCell, Changed, Dir, Edit, Effect, FormatItem, LinkChange, MergeMode, Name, RequestBody, Response, Shift, StyleOp, Value } from './protocol';
+import type { Area, Cell, CfCell, Changed, Dir, Edit, Effect, FilterList, FormatItem, LinkChange, MergeMode, Name, RequestBody, Response, Shift, StyleOp, Value } from './protocol';
 
-export type { Area, Cell, CfCell, Changed, Dir, Edit, Effect, FormatChange, FormatItem, LinkChange, MergeMode, Name, Shift, StyleChange, StyleOp } from './protocol';
+export type { Area, Cell, CfCell, Changed, Dir, Edit, Effect, FilterList, FormatChange, FormatItem, LinkChange, MergeMode, Name, Shift, StyleChange, StyleOp } from './protocol';
 
 type Pending = { resolve: (v: Value) => void; reject: (e: Error) => void };
 
@@ -208,6 +208,26 @@ export class EngineClient {
 
   async loadRules(book: number, sheet: number, lines: string[]): Promise<void> {
     if (lines.length) await this.call({ op: 'rules.load', book, sheet, lines });
+  }
+
+  async filter(book: number, sheet: number): Promise<string> {
+    return (await this.call({ op: 'filter.get', book, sheet })) as string;
+  }
+
+  async setFilter(book: number, sheet: number, text: string): Promise<Effect> {
+    return (await this.call({ op: 'filter.set', book, sheet, text })) as Effect;
+  }
+
+  async loadFilter(book: number, sheet: number, text: string): Promise<void> {
+    if (text) await this.call({ op: 'filter.load', book, sheet, text });
+  }
+
+  async reapplyFilter(book: number, sheet: number): Promise<Effect> {
+    return (await this.call({ op: 'filter.reapply', book, sheet })) as Effect;
+  }
+
+  async filterValues(book: number, sheet: number, col: number): Promise<FilterList> {
+    return (await this.call({ op: 'filter.values', book, sheet, col })) as FilterList;
   }
 
   async readCf(book: number, sheet: number, r0: number, c0: number, r1: number, c1: number): Promise<CfCell[]> {

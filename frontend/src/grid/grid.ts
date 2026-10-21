@@ -35,6 +35,8 @@ export const ZOOMS = [0.5, 0.67, 0.75, 0.9, 1, 1.1, 1.25, 1.5, 1.75, 2];
 const HEAD_H = 24;
 const HEAD_W = 60;
 const KEY = (r: number, c: number) => r * MAX_COLS + c;
+const FILTER_BTN = 16;
+const unescapeField = (s: string) => s.replace(/\\(.)/g, (_, ch: string) => (ch === 't' ? '\t' : ch === 'n' ? '\n' : ch === 'r' ? '\r' : ch));
 const ERRORS = new Set(['#DIV/0!', '#VALUE!', '#REF!', '#NAME?', '#N/A', '#NUM!', '#NULL!', '#ERROR!']);
 const OUTLINE_PAD = 3;
 const OUTLINE_STEP = 16;
@@ -65,6 +67,9 @@ export interface GridEvents {
   onLook(): void;
   onPasteMenu(x: number, y: number): void;
   onRules(sheet: number, lines: string[]): void;
+  onFilter(sheet: number, text: string): void;
+  onFilterMenu(col: number): void;
+  onFilterKey(): void;
   onLinks(changes: LinkChange[]): void;
   onOpenLink(): void;
   onLinkBox(): void;
@@ -94,6 +99,9 @@ export class Grid {
   private merges: Area[] = [];
   private readonly cfs = new Map<number, Mark>();
   private ruleLines: string[] = [];
+  private filterArea: Area | null = null;
+  private filterCols = new Map<number, string[]>();
+  private filterText = '';
   look: Look = themeOf('');
   themeText = '';
   themeNames: string[] = [];
@@ -381,6 +389,7 @@ export class Grid {
         ctx.rect(xl, ytop, xr - xl, ybot - ytop);
         ctx.clip();
         this.paintCells(ra, rb, ca, cb);
+        this.paintFilterButtons(ra, rb, ca, cb);
         ctx.restore();
       }
     }
@@ -845,6 +854,109 @@ export class Grid {
     return this.ac;
   }
 
+  filterInfo(): { area: Range; cols: Map<number, string[]>; text: string } | null {
+    if (!this.filterArea) return null;
+    const [r0, c0, r1, c1] = this.filterArea;
+    return { area: { r0, c0, r1, c1 }, cols: this.filterCols, text: this.filterText };
+  }
+
+  async setFilter(text: string): Promise<void> {
+    await this.applyEffect(await this.engine.setFilter(this.book, this.sheet, text));
+  }
+
+  async reapplyFilter(): Promise<void> {
+    await this.applyEffect(await this.engine.reapplyFilter(this.book, this.sheet));
+  }
+
+  async sortFilterColumn(col: number, descending: boolean): Promise<void> {
+    const a = this.filterArea;
+    if (!a) return;
+    const mark = await this.engine.undoMark(this.book);
+    await this.applyEffect(await this.engine.sort(this.book, this.sheet, a[0], a[1], a[2], a[3], [[col, descending]], true, false));
+    await this.applyEffect(await this.engine.reapplyFilter(this.book, this.sheet));
+    await this.engine.undoGroup(this.book, mark);
+  }
+
+  filterButton(col: number): DOMRect | null {
+    const a = this.filterArea;
+    if (!a || col < a[1] || col > a[3] || !this.cols.size(col) || !this.rows.size(a[0])) return null;
+    const r = this.canvas.getBoundingClientRect();
+    const right = (this.x(col + 1) - 2) * this.z;
+    const top = (this.y(a[0]) + this.rows.size(a[0]) / 2 - FILTER_BTN / 2) * this.z;
+    return new DOMRect(r.left + right - FILTER_BTN * this.z, r.top + top, FILTER_BTN * this.z, FILTER_BTN * this.z);
+  }
+
+  private async loadFilter(): Promise<void> {
+    if (this.book < 0) return;
+    const sheet = this.sheet;
+    const text = await this.engine.filter(this.book, sheet);
+    if (sheet !== this.sheet) return;
+    this.filterText = text;
+    this.filterArea = null;
+    this.filterCols = new Map();
+    let hidden: number[] = [];
+    for (const line of text.split('\n')) {
+      const p = line.split('\t');
+      if (p[0] === 'area') {
+        const n = p[1].split(',').map(Number);
+        this.filterArea = [n[0], n[1], n[2], n[3]];
+      } else if (p[0] === 'col') this.filterCols.set(Number(p[1]), p.slice(2).map(unescapeField));
+      else if (p[0] === 'hidden') {
+        hidden = [];
+        for (const part of (p[1] ?? '').split(',').filter(Boolean)) {
+          const [x, y] = part.split('-').map(Number);
+          for (let i = x; i <= (y ?? x); i++) hidden.push(i);
+        }
+      }
+    }
+    this.rows.setFiltered(hidden);
+    if (this.rows.isFiltered(this.ar)) this.ar = this.fr2 = this.rows.nextVisible(this.ar, 1);
+    this.paint();
+  }
+
+  private paintFilterButtons(r0: number, r1: number, c0: number, c1: number): void {
+    const a = this.filterArea;
+    if (!a || a[0] < r0 || a[0] > r1 || !this.rows.size(a[0])) return;
+    const { ctx, pal } = this;
+    const cy = this.y(a[0]) + this.rows.size(a[0]) / 2;
+    for (let c = Math.max(c0, a[1]); c <= Math.min(c1, a[3]); c++) {
+      if (!this.cols.size(c)) continue;
+      const x = Math.round(this.x(c + 1) - 2 - FILTER_BTN) + 0.5;
+      const y = Math.round(cy - FILTER_BTN / 2) + 0.5;
+      const on = this.filterCols.has(c);
+      ctx.fillStyle = pal.headBg;
+      ctx.fillRect(x, y, FILTER_BTN, FILTER_BTN);
+      ctx.strokeStyle = on ? pal.edge : pal.grid;
+      ctx.lineWidth = 1;
+      ctx.strokeRect(x, y, FILTER_BTN, FILTER_BTN);
+      ctx.fillStyle = on ? pal.edge : pal.headFg;
+      ctx.beginPath();
+      const m = x + FILTER_BTN / 2;
+      if (on) {
+        ctx.moveTo(m - 5, y + 4);
+        ctx.lineTo(m + 5, y + 4);
+        ctx.lineTo(m + 1, y + 9);
+        ctx.lineTo(m + 1, y + 13);
+        ctx.lineTo(m - 1, y + 12);
+        ctx.lineTo(m - 1, y + 9);
+      } else {
+        ctx.moveTo(m - 4, y + 6.5);
+        ctx.lineTo(m + 4, y + 6.5);
+        ctx.lineTo(m, y + 10.5);
+      }
+      ctx.closePath();
+      ctx.fill();
+    }
+  }
+
+  private onFilterButton(px: number, py: number, row: number, col: number, pr: Pane, pc: Pane): boolean {
+    const a = this.filterArea;
+    if (!a || row !== a[0] || col < a[1] || col > a[3]) return false;
+    const right = this.x(col + 1, pc) - 2;
+    const cy = this.y(a[0], pr) + this.rows.size(a[0]) / 2;
+    return px >= right - FILTER_BTN - 1 && px <= right + 1 && Math.abs(py - cy) <= FILTER_BTN / 2 + 1;
+  }
+
   async merge(mode: MergeMode): Promise<void> {
     const s = this.sel();
     await this.applyEffect(await this.engine.merge(this.book, this.sheet, s.r0, s.c0, s.r1, s.c1, mode));
@@ -1010,7 +1122,8 @@ export class Grid {
           ctx.fillStyle = pal.headOn;
           ctx.fillRect(0, yy, HEAD_W, rh);
         }
-        ctx.fillStyle = pal.headFg;
+        const fa = this.filterArea;
+        ctx.fillStyle = fa && this.filterCols.size && r > fa[0] && r <= fa[2] ? pal.link : pal.headFg;
         ctx.fillText(String(r + 1), HEAD_W / 2, yy + rh / 2);
         ctx.strokeStyle = pal.grid;
         ctx.lineWidth = 1;
@@ -1182,8 +1295,13 @@ export class Grid {
     this.dropWindows();
     this.merges = [];
     this.ruleLines = [];
+    this.filterArea = null;
+    this.filterCols = new Map();
+    this.filterText = '';
+    this.rows.setFiltered([]);
     void this.loadMerges();
     void this.loadRules();
+    void this.loadFilter();
     void this.loadTheme();
     this.rows.restore(view.rows);
     this.cols.restore(view.cols);
@@ -1485,6 +1603,12 @@ export class Grid {
       const lines = await this.engine.rules(this.book, sheet);
       if (sheet === this.sheet) await this.loadRules();
       this.events.onRules(sheet, lines);
+    }
+    if (e.filter !== null) {
+      const sheet = e.filter;
+      const text = await this.engine.filter(this.book, sheet);
+      if (sheet === this.sheet) await this.loadFilter();
+      this.events.onFilter(sheet, text);
     }
     if (e.merges !== null) {
       const sheet = e.merges;
@@ -1954,6 +2078,12 @@ export class Grid {
       } else if (p.x < HEAD_W) {
         this.drag = { kind: 'rows' };
         this.enqueue(() => (pane(true, false), shift ? this.extendTo(row, MAX_COLS - 1) : this.select(row, 0, row, MAX_COLS - 1, false)));
+      } else if (!shift && this.onFilterButton(p.x, p.y, row, col, pr, pc)) {
+        this.enqueue(() => {
+          pane(true, true);
+          this.select(row, col);
+          this.events.onFilterMenu(col);
+        });
       } else {
         this.drag = { kind: 'cells' };
         const open = (e.ctrlKey || e.metaKey) && !shift && this.linked.has(KEY(row, col));
@@ -2209,6 +2339,10 @@ export class Grid {
       this.groupAuto(dir === 'right' ? 1 : -1);
       return;
     }
+    if (dir === 'down' && e.altKey && !e.shiftKey && !mod && this.filterArea && this.ar === this.filterArea[0] && this.ac >= this.filterArea[1] && this.ac <= this.filterArea[3]) {
+      this.events.onFilterMenu(this.ac);
+      return;
+    }
     if (dir) {
       if (mod) await this.jump(dir, e.shiftKey);
       else this.move(dir, e.shiftKey);
@@ -2225,6 +2359,7 @@ export class Grid {
       if (e.code === 'Digit0') return this.hide(false, !e.shiftKey);
       if (e.shiftKey && e.code in SHORT_FORMATS) return this.setFormat(SHORT_FORMATS[e.code]);
       if (k === 'g') return this.events.onGoto();
+      if (e.shiftKey && e.code === 'KeyL') return this.events.onFilterKey();
       if (k === 'k' && !e.shiftKey) return this.events.onLinkBox();
       if (k === 'z' && !e.shiftKey) return this.undo();
       if (k === 'y' || k === 'z') return this.redo();
@@ -2368,7 +2503,7 @@ function wants(e: KeyboardEvent): boolean {
   if (ARROWS[e.key]) return true;
   const mod = e.ctrlKey || e.metaKey;
   if (mod && e.altKey && e.code === 'KeyV') return true;
-  if (mod) return !e.altKey && (['z', 'y', 'a', 'home', 'end', '+', '=', '-', '_', 'g', 'k'].includes(e.key.toLowerCase()) || e.code === 'Digit9' || e.code === 'Digit0' || (e.shiftKey && (e.code in SHORT_FORMATS || e.code === 'Digit7')) || (!e.shiftKey && e.code in TOGGLE_KEYS));
+  if (mod) return !e.altKey && (['z', 'y', 'a', 'home', 'end', '+', '=', '-', '_', 'g', 'k'].includes(e.key.toLowerCase()) || (e.shiftKey && e.code === 'KeyL') || e.code === 'Digit9' || e.code === 'Digit0' || (e.shiftKey && (e.code in SHORT_FORMATS || e.code === 'Digit7')) || (!e.shiftKey && e.code in TOGGLE_KEYS));
   if (['Enter', 'Tab', 'Escape', 'Home', 'PageDown', 'PageUp', 'F2', 'F5', 'Delete', 'Backspace'].includes(e.key)) return true;
   return e.key.length === 1 && !e.altKey;
 }
