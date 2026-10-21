@@ -227,3 +227,27 @@ Sizes: a column `width` is in characters of the default font; 7 pixels each is t
 Styles: theme colours map from the file's index order (lt1, dk1, lt2, dk2, accents) to FormCel's slots; a tint becomes a percentage. Cell styles are written as named styles (Accent 1 as Accent1) and a cell keeps its own formatting over its style; on the way in, formatting a cell shares with its named style is dropped so the cell says `cs:Name` plus what differs. The default font of the file (font 0) counts as no font setting.
 
 On export the full calculation flag is set, so Excel recalculates on open; cached values are not written. Text kept under merged cells is not written, since a merged cell shows only the contents of its upper-left cell (MS-MERGE).
+
+### Conditional formatting in .xlsx
+- refers-to: app/services/xlsx/cf.py :: rules_in, rules_out, dxf_tokens, dxf_out; reader.py :: read; writer.py :: write; store.py :: import_xlsx
+- kind: explainer
+- logged: v0.26.0 · 2026-10-21
+
+Every FormCel rule kind maps to a rule type in the file: cellIs (with its eight operators), containsText, notContainsText, beginsWith, endsWith, timePeriod, duplicateValues, uniqueValues, top10, aboveAverage, the four blank and error types, expression, colorScale, dataBar and iconSet (3 arrows, 3 traffic lights, 3 flags, 3 symbols, 4 arrows, 5 arrows). Rules are read in priority order, so FormCel's top rule is the file's priority 1, and written in FormCel's order, which openpyxl numbers 1, 2, 3. A rule over several ranges becomes one FormCel rule per range, with formula references moved by `formcel_engine.offset`. A rule's format is a differential style: in the file a solid fill's colour sits in `bgColor`, not `fgColor`.
+
+A cellIs value is a number, a quoted text or a formula; it comes in as the number, the text, or `=formula`. Text, date and blank rules carry a formula in the file as well as their type; FormCel writes `NOT(ISERROR(SEARCH("t",A1)))` and the like for the first cell of the range, and for dates the FLOOR, ROUNDDOWN, EDATE and WEEKDAY forms. These are the forms Excel writes as FormCel understands them; no vendor page gives them, and they are not read back (FormCel reads the type).
+
+Left out with a note: rule types FormCel does not have, icon sets FormCel does not draw, average rules with standard deviations or "or equal", and scales or bars with theme colours. Icon cut-offs that are not percents become even steps, and scale points from formulas become lowest or highest, each with a note. Excel's data bar extension (negative bar colour, axis) is not read; openpyxl drops it.
+
+Checked: all 19 rule forms in `tools/checks/xlsxcheck.py` come back unchanged after write and read. After LibreOffice 24.2 opens and re-saves the file, 18 of 19 come back unchanged. LibreOffice drops Stop If True, so that rule comes back without it.
+
+### CSV, TSV and text files
+- refers-to: app/services/csvio.py :: decode, sniff, rows_of, guess, preview, cells, write; store.py :: import_csv, export_text; app/routers/workbooks.py :: preview_file, import_file, export_text
+- kind: explainer
+- logged: v0.26.0 · 2026-10-21
+
+`POST /api/import/preview?name=&delimiter=` reads a .csv, .tsv or .txt body and answers the separator, the encoding, the row count, a guess for each column and the first 12 rows. `POST /api/import?name=&delimiter=&text=0,3` makes the workbook; the columns listed in `text` keep every value as written. Separator sniffing is ported from form.md 0.46.0 (`internal/collection/csv.go` sniffDelimiter: the most common of comma, semicolon, tab and vertical bar in the first line), with .tsv always tab. Encoding: a UTF-8 or UTF-16 byte order mark, else UTF-8, else Windows-1252, which is named in the notes.
+
+Values are read as if typed, so numbers, dates, percents and TRUE or FALSE become values. A column is suggested as Text when any value is a digit string with a leading zero or more than 15 digits, the values a General column would change. A value starting with `=` stays text and is counted in the notes: opening a file should not run what it contains.
+
+Export writes the sheet's values as shown, UTF-8 with a byte order mark, CRLF line ends, comma or tab. One sheet per file; the file is named after the workbook, and the sheet when its name differs.

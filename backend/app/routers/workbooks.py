@@ -4,7 +4,7 @@ from urllib.parse import quote
 from fastapi import APIRouter, HTTPException, Request, Response
 from pydantic import BaseModel, Field
 
-from ..services import templates
+from ..services import csvio, templates
 from ..services.store import store
 
 router = APIRouter(prefix="/api")
@@ -72,14 +72,31 @@ def create_workbook(body: CreateIn) -> dict:
 MAX_IMPORT = 100 * 1024 * 1024
 
 
+TEXT_FILES = ("csv", "tsv", "txt")
+
+
+@router.post("/import/preview")
+async def preview_file(request: Request, name: str, delimiter: str | None = None) -> dict:
+    data = await request.body()
+    if len(data) > MAX_IMPORT:
+        raise HTTPException(413, "That file is over 100 MB.")
+    if name.rpartition(".")[2].lower() not in TEXT_FILES:
+        raise HTTPException(415, "A preview is only for .csv, .tsv and .txt files.")
+    return csvio.preview(data, name, delimiter)
+
+
 @router.post("/import", status_code=201)
-async def import_file(request: Request, name: str = "Imported workbook.xlsx") -> dict:
+async def import_file(request: Request, name: str = "Imported workbook.xlsx", delimiter: str | None = None, text: str = "") -> dict:
     data = await request.body()
     if len(data) > MAX_IMPORT:
         raise HTTPException(413, "That file is over 100 MB.")
     stem, _, ext = name.rpartition(".")
-    if ext.lower() not in ("xlsx", "xlsm"):
-        raise HTTPException(415, "FormCel opens .xlsx and .xlsm files so far.")
+    ext = ext.lower()
+    if ext in TEXT_FILES:
+        cols = {int(x) for x in text.split(",") if x.strip().isdigit()}
+        return store().import_csv(data, name, delimiter, cols)
+    if ext not in ("xlsx", "xlsm"):
+        raise HTTPException(415, "FormCel opens .xlsx, .xlsm, .csv, .tsv and .txt files so far.")
     try:
         return store().import_xlsx(data, stem or name)
     except (KeyError, ValueError, OSError, zipfile.BadZipFile) as e:
@@ -95,6 +112,21 @@ def export_xlsx(wid: str) -> Response:
     fname = "".join(ch for ch in title if ch not in '\\/:*?"<>|').strip() or "Workbook"
     return Response(data, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                     headers={"Content-Disposition": f"attachment; filename*=UTF-8''{quote(fname)}.xlsx"})
+
+
+@router.get("/workbooks/{wid}/export.{kind}")
+def export_text(wid: str, kind: str, sheet: int = 0) -> Response:
+    if kind not in ("csv", "tsv"):
+        raise HTTPException(404, f"FormCel does not export .{kind}.")
+    try:
+        title, name, text = store().export_text(wid, sheet, "\t" if kind == "tsv" else ",")
+    except (KeyError, FileNotFoundError):
+        raise missing(wid)
+    except IndexError:
+        raise HTTPException(404, f"No sheet {sheet}.")
+    fname = "".join(ch for ch in (title if name == title else f"{title} - {name}") if ch not in '\\/:*?"<>|').strip() or "Sheet"
+    return Response(text.encode("utf-8-sig"), media_type="text/csv" if kind == "csv" else "text/tab-separated-values",
+                    headers={"Content-Disposition": f"attachment; filename*=UTF-8''{quote(fname)}.{kind}"})
 
 
 @router.get("/workbooks/{wid}")

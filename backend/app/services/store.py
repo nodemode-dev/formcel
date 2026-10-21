@@ -180,6 +180,10 @@ class Store:
             eng.load(s["cells"], i)
             eng.load_merges(s["merges"], i)
             eng.load_links(s["links"], i)
+            if s.get("rules"):
+                kept = eng.load_rules(s["rules"], i)
+                if kept < len(s["rules"]):
+                    notes.append(f"{len(s['rules']) - kept} conditional formatting rules FormCel could not read left out")
         dropped = 0
         for name, refers in book["names"]:
             try:
@@ -194,6 +198,35 @@ class Store:
             self.open[b.id] = b
         self._write(b)
         return {**b.meta(), "notes": notes}
+
+    def import_csv(self, data: bytes, title: str, delimiter: str | None, text_cols: set[int]) -> dict:
+        from . import csvio
+
+        cells, info = csvio.cells(data, title, delimiter, text_cols)
+        eng = formcel_engine.Workbook()
+        eng.rename_sheet(0, (title.rpartition(".")[0] or title)[:31] or "Sheet1")
+        eng.load(cells, 0)
+        notes = []
+        if any(v.startswith("'=") for _, _, v in cells):
+            notes.append(f"{sum(1 for _, _, v in cells if v.startswith(chr(39) + '='))} formulas kept as text")
+        if info["encoding"] != "UTF-8":
+            notes.append(f"1 file read as {info['encoding']}")
+        stamp = now()
+        b = Book(uuid.uuid4().hex[:12], (title.rpartition(".")[0] or title)[:120], stamp, stamp, eng, None, [{}])
+        with self.guard:
+            self.open[b.id] = b
+        self._write(b)
+        return {**b.meta(), "notes": notes}
+
+    def export_text(self, wid: str, sheet: int, delimiter: str) -> tuple[str, str, str]:
+        from . import csvio
+
+        b = self._load(wid)
+        with b.lock:
+            names = b.sheet_names()
+            if not 0 <= sheet < len(names):
+                raise IndexError(sheet)
+            return b.title, names[sheet], csvio.write(b.engine.values(sheet), delimiter)
 
     def export_xlsx(self, wid: str) -> tuple[str, bytes]:
         from . import xlsx
