@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.23.0 · 2026-10-21
+
+- Links in cells:
+  - HYPERLINK(link_location, [friendly_name]), for example `=HYPERLINK("https://example.com/report","Report")`. 108 functions in all.
+  - Typing a web address or an email address makes it a link.
+  - Insert link or Edit link with Ctrl+K or right-click: text to display and a web page, an email address, or a place in the workbook such as `#Sheet2!A1`.
+  - Selecting a linked cell shows its target with Open, Edit and Remove. Ctrl+click opens it. Remove link keeps the text; Delete removes both.
+- Links are blue and underlined, saved with the workbook, undo, and move with inserted and deleted rows and columns.
+- Only web, email, ftp and in-workbook links are made; other kinds of address stay plain text.
+
 ## 0.22.0 · 2026-10-21
 
 - Conditional formatting, from the new toolbar button:
