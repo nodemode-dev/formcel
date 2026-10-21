@@ -167,6 +167,13 @@ The gutters are a second canvas (`.fc-outline`) behind the grid canvas, which is
 
 Cells and changes from the engine carry an optional formula text after the value. The grid keeps it in `fx` beside the value cache: the canvas paints values, the formula bar and the cell editor show the formula, and autosave sends the formula. Filling from a formula copies it to each target cell with its relative references moved by the distance from its source cell (the engine's `offset`); a fill lane that mixes formulas and constants repeats the sources in order instead of continuing a series. Error values are centred like TRUE and FALSE. Copy and cut still put values on the clipboard; copying formulas between cells waits for the clipboard work in Phase 3.
 
+### Dates in the window
+- refers-to: src/engine/worker.ts :: localSerial, fc_set_clock; src/grid/fill.ts :: US_DATE, us; src/grid/grid.ts :: NUMERIC
+- kind: explainer
+- logged: v0.10.0 · 2026-10-21
+
+The worker gives the engine the browser's local time as a serial date before every request, so TODAY and NOW match the person's clock. The engine shows dates as m/d/yyyy, so the fill handle continues m/d/yyyy series as well as ISO ones, in the style they were typed. Right alignment now also covers values shown as currency, percent, dates and times.
+
 ### Split panes
 - refers-to: src/grid/grid.ts :: toggleSplit, y, x, hit, reveal, bands, splitBar
 - kind: explainer

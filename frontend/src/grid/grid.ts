@@ -23,7 +23,7 @@ export const ZOOMS = [0.5, 0.67, 0.75, 0.9, 1, 1.1, 1.25, 1.5, 1.75, 2];
 const HEAD_H = 24;
 const HEAD_W = 60;
 const KEY = (r: number, c: number) => r * MAX_COLS + c;
-const NUMERIC = /^-?(\d+\.?\d*|\.\d+)(e[+-]?\d+)?$/i;
+const NUMERIC = /^-?\$?-?(\d[\d,]*\.?\d*|\.\d+)(e[+-]?\d+)?%?$|^\d{1,2}\/\d{1,2}\/\d{4}( \d{1,2}:\d{2}(:\d{2})?( [AP]M)?)?$|^\d{1,2}:\d{2}(:\d{2})?( [AP]M)?$/i;
 const ERRORS = new Set(['#DIV/0!', '#VALUE!', '#REF!', '#NAME?', '#N/A', '#NUM!', '#NULL!', '#ERROR!']);
 const OUTLINE_PAD = 3;
 const OUTLINE_STEP = 16;

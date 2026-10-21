@@ -24,6 +24,12 @@ interface Exports {
   fc_extent(book: number, sheet: number): number;
   fc_edge(book: number, sheet: number, row: number, col: number, dir: number): number;
   fc_offset(src: number, len: number, dr: number, dc: number): number;
+  fc_set_clock(serial: number): void;
+}
+
+function localSerial(): number {
+  const now = Date.now();
+  return (now - new Date(now).getTimezoneOffset() * 60000) / 86400000 + 25569;
 }
 
 const DIRS = { up: 0, down: 1, left: 2, right: 3 } as const;
@@ -164,7 +170,9 @@ self.onmessage = async (e: MessageEvent<Request>) => {
   const req = e.data;
   let res: Response;
   try {
-    res = { id: req.id, ok: true, value: run(await ready, req) };
+    const x = await ready;
+    x.fc_set_clock(localSerial());
+    res = { id: req.id, ok: true, value: run(x, req) };
   } catch (err) {
     res = { id: req.id, ok: false, error: err instanceof Error ? err.message : String(err) };
   }

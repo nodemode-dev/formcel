@@ -1,5 +1,6 @@
 const NUM = /^-?(\d+\.?\d*|\.\d+)$/;
 const DATE = /^(\d{4})-(\d{2})-(\d{2})$/;
+const US_DATE = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/;
 const TAIL = /^(.*?)(\d+)$/;
 const LISTS = [
   ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
@@ -19,12 +20,19 @@ function fmt(n: number): string {
 }
 
 function days(s: string): number {
-  const m = DATE.exec(s)!;
-  return Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3])) / 86400000;
+  const m = DATE.exec(s);
+  if (m) return Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3])) / 86400000;
+  const u = US_DATE.exec(s)!;
+  return Date.UTC(Number(u[3]), Number(u[1]) - 1, Number(u[2])) / 86400000;
 }
 
 function iso(d: number): string {
   return new Date(d * 86400000).toISOString().slice(0, 10);
+}
+
+function us(d: number): string {
+  const t = new Date(d * 86400000);
+  return `${t.getUTCMonth() + 1}/${t.getUTCDate()}/${t.getUTCFullYear()}`;
 }
 
 function caseLike(word: string, like: string): string {
@@ -47,10 +55,11 @@ export function fillSeries(src: string[], n: number): string[] {
     for (let i = 1; i <= n; i++) out.push(fmt(nums[nums.length - 1] + d * i));
     return out;
   }
-  if (vals.every((v) => DATE.test(v))) {
+  if (vals.every((v) => DATE.test(v)) || vals.every((v) => US_DATE.test(v))) {
     const ds = vals.map(days);
     const d = vals.length === 1 ? 1 : Math.round(step(ds));
-    for (let i = 1; i <= n; i++) out.push(iso(ds[ds.length - 1] + d * i));
+    const show = DATE.test(vals[0]) ? iso : us;
+    for (let i = 1; i <= n; i++) out.push(show(ds[ds.length - 1] + d * i));
     return out;
   }
   for (const list of LISTS) {
