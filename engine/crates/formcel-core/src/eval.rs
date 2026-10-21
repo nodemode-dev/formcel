@@ -93,7 +93,37 @@ fn hull(a: Area, b: Area) -> Area {
     Area { r0: a.r0.min(b.r0), c0: a.c0.min(b.c0), r1: a.r1.max(b.r1), c1: a.c1.max(b.c1) }
 }
 
-const ARRAY_FNS: [&str; 5] = ["INDEX", "CHOOSE", "SEQUENCE", "TRANSPOSE", "IF"];
+const ARRAY_FNS: [&str; 15] = ["INDEX", "CHOOSE", "SEQUENCE", "TRANSPOSE", "IF", "FILTER", "SORT", "SORTBY", "UNIQUE", "MAP", "REDUCE", "SCAN", "BYROW", "BYCOL", "MAKEARRAY"];
+
+fn transposed(g: &Array) -> Array {
+    let mut data = Vec::with_capacity(g.data.len());
+    for c in 0..g.cols {
+        for r in 0..g.rows {
+            data.push(g.get(r, c).clone());
+        }
+    }
+    Array { rows: g.cols, cols: g.rows, data }
+}
+
+fn pick_rows(g: &Array, keep: &[usize]) -> Array {
+    let mut data = Vec::with_capacity(keep.len() * g.cols);
+    for &r in keep {
+        data.extend_from_slice(&g.data[r * g.cols..(r + 1) * g.cols]);
+    }
+    Array { rows: keep.len(), cols: g.cols, data }
+}
+
+fn sort_key(a: &Value, b: &Value) -> std::cmp::Ordering {
+    match (a, b) {
+        (Value::Empty, Value::Empty) => std::cmp::Ordering::Equal,
+        (Value::Empty, _) => std::cmp::Ordering::Greater,
+        (_, Value::Empty) => std::cmp::Ordering::Less,
+        (Value::Error(_), Value::Error(_)) => std::cmp::Ordering::Equal,
+        (Value::Error(_), _) => std::cmp::Ordering::Greater,
+        (_, Value::Error(_)) => std::cmp::Ordering::Less,
+        _ => compare(a, b),
+    }
+}
 
 fn err(e: ErrKind) -> Value {
     Value::Error(e)
@@ -201,6 +231,18 @@ impl<'a> Eval<'a> {
             return Err(ErrKind::Value);
         }
         let vals: Vec<Arg> = args.iter().map(|a| self.arg(a)).collect();
+        self.apply(&f, vals)
+    }
+
+    fn lambda(&self, e: &Expr, params: usize) -> Result<Rc<Lambda>, ErrKind> {
+        match self.arg(e) {
+            Arg::F(f) if f.params.len() == params => Ok(f),
+            Arg::V(Value::Error(k)) => Err(k),
+            _ => Err(ErrKind::Value),
+        }
+    }
+
+    fn apply(&self, f: &Rc<Lambda>, vals: Vec<Arg>) -> Result<Arg, ErrKind> {
         self.deeper(|| {
             let mut env = f.env.clone();
             env.extend(f.params.iter().cloned().zip(vals));
@@ -213,7 +255,7 @@ impl<'a> Eval<'a> {
 
     fn scoped(&self, name: &str, a: &[Expr]) -> Result<Arg, ErrKind> {
         let ident = |e: &Expr| match e {
-            Expr::Name(n) if crate::formula::valid_name(n) => Ok(n.to_ascii_uppercase()),
+            Expr::Name(n) if crate::formula::valid_local(n) => Ok(n.to_ascii_uppercase()),
             _ => Err(ErrKind::Value),
         };
         if name == "LAMBDA" {
@@ -496,6 +538,7 @@ impl<'a> Eval<'a> {
                     }
                 }
                 "SUM" => num(self.numbers(a)?.iter().sum()),
+                "SUMSQ" => num(self.numbers(a)?.iter().map(|x| x * x).sum()),
                 "PRODUCT" => num(self.numbers(a)?.iter().product()),
                 "AVERAGE" => {
                     let v = self.numbers(a)?;
@@ -1060,6 +1103,193 @@ impl Eval<'_> {
                     }
                 }
                 Ok(Arg::A(Array { rows: g.cols, cols: g.rows, data }))
+            }
+            "FILTER" => {
+                if a.len() < 2 || a.len() > 3 {
+                    return Err(ErrKind::Na);
+                }
+                let g = self.grid(self.arg(&a[0]))?;
+                let inc = self.grid(self.arg(&a[1]))?;
+                let by_row = inc.cols == 1 && inc.rows == g.rows;
+                if !by_row && !(inc.rows == 1 && inc.cols == g.cols) {
+                    return Err(ErrKind::Value);
+                }
+                let mut keep = Vec::new();
+                for (i, v) in inc.data.iter().enumerate() {
+                    if bool_of(v)? {
+                        keep.push(i);
+                    }
+                }
+                if keep.is_empty() {
+                    return match a.get(2) {
+                        Some(e) if !matches!(e, Expr::Missing) => Ok(self.arg(e)),
+                        _ => Err(ErrKind::Calc),
+                    };
+                }
+                Ok(Arg::A(if by_row { pick_rows(&g, &keep) } else { transposed(&pick_rows(&transposed(&g), &keep)) }))
+            }
+            "SORT" | "SORTBY" => {
+                let g = self.grid(self.arg(a.first().ok_or(ErrKind::Na)?))?;
+                let opt = |i: usize, d: f64| -> Result<f64, ErrKind> { if a.len() > i && !matches!(a[i], Expr::Missing) { self.n(a, i) } else { Ok(d) } };
+                let order = |o: f64| match o as i64 {
+                    1 => Ok(false),
+                    -1 => Ok(true),
+                    _ => Err(ErrKind::Value),
+                };
+                let (by_col, keys): (bool, Vec<(Vec<Value>, bool)>) = if name == "SORT" {
+                    if a.len() > 4 {
+                        return Err(ErrKind::Na);
+                    }
+                    let by_col = a.len() > 3 && !matches!(a[3], Expr::Missing) && bool_of(&self.scalar(&a[3]))?;
+                    let t = if by_col { transposed(&g) } else { g.clone() };
+                    let k = opt(1, 1.0)?.trunc();
+                    if k < 1.0 || k as usize > t.cols {
+                        return Err(ErrKind::Value);
+                    }
+                    let col = (0..t.rows).map(|r| t.get(r, k as usize - 1).clone()).collect();
+                    (by_col, vec![(col, order(opt(2, 1.0)?)?)])
+                } else {
+                    if a.len() < 2 {
+                        return Err(ErrKind::Na);
+                    }
+                    let mut keys = Vec::new();
+                    let mut dir = None;
+                    for (i, p) in a[1..].chunks(2).enumerate() {
+                        let k = self.grid(self.arg(&p[0]))?;
+                        let this = if k.cols == 1 && k.rows == g.rows { false } else if k.rows == 1 && k.cols == g.cols { true } else { return Err(ErrKind::Value) };
+                        if *dir.get_or_insert(this) != this {
+                            return Err(ErrKind::Value);
+                        }
+                        let desc = if p.len() > 1 { order(opt(2 + 2 * i, 1.0)?)? } else { false };
+                        keys.push((k.data, desc));
+                    }
+                    (dir.unwrap_or(false), keys)
+                };
+                let t = if by_col { transposed(&g) } else { g };
+                let mut idx: Vec<usize> = (0..t.rows).collect();
+                idx.sort_by(|&x, &y| {
+                    for (k, desc) in &keys {
+                        let o = sort_key(&k[x], &k[y]);
+                        let o = if *desc { o.reverse() } else { o };
+                        if o != std::cmp::Ordering::Equal {
+                            return o;
+                        }
+                    }
+                    std::cmp::Ordering::Equal
+                });
+                let out = pick_rows(&t, &idx);
+                Ok(Arg::A(if by_col { transposed(&out) } else { out }))
+            }
+            "UNIQUE" => {
+                if a.is_empty() || a.len() > 3 {
+                    return Err(ErrKind::Na);
+                }
+                let flag = |i: usize| -> Result<bool, ErrKind> { if a.len() > i && !matches!(a[i], Expr::Missing) { bool_of(&self.scalar(&a[i])) } else { Ok(false) } };
+                let (by_col, once) = (flag(1)?, flag(2)?);
+                let g = self.grid(self.arg(&a[0]))?;
+                let t = if by_col { transposed(&g) } else { g };
+                let row = |r: usize| &t.data[r * t.cols..(r + 1) * t.cols];
+                let same_row = |x: usize, y: usize| row(x).iter().zip(row(y)).all(|(p, q)| same(p, q) || (*p == Value::Empty && *q == Value::Empty));
+                let mut firsts: Vec<(usize, usize)> = Vec::new();
+                for r in 0..t.rows {
+                    match firsts.iter_mut().find(|(f, _)| same_row(*f, r)) {
+                        Some(e) => e.1 += 1,
+                        None => firsts.push((r, 1)),
+                    }
+                }
+                let keep: Vec<usize> = firsts.into_iter().filter(|&(_, n)| !once || n == 1).map(|(r, _)| r).collect();
+                if keep.is_empty() {
+                    return Err(ErrKind::Calc);
+                }
+                let out = pick_rows(&t, &keep);
+                Ok(Arg::A(if by_col { transposed(&out) } else { out }))
+            }
+            "MAP" => {
+                if a.len() < 2 {
+                    return Err(ErrKind::Na);
+                }
+                let f = self.lambda(&a[a.len() - 1], a.len() - 1)?;
+                let gs = a[..a.len() - 1].iter().map(|e| self.grid(self.arg(e))).collect::<Result<Vec<_>, _>>()?;
+                let (rows, cols) = (gs[0].rows, gs[0].cols);
+                let mut data = Vec::with_capacity(rows * cols);
+                for r in 0..rows {
+                    for c in 0..cols {
+                        let vals = gs.iter().map(|g| Arg::V(g.pick(r, c))).collect();
+                        data.push(self.deref(self.apply(&f, vals)?));
+                    }
+                }
+                Ok(Arg::A(Array { rows, cols, data }))
+            }
+            "REDUCE" | "SCAN" => {
+                if a.len() < 2 || a.len() > 3 {
+                    return Err(ErrKind::Na);
+                }
+                let (init, arr, lam) = if a.len() == 3 { (Some(&a[0]), &a[1], &a[2]) } else { (None, &a[0], &a[1]) };
+                let f = self.lambda(lam, 2)?;
+                let g = self.grid(self.arg(arr))?;
+                let mut items = g.data.iter();
+                let mut acc = match init {
+                    Some(e) => self.arg(e),
+                    None => Arg::V(items.next().cloned().unwrap_or(Value::Empty)),
+                };
+                let mut steps = Vec::with_capacity(g.data.len());
+                if init.is_none() && !g.data.is_empty() {
+                    steps.push(self.deref(acc.clone()));
+                }
+                for v in items {
+                    acc = self.apply(&f, vec![acc, Arg::V(v.clone())])?;
+                    if name == "SCAN" {
+                        steps.push(self.deref(acc.clone()));
+                    }
+                }
+                if name == "REDUCE" {
+                    return Ok(acc);
+                }
+                Ok(Arg::A(Array { rows: g.rows, cols: g.cols, data: steps }))
+            }
+            "BYROW" | "BYCOL" => {
+                if a.len() != 2 {
+                    return Err(ErrKind::Na);
+                }
+                let f = match self.arg(&a[1]) {
+                    Arg::F(f) if f.params.len() == 1 => f,
+                    Arg::F(_) => return Err(ErrKind::Value),
+                    Arg::V(Value::Error(k)) => return Err(k),
+                    _ => return Err(ErrKind::Calc),
+                };
+                let g = self.grid(self.arg(&a[0]))?;
+                let t = if name == "BYCOL" { transposed(&g) } else { g };
+                let mut data = Vec::with_capacity(t.rows);
+                for r in 0..t.rows {
+                    let line = Array { rows: 1, cols: t.cols, data: t.data[r * t.cols..(r + 1) * t.cols].to_vec() };
+                    let line = if name == "BYCOL" { transposed(&line) } else { line };
+                    let out = self.apply(&f, vec![Arg::A(line)])?;
+                    data.push(if multi(&out) { err(ErrKind::Calc) } else { self.deref(out) });
+                }
+                Ok(Arg::A(if name == "BYCOL" { Array { rows: 1, cols: t.rows, data } } else { Array { rows: t.rows, cols: 1, data } }))
+            }
+            "MAKEARRAY" => {
+                if a.len() != 3 {
+                    return Err(ErrKind::Na);
+                }
+                let dim = |i: usize| -> Result<usize, ErrKind> {
+                    match self.scalar(&a[i]) {
+                        Value::Number(n) if n.trunc() >= 1.0 => Ok(n.trunc() as usize),
+                        _ => Err(ErrKind::Value),
+                    }
+                };
+                let (rows, cols) = (dim(0)?, dim(1)?);
+                if (rows as u64) * (cols as u64) > MAX_ARRAY {
+                    return Err(ErrKind::Value);
+                }
+                let f = self.lambda(&a[2], 2)?;
+                let mut data = Vec::with_capacity(rows * cols);
+                for r in 1..=rows {
+                    for c in 1..=cols {
+                        data.push(self.deref(self.apply(&f, vec![Arg::V(Value::Number(r as f64)), Arg::V(Value::Number(c as f64))])?));
+                    }
+                }
+                Ok(Arg::A(Array { rows, cols, data }))
             }
             _ => Err(ErrKind::Name),
         }

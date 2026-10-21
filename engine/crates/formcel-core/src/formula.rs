@@ -144,11 +144,12 @@ pub enum Expr {
     Invoke(Box<Expr>, Vec<Expr>),
 }
 
-pub const FUNCTIONS: [&str; 81] = [
-    "ABS", "AND", "AVERAGE", "AVERAGEIF", "AVERAGEIFS", "CHOOSE", "CONCAT", "CONCATENATE", "COUNT", "COUNTA", "COUNTBLANK", "COUNTIF", "COUNTIFS", "DATE", "DATEVALUE", "DAY", "DAYS", "EDATE",
-    "EOMONTH", "FALSE", "HLOOKUP", "HOUR", "IF", "IFERROR", "IFNA", "IFS", "INDEX", "INT", "ISBLANK", "ISERR", "ISERROR", "ISLOGICAL", "ISNA", "ISNONTEXT", "ISNUMBER", "ISREF", "ISTEXT", "LAMBDA",
-    "LEFT", "LEN", "LET", "LOWER", "MATCH", "MAX", "MID", "MIN", "MINUTE", "MOD", "MONTH", "NA", "NOT", "NOW", "OR", "PI", "POWER", "PRODUCT", "RIGHT", "ROUND", "ROUNDDOWN", "ROUNDUP", "SECOND",
-    "SEQUENCE", "SQRT", "SUBSTITUTE", "SUM", "SUMIF", "SUMIFS", "SWITCH", "TIME", "TIMEVALUE", "TODAY", "TRANSPOSE", "TRIM", "TRUE", "UPPER", "VLOOKUP", "WEEKDAY", "XLOOKUP", "XMATCH", "XOR", "YEAR",
+pub const FUNCTIONS: [&str; 92] = [
+    "ABS", "AND", "AVERAGE", "AVERAGEIF", "AVERAGEIFS", "BYCOL", "BYROW", "CHOOSE", "CONCAT", "CONCATENATE", "COUNT", "COUNTA", "COUNTBLANK", "COUNTIF", "COUNTIFS", "DATE", "DATEVALUE",
+    "DAY", "DAYS", "EDATE", "EOMONTH", "FALSE", "FILTER", "HLOOKUP", "HOUR", "IF", "IFERROR", "IFNA", "IFS", "INDEX", "INT", "ISBLANK", "ISERR", "ISERROR", "ISLOGICAL", "ISNA", "ISNONTEXT",
+    "ISNUMBER", "ISREF", "ISTEXT", "LAMBDA", "LEFT", "LEN", "LET", "LOWER", "MAKEARRAY", "MAP", "MATCH", "MAX", "MID", "MIN", "MINUTE", "MOD", "MONTH", "NA", "NOT", "NOW", "OR", "PI",
+    "POWER", "PRODUCT", "REDUCE", "RIGHT", "ROUND", "ROUNDDOWN", "ROUNDUP", "SCAN", "SECOND", "SEQUENCE", "SORT", "SORTBY", "SQRT", "SUBSTITUTE", "SUM", "SUMIF", "SUMIFS", "SUMSQ", "SWITCH",
+    "TIME", "TIMEVALUE", "TODAY", "TRANSPOSE", "TRIM", "TRUE", "UNIQUE", "UPPER", "VLOOKUP", "WEEKDAY", "XLOOKUP", "XMATCH", "XOR", "YEAR",
 ];
 
 #[derive(Clone, Debug, PartialEq)]
@@ -711,15 +712,19 @@ pub fn names(e: &Expr, f: &mut dyn FnMut(&str)) {
 }
 
 pub fn valid_name(n: &str) -> bool {
+    valid_local(n) && !n.eq_ignore_ascii_case("C") && !n.eq_ignore_ascii_case("R")
+}
+
+pub fn valid_local(n: &str) -> bool {
     let mut cs = n.chars();
     let Some(first) = cs.next() else { return false };
     let upper = n.to_ascii_uppercase();
     (first.is_alphabetic() || first == '_' || first == '\\')
         && cs.all(|c| c.is_alphanumeric() || c == '_' || c == '.')
         && n.chars().count() <= 255
-        && !matches!(upper.as_str(), "C" | "R" | "TRUE" | "FALSE")
+        && !matches!(upper.as_str(), "TRUE" | "FALSE")
         && parse_cell(n).is_none()
-        && !is_r1c1(&upper)
+        && (upper.len() == 1 || !is_r1c1(&upper))
 }
 
 fn is_r1c1(u: &str) -> bool {
