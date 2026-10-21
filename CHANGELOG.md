@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.7.0 · 2026-10-21
+
+- Formulas (Phase 2, first slice): type `=` to enter a formula. References to cells, ranges, whole columns and rows, other sheets (`Sheet2!A1`, `'My sheet'!A1:B4`), `$` anchors, the operators `+ - * / ^ & = <> < > <= >= %`, and 40 functions: IF, IFERROR, IFNA, SUM, PRODUCT, AVERAGE, MIN, MAX, COUNT, COUNTA, COUNTBLANK, AND, OR, XOR, NOT, TRUE, FALSE, ABS, INT, SQRT, POWER, MOD, PI, ROUND, ROUNDUP, ROUNDDOWN, LEN, UPPER, LOWER, TRIM, LEFT, RIGHT, MID, CONCAT, CONCATENATE, ISBLANK, ISNUMBER, ISTEXT, ISERROR, NA.
+- Dependent cells recalculate after every edit, undo and redo; circular references show `#REF!`; errors show as `#DIV/0!`, `#VALUE!`, `#REF!`, `#NAME?`, `#N/A`, `#NUM!`, `#ERROR!`.
+- Inserting and deleting rows and columns adjusts references on every sheet (deleted ones become `#REF!`, and undo restores them); renaming a sheet updates references to it.
+- The fill handle copies formulas with their relative references moved.
+- The formula bar and the cell editor show the formula; the cell shows its result. Numbers display to 15 significant digits.
+- Workbooks save formulas as typed and recalculate on open.
+- Tracker: five more Phase 2 cells checked against vendor pages (R1C1 in Sheets, recalculation mode, autocomplete in both, named ranges in Sheets).
+
 ## 0.6.0 · 2026-10-21
 
 - Split panes: the toolbar's split button divides the sheet above and left of the active cell into two or four panes. Panes scroll on their own (side-by-side panes share their rows, stacked panes share their columns), the wheel scrolls the pane under the pointer, and keys move in the pane last clicked. Drag a split bar to move it, double-click it or press the button again to remove the split. Split and freeze turn each other off. The split is saved with the sheet.
