@@ -24,6 +24,7 @@ export interface TemplateMeta {
 export interface HomeHooks {
   open(id: string): void;
   create(template?: string): void;
+  importFile(file: File): void;
   trash(id: string): void;
   restore(id: string): void;
   purge(id: string): void;
@@ -133,9 +134,9 @@ export class Home {
       </nav>
       <div class="fc-home-body">
         <div data-page="start">
-          <header class="fc-home-head"><div><h1 class="fc-home-title">Hello</h1><p class="fc-home-sub">Start a workbook, pick a template, or carry on where you left off.</p></div><div class="fc-home-actions"><button type="button" class="fc-btn fc-btn-primary" data-a="blank">${icon('plus')}Blank workbook</button></div></header>
+          <header class="fc-home-head"><div><h1 class="fc-home-title">Hello</h1><p class="fc-home-sub">Start a workbook, pick a template, or carry on where you left off.</p></div><div class="fc-home-actions"><button type="button" class="fc-btn" data-a="openfile">${icon('upload')}Open a file</button><button type="button" class="fc-btn fc-btn-primary" data-a="blank">${icon('plus')}Blank workbook</button><input type="file" class="fc-file" accept=".xlsx,.xlsm" hidden></div></header>
           <section class="fc-home-section"><div class="fc-home-section-head"><h2>Recent workbooks</h2><button type="button" class="fc-btn fc-btn-ghost" data-go="recent">See all</button></div><div class="fc-cards fc-one-row fc-start-recent">${skel(4)}</div><p class="fc-none fc-start-none" hidden>No workbooks yet. Start a blank one or pick a template.</p></section>
-          <section class="fc-home-section"><div class="fc-home-section-head"><h2>Spreadsheet templates</h2><button type="button" class="fc-btn fc-btn-ghost" data-go="templates">See all 34</button></div><div class="fc-cards fc-two-rows fc-start-tpl">${skel(8)}</div></section>
+          <section class="fc-home-section"><div class="fc-home-section-head"><h2>Spreadsheet templates</h2><button type="button" class="fc-btn fc-btn-ghost" data-go="templates">See all 36</button></div><div class="fc-cards fc-two-rows fc-start-tpl">${skel(8)}</div></section>
         </div>
         <div data-page="recent" hidden>
           <header class="fc-home-head"><div><h1>Recent workbooks</h1><p class="fc-home-sub">Everything in ~/FormCel, newest first. Workbooks save as you type.</p></div></header>
@@ -154,6 +155,33 @@ export class Home {
     const h = new Date().getHours();
     setText(root.querySelector('.fc-home-title'), h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening');
     root.addEventListener('click', (e) => this.click(e));
+    const file = root.querySelector<HTMLInputElement>('.fc-file')!;
+    file.addEventListener('change', () => {
+      const f = file.files?.[0];
+      file.value = '';
+      if (f) this.hooks.importFile(f);
+    });
+    let depth = 0;
+    const carries = (e: DragEvent) => [...(e.dataTransfer?.types ?? [])].includes('Files');
+    root.addEventListener('dragenter', (e) => {
+      if (!carries(e)) return;
+      e.preventDefault();
+      if (depth++ === 0) root.classList.add('is-dropping');
+    });
+    root.addEventListener('dragover', (e) => {
+      if (carries(e)) e.preventDefault();
+    });
+    root.addEventListener('dragleave', () => {
+      if (depth > 0 && --depth === 0) root.classList.remove('is-dropping');
+    });
+    root.addEventListener('drop', (e) => {
+      if (!carries(e)) return;
+      e.preventDefault();
+      depth = 0;
+      root.classList.remove('is-dropping');
+      const f = e.dataTransfer?.files?.[0];
+      if (f) this.hooks.importFile(f);
+    });
     root.querySelector<HTMLInputElement>('.fc-tpl-q')!.addEventListener('input', (e) => {
       this.query = (e.target as HTMLInputElement).value.trim().toLowerCase();
       this.renderTemplates();
@@ -176,6 +204,7 @@ export class Home {
     const id = act.closest<HTMLElement>('[data-key]')?.dataset.key ?? '';
     switch (act.dataset.a) {
       case 'blank': return this.hooks.create();
+      case 'openfile': return this.root.querySelector<HTMLInputElement>('.fc-file')!.click();
       case 'open': return this.hooks.open(id);
       case 'use': return this.hooks.create(id);
       case 'trash': return this.hooks.trash(id);
@@ -190,6 +219,12 @@ export class Home {
         }, 3000);
         return;
     }
+  }
+
+  say(text: string, error = false): void {
+    const sub = this.root.querySelector<HTMLElement>('[data-page="start"] .fc-home-sub')!;
+    sub.dataset.state = error ? 'error' : text ? 'busy' : '';
+    setText(sub, text || 'Start a workbook, pick a template, or carry on where you left off.');
   }
 
   go(page: Page): void {

@@ -46,6 +46,8 @@ export function mountShell(root: HTMLElement): ShellParts {
         ${tool('format.menu', 'numFormat', 'Number format')}${tool('format.decimals-more', 'decMore', 'Increase decimal places')}${tool('format.decimals-less', 'decLess', 'Decrease decimal places')}
         <span class="fc-tool-sep" aria-hidden="true"></span>
         ${tool('view.freeze-top-row', 'freezeRow', 'Freeze top row')}${tool('view.freeze-first-column', 'freezeCol', 'Freeze first column')}${tool('view.freeze-panes', 'freezePanes', 'Freeze panes above and left of the active cell')}${tool('view.unfreeze', 'unfreeze', 'Unfreeze panes')}${tool('view.split', 'split', 'Split into panes at the active cell')}
+        <span class="fc-tool-sep" aria-hidden="true"></span>
+        ${tool('file.download-xlsx', 'download', 'Download as Excel workbook (.xlsx)')}
       </div>
       <div class="fc-formula">
         <input class="fc-namebox" aria-label="Name Box" spellcheck="false" autocomplete="off">

@@ -126,11 +126,13 @@ export class App {
   private currentRange: Range = { r0: 0, c0: 0, r1: 0, c1: 0 };
   private readonly menu = new Menu();
   private viewTimers = new Map<number, number>();
+  private importNotes: string[] = [];
 
   constructor(private readonly p: ShellParts) {
     this.home = new Home(p.home, {
       open: (id) => void this.openWorkbook(id),
       create: (template) => void this.create(template),
+      importFile: (file) => void this.importFile(file),
       trash: (id) => void this.act(() => api('DELETE', `/api/workbooks/${id}`)),
       restore: (id) => void this.act(() => api('POST', `/api/trash/${id}/restore`)),
       purge: (id) => void this.act(() => api('DELETE', `/api/trash/${id}`)),
@@ -204,6 +206,7 @@ export class App {
     cmd('view.split', 'Split panes', 'Split the sheet above and left of the active cell into panes that scroll on their own, or remove the split. Drag a split bar to move it, double-click it to remove it.', false, () => g.toggleSplit());
     cmd('file.home', 'Home', 'Save and go to the home screen.', false, () => { location.hash = ''; });
     cmd('file.new', 'New blank workbook', 'Create an empty workbook and open it.', true, () => this.create());
+    cmd('file.download-xlsx', 'Download as .xlsx', 'Save a copy of this workbook as an Excel workbook in your downloads.', false, () => this.downloadXlsx());
     cmd('sheet.add', 'Add a sheet', 'Add a sheet after the last one and show it.', true, () => this.addSheet());
     cmd('rows.insert-above', 'Insert rows above', 'Insert as many rows as are selected, above the selection.', true, () => g.insert(true), 'Mod++');
     cmd('rows.insert-below', 'Insert rows below', 'Insert as many rows as are selected, below the selection.', true, () => g.insert(true, true));
@@ -390,6 +393,33 @@ export class App {
     location.hash = `w-${meta.id}`;
   }
 
+  private async downloadXlsx(): Promise<void> {
+    const o = this.open;
+    if (!o) return;
+    this.flush();
+    await this.saving;
+    const a = document.createElement('a');
+    a.href = `/api/workbooks/${o.id}/export.xlsx`;
+    a.download = '';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  }
+
+  private async importFile(file: File): Promise<void> {
+    this.home.say(`Opening ${file.name}`);
+    const r = await fetch(`/api/import?name=${encodeURIComponent(file.name)}`, { method: 'POST', headers: { 'content-type': 'application/octet-stream' }, body: file }).catch(() => null);
+    if (!r || !r.ok) {
+      const detail = r ? await r.json().then((j: { detail?: string }) => j.detail).catch(() => undefined) : undefined;
+      this.home.say(detail ?? `${file.name} could not be opened.`, true);
+      return;
+    }
+    this.home.say('');
+    const meta = (await r.json()) as WorkbookMeta & { notes?: string[] };
+    this.importNotes = meta.notes ?? [];
+    location.hash = `w-${meta.id}`;
+  }
+
   private async openWorkbook(id: string, setHash = true): Promise<void> {
     this.flush();
     await this.saving;
@@ -406,6 +436,7 @@ export class App {
     await e.loadNamed(book, doc.cellStyles ?? []);
     for (let i = 0; i < doc.sheets.length; i++) {
       if (i) await e.addSheet(book, doc.sheets[i]);
+      else if (doc.sheets[0] !== 'Sheet1') await e.renameSheet(book, 0, doc.sheets[0]);
       await e.loadFormats(book, i, doc.formats?.[i] ?? []);
       await e.loadStyles(book, i, doc.styles?.[i] ?? []);
       await e.loadMerges(book, i, doc.merges?.[i] ?? []);
@@ -423,7 +454,9 @@ export class App {
     p.title.hidden = false;
     p.title.value = doc.title;
     p.save.hidden = false;
-    this.status('Saved');
+    this.status(this.importNotes.length ? `Opened, with ${this.importNotes.length} kind${this.importNotes.length === 1 ? '' : 's'} of content left out` : 'Saved');
+    p.save.title = this.importNotes.join('\n');
+    this.importNotes = [];
     document.title = `${doc.title} · FormCel`;
     this.renderTabs();
     this.showSheet(0);

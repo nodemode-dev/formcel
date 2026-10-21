@@ -379,3 +379,12 @@ Linked cells paint in the `--cell-link` colour and underlined, unless the cell h
 - logged: v0.24.0 · 2026-10-21
 
 Styles made for a white sheet set dark text colours, for example the headings and Title use the theme's dark 2. On the dark grid such text was unreadable. A cell with no fill whose text colour is dark (no channel above 127) on a dark grid, or light on a light grid, is painted 60 percent toward the other end; black still paints as the grid's text colour. Text on a fill keeps its colour, since the fill is what it was chosen against. The stored colour does not change.
+
+### Open a file and Download as .xlsx
+- refers-to: src/ui/home.ts :: say, importFile hook, drop handlers; src/app.ts :: importFile, downloadXlsx, openWorkbook; src/ui/shell.ts :: file.download-xlsx button
+- kind: explainer
+- logged: v0.25.0 · 2026-10-21
+
+Home's Open a file button and dropping a file anywhere on Home send the file to `/api/import`. While a file is over Home the page gets a dashed outline drawn with `outline`, so nothing moves. Messages (opening, refused file types) replace the Start page's subtitle text instead of adding a line. When the workbook opens, the save indicator says how many kinds of content were left out, and its tooltip lists them. Download as .xlsx saves pending edits first, then follows a link to the export, so the browser names the file from the workbook title.
+
+Fixed: opening a workbook never renamed the window engine's first sheet, so it stayed Sheet1 there while the engine process had the real name. A formula or name pointing at the first sheet by name (`=Data!B2`) showed #REF! in the window. Found by the .xlsx check, whose first sheet is Data.
