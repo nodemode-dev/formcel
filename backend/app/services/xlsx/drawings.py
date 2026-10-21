@@ -15,8 +15,8 @@ from openpyxl.drawing.spreadsheet_drawing import AnchorMarker, OneCellAnchor, Tw
 from openpyxl.drawing.xdr import XDRPositiveSize2D
 from openpyxl.utils import get_column_letter, range_boundaries
 
-from . import chartex, chartstyle
-from .overlay import markers, range_text
+from . import chartex, chartstyle, pivotchart
+from .overlay import cell_of, markers, range_text
 
 EMU = 9525
 COL_PX = 100
@@ -286,6 +286,10 @@ def chart_out(wb, host, obj: dict, view: dict, pivots: dict | None = None) -> bo
         chart.dataLabels.showVal = True
     chartstyle.chart_out(chart, spec, style_kind, [c for c in getattr(chart, "_charts", []) if c is not chart])
     chart.anchor = _anchor(obj, view)
+    if spec.get("pivot") and pivots and spec["pivot"] in pivots and pivotchart.attach(wb, chart, spec["pivot"], pivots[spec["pivot"]], len(chart.series)):
+        pivotchart.mark(wb, spec.get("pivotButtons") is not False)
+    else:
+        pivotchart.plain(wb)
     host.add_chart(chart)
     if tagged:
         chartex.tag(wb, host.title, len(host._charts) - 1, spec)
@@ -307,11 +311,32 @@ def picture_out(host, obj: dict, view: dict) -> bool:
     return True
 
 
+def cell_picture_out(ws, obj: dict, view: dict, plan: dict) -> bool:
+    pic = obj.get("picture") or {}
+    m = re.match(r"data:image/(png|jpeg|gif|bmp|webp);base64,(.*)$", str(pic.get("src", "")), re.S)
+    if not m:
+        return False
+    r, c = cell_of(obj, view)
+    cell = ws.cell(row=r + 1, column=c + 1)
+    if cell.value not in (None, ""):
+        return False
+    try:
+        data = base64.b64decode(m.group(2))
+    except ValueError:
+        return False
+    cell.value = "#VALUE!"
+    cell.data_type = "e"
+    plan["cellpics"].append({"ref": cell.coordinate, "data": data, "ext": m.group(1), "alt": str(obj.get("alt") or "")})
+    return True
+
+
 def objects_out(wb, ws, objects: list[dict], view: dict, notes: Counter | None = None, pivots: dict | None = None) -> dict:
-    plan: dict = {"alts": {"charts": [], "pics": []}, "shapes": [], "sparks": []}
+    plan: dict = {"alts": {"charts": [], "pics": []}, "shapes": [], "sparks": [], "cellpics": []}
     ranges = {o.get("id"): o for o in objects if o.get("kind") == "range"}
     for obj in objects:
         kind = obj.get("kind")
+        if kind == "picture" and obj.get("inCell") and cell_picture_out(ws, obj, view, plan):
+            continue
         if kind in ("shape", "text"):
             plan["shapes"].append(obj)
             continue
@@ -435,6 +460,11 @@ def chart_in(ch, ws_title: str, view: dict, found: dict | None = None) -> dict |
         positions = sorted({p for p in (_val_pos(s, by_rows) for s in sers) if p is not None})
         spec["secondary"] = sorted({positions.index(p) for p in (_val_pos(s, by_rows) for c in second for s in c.series) if p in positions})
     chartstyle.chart_in(ch, spec, sers, "pie" if spec_type in ("pie", "doughnut") else spec_type)
+    pivot = pivotchart.name_in(ch)
+    if pivot:
+        spec["pivot"] = pivot
+        if found and not pivotchart.buttons_in(found["xml"]):
+            spec["pivotButtons"] = False
     if found:
         fill = chartex.plot_fill(found["xml"])
         if fill:
@@ -483,6 +513,7 @@ def objects_in(ws, view: dict, notes: Counter, extra: dict | None = None, found:
         if i < len(pic_alts) and pic_alts[i] and pic_alts[i] != "Picture" and len(pic_alts) == len(getattr(ws, "_images", [])):
             pic["alt"] = pic_alts[i]
         out.append(pic)
+    out.extend(extra.get("cellpics") or [])
     out.extend(extra.get("shapes") or [])
     out.extend(extra.get("sparks") or [])
     return out

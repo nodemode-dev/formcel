@@ -11,6 +11,8 @@ from xml.sax.saxutils import escape
 
 from openpyxl.utils import get_column_letter, range_boundaries
 
+from . import pivotchart
+
 NS_CX = "http://schemas.microsoft.com/office/drawing/2014/chartex"
 NS_CX1 = "http://schemas.microsoft.com/office/drawing/2015/9/8/chartex"
 NS_A = "http://schemas.openxmlformats.org/drawingml/2006/main"
@@ -330,12 +332,14 @@ def _anchor_xml(obj: dict, view: dict, name_id: int, rid: str, cols: dict, rows:
 def inject(data: bytes, wb, views: list[dict], col_px: int, row_px: int) -> bytes:
     cx = getattr(wb, "_fc_cx", None) or []
     tags = getattr(wb, "_fc_tags", None) or []
-    if not cx and not tags:
+    flags = getattr(wb, "_fc_chartflags", None) or []
+    if not cx and not tags and not any(f is not None for f in flags):
         return data
     with zipfile.ZipFile(BytesIO(data)) as z:
         order = z.namelist()
         files = {n: z.read(n) for n in order}
         infos = {n: z.getinfo(n).compress_type for n in order}
+    pivotchart.finish(files, flags)
     sheets = _sheet_parts(files)
     names = [ws.title for ws in wb.worksheets]
     ctypes = files["[Content_Types].xml"].decode("utf-8")
