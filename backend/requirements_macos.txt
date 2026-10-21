@@ -2,3 +2,4 @@ fastapi==0.141.1
 uvicorn[standard]==0.53.0
 maturin==1.9.6
 openpyxl==3.1.5
+xlrd==2.0.1

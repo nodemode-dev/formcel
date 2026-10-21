@@ -26,3 +26,4 @@ FormCel ports code from two sibling repositories by the same owner, both Apache-
 | maturin | MIT or Apache-2.0 | builds the Python module |
 | openpyxl 3.1.5 | MIT | engine process: reading and writing .xlsx (`backend/app/services/xlsx`) |
 | et_xmlfile 2.0.0 | MIT | engine process: XML writing for openpyxl |
+| xlrd 2.0.1 | BSD-3-Clause | engine process: reading legacy .xls (`backend/app/services/xls.py`) |
