@@ -11,6 +11,7 @@ pub mod r1c1;
 pub mod xref;
 pub mod eval;
 pub mod link;
+pub mod chips;
 pub mod filter;
 pub mod formula;
 pub mod host;
@@ -339,6 +340,7 @@ struct Lost {
     valid: Vec<valid::Validation>,
     tables: Vec<table::Table>,
     links: Vec<(Key, Option<String>, Option<String>)>,
+    chips: Vec<(Key, Option<String>, Option<String>)>,
     objects: Vec<objects::Anchor>,
 }
 
@@ -438,6 +440,7 @@ enum Tx {
     Tables { before: Vec<table::Table>, after: Vec<table::Table> },
     Pivots { before: Vec<pivot::Pivot>, after: Vec<pivot::Pivot> },
     Links(Vec<FormatChange>),
+    Chips(Vec<FormatChange>),
     WhatIf { before: Vec<String>, after: Vec<String> },
     Arrays { before: Vec<(Key, (u32, u32))>, after: Vec<(Key, (u32, u32))> },
 }
@@ -461,6 +464,8 @@ pub struct Workbook {
     named_codes: FastMap<String, std::sync::Arc<(String, fmtcode::Code)>>,
     links: FastMap<Key, String>,
     link_log: Vec<(usize, Addr, String)>,
+    chips: FastMap<Key, String>,
+    chip_log: Vec<(usize, Addr, String)>,
     tables: Vec<table::Table>,
     table_quiet: bool,
     wprot: protect::BookProt,
@@ -589,6 +594,8 @@ impl Workbook {
             named_codes: FastMap::default(),
             links: FastMap::default(),
             link_log: Vec::new(),
+            chips: FastMap::default(),
+            chip_log: Vec::new(),
             tables: Vec::new(),
             table_quiet: false,
             wprot: protect::BookProt::default(),
@@ -851,6 +858,7 @@ impl Workbook {
             changed.extend(self.refresh_tables());
         }
         self.auto_links(sheet, &edited);
+        self.refresh_chips(sheet, &edited);
         self.group_since(mark);
         Ok(self.present(changed))
     }
@@ -1626,6 +1634,7 @@ impl Workbook {
                 None => lost_fmt.links.push(((sh, a), Some(t), None)),
             }
         }
+        lost_fmt.chips = self.move_chips(s.sheet, &moved);
         if s.delta > 0 && s.at > 0 {
             self.inherit(s);
         }
@@ -1796,6 +1805,12 @@ impl Workbook {
                 self.links.insert((n, a), t);
             }
         }
+        let old = std::mem::take(&mut self.chips);
+        for ((s, a), t) in old {
+            if let Some(n) = map(s) {
+                self.chips.insert((n, a), t);
+            }
+        }
         self.rekey_arrays(&map);
     }
 
@@ -1906,6 +1921,7 @@ impl Workbook {
                 Effect { merges: Some(*sheet), ..Effect::default() }
             }
             Tx::Links(changes) => self.apply_links(changes, forward),
+            Tx::Chips(changes) => self.apply_chips(changes, forward),
             Tx::Rules { sheet, before, after } => {
                 self.sheets[*sheet].rules = if forward { after.clone() } else { before.clone() };
                 Effect { rules: Some(*sheet), ..Effect::default() }
@@ -1976,6 +1992,7 @@ impl Workbook {
                 self.tables = lost.tables.clone();
                 self.graph.built = false;
                 self.apply_links(&lost.links, false);
+                self.apply_chips(&lost.chips, false);
                 let restored = self.apply_formats(&lost.codes, false).join(self.apply_styles(&lost.styles, false));
                 for (s, a, raw) in rewritten {
                     self.set_raw(*s, *a, raw);
