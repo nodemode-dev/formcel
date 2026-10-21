@@ -101,6 +101,7 @@ pub unsafe extern "C" fn fc_apply(id: u32, sheet: u32, edits: *const u8, len: u3
     let Some(edits) = wire::decode_edits(text(edits, len)) else { return -1 };
     match with_book(id, |wb| wb.apply(sheet as usize, &edits).map(|c| wire::encode_changed(&c, &|s, a| wb.meta(s, a)))) {
         Some(Ok(s)) => emit(&s) as i32,
+        Some(Err(formcel_core::EngineError::Protected(_))) => -9,
         _ => -1,
     }
 }
@@ -931,4 +932,130 @@ pub extern "C" fn fc_edge(id: u32, sheet: u32, row: u32, col: u32, dir: u32) -> 
         Some(Ok(a)) => emit(&format!("{}\t{}", a.row, a.col)) as i32,
         _ => -1,
     }
+}
+
+fn prot_sheet(sheet: u32) -> Option<usize> {
+    if sheet == u32::MAX {
+        None
+    } else {
+        Some(sheet as usize)
+    }
+}
+
+fn verdict(r: Option<Result<(), String>>) -> i32 {
+    match r {
+        Some(Ok(())) => emit("") as i32,
+        Some(Err(m)) => emit(&m) as i32,
+        None => emit("No such workbook.") as i32,
+    }
+}
+
+/// A sheet's protection state as lines (sheet 4294967295 for the workbook's).
+#[no_mangle]
+pub extern "C" fn fc_protect_text(id: u32, sheet: u32) -> i32 {
+    match with_book(id, |wb| wb.protection_lines(prot_sheet(sheet)).join("\n")) {
+        Some(s) => emit(&s) as i32,
+        None => -1,
+    }
+}
+
+/// # Safety
+/// `lines` must point at `len` readable bytes.
+#[no_mangle]
+pub unsafe extern "C" fn fc_protect_load(id: u32, sheet: u32, lines: *const u8, len: u32) -> i32 {
+    let list: Vec<String> = text(lines, len).split('\n').filter(|l| !l.is_empty()).map(String::from).collect();
+    match with_book(id, |wb| wb.load_protection(prot_sheet(sheet), &list)) {
+        Some(true) => 0,
+        _ => -1,
+    }
+}
+
+/// Protects or unprotects a sheet; the out text is empty on success or the reason it was refused.
+///
+/// # Safety
+/// `pw` and `allow` must point at readable bytes of their lengths.
+#[no_mangle]
+pub unsafe extern "C" fn fc_protect_sheet(id: u32, sheet: u32, on: u32, pw: *const u8, pw_len: u32, allow: *const u8, allow_len: u32) -> i32 {
+    let (pw, allow) = (text(pw, pw_len).to_string(), text(allow, allow_len).to_string());
+    let list: Vec<String> = allow.split(',').filter(|a| !a.is_empty()).map(String::from).collect();
+    verdict(with_book(id, |wb| wb.protect_sheet(sheet as usize, on != 0, &pw, &list)))
+}
+
+/// # Safety
+/// `pw` must point at `len` readable bytes.
+#[no_mangle]
+pub unsafe extern "C" fn fc_protect_book(id: u32, on: u32, pw: *const u8, len: u32) -> i32 {
+    let pw = text(pw, len).to_string();
+    verdict(with_book(id, |wb| wb.protect_book(on != 0, &pw)))
+}
+
+#[no_mangle]
+pub extern "C" fn fc_mark_final(id: u32, on: u32) -> i32 {
+    verdict(with_book(id, |wb| {
+        wb.mark_final(on != 0);
+        Ok(())
+    }))
+}
+
+/// Marks a rectangle locked or unlocked and hidden or shown (2 leaves a flag as it is).
+#[no_mangle]
+pub extern "C" fn fc_set_flags(id: u32, sheet: u32, r0: u32, c0: u32, r1: u32, c1: u32, unlocked: u32, hidden: u32) -> i32 {
+    let area = formcel_core::formula::Area { r0: r0.min(r1), c0: c0.min(c1), r1: r0.max(r1), c1: c0.max(c1) };
+    let pick = |v: u32| if v > 1 { None } else { Some(v == 1) };
+    verdict(with_book(id, |wb| wb.set_cell_flags(sheet as usize, area, pick(unlocked), pick(hidden))))
+}
+
+/// The flags of a cell: 1 unlocked, 2 hidden formula.
+#[no_mangle]
+pub extern "C" fn fc_cell_flags(id: u32, sheet: u32, row: u32, col: u32) -> i32 {
+    with_book(id, |wb| i32::from(wb.cell_flags(sheet as usize, row, col))).unwrap_or(-1)
+}
+
+/// # Safety
+/// `lines` must point at `len` readable bytes.
+#[no_mangle]
+pub unsafe extern "C" fn fc_edit_ranges(id: u32, sheet: u32, lines: *const u8, len: u32) -> i32 {
+    let list: Vec<String> = text(lines, len).split('\n').filter(|l| !l.is_empty()).map(String::from).collect();
+    let ranges = formcel_core::protect::SheetProt::parse(&list).ranges;
+    verdict(with_book(id, |wb| wb.set_edit_ranges(sheet as usize, ranges)))
+}
+
+/// # Safety
+/// `name` must point at `len` readable bytes.
+#[no_mangle]
+pub unsafe extern "C" fn fc_set_user(id: u32, name: *const u8, len: u32) -> i32 {
+    let name = text(name, len).to_string();
+    with_book(id, |wb| wb.set_user(&name)).map_or(-1, |()| 0)
+}
+
+/// Asks whether an operation may run on a rectangle; the out text is empty when it may, else the reason.
+///
+/// # Safety
+/// `op` must point at `len` readable bytes.
+#[no_mangle]
+pub unsafe extern "C" fn fc_guard(id: u32, sheet: u32, op: *const u8, len: u32, r0: u32, c0: u32, r1: u32, c1: u32) -> i32 {
+    let op = text(op, len).to_string();
+    let area = formcel_core::formula::Area { r0: r0.min(r1), c0: c0.min(c1), r1: r0.max(r1), c1: c0.max(c1) };
+    verdict(with_book(id, |wb| wb.guard(&op, sheet as usize, area)))
+}
+
+#[no_mangle]
+pub extern "C" fn fc_hides_formula(id: u32, sheet: u32, row: u32, col: u32) -> i32 {
+    with_book(id, |wb| i32::from(wb.hides_formula(sheet as usize, row, col))).unwrap_or(-1)
+}
+
+#[no_mangle]
+pub extern "C" fn fc_bypass(id: u32, on: u32) -> i32 {
+    with_book(id, |wb| wb.set_bypass(on != 0)).map_or(-1, |()| 0)
+}
+
+#[no_mangle]
+pub extern "C" fn fc_is_final(id: u32) -> i32 {
+    with_book(id, |wb| i32::from(wb.is_final())).unwrap_or(-1)
+}
+
+/// The message of the last refused edit, for the window to show.
+#[no_mangle]
+pub extern "C" fn fc_last_refusal(id: u32) -> i32 {
+    emit(&with_book(id, |wb| wb.take_refusal()).unwrap_or_default()) as i32
 }

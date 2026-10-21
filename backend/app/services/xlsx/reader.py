@@ -12,6 +12,7 @@ from .autofilter import filter_in
 from .cf import rules_in
 from .drawings import objects_in
 from .formulas import from_file
+from .protect import book_in, flags_in, notes_in, sheet_in
 from .styles import tokens_in
 from .tables import tables_in
 from .theme import theme_in
@@ -131,6 +132,7 @@ def read(data: bytes) -> dict:
     sheets = []
     for ws in wb.worksheets:
         cells, formats, styles, links = [], [], [], []
+        flagged: dict[tuple[int, int], int] = {}
         max_c = 0
         for (r, c), cell in list(ws._cells.items()):
             r0, c0 = r - 1, c - 1
@@ -144,6 +146,9 @@ def read(data: bytes) -> dict:
             if code and code != "General" and not (base and code == base[1]):
                 formats.append((r0, c0, BUILTIN_DATE.get(code, code)))
             if cell.has_style:
+                pf = flags_in(cell)
+                if pf:
+                    flagged[(r0, c0)] = pf
                 toks = [t for t in tokens_in(cell, default_font).split(";") if t]
                 if base:
                     toks = [f"cs:{sname}"] + [t for t in toks if t not in base[0]]
@@ -179,12 +184,9 @@ def read(data: bytes) -> dict:
                 if t.autoFilter is not None and t.autoFilter.filterColumn:
                     autofilter = filter_in(ws, wb, view, notes, af=t.autoFilter)
                     break
-        comments = sum(1 for c in ws._cells.values() if c.comment is not None)
-        if comments:
-            notes["comments and notes left out"] += comments
         if ws.defined_names:
             notes["names scoped to one sheet left out"] += len(ws.defined_names)
-        sheets.append({"name": ws.title[:31], "cells": cells, "formats": formats, "styles": styles, "merges": merges, "links": links, "rules": rules, "filter": autofilter, "validations": valid, "view": view, "objects": objects})
+        sheets.append({"name": ws.title[:31], "cells": cells, "formats": formats, "styles": styles, "merges": merges, "links": links, "rules": rules, "filter": autofilter, "validations": valid, "view": view, "objects": objects, "notes": notes_in(ws), "protection": sheet_in(ws, flagged)})
     for cs in wb.chartsheets:
         notes["chart sheets left out"] += 1
     names = []
@@ -195,4 +197,4 @@ def read(data: bytes) -> dict:
         text = dn.attr_text or ""
         names.append((name, "=" + from_file(text.lstrip("="))))
     tables = tables_in(wb, {ws.title: i for i, ws in enumerate(wb.worksheets)}, notes)
-    return {"sheets": sheets, "names": names, "tables": tables, "theme": theme_in(wb.loaded_theme), "cellStyles": custom, "vba": vba, "notes": [f"{n} {what}" for what, n in sorted(notes.items())]}
+    return {"sheets": sheets, "names": names, "tables": tables, "theme": theme_in(wb.loaded_theme), "cellStyles": custom, "vba": vba, "protection": book_in(wb), "notes": [f"{n} {what}" for what, n in sorted(notes.items())]}

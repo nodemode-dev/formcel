@@ -9,6 +9,7 @@ import { TABLE_STYLES } from './grid/tables';
 import { listCommands, registerCommand, runCommand } from './ui/commands';
 import { Home, type TemplateMeta, type WorkbookMeta } from './ui/home';
 import { Menu, type MenuItem } from './ui/menu';
+import { Collab, identityHeaders } from './ui/collab';
 import type { ShellParts } from './ui/shell';
 import { icon } from './ui/icons';
 import { DATE_PERIODS, describe, parseRule, PRESETS, rangeText, ruleLine, withStop } from './ui/rules';
@@ -200,7 +201,7 @@ const TAB_COLOURS =['', '#ef4444', '#f97316', '#eab308', '#22c55e', '#14b8a6', '
 async function api<T>(method: string, url: string, body?: unknown): Promise<T> {
   const r = await fetch(url, {
     method,
-    headers: body === undefined ? undefined : { 'content-type': 'application/json' },
+    headers: { ...identityHeaders(), ...(body === undefined ? {} : { 'content-type': 'application/json' }) },
     body: body === undefined ? undefined : JSON.stringify(body),
   });
   if (!r.ok) {
@@ -222,6 +223,7 @@ export class App {
   private currentRef = 'A1';
   private currentRange: Range = { r0: 0, c0: 0, r1: 0, c1: 0 };
   private readonly menu = new Menu();
+  private collab!: Collab;
   private viewTimers = new Map<number, number>();
   private importNotes: string[] = [];
 
@@ -243,7 +245,10 @@ export class App {
         if (document.activeElement !== p.formulaBar) p.formulaBar.value = text;
         this.formatBar();
         this.linkChip();
+        this.collab?.active();
       },
+      onError: (message) => this.collab?.refused(message),
+      onHover: (row, col, x, y) => this.collab?.hover(row, col, x, y),
       onHistory: (undo, redo) => {
         this.button('edit.undo').disabled = !undo;
         this.button('edit.redo').disabled = !redo;
@@ -252,6 +257,7 @@ export class App {
       onSheet: (sheet) => {
         this.markTab(sheet);
         queueMicrotask(() => this.zoomLabel());
+        queueMicrotask(() => this.collab?.sheetChanged());
         return this.open?.views[sheet] ?? {};
       },
       onShift: (s) => this.sendShift(s),
@@ -294,7 +300,22 @@ export class App {
     });
     this.button('edit.undo').disabled = true;
     this.button('edit.redo').disabled = true;
+    this.collab = new Collab({
+      grid: this.grid,
+      menu: this.menu,
+      open: () => (this.open ? { id: this.open.id, book: this.open.book, sheets: this.open.sheets } : null),
+      status: (text, error) => this.status(text, error),
+      reload: () => {
+        if (this.open) void this.openWorkbook(this.open.id, false);
+      },
+    });
+    window.addEventListener('unhandledrejection', (e) => {
+      if (!(e.reason instanceof Error)) return;
+      e.preventDefault();
+      this.collab.refused(e.reason.message);
+    });
     this.commands();
+    this.collab.commands((id, title, description, changes, run, keys) => registerCommand({ id, title, description, changes, run, keys }));
     this.bindChrome();
     window.addEventListener('hashchange', () => void this.route());
     window.addEventListener('beforeunload', () => this.flush());
@@ -491,6 +512,7 @@ export class App {
   private showHome(): void {
     const p = this.p;
     this.open = null;
+    this.collab.detach();
     p.sheet.hidden = true;
     p.home.hidden = false;
     p.homeBtn.hidden = true;
@@ -1287,7 +1309,8 @@ export class App {
   private async openWorkbook(id: string, setHash = true): Promise<void> {
     this.flush();
     await this.saving;
-    let doc: WorkbookMeta & { cells: [number, number, string][][]; formats?: [number, number, string][][]; styles?: [number, number, string][][]; merges?: Area[][]; rules?: string[][]; filters?: string[]; validations?: string[][]; tables?: string[]; links?: [number, number, string][][]; theme?: string; cellStyles?: string[]; views?: SheetView[]; names?: Name[] };
+    this.collab.detach();
+    let doc: WorkbookMeta & { collab?: { notes: Record<string, { text: string; author: string; time: string }>; threads: never[]; people: string[] }; protection?: { book: string[]; sheets: string[][] }; cells: [number, number, string][][]; formats?: [number, number, string][][]; styles?: [number, number, string][][]; merges?: Area[][]; rules?: string[][]; filters?: string[]; validations?: string[][]; tables?: string[]; links?: [number, number, string][][]; theme?: string; cellStyles?: string[]; views?: SheetView[]; names?: Name[] };
     try {
       doc = await api('GET', `/api/workbooks/${id}`);
     } catch {
@@ -1332,6 +1355,7 @@ export class App {
     this.button('edit.redo').disabled = true;
     this.grid.focus();
     if (setHash && location.hash !== `#w-${id}`) location.hash = `w-${id}`;
+    this.collab.attach(id, book, doc.sheets, doc.collab, doc.protection);
   }
 
   private nameOf(r: Range): string | null {

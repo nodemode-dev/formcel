@@ -10,6 +10,7 @@ pub mod formula;
 mod graph;
 pub mod fmtcode;
 pub mod numfmt;
+pub mod protect;
 pub mod sort;
 pub use numfmt::Fmt;
 mod store;
@@ -139,6 +140,7 @@ pub enum EngineError {
     BadFormula(String),
     BadFormat(String),
     BadStyle(String),
+    Protected(String),
 }
 
 impl fmt::Display for EngineError {
@@ -151,6 +153,7 @@ impl fmt::Display for EngineError {
             EngineError::BadFormula(s) => write!(f, "not a valid formula: {s}"),
             EngineError::BadFormat(s) => write!(f, "not a valid number format: {s}"),
             EngineError::BadStyle(s) => write!(f, "not a valid cell style: {s}"),
+            EngineError::Protected(s) => write!(f, "{s}"),
         }
     }
 }
@@ -202,11 +205,12 @@ pub struct Sheet {
     rules: Vec<cf::Rule>,
     filter: Option<filter::Filter>,
     valid: Vec<valid::Validation>,
+    prot: protect::SheetProt,
 }
 
 impl Sheet {
     pub fn new(name: &str) -> Self {
-        Sheet { name: name.to_string(), cells: Store::default(), merges: Vec::new(), rules: Vec::new(), filter: None, valid: Vec::new() }
+        Sheet { name: name.to_string(), cells: Store::default(), merges: Vec::new(), rules: Vec::new(), filter: None, valid: Vec::new(), prot: protect::SheetProt::default() }
     }
 
     pub fn len(&self) -> usize {
@@ -394,6 +398,7 @@ pub struct Workbook {
     link_log: Vec<(usize, Addr, String)>,
     tables: Vec<table::Table>,
     table_quiet: bool,
+    wprot: protect::BookProt,
 }
 
 const SPILL_PASSES: usize = 8;
@@ -465,6 +470,7 @@ impl Workbook {
             link_log: Vec::new(),
             tables: Vec::new(),
             table_quiet: false,
+            wprot: protect::BookProt::default(),
         }
         .with_named_codes()
     }
@@ -646,6 +652,10 @@ impl Workbook {
     }
 
     pub fn rename_sheet(&mut self, sheet: usize, name: &str) -> Result<(), EngineError> {
+        if sheet >= self.sheets.len() {
+            return Err(EngineError::NoSheet(sheet));
+        }
+        self.guard("structure", sheet, formula::Area::default()).map_err(EngineError::Protected)?;
         let s = self.sheets.get_mut(sheet).ok_or(EngineError::NoSheet(sheet))?;
         let old = std::mem::replace(&mut s.name, name.to_string());
         for f in self.formulas.values_mut() {
@@ -679,6 +689,11 @@ impl Workbook {
     pub fn apply(&mut self, sheet: usize, edits: &[(Addr, String)]) -> Result<Changed, EngineError> {
         for (a, _) in edits {
             self.check(sheet, *a)?;
+        }
+        let spots: Vec<(u32, u32)> = edits.iter().map(|(a, _)| (a.row, a.col)).collect();
+        if let Err(m) = self.guard_cells(sheet, &spots) {
+            self.wprot.refusal.clone_from(&m);
+            return Err(EngineError::Protected(m));
         }
         let mut tx = Vec::with_capacity(edits.len());
         let mut seeds = Vec::with_capacity(edits.len());
@@ -1432,6 +1447,7 @@ impl Workbook {
     fn do_shift(&mut self, s: Shift) -> (Dropped, Rewritten, Lost) {
         let mut lost_fmt = Lost { merges: self.sheets[s.sheet].merges.clone(), rules: self.sheets[s.sheet].rules.clone(), filter: self.sheets[s.sheet].filter.clone(), valid: self.sheets[s.sheet].valid.clone(), tables: self.tables.clone(), ..Lost::default() };
         self.shift_tables(s);
+        self.sheets[s.sheet].prot.shift(s.rows, s.at, s.delta);
         let valid = std::mem::take(&mut self.sheets[s.sheet].valid);
         self.sheets[s.sheet].valid = valid.into_iter().filter_map(|v| shift_span(v.area, s).map(|area| valid::Validation { area, ..v })).collect();
         let merges = std::mem::take(&mut self.sheets[s.sheet].merges);
@@ -1716,6 +1732,7 @@ impl Workbook {
         if n == 0 || at >= limit {
             return Err(EngineError::OutOfRange { row: at, col: n });
         }
+        self.guard(if rows { "insert_rows" } else { "insert_cols" }, sheet, formula::Area::default()).map_err(EngineError::Protected)?;
         let shift = Shift { sheet, rows, at, delta: i64::from(n) };
         let (dropped, rewritten, lost) = self.do_shift(shift);
         self.record(Tx::Shift { shift, dropped, rewritten, lost: Box::new(lost) });
@@ -1731,6 +1748,8 @@ impl Workbook {
             return Err(EngineError::OutOfRange { row: at, col: n });
         }
         let n = n.min(limit - at);
+        let span = if rows { formula::Area { r0: at, c0: 0, r1: at + n - 1, c1: 0 } } else { formula::Area { r0: 0, c0: at, r1: 0, c1: at + n - 1 } };
+        self.guard(if rows { "delete_rows" } else { "delete_cols" }, sheet, span).map_err(EngineError::Protected)?;
         let shift = Shift { sheet, rows, at, delta: -i64::from(n) };
         let (dropped, rewritten, lost) = self.do_shift(shift);
         self.record(Tx::Shift { shift, dropped, rewritten, lost: Box::new(lost) });
@@ -1741,6 +1760,7 @@ impl Workbook {
         if sheet >= self.sheets.len() || self.sheets.len() == 1 {
             return Err(EngineError::NoSheet(sheet));
         }
+        self.guard("structure", sheet, formula::Area::default()).map_err(EngineError::Protected)?;
         self.unspill_all();
         self.sheets.remove(sheet);
         self.graph.built = false;
@@ -1758,6 +1778,7 @@ impl Workbook {
         if from >= self.sheets.len() || to >= self.sheets.len() {
             return Err(EngineError::NoSheet(from.max(to)));
         }
+        self.guard("structure", from, formula::Area::default()).map_err(EngineError::Protected)?;
         self.unspill_all();
         let s = self.sheets.remove(from);
         self.sheets.insert(to, s);

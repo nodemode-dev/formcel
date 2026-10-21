@@ -11,6 +11,7 @@ from pathlib import Path
 import formcel_engine
 
 from .. import config
+from . import collab as cb
 from . import templates
 
 FORMAT = "fcel"
@@ -41,6 +42,12 @@ class Book:
         self.objects = (self.objects + [[] for _ in range(n)])[:n]
         return self.objects
 
+    collab: dict = field(default_factory=cb.empty)
+
+    def protection(self) -> dict:
+        n = len(self.sheet_names())
+        return {"book": self.engine.protection(), "sheets": [self.engine.protection(i) for i in range(n)]}
+
     def fit_views(self) -> None:
         n = len(self.sheet_names())
         self.views = (self.views + [{} for _ in range(n)])[:n]
@@ -67,6 +74,8 @@ class Store:
         self.trash = root / "Trash"
         self.open: dict[str, Book] = {}
         self.guard = threading.Lock()
+        self.versions = cb.Versions(root)
+        self.hub = cb.Hub()
 
     def path(self, wid: str, trashed: bool = False) -> Path:
         if not wid.isalnum():
@@ -77,7 +86,7 @@ class Store:
         doc = {"format": FORMAT, "version": FORMAT_VERSION, "id": b.id, "title": b.title, "created": b.created,
                "modified": b.modified, "template": b.template, "preview": b.preview(),
                "names": [list(n) for n in b.engine.names()], "tables": b.engine.tables(),
-               "theme": b.engine.theme(), "cellStyles": b.engine.cell_styles(),
+               "theme": b.engine.theme(), "cellStyles": b.engine.cell_styles(), "collab": b.collab, "protection": b.protection(),
                "sheets": [{"name": n, "view": b.views[i] if i < len(b.views) else {}, "cells": b.engine.cells(i), "formats": b.engine.formats(i), "styles": b.engine.styles(i), "merges": [list(m) for m in b.engine.merges(i)], "rules": b.engine.rules(i), "filter": b.engine.filter(i), "validations": b.engine.validations(i), "links": b.engine.links(i), "objects": b.fit_objects()[i]} for i, n in enumerate(b.sheet_names())]}
         target = self.path(b.id)
         tmp = target.with_suffix(".fcel.tmp")
@@ -87,6 +96,10 @@ class Store:
             for name, blob in (b.vba or {}).items():
                 z.writestr(f"macros/{name}", blob)
         os.replace(tmp, target)
+        try:
+            self.versions.snapshot(b.id, target)
+        except OSError:
+            pass
 
     @staticmethod
     def _read(p: Path) -> dict:
@@ -135,6 +148,12 @@ class Store:
             b = Book(wid, doc["title"], doc["created"], doc["modified"], eng, doc.get("template"), [s.get("view") or {} for s in doc["sheets"]])
             b.objects = [list(s.get("objects") or []) for s in doc["sheets"]]
             b.vba = self._macros(self.path(wid))
+            b.collab = cb.fit(doc.get("collab"))
+            prot = doc.get("protection") or {}
+            eng.load_protection(prot.get("book") or [])
+            for i, lines in enumerate(prot.get("sheets") or []):
+                if i < len(doc["sheets"]):
+                    eng.load_protection(lines, i)
             self.open[wid] = b
             return b
 
@@ -227,6 +246,13 @@ class Store:
         b = Book(uuid.uuid4().hex[:12], (title or "Imported workbook")[:120], stamp, stamp, eng, None, [s["view"] for s in book["sheets"]])
         b.objects = [list(s.get("objects") or []) for s in book["sheets"]]
         b.vba = book.get("vba")
+        for i, s in enumerate(book["sheets"]):
+            for r, c, text, author in s.get("notes", []):
+                cb.set_note(b.collab, i, r, c, text, author)
+            if s.get("protection"):
+                eng.load_protection(s["protection"], i)
+        if book.get("protection"):
+            eng.load_protection(book["protection"])
         if b.vba:
             notes.append("1 macro project kept for saving as .xlsm (FormCel does not run macros)")
         with self.guard:
@@ -290,13 +316,13 @@ class Store:
             b.fit_views()
             if macros and not b.vba:
                 raise LookupError(wid)
-            return b.title, xlsx.write(b.engine, b.views, b.vba if macros else None, b.fit_objects())
+            return b.title, xlsx.write(b.engine, b.views, b.vba if macros else None, b.fit_objects(), b.collab["notes"])
 
     def get(self, wid: str) -> dict:
         b = self._load(wid)
         with b.lock:
             n = len(b.sheet_names())
-            return {**b.meta(), "names": [list(x) for x in b.engine.names()], "theme": b.engine.theme(), "cellStyles": b.engine.cell_styles(), "cells": [b.engine.cells(i) for i in range(n)], "formats": [b.engine.formats(i) for i in range(n)], "styles": [b.engine.styles(i) for i in range(n)], "merges": [[list(m) for m in b.engine.merges(i)] for i in range(n)], "rules": [b.engine.rules(i) for i in range(n)], "filters": [b.engine.filter(i) for i in range(n)], "validations": [b.engine.validations(i) for i in range(n)], "tables": b.engine.tables(), "links": [b.engine.links(i) for i in range(n)]}
+            return {**b.meta(), "names": [list(x) for x in b.engine.names()], "theme": b.engine.theme(), "cellStyles": b.engine.cell_styles(), "cells": [b.engine.cells(i) for i in range(n)], "formats": [b.engine.formats(i) for i in range(n)], "styles": [b.engine.styles(i) for i in range(n)], "merges": [[list(m) for m in b.engine.merges(i)] for i in range(n)], "rules": [b.engine.rules(i) for i in range(n)], "filters": [b.engine.filter(i) for i in range(n)], "validations": [b.engine.validations(i) for i in range(n)], "tables": b.engine.tables(), "links": [b.engine.links(i) for i in range(n)], "collab": {"notes": b.collab["notes"], "threads": b.collab["threads"]}, "protection": b.protection()}
 
     def get_objects(self, wid: str) -> list[list[dict]]:
         b = self._load(wid)
@@ -404,15 +430,106 @@ class Store:
             self._write(b)
             return {"names": [list(n) for n in b.engine.names()]}
 
-    def edit(self, wid: str, sheet: int, cells: list[tuple[int, int, str]]) -> dict:
+    def edit(self, wid: str, sheet: int, cells: list[tuple[int, int, str]], user: str = "", client: str | None = None) -> dict:
         b = self._load(wid)
         with b.lock:
-            if sheet >= len(b.sheet_names()):
+            names = b.sheet_names()
+            if sheet >= len(names):
                 raise IndexError(sheet)
+            b.engine.set_user(user)
+            b.engine.guard_cells(sheet, [(r, c) for r, c, _ in cells])
+            before = [b.engine.input(f"{cb.col_name(c)}{r + 1}", sheet) for r, c, _ in cells]
             b.engine.load(cells, sheet)
+            for (r, c, raw), was in zip(cells, before):
+                after = b.engine.input(f"{cb.col_name(c)}{r + 1}", sheet)
+                if after != was:
+                    cb.log_edit(b.collab, user, sheet, names[sheet], r, c, was, after)
             b.modified = now()
             self._write(b)
+            self.hub.publish(wid, {"type": "edit", "sheet": sheet, "cells": [list(x) for x in cells], "user": user}, client)
             return {"id": b.id, "modified": b.modified}
+
+    def collab_edit(self, wid: str, fn, client: str | None = None, event: str = "collab"):
+        b = self._load(wid)
+        with b.lock:
+            out = fn(b)
+            b.modified = now()
+            self._write(b)
+        self.hub.publish(wid, {"type": event}, client)
+        return out
+
+    def set_protection(self, wid: str, sheet: int | None, lines: list[str], client: str | None = None) -> dict:
+        b = self._load(wid)
+        with b.lock:
+            if sheet is not None and sheet >= len(b.sheet_names()):
+                raise IndexError(sheet)
+            b.engine.load_protection(lines, sheet)
+            b.modified = now()
+            self._write(b)
+        self.hub.publish(wid, {"type": "protection"}, client)
+        return b.protection()
+
+    def snapshot_now(self, wid: str, name: str, user: str) -> dict:
+        b = self._load(wid)
+        with b.lock:
+            self._write(b)
+            return self.versions.snapshot(wid, self.path(wid), name=name, user=user, force=True, why="saved by request") or {}
+
+    def restore_version(self, wid: str, vid: str, user: str, client: str | None = None) -> dict:
+        b = self._load(wid)
+        src = self.versions.path(wid, vid)
+        with b.lock:
+            self._write(b)
+            self.versions.snapshot(wid, self.path(wid), name="Before restore", user=user, force=True, why="before restore")
+        shutil.copyfile(src, self.path(wid))
+        with self.guard:
+            self.open.pop(wid, None)
+        b = self._load(wid)
+        with b.lock:
+            b.modified = now()
+            self._write(b)
+            made = self.versions.snapshot(wid, self.path(wid), name=f"Restored from {self.versions.find(wid, vid)['time']}", user=user, force=True, why="restore")
+        self.hub.publish(wid, {"type": "reload"}, client)
+        return made or {}
+
+    def publish_sheet(self, wid: str, sheet: int, kind: str) -> dict:
+        def run(b):
+            if sheet >= len(b.sheet_names()):
+                raise IndexError(sheet)
+            t = cb.token()
+            b.collab["shares"][t] = {"sheet": sheet, "kind": kind, "created": cb.stamp(), "revoked": False, "wid": wid}
+            return {"token": t, **b.collab["shares"][t]}
+        return self.collab_edit(wid, run, event="shares")
+
+    def revoke_share(self, wid: str, t: str) -> dict:
+        def run(b):
+            s = b.collab["shares"][t]
+            s["revoked"] = True
+            return {"token": t, **s}
+        return self.collab_edit(wid, run, event="shares")
+
+    def published(self, t: str, embed: bool) -> str | None:
+        for p in sorted(self.dir.glob("*.fcel")):
+            wid = p.stem
+            try:
+                b = self.open.get(wid)
+                shares = b.collab["shares"] if b else (self._read(p).get("collab") or {}).get("shares", {})
+                if t not in shares:
+                    continue
+                b = self._load(wid)
+            except (OSError, ValueError, KeyError, zipfile.BadZipFile):
+                continue
+            s = b.collab["shares"][t]
+            if s["revoked"]:
+                return None
+            with b.lock:
+                i = s["sheet"]
+                names = b.sheet_names()
+                if i >= len(names):
+                    return None
+                styles = {(r, c): st for r, c, st in b.engine.styles(i)}
+                return cb.render_sheet(b.title, names[i], b.engine.values(i), styles, embed)
+        return None
 
     def add_sheet(self, wid: str, name: str) -> dict:
         b = self._load(wid)
@@ -426,6 +543,7 @@ class Store:
         b = self._load(wid)
         with b.lock:
             b.engine.shift(sheet, rows, at, n, insert)
+            cb.shift_keys(b.collab, sheet, rows, at, n if insert else -n)
             b.modified = now()
             self._write(b)
             return {"id": b.id, "modified": b.modified}
@@ -439,10 +557,14 @@ class Store:
                 b.engine.delete_sheet(sheet)
                 del b.views[sheet]
                 del b.objects[sheet]
+                cb.remap_sheets(b.collab, lambda s: None if s == sheet else s - 1 if s > sheet else s)
             elif op == "move" and to is not None:
                 b.engine.move_sheet(sheet, to)
                 b.views.insert(to, b.views.pop(sheet))
                 b.objects.insert(to, b.objects.pop(sheet))
+                order = list(range(len(b.views)))
+                order.insert(to, order.pop(sheet))
+                cb.remap_sheets(b.collab, lambda s: order.index(s) if s in order else s)
             elif op == "update":
                 if name:
                     b.engine.rename_sheet(sheet, name.strip()[:31])

@@ -60,6 +60,10 @@ export const icons = {
   table: svg('<rect x="3.5" y="4.5" width="17" height="15" rx="2"/><path d="M3.5 9.5h17M3.5 14.5h17M9.5 9.5v10"/><path d="M3.5 7h17" stroke-width="3.5"/>'),
   validation: svg('<rect x="3.5" y="4.5" width="17" height="15" rx="2"/><path d="M7.5 12l3 3 6-6"/>'),
   download: svg('<path d="M12 4v11M7.5 10.5L12 15l4.5-4.5M5 19.5h14"/>'),
+  note: svg('<path d="M5 4.5h14v10.5l-4.5 4.5H5z"/><path d="M14.5 19.5V15H19M8.5 9h7M8.5 12.5h4"/>'),
+  comment: svg('<path d="M4.5 5.5h15v10h-8l-4.5 3.5v-3.5h-2.5z"/><path d="M8.5 9.5h7M8.5 12h4"/>'),
+  lock: svg('<rect x="5.5" y="10.5" width="13" height="9.5" rx="2"/><path d="M8.5 10.5V8a3.5 3.5 0 017 0v2.5M12 14.5v2"/>'),
+  share: svg('<circle cx="6.5" cy="12" r="2.3"/><circle cx="17.5" cy="6.5" r="2.3"/><circle cx="17.5" cy="17.5" r="2.3"/><path d="M8.5 10.9l7-3.3M8.5 13.1l7 3.3"/>'),
   upload: svg('<path d="M12 15V4M7.5 8.5L12 4l4.5 4.5M5 19.5h14"/>'),
 } as const;
 
