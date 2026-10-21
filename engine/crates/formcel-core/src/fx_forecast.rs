@@ -130,7 +130,7 @@ impl Eval<'_> {
         let seasonality = self.opt_f64(a, si, 1.0)?;
         let completion = self.opt_f64(a, ci, 1.0)?;
         let aggr = self.opt_f64(a, ai, 0.0)?;
-        if !(completion == 0.0 || completion == 1.0) || aggr < 0.0 || aggr > 6.0 {
+        if !(completion == 0.0 || completion == 1.0) || aggr < 0.0 || aggr > 7.0 {
             return Err(ErrKind::Num);
         }
         let series = stats::prepare(&t, &y, completion as i32, aggr as i32)?;
@@ -150,8 +150,8 @@ impl Eval<'_> {
                 4 => model.mase(&series.y),
                 5 => model.smape(&series.y),
                 6 => model.mae(),
-                _ if k == 7.0 => model.rmse(),
-                _ => if model.m > 1 { model.m as f64 } else { 0.0 },
+                7 => model.rmse(),
+                _ => series.step,
             };
             return Ok(num(v));
         }

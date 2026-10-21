@@ -624,11 +624,11 @@ fn fgcd(a: f64, b: f64) -> f64 {
 
 fn aggregate(v: &[f64], code: i32) -> f64 {
     match code {
-        1 | 2 => v.len() as f64,
-        3 => v.iter().cloned().fold(f64::MIN, f64::max),
-        4 => median(v),
-        5 => v.iter().cloned().fold(f64::MAX, f64::min),
-        6 => v.iter().sum(),
+        2 | 3 => v.len() as f64,
+        4 => v.iter().cloned().fold(f64::MIN, f64::max),
+        5 => median(v),
+        6 => v.iter().cloned().fold(f64::MAX, f64::min),
+        7 => v.iter().sum(),
         _ => mean(v),
     }
 }

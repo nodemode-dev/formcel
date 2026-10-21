@@ -284,6 +284,14 @@ fn show(c: Cx) -> String {
     }
 }
 
+pub(crate) fn complex_parts(s: &str) -> Option<(f64, f64)> {
+    parse_complex(s).ok().map(|c| (c.re, c.im))
+}
+
+pub(crate) fn complex_text(re: f64, im: f64) -> String {
+    show(Cx { re, im, suffix: 'i' })
+}
+
 fn digits_of(v: &Value) -> Result<String, ErrKind> {
     match v {
         Value::Error(k) => Err(*k),

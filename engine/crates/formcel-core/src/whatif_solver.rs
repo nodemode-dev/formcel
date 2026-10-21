@@ -1,7 +1,5 @@
 use super::*;
 
-const TOL: f64 = 1e-6;
-
 fn pseudo(i: usize, j: usize) -> f64 {
     let x = ((i * 7919 + j * 104_729 + 13) as f64).sin() * 10_000.0;
     (x - x.floor()) * 4.0 + 0.5
@@ -36,15 +34,34 @@ impl Workbook {
         if vars.len() > 200 {
             return Err("Solver handles at most 200 variable cells.".to_string());
         }
-        let mut p = Problem { obj, mode, target, vars: vars.clone(), nonneg: a[5] != "0", cons: Vec::new(), int: vec![false; vars.len()], bin: vec![false; vars.len()] };
+        let mut p = Problem { obj, mode, target, vars: vars.clone(), nonneg: a[5] != "0", cons: Vec::new(), int: vec![false; vars.len()], bin: vec![false; vars.len()], dif: Vec::new(), opts: opts::Opts::default() };
         for line in a.iter().skip(7) {
             let parts: Vec<&str> = line.split('|').collect();
             if parts.len() < 2 {
                 continue;
             }
+            if parts[0] == "@opts" {
+                p.opts.parse(&parts[1..])?;
+                continue;
+            }
             let (lhs_t, op) = (parts[0].trim(), parts[1].trim().to_string());
             let (lsh, lar) = self.resolve(lhs_t, sheet)?;
             let lcells = cells_of(lar);
+            if op == "dif" {
+                let mut group = Vec::new();
+                for c in lcells {
+                    let Some(i) = vars.iter().position(|v| *v == (lsh, c)) else {
+                        return Err(format!("AllDifferent can only be applied to variable cells; {} is not one.", to_a1(c)));
+                    };
+                    p.int[i] = true;
+                    group.push(i);
+                }
+                if group.len() < 2 {
+                    return Err("AllDifferent needs a range of at least two variable cells.".to_string());
+                }
+                p.dif.push(group);
+                continue;
+            }
             if op == "int" || op == "bin" {
                 for c in lcells {
                     let Some(i) = vars.iter().position(|v| *v == (lsh, c)) else {
@@ -153,7 +170,10 @@ impl Workbook {
         let mut message = String::new();
         let mut linear = false;
         let mut lin_model: Option<LinModel> = None;
-        if hint != "nl" {
+        let mut trace: Vec<String> = Vec::new();
+        let mut iterations = 0usize;
+        let evo = hint == "evo" || !p.dif.is_empty();
+        if hint != "nl" && !evo {
             let x0: Vec<f64> = orig.clone();
             if let Some((base, cols)) = self.linear_model(&p, &x0) {
                 let coefs = |f: &dyn Fn(&Sample) -> f64| -> Vec<f64> { cols.iter().map(|c| f(c) - f(&base)).collect() };
@@ -217,7 +237,7 @@ impl Workbook {
                         }
                     }
                     let ints: Vec<usize> = if free { Vec::new() } else { (0..n).filter(|i| p.int[*i]).collect() };
-                    let out = if ints.is_empty() { lp_solve(&lp, width) } else { milp(&lp, width, &ints) };
+                    let out = if ints.is_empty() { lp_solve(&lp, width) } else { milp_with(&lp, width, &ints, p.opts.int_gap, p.opts.max_sub) };
                     match out {
                         LpOut::Optimal(v, _) => {
                             let x: Vec<f64> = (0..n).map(|i| if free { v[i] - v[n + i] } else { v[i] }).collect();
@@ -233,48 +253,41 @@ impl Workbook {
         }
         if result.is_none() && message.is_empty() {
             let _ = linear;
-            let sign = if p.mode == "max" { -1.0 } else { 1.0 };
-            let round = |p: &Problem, x: &[f64]| -> Vec<f64> { x.iter().enumerate().map(|(i, v)| if p.int[i] { v.round() } else { *v }).collect() };
-            let mut best: Option<(Vec<f64>, f64, f64)> = None;
-            let starts: Vec<Vec<f64>> = vec![orig.iter().map(|v| if p.nonneg { v.max(0.0) } else { *v }).collect(), orig.iter().enumerate().map(|(i, v)| v.abs() * 0.5 + 1.0 + i as f64 * 0.1).collect()];
-            let cell = std::cell::RefCell::new(&mut *self);
-            for start in starts {
-                let mut cur = start;
-                for w in [10.0, 1e3, 1e5, 1e7] {
-                    let f = |x: &[f64]| -> f64 {
-                        let xr = round(&p, x);
-                        let mut wb = cell.borrow_mut();
-                        match wb.sample(&p, &xr) {
-                            None => 1e30,
-                            Some(s) => {
-                                let o = if p.mode == "value" { (s.obj - p.target).abs() } else { sign * s.obj };
-                                o + w * Workbook::violation(&p, &s, &xr)
-                            }
+            let found = if evo {
+                let start: Vec<f64> = orig.iter().map(|v| if p.nonneg { v.max(0.0) } else { *v }).collect();
+                match self.evolve(&p, &start, &mut trace) {
+                    Ok(r) => r.map(|(x, _, g)| {
+                        iterations = g;
+                        (x, "Evolutionary".to_string(), if p.opts.trial > 0 { format!("Solver stopped at trial solution {} of the Evolutionary search; all constraints are satisfied.", g) } else { "Solver cannot improve the current solution. All constraints are satisfied.".to_string() })
+                    }),
+                    Err(m) => {
+                        for (k, raw) in &orig_raw {
+                            self.set_raw(k.0, k.1, raw);
                         }
-                    };
-                    let (x, _) = stats::nelder_mead(&f, &cur, 0.3, 900);
-                    cur = x;
-                }
-                let xr = round(&p, &cur);
-                let mut wb = cell.borrow_mut();
-                if let Some(s) = wb.sample(&p, &xr) {
-                    let viol = Workbook::violation(&p, &s, &xr);
-                    let o = if p.mode == "value" { (s.obj - p.target).abs() } else { sign * s.obj };
-                    let better = match &best {
-                        None => true,
-                        Some((_, bo, bv)) => (viol <= TOL && (*bv > TOL || o < *bo)) || (viol > TOL && *bv > TOL && viol < *bv),
-                    };
-                    if better {
-                        best = Some((xr, o, viol));
+                        self.recalc(&p.vars);
+                        return Err(m);
                     }
                 }
-            }
-            drop(cell);
-            match best {
-                Some((x, _, viol)) if viol <= TOL * 10.0 => {
-                    result = Some((x, "Nelder-Mead (derivative free)".to_string(), "Solver converged to a solution with the derivative-free search; it is a local optimum and the constraints are satisfied.".to_string()));
+            } else {
+                match self.nonlinear(&p, &orig, &mut trace) {
+                    Ok(r) => r.map(|(x, _)| {
+                        iterations = if p.opts.trial > 0 { p.opts.iterations() } else { trace.len() };
+                        let name = if p.opts.multistart { "GRG Nonlinear, multistart (derivative-free search)" } else { "GRG Nonlinear (derivative-free search)" };
+                        let text = if p.opts.trial > 0 { format!("Solver stopped at the trial solution after iteration {}. All constraints are satisfied.", p.opts.trial) } else { "Solver has converged to the current solution. All constraints are satisfied; it is a local optimum.".to_string() };
+                        (x, name.to_string(), text)
+                    }),
+                    Err(m) => {
+                        for (k, raw) in &orig_raw {
+                            self.set_raw(k.0, k.1, raw);
+                        }
+                        self.recalc(&p.vars);
+                        return Err(m);
+                    }
                 }
-                _ => message = "Solver could not find a feasible solution.".to_string(),
+            };
+            match found {
+                Some(r) => result = Some(r),
+                None => message = "Solver could not find a feasible solution.".to_string(),
             }
         }
         for (k, raw) in &orig_raw {
@@ -316,8 +329,10 @@ impl Workbook {
             problem: Some(p.clone()),
             lin: lin_model,
             x: x.iter().map(|v| clean(*v)).collect(),
+            trace: trace.clone(),
+            iterations,
         });
-        Ok(format!("ok\t{}\t{}\t{}", msg, fnum(final_obj), method))
+        Ok(format!("ok\t{}\t{}\t{}\t{}\t{}", msg, fnum(final_obj), method, iterations, trace.join(" ")))
     }
 
     pub(super) fn solve_report(&mut self, a: &[String], fx: &mut Effect) -> Reply {
@@ -347,6 +362,9 @@ impl Workbook {
         put(&mut out, 0, 0, "FormCel Solver Answer Report");
         put(&mut out, 1, 0, "Result: ".to_string() + &run.message);
         put(&mut out, 2, 0, "Solver Engine: ".to_string() + &run.method);
+        if !run.trace.is_empty() {
+            put(&mut out, 3, 0, format!("Iterations: {}   Progress (iteration:objective): {}", run.iterations, run.trace.join(" ")));
+        }
         let mut r = 4u32;
         let sense = match run.mode.as_str() {
             "max" => "Max".to_string(),
