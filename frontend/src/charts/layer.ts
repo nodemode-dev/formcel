@@ -1,6 +1,6 @@
 import type { EngineClient } from '../engine';
 import type { Grid, ObjectsHook } from '../grid/grid';
-import { build, parseRangeText, readMatrix } from './data';
+import { build, readMatrix, resolveRange } from './data';
 import { renderChart } from './svg';
 import { newId, type FloatObject } from './types';
 
@@ -372,7 +372,7 @@ export class ObjectLayer implements ObjectsHook {
   private async draw(n: Node): Promise<void> {
     const spec = n.obj.chart;
     if (!spec) return;
-    const ref = parseRangeText(spec.range);
+    const ref = await resolveRange(this.eng, this.io.book(), spec.range);
     let html: string;
     if (!ref) html = `<div class="fc-chart-empty">The data range ${spec.range ? `"${spec.range}"` : ''} is not a range. Edit the chart to pick one.</div>`;
     else {

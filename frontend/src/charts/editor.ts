@@ -1,5 +1,5 @@
 import type { EngineClient } from '../engine';
-import { build, parseRangeText, readMatrix, recommend } from './data';
+import { build, readMatrix, recommend, resolveRange } from './data';
 import { renderChart } from './svg';
 import { CHART_TYPES, blankChart, type ChartSpec, type ChartType, type Legend } from './types';
 
@@ -33,7 +33,7 @@ export class ChartEditor {
 <div class="fc-chart-fields">
 <label class="fc-fmt-label">Chart type<select class="fc-fmt-input" data-k="type">${types}</select></label>
 <div class="fc-chart-rec" data-k="rec"></div>
-<label class="fc-fmt-label">Data range<input class="fc-fmt-input" data-k="range" spellcheck="false" autocomplete="off" placeholder="A1:C10"></label>
+<label class="fc-fmt-label">Data range or name<input class="fc-fmt-input" data-k="range" spellcheck="false" autocomplete="off" placeholder="A1:C10 or SalesData"></label>
 <label class="fc-fmt-label">Series are in<select class="fc-fmt-input" data-k="byRows"><option value="cols">Columns</option><option value="rows">Rows</option></select></label>
 <label class="fc-fmt-label">Chart title<input class="fc-fmt-input" data-k="title" autocomplete="off"></label>
 <label class="fc-fmt-label">Horizontal axis title<input class="fc-fmt-input" data-k="xTitle" autocomplete="off"></label>
@@ -67,13 +67,14 @@ export class ChartEditor {
     form.addEventListener('submit', (e) => {
       e.preventDefault();
       const s = this.read();
-      const ref = parseRangeText(s.range);
-      if (!ref || (ref.sheet && !this.ctx.sheetNames().includes(ref.sheet))) {
-        form.dataset.state = 'error';
-        this.q('hint').textContent = 'Type a range such as A1:D10, or Sheet2!A1:D10.';
-        return;
-      }
-      this.close(s);
+      void resolveRange(this.ctx.eng, this.ctx.book(), s.range).then((ref) => {
+        if (!ref || (ref.sheet && !this.ctx.sheetNames().includes(ref.sheet))) {
+          form.dataset.state = 'error';
+          this.q('hint').textContent = 'Type a range such as A1:D10, Sheet2!A1:D10, or the name of a named range.';
+          return;
+        }
+        this.close(s);
+      });
     });
   }
 
@@ -137,7 +138,8 @@ export class ChartEditor {
   private async preview(): Promise<void> {
     const seq = ++this.seq;
     const s = this.read();
-    const ref = parseRangeText(s.range);
+    const ref = await resolveRange(this.ctx.eng, this.ctx.book(), s.range);
+    if (seq !== this.seq) return;
     const box = this.q<HTMLElement>('preview');
     const rec = this.q<HTMLElement>('rec');
     let html = '<div class="fc-chart-empty">Type a data range to see the chart.</div>';
