@@ -5,7 +5,7 @@ from fastapi import FastAPI
 from . import config
 import asyncio
 
-from .routers import automation, collab, commands, review, share, workbooks
+from .routers import automation, collab, commands, review, share, spell, workbooks
 from .services import scheduler
 from .version import VERSION
 
@@ -29,6 +29,7 @@ app.include_router(commands.router)
 app.include_router(collab.router)
 app.include_router(review.router)
 app.include_router(share.router)
+app.include_router(spell.router)
 app.include_router(automation.router)
 app.include_router(automation.v1)
 

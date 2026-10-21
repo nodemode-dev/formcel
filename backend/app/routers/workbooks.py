@@ -102,8 +102,13 @@ async def import_file(request: Request, name: str = "Imported workbook.xlsx", de
     if ext in TEXT_FILES:
         cols = {int(x) for x in text.split(",") if x.strip().isdigit()}
         return store().import_csv(data, name, delimiter, cols)
+    if ext in ("pdf", "html", "htm", "paste"):
+        try:
+            return store().import_tables(data, stem or name, {"pdf": "pdf", "paste": "paste"}.get(ext, "html"))
+        except ValueError as e:
+            raise HTTPException(422, str(e))
     if ext not in ("xlsx", "xlsm", "xls", "ods"):
-        raise HTTPException(415, "FormCel opens .xlsx, .xlsm, .xls, .ods, .csv, .tsv and .txt files.")
+        raise HTTPException(415, "FormCel opens .xlsx, .xlsm, .xls, .ods, .csv, .tsv, .txt, .html and .pdf files.")
     try:
         data = crypto.unlock(data, request.headers.get("x-formcel-password"))
     except crypto.PasswordNeeded:

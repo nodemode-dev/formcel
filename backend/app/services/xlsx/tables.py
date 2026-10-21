@@ -92,9 +92,7 @@ def tables_in(wb, sheet_index: dict, notes: Counter) -> list[str]:
             except (TypeError, ValueError):
                 notes["tables FormCel could not read brought in as plain ranges"] += 1
                 continue
-            if not t.headerRowCount:
-                notes["tables without a header row brought in as plain ranges"] += 1
-                continue
+            headless = not t.headerRowCount
             r0, c0, r1, c1 = r0 - 1, c0 - 1, r1 - 1, c1 - 1
             cols = [c.name for c in t.tableColumns]
             if len(cols) != c1 - c0 + 1:
@@ -105,8 +103,8 @@ def tables_in(wb, sheet_index: dict, notes: Counter) -> list[str]:
             style = si.name if si is not None and valid_style(si.name) else (_custom_in(wb, si.name) if si is not None and si.name else None) or "TableStyleMedium2"
             if si is not None and si.name and style == "TableStyleMedium2" and si.name != style:
                 notes["table styles FormCel could not read shown as Medium 2"] += 1
-            flags = ("t" if t.totalsRowCount else "") + ("r" if si is None or si.showRowStripes else "") + ("c" if si is not None and si.showColumnStripes else "")
-            flags += ("f" if si is not None and si.showFirstColumn else "") + ("l" if si is not None and si.showLastColumn else "") + ("b" if t.autoFilter is not None else "")
+            flags = ("n" if headless else "") + ("t" if t.totalsRowCount else "") + ("r" if si is None or si.showRowStripes else "") + ("c" if si is not None and si.showColumnStripes else "")
+            flags += ("f" if si is not None and si.showFirstColumn else "") + ("l" if si is not None and si.showLastColumn else "") + ("b" if t.autoFilter is not None and not headless else "")
             n = len(cols)
             parts = [str(i), t.displayName or t.name or f"Table{len(lines) + 1}", f"{r0},{c0},{r1},{c1}", flags, style, str(n), *cols, *calc, *[""] * n]
             lines.append("\t".join(esc(x) for x in parts))
@@ -123,12 +121,15 @@ def tables_out(wb, eng) -> dict:
         ws = sheets[t["sheet"]]
         r0, c0, r1, c1 = t["area"]
         flags = t["flags"]
+        headless = "n" in flags
+        d0 = r0 + (0 if headless else 1)
         tb = Table(id=k + 1, displayName=t["name"], name=t["name"], ref=ref_of(r0, c0, r1, c1),
+                   headerRowCount=0 if headless else 1,
                    totalsRowCount=1 if "t" in flags else None, totalsRowShown=False if "t" not in flags else None)
         tb.tableStyleInfo = TableStyleInfo(name=_custom_out(wb, t["style"]) if t["style"].startswith("Custom:") else (None if t["style"] == "None" else t["style"]), showFirstColumn="f" in flags, showLastColumn="l" in flags, showRowStripes="r" in flags, showColumnStripes="c" in flags)
         for j, name in enumerate(t["cols"]):
             col = TableColumn(id=j + 1, name=name)
-            first = ws.cell(row=r0 + 2, column=c0 + j + 1).value
+            first = ws.cell(row=d0 + 1, column=c0 + j + 1).value
             if t["calc"][j] and isinstance(first, str) and first.startswith("="):
                 col.calculatedColumnFormula = TableFormula(attr_text=first[1:])
             if "t" in flags:
@@ -140,10 +141,11 @@ def tables_out(wb, eng) -> dict:
                 elif v not in (None, ""):
                     col.totalsRowLabel = str(v)
             tb.tableColumns.append(col)
-            hdr = ws.cell(row=r0 + 1, column=c0 + j + 1)
-            hdr.value = name
-            hdr.data_type = "s"
-        if "b" in flags:
+            if not headless:
+                hdr = ws.cell(row=r0 + 1, column=c0 + j + 1)
+                hdr.value = name
+                hdr.data_type = "s"
+        if "b" in flags and not headless:
             tb.autoFilter = AutoFilter(ref=ref_of(r0, c0, r1 - (1 if "t" in flags else 0), c1))
         ws.add_table(tb)
         by_sheet.setdefault(t["sheet"], []).append((tb, (r0, c0, r1 - (1 if "t" in flags else 0), c1)))

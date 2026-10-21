@@ -4,6 +4,7 @@ maturin==1.9.6
 openpyxl==3.1.5
 xlrd==2.0.1
 reportlab==4.2.5
+pdfplumber==0.11.10
 msoffcrypto-tool==5.4.2
 PyMySQL==1.2.3
 psycopg[binary]==3.3.6
