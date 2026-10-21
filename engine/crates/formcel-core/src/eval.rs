@@ -5,6 +5,8 @@ use std::rc::Rc;
 
 #[path = "fx_chart.rs"]
 mod fx_chart;
+#[path = "fx_image.rs"]
+mod fx_image;
 mod fx;
 mod fx_db;
 mod fx_fin;

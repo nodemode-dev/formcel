@@ -55,6 +55,8 @@ export type Request =
   | { id: number; op: 'pivot.remove'; book: number; name: string }
   | { id: number; op: 'whatif.run'; book: number; cmd: string }
   | { id: number; op: 'whatif.load'; book: number; lines: string[] }
+  | { id: number; op: 'objects.list'; book: number; sheet: number }
+  | { id: number; op: 'objects.load' | 'objects.set'; book: number; sheet: number; lines: string[] }
   | { id: number; op: 'valid.list'; book: number; sheet: number }
   | { id: number; op: 'valid.load'; book: number; sheet: number; lines: string[] }
   | { id: number; op: 'valid.set'; book: number; sheet: number; r0: number; c0: number; r1: number; c1: number; line: string }
@@ -116,6 +118,7 @@ export interface Effect {
   rules: number | null;
   filter: number | null;
   valid: number | null;
+  objects?: number | null;
   tables: boolean;
 }
 export interface FilterList {

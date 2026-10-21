@@ -8,9 +8,11 @@ from openpyxl.chart.data_source import AxDataSource, NumDataSource, NumRef, StrR
 from openpyxl.chart.label import DataLabelList
 from openpyxl.chart.series import SeriesLabel
 from openpyxl.drawing.image import Image as XImage
-from openpyxl.drawing.spreadsheet_drawing import AnchorMarker, OneCellAnchor
+from openpyxl.drawing.spreadsheet_drawing import AnchorMarker, OneCellAnchor, TwoCellAnchor
 from openpyxl.drawing.xdr import XDRPositiveSize2D
 from openpyxl.utils import get_column_letter, range_boundaries
+
+from .overlay import markers, range_text
 
 EMU = 9525
 COL_PX = 100
@@ -39,7 +41,10 @@ def _offset(sizes: dict[int, int], default: int, index: int) -> float:
     return float(sum(sizes.get(i, default) for i in range(index)))
 
 
-def _anchor(obj: dict, view: dict) -> OneCellAnchor:
+def _anchor(obj: dict, view: dict) -> OneCellAnchor | TwoCellAnchor:
+    if isinstance(obj.get("anchor"), dict):
+        f, t = markers(obj, view)
+        return TwoCellAnchor(editAs="twoCell", _from=AnchorMarker(col=f[0], colOff=f[1], row=f[2], rowOff=f[3]), to=AnchorMarker(col=t[0], colOff=t[1], row=t[2], rowOff=t[3]))
     cs = _sizes(view, "cols", COL_PX)
     rs = _sizes(view, "rows", ROW_PX)
     col, coff = _locate(cs, COL_PX, max(0, obj.get("x", 0)))
@@ -219,12 +224,27 @@ def picture_out(host, obj: dict, view: dict) -> bool:
     return True
 
 
-def objects_out(wb, ws, objects: list[dict], view: dict, notes: Counter | None = None) -> None:
+def objects_out(wb, ws, objects: list[dict], view: dict, notes: Counter | None = None) -> dict:
+    plan: dict = {"alts": {"charts": [], "pics": []}, "shapes": [], "sparks": []}
+    ranges = {o.get("id"): o for o in objects if o.get("kind") == "range"}
     for obj in objects:
         kind = obj.get("kind")
+        if kind in ("shape", "text"):
+            plan["shapes"].append(obj)
+            continue
+        if kind == "range":
+            continue
+        if kind == "spark":
+            spec = obj.get("spark") or {}
+            box = ranges.get(spec.get("dataId"))
+            plan["sparks"].append({**obj, "_data": range_text(box, view) if box else ""})
+            continue
         ok = chart_out(wb, ws, obj, view) if kind == "chart" else picture_out(ws, obj, view) if kind == "picture" else False
-        if not ok and notes is not None:
+        if ok:
+            plan["alts"]["charts" if kind == "chart" else "pics"].append(str(obj.get("alt") or ""))
+        elif notes is not None:
             notes[kind or "object"] += 1
+    return plan
 
 
 def _refs(text: str) -> tuple[str | None, tuple[int, int, int, int]] | None:
@@ -314,14 +334,20 @@ def chart_in(ch, ws_title: str, view: dict) -> dict | None:
     return {"kind": "chart", "x": x, "y": y, "w": w, "h": h, "chart": {"type": spec_type, "range": rng, "byRows": by_rows, "title": _title_text(ch.title) if ch.title is not None else "", "xTitle": xt, "yTitle": yt, "legend": legend, "labels": bool(ch.dataLabels is not None and ch.dataLabels.showVal), "secondary": []}}
 
 
-def objects_in(ws, view: dict, notes: Counter) -> list[dict]:
+def objects_in(ws, view: dict, notes: Counter, extra: dict | None = None) -> list[dict]:
     out: list[dict] = []
+    extra = extra or {}
+    alts = extra.get("alts") or {}
+    chart_alts = alts.get("charts") or []
+    pic_alts = alts.get("pics") or []
     for i, ch in enumerate(getattr(ws, "_charts", []) or []):
         item = chart_in(ch, ws.title, view)
         if item is None:
             notes["charts of a type FormCel does not draw left out"] += 1
             continue
         item["id"] = f"x{id(ws) % 10**6}c{i}"
+        if i < len(chart_alts) and chart_alts[i] and len(chart_alts) == len(getattr(ws, "_charts", [])):
+            item["alt"] = chart_alts[i]
         out.append(item)
     for i, im in enumerate(getattr(ws, "_images", []) or []):
         try:
@@ -332,5 +358,10 @@ def objects_in(ws, view: dict, notes: Counter) -> list[dict]:
         except Exception:
             notes["pictures FormCel could not read left out"] += 1
             continue
-        out.append({"id": f"x{id(ws) % 10**6}p{i}", "kind": "picture", "x": x, "y": y, "w": w, "h": h, "picture": {"src": f"data:image/{fmt};base64,{base64.b64encode(data).decode()}", "name": f"picture{i + 1}.{fmt}"}})
+        pic = {"id": f"x{id(ws) % 10**6}p{i}", "kind": "picture", "x": x, "y": y, "w": w, "h": h, "picture": {"src": f"data:image/{fmt};base64,{base64.b64encode(data).decode()}", "name": f"picture{i + 1}.{fmt}"}}
+        if i < len(pic_alts) and pic_alts[i] and pic_alts[i] != "Picture" and len(pic_alts) == len(getattr(ws, "_images", [])):
+            pic["alt"] = pic_alts[i]
+        out.append(pic)
+    out.extend(extra.get("shapes") or [])
+    out.extend(extra.get("sparks") or [])
     return out

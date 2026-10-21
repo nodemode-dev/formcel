@@ -20,6 +20,7 @@ import { emptyPivot, formatPivot, outArea, parseFields, parsePivot, PivotDialog,
 import { WhatIf } from './ui/whatif';
 import { Audit } from './ui/audit';
 import { DATE_PERIODS, describe, parseRule, PRESETS, rangeText, ruleLine, withStop } from './ui/rules';
+import { ScreenReaderGrid } from './ui/srgrid';
 import { bindShortcuts, Checker, initPrefs, liveRegion, setTextSize, setTheme, Shortcuts, textSize, theme, type TextSize, type ThemeName } from './ui/a11y';
 import { cleanPage, layoutOf, PageSetupDialog, type PageSetup } from './ui/pagesetup';
 
@@ -250,9 +251,29 @@ export class App {
     fetch: () => api('GET', `/api/workbooks/${this.open?.id}/accessibility`),
     go: (sheet, where) => {
       this.showSheet(sheet);
-      this.grid.goTo(where);
+      if (this.charts.layer.find(where, sheet)) this.charts.layer.focusObject(where);
+      else this.grid.goTo(where);
     },
     alt: (sheet, name, text) => void this.setAlt(sheet, name, text),
+    decorative: (sheet, name) => {
+      if (this.grid.sheetIndex !== sheet) this.showSheet(sheet);
+      this.charts.layer.setAlt(name, '', true);
+    },
+    rename: (sheet, name) => this.renameSheetTo(sheet, name),
+    unmerge: async (sheet, areas) => {
+      if (this.grid.sheetIndex !== sheet) this.showSheet(sheet);
+      const o = this.open;
+      const mark = o ? await engine().undoMark(o.book) : 0;
+      for (const [r0, c0, r1, c1] of areas) {
+        this.grid.select(r0, c0, r1, c1);
+        await this.grid.merge('unmerge');
+      }
+      if (o && (await engine().undoMark(o.book)) > mark + 1) await engine().undoGroup(o.book, mark);
+    },
+    contrast: async (sheet, fixes) => {
+      if (this.grid.sheetIndex !== sheet) this.showSheet(sheet);
+      await this.grid.setStyles(fixes.map(([r, c, col]) => [r, c, r, c, `fc:${col.replace('#', '')}`] as [number, number, number, number, string]));
+    },
   });
   private readonly auto: Automation;
   private tools!: DataTools;
@@ -276,9 +297,7 @@ export class App {
         if (document.activeElement !== p.nameBox) p.nameBox.value = this.currentRef;
         if (document.activeElement !== p.formulaBar) p.formulaBar.value = text;
         if (this.grid) {
-          const [ar, ac] = this.grid.activeCell();
-          const shown = this.grid.shownAt(ar, ac);
-          this.say(`${this.currentRef}, ${shown ? `value ${shown}` : 'empty'}${text.startsWith('=') ? `, formula ${text}` : ''}`);
+          if (text.startsWith('=')) this.say(`${this.currentRef}, formula ${text}`);
         }
         this.formatBar();
         this.linkChip();
@@ -335,12 +354,14 @@ export class App {
       onLinkBox: () => this.linkBox(),
       onPainter: (state) => this.button('format.painter').setAttribute('aria-pressed', String(state !== 'off')),
       onView: (sheet, view) => this.saveView(sheet, view),
+      onBreakMove: (axis, from, to) => this.moveBreak(axis, from, to),
       onMenu: (kind, x, y) => this.cellMenu(kind, x, y),
       onGoto: () => {
         p.nameBox.focus();
         p.nameBox.select();
       },
     });
+    new ScreenReaderGrid(this.grid, () => this.open?.sheets[this.grid.sheetIndex] ?? '');
     this.whatIf = new WhatIf({
       grid: this.grid,
       book: () => this.open?.book ?? -1,
@@ -1374,6 +1395,15 @@ export class App {
     this.grid.focus();
   }
 
+  private moveBreak(axis: 'row' | 'col', from: number, to: number): void {
+    if (!this.open || to < 1) return;
+    const sheet = this.grid.sheetIndex;
+    const p = this.pageOf(sheet);
+    const key = axis === 'row' ? 'rowBreaks' : 'colBreaks';
+    p[key] = [...new Set([...p[key].filter((x) => x !== from), to])].sort((a, b) => a - b);
+    this.sendPage(sheet);
+  }
+
   private printArea(set: boolean): void {
     if (!this.open) return;
     const sheet = this.grid.sheetIndex;
@@ -1442,11 +1472,9 @@ export class App {
   }
 
   private async setAlt(sheet: number, name: string, text: string): Promise<void> {
-    const o = this.open;
-    if (!o) return;
-    const doc = await api<{ views: { objects?: { id?: string; name?: string; alt?: string }[] }[] }>('GET', `/api/workbooks/${o.id}`);
-    const objects = (doc.views[sheet]?.objects ?? []).map((x) => (x.name === name || x.id === name ? { ...x, alt: text } : x));
-    await api('PATCH', `/api/workbooks/${o.id}/sheets/${sheet}`, { view: { objects } }).catch(() => this.status('Alt text not saved', true));
+    if (!this.open) return;
+    if (this.grid.sheetIndex !== sheet) this.showSheet(sheet);
+    this.charts.layer.setAlt(name, text);
   }
 
   private downloadLocked(): void {
@@ -2897,6 +2925,17 @@ export class App {
       { sep: true },
       { label: 'Delete sheet', danger: true, disabled: o.sheets.length === 1, confirm: 'Click again to delete this sheet', run: () => this.deleteSheet(i) },
     ]);
+  }
+
+  private renameSheetTo(i: number, raw: string): void {
+    const o = this.open;
+    const t = this.p.tabs.querySelector<HTMLElement>(`[data-sheet="${i}"]`);
+    const name = raw.replace(/[\\/?*[\]:]/g, '').trim().slice(0, 31);
+    if (!o || !name || name === o.sheets[i] || o.sheets.some((s) => s.toLowerCase() === name.toLowerCase())) return;
+    o.sheets[i] = name;
+    if (t) t.textContent = name;
+    void engine().renameSheet(o.book, i, name).then(() => this.refreshNames());
+    void api('PATCH', `/api/workbooks/${o.id}/sheets/${i}`, { name }).catch(() => this.status('Name not saved', true));
   }
 
   private renameTab(i: number): void {

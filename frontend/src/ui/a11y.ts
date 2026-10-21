@@ -277,12 +277,20 @@ export interface A11yIssue {
   where: string;
   text: string;
   fix: string;
+  label?: string;
+  suggestion?: string;
+  areas?: [number, number, number, number][];
+  fixes?: [number, number, string][];
 }
 
 export interface CheckerHooks {
   fetch(): Promise<A11yIssue[]>;
   go(sheet: number, where: string): void;
   alt(sheet: number, name: string, text: string): void;
+  decorative?(sheet: number, name: string): void;
+  rename?(sheet: number, name: string): void;
+  unmerge?(sheet: number, areas: [number, number, number, number][]): Promise<void> | void;
+  contrast?(sheet: number, fixes: [number, number, string][]): Promise<void> | void;
 }
 
 const LEVELS: [A11yIssue['level'], string][] = [['error', 'Errors'], ['warning', 'Warnings'], ['tip', 'Tips']];
@@ -311,6 +319,8 @@ export class Checker {
           void this.run();
         }
       }
+      const fix = t.closest<HTMLElement>('[data-fix]');
+      if (fix) void this.apply(fix, e);
     });
   }
 
@@ -319,11 +329,61 @@ export class Checker {
     void this.run();
   }
 
+  private issues: A11yIssue[] = [];
+
+  private async apply(button: HTMLElement, _e: Event): Promise<void> {
+    const issue = this.issues[Number(button.dataset.index)];
+    if (!issue) return;
+    const sheet = issue.sheet ?? 0;
+    const kind = button.dataset.fix;
+    if (kind === 'decorative') this.hooks.decorative?.(sheet, issue.where);
+    else if (kind === 'rename') {
+      const name = button.parentElement!.querySelector<HTMLInputElement>('input')!.value.trim();
+      if (!name) return;
+      this.hooks.rename?.(sheet, name);
+    } else if (kind === 'unmerge' && issue.areas) await this.hooks.unmerge?.(sheet, issue.areas);
+    else if (kind === 'contrast' && issue.fixes) await this.hooks.contrast?.(sheet, issue.fixes);
+    await this.run();
+  }
+
+  private action(li: HTMLElement, index: number, i: A11yIssue): void {
+    const make = (text: string, fix: string): HTMLButtonElement => {
+      const b = el('button', 'fc-btn', text);
+      b.type = 'button';
+      b.dataset.fix = fix;
+      b.dataset.index = String(index);
+      return b;
+    };
+    const row = el('div', 'fc-page-row');
+    if (i.rule === 'alt') {
+      const input = el('input', 'fc-fmt-input');
+      input.setAttribute('aria-label', `Alternative text for ${i.label ?? i.where}`);
+      const save = el('button', 'fc-btn', 'Save alt text');
+      save.type = 'button';
+      save.dataset.alt = i.where;
+      save.dataset.sheet = String(i.sheet ?? 0);
+      row.append(input, save, make('Mark decorative', 'decorative'));
+    } else if (i.rule === 'sheetname') {
+      const input = el('input', 'fc-fmt-input');
+      input.value = i.suggestion ?? '';
+      input.setAttribute('aria-label', `New name for sheet ${i.sheet ?? 0}`);
+      row.append(input, make('Rename sheet', 'rename'));
+    } else if (i.rule === 'merged' && i.areas?.length) row.append(make('Unmerge cells', 'unmerge'));
+    else if (i.rule === 'contrast' && i.fixes?.length) row.append(make('Use readable colours', 'contrast'));
+    const go = el('button', 'fc-btn', i.rule === 'alt' ? 'Show' : 'Go to');
+    go.type = 'button';
+    go.dataset.go = i.where;
+    go.dataset.sheet = String(i.sheet ?? 0);
+    row.append(go);
+    li.appendChild(row);
+  }
+
   private async run(): Promise<void> {
     this.summary.textContent = 'Checking';
     let issues: A11yIssue[];
     try {
       issues = await this.hooks.fetch();
+      this.issues = issues;
     } catch {
       this.summary.textContent = 'The check could not run.';
       return;
@@ -336,24 +396,8 @@ export class Checker {
       const ul = el('ul', `fc-checker-items fc-checker-${level}`);
       for (const i of mine) {
         const li = el('li');
-        const msg = el('div', 'fc-checker-text', i.text);
-        const fix = el('div', 'fc-fmt-hint', i.fix);
-        const go = el('button', 'fc-btn', i.rule === 'alt' ? 'Show' : 'Go to');
-        go.type = 'button';
-        go.dataset.go = i.where;
-        go.dataset.sheet = String(i.sheet ?? 0);
-        li.append(msg, fix);
-        if (i.rule === 'alt') {
-          const input = el('input', 'fc-fmt-input');
-          input.setAttribute('aria-label', `Alternative text for ${i.where}`);
-          const save = el('button', 'fc-btn', 'Save alt text');
-          save.type = 'button';
-          save.dataset.alt = i.where;
-          save.dataset.sheet = String(i.sheet ?? 0);
-          const row = el('div', 'fc-page-row');
-          row.append(input, save);
-          li.appendChild(row);
-        } else li.appendChild(go);
+        li.append(el('div', 'fc-checker-text', i.text), el('div', 'fc-fmt-hint', i.fix));
+        this.action(li, issues.indexOf(i), i);
         ul.appendChild(li);
       }
       groups.push(h, ul);

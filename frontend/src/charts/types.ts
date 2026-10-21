@@ -45,7 +45,22 @@ export interface ChartSpec {
   min?: number;
 }
 
-export type ObjectKind = 'chart' | 'picture' | 'shape' | 'text';
+export type ObjectKind = 'chart' | 'picture' | 'shape' | 'text' | 'spark' | 'range';
+
+export function isFloat(o: { kind: ObjectKind; inCell?: boolean }): boolean {
+  return o.kind !== 'spark' && o.kind !== 'range' && !o.inCell;
+}
+
+export interface Anchor {
+  r0: number;
+  c0: number;
+  dy0: number;
+  dx0: number;
+  r1: number;
+  c1: number;
+  dy1: number;
+  dx1: number;
+}
 
 export interface FloatObject {
   id: string;
@@ -54,10 +69,41 @@ export interface FloatObject {
   y: number;
   w: number;
   h: number;
+  anchor?: Anchor;
+  alt?: string;
+  name?: string;
   chart?: ChartSpec;
   picture?: { src: string; name: string };
+  inCell?: boolean;
+  decorative?: boolean;
+  spark?: SparkSpec;
   shape?: { shape: 'rect' | 'ellipse' | 'arrow'; fill: string; stroke: string; text: string };
   text?: { text: string; size: number; color: string };
+}
+
+export interface SparkSpec {
+  type: 'line' | 'column' | 'winloss';
+  color: string;
+  neg: string;
+  dataId?: string;
+  data?: string;
+  markers?: boolean;
+  high?: boolean;
+  low?: boolean;
+  first?: boolean;
+  last?: boolean;
+  negative?: boolean;
+  axis?: boolean;
+  weight?: number;
+  min?: number | 'group';
+  max?: number | 'group';
+  empty?: 'gap' | 'zero' | 'span';
+  markerColor?: string;
+  firstColor?: string;
+  lastColor?: string;
+  highColor?: string;
+  lowColor?: string;
+  axisColor?: string;
 }
 
 export interface Series {

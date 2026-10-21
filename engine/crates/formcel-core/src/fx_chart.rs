@@ -6,6 +6,7 @@ impl Eval<'_> {
     pub(crate) fn call_chart(&self, name: &str, a: &[Expr]) -> Option<Result<Value, ErrKind>> {
         match name {
             "SPARKLINE" => Some(self.sparkline(a)),
+            "IMAGE" => Some(self.image(a)),
             _ => None,
         }
     }

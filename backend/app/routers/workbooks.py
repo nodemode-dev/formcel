@@ -357,7 +357,7 @@ def set_validations(wid: str, body: RulesIn) -> dict:
 
 class ObjectsIn(BaseModel):
     sheet: int = 0
-    objects: list[dict] = Field(default_factory=list, max_length=500)
+    objects: list[dict] = Field(default_factory=list, max_length=5000)
 
 
 @router.get("/workbooks/{wid}/objects")

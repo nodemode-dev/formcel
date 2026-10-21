@@ -13,6 +13,7 @@ from .autofilter import filter_in
 from .cf import rules_in
 from .drawings import objects_in
 from .formulas import from_file
+from .overlay import Package
 from .protect import book_in, flags_in, notes_in, sheet_in
 from .review import ranges_in, threads_in
 from .styles import tokens_in
@@ -135,6 +136,7 @@ def read(data: bytes) -> dict:
     kept_ranges, skipped_ranges = ranges_in(data, wb)
     if skipped_ranges:
         notes["protected ranges without FormCel person names left out"] += skipped_ranges
+    package = Package(data)
     sheets = []
     for ws in wb.worksheets:
         cells, formats, styles, links = [], [], [], []
@@ -187,7 +189,7 @@ def read(data: bytes) -> dict:
         rules = rules_in(ws, notes)
         autofilter = filter_in(ws, wb, view, notes)
         valid = validations_in(ws, notes)
-        objects = objects_in(ws, view, notes)
+        objects = objects_in(ws, view, notes, package.sheet(len(sheets), ws.title, view))
         if getattr(ws, "_pivots", None):
             notes["pivot tables left out"] += len(ws._pivots)
         if not autofilter:
