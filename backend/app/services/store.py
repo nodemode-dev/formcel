@@ -137,12 +137,19 @@ class Store:
             sheets = templates.sheets_of(template_id)
             if sheets is None:
                 raise KeyError(template_id)
+            extras = templates.extras_of(template_id)
             for i, (sname, cells) in enumerate(sheets):
                 if i:
                     eng.add_sheet(sname)
                 else:
                     eng.rename_sheet(0, sname)
+                x = extras[i] if i < len(extras) else {}
+                eng.load_formats([tuple(c) for c in x.get("formats", [])], i)
+                eng.load_styles([tuple(c) for c in x.get("styles", [])], i)
                 eng.load(cells, i)
+                eng.load_merges([tuple(m) for m in x.get("merges", [])], i)
+                eng.load_rules(x.get("rules", []), i)
+                eng.load_links([tuple(c) for c in x.get("links", [])], i)
             for n, refers in templates.names_of(template_id):
                 eng.define_name(n, refers)
             name = name or templates.catalog()[template_id]["name"]

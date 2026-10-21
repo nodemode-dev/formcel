@@ -3,7 +3,7 @@ from functools import lru_cache
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent.parent / "templates"
-SOURCES = ("native.json", "formmd.json", "conformance.json")
+SOURCES = ("native.json", "formmd.json", "conformance.json", "formatcheck.json")
 ORDER = ("Spreadsheets", "Data & charts", "Example projects")
 PREVIEW_ROWS = 8
 PREVIEW_COLS = 6
@@ -76,6 +76,14 @@ def listing() -> dict:
 def names_of(template_id: str) -> list[tuple[str, str]]:
     t = catalog().get(template_id)
     return [(n, r) for n, r in t.get("names", [])] if t else []
+
+
+def extras_of(template_id: str) -> list[dict]:
+    t = catalog().get(template_id)
+    if t is None:
+        return []
+    keys = ("formats", "styles", "merges", "rules", "links")
+    return [{k: s.get(k, []) for k in keys} for s in t["sheets"]]
 
 
 def sheets_of(template_id: str) -> list[tuple[str, list[tuple[int, int, str]]]] | None:
