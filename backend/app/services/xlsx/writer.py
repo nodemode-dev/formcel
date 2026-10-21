@@ -13,6 +13,7 @@ from .cf import rules_out
 from .drawings import objects_out
 from .formulas import to_file
 from .protect import book_out, notes_out, sheet_out
+from .review import finish, placeholders, ranges_out
 from .styles import apply_out
 from .tables import ref_of, tables_out
 from .theme import theme_out
@@ -31,7 +32,9 @@ def _number(text: str) -> int | float:
     return int(n) if n.is_integer() and abs(n) < 2**53 else n
 
 
-def write(eng, views: list[dict], vba: dict[str, bytes] | None = None, objects: list[list[dict]] | None = None, notes: dict | None = None) -> bytes:
+def write(eng, views: list[dict], vba: dict[str, bytes] | None = None, objects: list[list[dict]] | None = None, notes: dict | None = None, threads: list[dict] | None = None) -> bytes:
+    threads = threads or []
+    ranges: dict[int, list[tuple[str, str]]] = {}
     wb = Workbook()
     xml, body, heading = theme_out(eng.theme())
     wb.loaded_theme = xml
@@ -127,7 +130,9 @@ def write(eng, views: list[dict], vba: dict[str, bytes] | None = None, objects: 
         if view.get("color"):
             ws.sheet_properties.tabColor = "FF" + view["color"].lstrip("#").upper()
         notes_out(ws, notes or {}, i)
+        placeholders(ws, threads, i)
         sheet_out(ws, eng.protection(i))
+        ranges[i] = ranges_out(wb, eng.protection(i), i)
     book_out(wb, eng.protection())
     for name, refers in eng.names():
         wb.defined_names[name] = DefinedName(name, attr_text=to_file(refers).lstrip("="))
@@ -151,4 +156,4 @@ def write(eng, views: list[dict], vba: dict[str, bytes] | None = None, objects: 
         wb.vba_archive = zipfile.ZipFile(io.BytesIO(buf.getvalue()))
     out = io.BytesIO()
     wb.save(out)
-    return out.getvalue()
+    return finish(out.getvalue(), threads, ranges)

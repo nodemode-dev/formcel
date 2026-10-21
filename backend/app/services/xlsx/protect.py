@@ -15,7 +15,7 @@ def notes_in(ws) -> list[tuple[int, int, str, str]]:
     out = []
     for (r, c), cell in ws._cells.items():
         cm = cell.comment
-        if cm is not None and (cm.text or "").strip():
+        if cm is not None and (cm.text or "").strip() and not (cm.author or "").startswith("tc="):
             out.append((r - 1, c - 1, cm.text, cm.author or ""))
     return out
 

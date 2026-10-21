@@ -1,0 +1,292 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Shared workbook</title>
+<style>
+:root{--z-sticky:1;--z-corner:2;--z-label:3;--z-editor:4;--bg:#fff;--fg:#161616;--mut:#666;--line:#dcdcdc;--head:#f3f3f3;--panel:#fafafa;--acc:#2563eb;--sel:#dbeafe}
+@media(prefers-color-scheme:dark){:root{--bg:#161616;--fg:#eee;--mut:#9a9a9a;--line:#333;--head:#222;--panel:#1c1c1c;--acc:#60a5fa;--sel:#1e3a5f}}
+*{box-sizing:border-box}
+body{margin:0;font:13px Inter,system-ui,sans-serif;background:var(--bg);color:var(--fg);height:100vh;display:grid;grid-template-rows:auto auto 1fr auto;grid-template-columns:1fr 300px}
+header{grid-column:1/3;display:flex;gap:12px;align-items:center;padding:8px 12px;border-bottom:1px solid var(--line);background:var(--panel)}
+header strong{font-size:14px}
+header .perm{color:var(--mut)}
+nav{grid-column:1/3;display:flex;gap:4px;padding:4px 8px;border-bottom:1px solid var(--line);min-height:32px}
+nav button{border:0;background:none;color:inherit;padding:4px 10px;border-radius:4px;cursor:pointer;font:inherit}
+nav button[aria-selected=true]{background:var(--sel);font-weight:600}
+#grid{overflow:auto;position:relative}
+table{border-collapse:collapse}
+td,th{border:1px solid var(--line);padding:2px 6px;min-width:72px;height:24px;white-space:pre;position:relative}
+th{background:var(--head);font-weight:500;color:var(--mut);position:sticky;top:0;z-index:var(--z-sticky)}
+th.r{left:0;min-width:36px;z-index:var(--z-corner)}
+td[data-sel=true]{outline:2px solid var(--acc);outline-offset:-2px}
+td[data-flag=true]::after{content:"";position:absolute;top:0;right:0;border:5px solid transparent;border-top-color:#7c3aed;border-right-color:#7c3aed}
+td .who{position:absolute;left:-1px;top:-14px;font-size:10px;color:#fff;padding:0 4px;white-space:nowrap;z-index:var(--z-label);pointer-events:none}
+aside{border-left:1px solid var(--line);background:var(--panel);display:flex;flex-direction:column;min-height:0}
+aside .tabs{display:flex;border-bottom:1px solid var(--line)}
+aside .tabs button{flex:1;border:0;background:none;color:inherit;padding:8px;cursor:pointer;font:inherit}
+aside .tabs button[aria-selected=true]{border-bottom:2px solid var(--acc);font-weight:600}
+section{display:flex;flex-direction:column;gap:8px;padding:8px;overflow:auto;flex:1;min-height:0}
+section[hidden]{display:none}
+.msg{border:1px solid var(--line);border-radius:6px;padding:6px 8px;background:var(--bg)}
+.msg small{display:block;color:var(--mut)}
+textarea,input[type=text]{width:100%;font:inherit;color:inherit;background:var(--bg);border:1px solid var(--line);border-radius:4px;padding:4px 6px}
+button.go{background:var(--acc);color:#fff;border:0;border-radius:4px;padding:5px 10px;cursor:pointer;font:inherit}
+.dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:6px}
+footer{grid-column:1/3;padding:4px 12px;border-top:1px solid var(--line);color:var(--mut);min-height:26px}
+footer[data-error=true]{color:#dc2626}
+#editor{position:absolute;z-index:var(--z-editor);font:inherit;border:2px solid var(--acc);padding:2px 6px;background:var(--bg);color:inherit}
+@media(max-width:700px){body{grid-template-columns:1fr}aside{display:none}}
+</style>
+</head>
+<body>
+<header><strong id="title">Shared workbook</strong><span class="perm" id="perm"></span><span class="perm" id="you"></span></header>
+<nav id="tabs" aria-label="Sheets"></nav>
+<div id="grid" tabindex="0" aria-label="Sheet"></div>
+<aside>
+<div class="tabs" role="tablist"><button role="tab" data-t="people" aria-selected="true">People and chat</button><button role="tab" data-t="comments" aria-selected="false">Comments</button></div>
+<section id="people"><div id="who"></div><div id="chat"></div><textarea id="say" rows="2" placeholder="Message everyone here" aria-label="Chat message"></textarea><button class="go" id="send" type="button">Send</button></section>
+<section id="comments" hidden><div id="threads"></div><textarea id="note" rows="3" placeholder="Comment on the selected cell" aria-label="Comment"></textarea><button class="go" id="post" type="button">Comment</button></section>
+</aside>
+<footer id="status" role="status" aria-live="polite"></footer>
+<script>
+(function () {
+  var token = location.pathname.split('/').filter(Boolean).pop();
+  var base = '/s/' + token + '/api/';
+  var client = Math.random().toString(36).slice(2, 10);
+  var name = '';
+  try { name = localStorage.getItem('formcel.guest') || ''; } catch (e) {}
+  if (!name) {
+    name = (window.prompt('Your name, shown to others on this workbook') || '').trim().slice(0, 60) || 'Guest';
+    try { localStorage.setItem('formcel.guest', name); } catch (e) {}
+  }
+  var $ = function (id) { return document.getElementById(id); };
+  var state = null, sel = [0, 0], sheet = null, others = {}, timer = 0, refresh = 0;
+  var perm = 'view';
+
+  function say(text, error) { var s = $('status'); s.textContent = text; s.dataset.error = error ? 'true' : 'false'; }
+  function colName(c) { var s = ''; c++; while (c) { var r = (c - 1) % 26; s = String.fromCharCode(65 + r) + s; c = Math.floor((c - 1) / 26); } return s; }
+  function colour(id) { var h = 0; for (var i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) % 360; return 'hsl(' + h + ' 70% 38%)'; }
+  function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text) e.textContent = text; return e; }
+
+  async function api(method, path, body) {
+    var r = await fetch(base + path, { method: method, headers: body ? { 'content-type': 'application/json' } : {}, body: body ? JSON.stringify(body) : undefined });
+    if (!r.ok) {
+      var d = await r.json().then(function (j) { return j.detail; }).catch(function () { return null; });
+      throw new Error(d || 'The engine answered ' + r.status + '.');
+    }
+    return r.json();
+  }
+
+  function css(tokens) {
+    var out = [];
+    String(tokens).split(';').forEach(function (t) {
+      if (t === 'b') out.push('font-weight:700');
+      else if (t === 'i') out.push('font-style:italic');
+      else if (t === 'u') out.push('text-decoration:underline');
+      else if (/^fc:[0-9a-fA-F]{6}$/.test(t)) out.push('color:#' + t.slice(3));
+      else if (/^bg:[0-9a-fA-F]{6}$/.test(t)) out.push('background:#' + t.slice(3));
+      else if (t === 'ha:left' || t === 'ha:center' || t === 'ha:right') out.push('text-align:' + t.slice(3));
+    });
+    return out.join(';');
+  }
+
+  function paint() {
+    var cells = {}, styles = {}, rows = 0, cols = 0;
+    state.cells.forEach(function (c) { cells[c[0] + ':' + c[1]] = c[2]; rows = Math.max(rows, c[0] + 1); cols = Math.max(cols, c[1] + 1); });
+    state.styles.forEach(function (c) { styles[c[0] + ':' + c[1]] = c[2]; });
+    rows = Math.min(Math.max(rows + 12, 40), 400);
+    cols = Math.min(Math.max(cols + 3, 12), 80);
+    var flags = {};
+    state.threads.forEach(function (t) { if (t.status !== 'resolved') flags[t.row + ':' + t.col] = true; });
+    Object.keys(state.notes).forEach(function (k) { var p = k.split(':'); flags[p[1] + ':' + p[2]] = true; });
+    Object.keys(state.chips || {}).forEach(function (k) { var p = k.split(':'); flags[p[1] + ':' + p[2]] = true; });
+    var t = document.createElement('table');
+    var head = t.insertRow();
+    head.appendChild(el('th', 'r'));
+    for (var c = 0; c < cols; c++) head.appendChild(el('th', '', colName(c)));
+    for (var r = 0; r < rows; r++) {
+      var tr = t.insertRow();
+      tr.appendChild(el('th', 'r', String(r + 1)));
+      for (var k = 0; k < cols; k++) {
+        var td = tr.insertCell();
+        td.dataset.r = r; td.dataset.c = k;
+        var key = r + ':' + k;
+        if (cells[key] !== undefined) td.textContent = cells[key];
+        if (styles[key]) td.style.cssText = css(styles[key]);
+        if (flags[key]) td.dataset.flag = 'true';
+      }
+    }
+    $('grid').replaceChildren(t);
+    mark();
+  }
+
+  function cellAt(r, c) { return $('grid').querySelector('td[data-r="' + r + '"][data-c="' + c + '"]'); }
+
+  function mark() {
+    $('grid').querySelectorAll('td[data-sel]').forEach(function (n) { delete n.dataset.sel; });
+    $('grid').querySelectorAll('.who').forEach(function (n) { n.parentNode.style.outline = ''; n.remove(); });
+    Object.keys(others).forEach(function (id) {
+      var o = others[id];
+      if (o.sheet !== sheet || o.row < 0) return;
+      var td = cellAt(o.row, o.col);
+      if (!td) return;
+      td.style.outline = '2px solid ' + colour(id);
+      td.style.outlineOffset = '-2px';
+      var tag = el('span', 'who', o.user || 'Someone');
+      tag.style.background = colour(id);
+      td.appendChild(tag);
+    });
+    var me = cellAt(sel[0], sel[1]);
+    if (me) me.dataset.sel = 'true';
+    threads();
+  }
+
+  function threads() {
+    var box = $('threads');
+    var mine = state.threads.filter(function (t) { return t.row === sel[0] && t.col === sel[1]; });
+    var items = mine.map(function (t) {
+      var d = el('div', 'msg');
+      t.messages.forEach(function (m) { var p = el('div'); var b = el('strong', '', m.author || 'Someone'); p.append(b, document.createTextNode(' ' + m.text)); d.appendChild(p); });
+      d.appendChild(el('small', '', t.status === 'resolved' ? 'Resolved' : 'Open'));
+      if (perm !== 'view') {
+        var re = el('input'); re.type = 'text'; re.placeholder = 'Reply';
+        re.addEventListener('keydown', function (e) {
+          if (e.key === 'Enter' && re.value.trim()) { api('POST', 'threads/' + t.id + '/replies', { text: re.value, user: name }).then(function () { return load(false); }).catch(function (x) { say(x.message, true); }); }
+        });
+        d.appendChild(re);
+      }
+      return d;
+    });
+    var note = state.notes[sheet + ':' + sel[0] + ':' + sel[1]];
+    if (note) { var n = el('div', 'msg'); n.append(el('strong', '', 'Note'), document.createTextNode(' ' + note.text)); items.unshift(n); }
+    (state.chips[sheet + ':' + sel[0] + ':' + sel[1]] || []).forEach(function (c) { var n = el('div', 'msg', c.kind + ': ' + c.label); items.push(n); });
+    if (!items.length) items.push(el('span', '', 'No comments on ' + colName(sel[1]) + (sel[0] + 1) + '.'));
+    box.replaceChildren.apply(box, items);
+  }
+
+  function people() {
+    var box = $('who');
+    var rows = Object.keys(others).map(function (id) {
+      var d = el('div'); var dot = el('span', 'dot'); dot.style.background = colour(id);
+      d.append(dot, document.createTextNode(others[id].user || 'Someone'));
+      return d;
+    });
+    if (!rows.length) rows.push(el('span', '', 'Only you are here.'));
+    box.replaceChildren.apply(box, rows);
+  }
+
+  function chatLine(m) {
+    var d = el('div', 'msg'); d.append(el('strong', '', m.user), document.createTextNode(' ' + m.text), el('small', '', new Date(m.time).toLocaleTimeString()));
+    return d;
+  }
+
+  async function load(first) {
+    var q = first ? '' : '?sheet=' + sheet;
+    state = await api('GET', 'state' + q + (first ? '?user=' + encodeURIComponent(name) : ''));
+    sheet = state.sheet; perm = state.perm;
+    $('title').textContent = state.title;
+    document.title = state.title;
+    $('perm').textContent = perm === 'edit' ? 'You can edit' : perm === 'comment' ? 'You can comment' : 'View only';
+    $('you').textContent = 'You are ' + name;
+    var tabs = $('tabs');
+    tabs.replaceChildren.apply(tabs, state.sheets.map(function (s) {
+      var b = el('button', '', s[1]); b.type = 'button'; b.setAttribute('aria-selected', String(s[0] === sheet));
+      b.addEventListener('click', function () { sheet = s[0]; sel = [0, 0]; load(false).catch(function (x) { say(x.message, true); }); });
+      return b;
+    }));
+    if (first) {
+      var chat = $('chat'); chat.replaceChildren.apply(chat, state.chat.map(chatLine));
+      state.people.forEach(function (p) { if (p.client !== client) others[p.client] = { user: p.user, sheet: p.sheet === undefined ? 0 : p.sheet, row: p.row === undefined ? -1 : p.row, col: p.col || 0 }; });
+      people();
+    }
+    paint();
+  }
+
+  function start(td) {
+    if (perm !== 'edit') return;
+    var r = +td.dataset.r, c = +td.dataset.c;
+    api('GET', 'cell?sheet=' + sheet + '&row=' + r + '&col=' + c).then(function (o) {
+      var box = td.getBoundingClientRect(), host = $('grid').getBoundingClientRect();
+      var ed = el('input'); ed.id = 'editor'; ed.type = 'text'; ed.value = o.input;
+      ed.style.left = (box.left - host.left + $('grid').scrollLeft) + 'px';
+      ed.style.top = (box.top - host.top + $('grid').scrollTop) + 'px';
+      ed.style.width = Math.max(box.width, 140) + 'px';
+      ed.style.height = box.height + 'px';
+      $('grid').appendChild(ed);
+      ed.focus();
+      var done = false;
+      function finish(save) {
+        if (done) return; done = true;
+        var v = ed.value; ed.remove();
+        if (!save || v === o.input) return;
+        api('POST', 'edit', { sheet: sheet, cells: [[r, c, v]], user: name, client: client }).then(function () { return load(false); }).then(function () { say('Saved'); }).catch(function (x) { say(x.message, true); });
+      }
+      ed.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter') { finish(true); sel = [Math.min(r + 1, 399), c]; mark(); $('grid').focus(); }
+        else if (e.key === 'Escape') { finish(false); $('grid').focus(); }
+      });
+      ed.addEventListener('blur', function () { finish(true); });
+    }).catch(function (x) { say(x.message, true); });
+  }
+
+  function cursor() {
+    window.clearTimeout(timer);
+    timer = window.setTimeout(function () { api('POST', 'presence', { client: client, user: name, sheet: sheet, row: sel[0], col: sel[1] }).catch(function () {}); }, 150);
+  }
+
+  function pick(r, c) { sel = [r, c]; mark(); cursor(); }
+
+  $('grid').addEventListener('click', function (e) { var td = e.target.closest('td'); if (td) pick(+td.dataset.r, +td.dataset.c); });
+  $('grid').addEventListener('dblclick', function (e) { var td = e.target.closest('td'); if (td) start(td); });
+  $('grid').addEventListener('keydown', function (e) {
+    if (e.target.id === 'editor') return;
+    var d = { ArrowUp: [-1, 0], ArrowDown: [1, 0], ArrowLeft: [0, -1], ArrowRight: [0, 1] }[e.key];
+    if (d) { e.preventDefault(); pick(Math.max(0, sel[0] + d[0]), Math.max(0, sel[1] + d[1])); }
+    else if (e.key === 'Enter' || e.key === 'F2') { var td = cellAt(sel[0], sel[1]); if (td) start(td); }
+  });
+
+  document.querySelectorAll('aside .tabs button').forEach(function (b) {
+    b.addEventListener('click', function () {
+      document.querySelectorAll('aside .tabs button').forEach(function (x) { x.setAttribute('aria-selected', String(x === b)); });
+      $('people').hidden = b.dataset.t !== 'people';
+      $('comments').hidden = b.dataset.t !== 'comments';
+    });
+  });
+
+  $('send').addEventListener('click', function () {
+    var v = $('say').value.trim(); if (!v) return;
+    if (perm === 'view') { say('This link is view only, so chat is off.', true); return; }
+    $('say').value = '';
+    api('POST', 'chat', { text: v, user: name, client: client }).then(function (m) { $('chat').appendChild(chatLine(m)); }).catch(function (x) { say(x.message, true); });
+  });
+
+  $('post').addEventListener('click', function () {
+    var v = $('note').value.trim(); if (!v) return;
+    if (perm === 'view') { say('This link is view only.', true); return; }
+    api('POST', 'threads', { sheet: sheet, row: sel[0], col: sel[1], text: v, user: name }).then(function () { $('note').value = ''; return load(false); }).catch(function (x) { say(x.message, true); });
+  });
+
+  function connect() {
+    var s = new EventSource(base + 'events?client=' + client + '&user=' + encodeURIComponent(name));
+    s.onmessage = function (m) {
+      var ev = JSON.parse(m.data);
+      if (ev.type === 'presence') { others[ev.client] = { user: ev.user, sheet: ev.sheet, row: ev.row, col: ev.col }; people(); mark(); }
+      else if (ev.type === 'join') { others[ev.client] = { user: ev.user, sheet: 0, row: -1, col: 0 }; people(); }
+      else if (ev.type === 'leave') { delete others[ev.client]; people(); mark(); }
+      else if (ev.type === 'chat') { $('chat').appendChild(chatLine(ev.message)); }
+      else if (ev.type === 'edit' || ev.type === 'collab') {
+        window.clearTimeout(refresh);
+        refresh = window.setTimeout(function () { load(false).catch(function () {}); }, 250);
+      } else if (ev.type === 'reload') { load(true).catch(function () {}); }
+    };
+    s.onerror = function () { say('Connection lost, trying again'); };
+    s.onopen = function () { say('Connected'); };
+  }
+
+  load(true).then(function () { connect(); cursor(); }).catch(function (x) { say(x.message, true); document.title = 'Link unavailable'; });
+})();
+</script>
+</body>
+</html>

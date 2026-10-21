@@ -11,6 +11,8 @@ import { listCommands, registerCommand, runCommand } from './ui/commands';
 import { Home, type TemplateMeta, type WorkbookMeta } from './ui/home';
 import { Menu, type MenuItem } from './ui/menu';
 import { Collab, identityHeaders } from './ui/collab';
+import { isNetworkFailure, keep, replay, waiting } from './ui/offline';
+import { takeAction } from './ui/action';
 import { DataTools } from './ui/datatools';
 import type { ShellParts } from './ui/shell';
 import { icon } from './ui/icons';
@@ -230,6 +232,7 @@ export class App {
   private open: Opened | null = null;
   private pending = new Map<number, Map<string, [number, number, string]>>();
   private timer = 0;
+  private offlineTimer = 0;
   private saving: Promise<void> = Promise.resolve();
   private current = '';
   private currentRef = 'A1';
@@ -1702,6 +1705,14 @@ export class App {
     this.auto.opened(id, (doc as unknown as { automation?: Parameters<Automation['opened']>[1] }).automation);
     if (setHash && location.hash !== `#w-${id}`) location.hash = `w-${id}`;
     this.collab.attach(id, book, doc.sheets, doc.collab, doc.protection);
+    void waiting(id).then((n) => {
+      if (!n) return;
+      this.status('Offline changes waiting to be sent');
+      this.watchOffline(id);
+      window.setTimeout(() => {
+        this.saving = this.saving.then(() => this.drainOffline(id)).catch(() => undefined);
+      }, 500);
+    });
   }
 
   private nameOf(r: Range): string | null {
@@ -3069,6 +3080,35 @@ export class App {
     });
   }
 
+  private async drainOffline(id: string): Promise<void> {
+    if (!(await waiting(id))) return;
+    const sent = await replay(id, async (sheet, cells) => {
+      try {
+        await api('POST', `/api/workbooks/${id}/cells?why=${encodeURIComponent('Sent after being offline')}`, { sheet, cells });
+      } catch (err) {
+        if (isNetworkFailure(err)) throw err;
+        this.collab?.refused(`A change made while offline was refused: ${err instanceof Error ? err.message : 'not saved'}`);
+      }
+    });
+    if (sent) this.status(`Sent ${sent} change${sent === 1 ? '' : 's'} kept while offline`);
+  }
+
+  private watchOffline(id: string): void {
+    window.clearTimeout(this.offlineTimer);
+    this.offlineTimer = window.setTimeout(() => {
+      if (this.open?.id !== id) return;
+      this.saving = this.saving.then(async () => {
+        try {
+          await this.drainOffline(id);
+          if (!this.pending.size) this.status('Saved');
+          this.p.save.title = '';
+        } catch {
+          this.watchOffline(id);
+        }
+      });
+    }, 15000);
+  }
+
   private flush(): void {
     this.charts.layer.flush();
     window.clearTimeout(this.timer);
@@ -3076,11 +3116,28 @@ export class App {
     if (!o || !this.pending.size) return;
     const batches = [...this.pending.entries()];
     this.pending = new Map();
+    const why = takeAction();
     this.saving = this.saving.then(async () => {
       try {
-        for (const [sheet, m] of batches) await api('POST', `/api/workbooks/${o.id}/cells`, { sheet, cells: [...m.values()] });
+        await this.drainOffline(o.id);
+        let first = true;
+        for (const [sheet, m] of batches) {
+          await api('POST', `/api/workbooks/${o.id}/cells${first && why ? `?why=${encodeURIComponent(why)}` : ''}`, { sheet, cells: [...m.values()] });
+          first = false;
+        }
         if (!this.pending.size) this.status('Saved');
       } catch (err) {
+        if (isNetworkFailure(err)) {
+          try {
+            for (const [sheet, m] of batches) await keep(o.id, sheet, [...m.values()]);
+            this.status('Offline: changes kept on this computer');
+            this.p.save.title = 'The engine could not be reached. FormCel keeps your changes on this computer and sends them when it can.';
+            this.watchOffline(o.id);
+            return;
+          } catch {
+            this.status('Not saved', true);
+          }
+        }
         for (const [sheet, m] of batches) {
           const cur = this.pending.get(sheet) ?? new Map();
           for (const [k, v] of m) if (!cur.has(k)) cur.set(k, v);

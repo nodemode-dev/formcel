@@ -5,7 +5,7 @@ from fastapi import FastAPI
 from . import config
 import asyncio
 
-from .routers import automation, collab, commands, workbooks
+from .routers import automation, collab, commands, review, share, workbooks
 from .services import scheduler
 from .version import VERSION
 
@@ -27,6 +27,8 @@ app = FastAPI(title="FormCel engine", version=VERSION, lifespan=lifespan, docs_u
 app.include_router(workbooks.router)
 app.include_router(commands.router)
 app.include_router(collab.router)
+app.include_router(review.router)
+app.include_router(share.router)
 app.include_router(automation.router)
 app.include_router(automation.v1)
 
