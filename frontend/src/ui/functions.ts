@@ -41,7 +41,7 @@ function clean(arg: string): string {
   return arg.replace(/^\[\s*/, '').replace(/\s*\]$/, '');
 }
 
-function splitArgs(text: string): string[] {
+export function splitArgs(text: string): string[] {
   const open = text.indexOf('(');
   const close = text.lastIndexOf(')');
   if (open < 0) return [];

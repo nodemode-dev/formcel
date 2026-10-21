@@ -73,6 +73,7 @@ pub trait Ctx {
 #[derive(Debug)]
 pub struct Lambda {
     params: Vec<String>,
+    required: usize,
     body: Expr,
     env: Vec<(String, Arg)>,
 }
@@ -365,11 +366,12 @@ impl<'a> Eval<'a> {
             Arg::V(Value::Error(k)) => return Err(k),
             _ => return Err(ErrKind::Value),
         };
-        if f.params.len() != args.len() {
+        if args.len() > f.params.len() || args.len() < f.required {
             return Err(ErrKind::Value);
         }
+        let omitted: Vec<usize> = args.iter().enumerate().filter(|(i, a)| *i >= f.required && matches!(a, Expr::Missing)).map(|(i, _)| i).collect();
         let vals: Vec<Arg> = args.iter().map(|a| self.arg(a)).collect();
-        self.apply(&f, vals)
+        self.apply_with(&f, vals, &omitted)
     }
 
     fn lambda(&self, e: &Expr, params: usize) -> Result<Rc<Lambda>, ErrKind> {
@@ -381,9 +383,20 @@ impl<'a> Eval<'a> {
     }
 
     fn apply(&self, f: &Rc<Lambda>, vals: Vec<Arg>) -> Result<Arg, ErrKind> {
+        self.apply_with(f, vals, &[])
+    }
+
+    fn apply_with(&self, f: &Rc<Lambda>, mut vals: Vec<Arg>, omitted: &[usize]) -> Result<Arg, ErrKind> {
         self.deeper(|| {
             let mut env = f.env.clone();
+            let given = vals.len();
+            vals.resize(f.params.len(), Arg::V(Value::Empty));
             env.extend(f.params.iter().cloned().zip(vals));
+            for (i, p) in f.params.iter().enumerate() {
+                if i >= given || omitted.contains(&i) {
+                    env.push((format!("\u{1}{p}"), Arg::V(Value::Bool(true))));
+                }
+            }
             let saved = std::mem::replace(&mut *self.env.borrow_mut(), env);
             let a = self.arg(&f.body);
             *self.env.borrow_mut() = saved;
@@ -401,8 +414,25 @@ impl<'a> Eval<'a> {
             if params.len() > 253 {
                 return Err(ErrKind::Value);
             }
-            let params = params.iter().map(ident).collect::<Result<Vec<_>, _>>()?;
-            return Ok(Arg::F(Rc::new(Lambda { params, body: body.clone(), env: self.env.borrow().clone() })));
+            let mut required = params.len();
+            let mut names = Vec::with_capacity(params.len());
+            for (i, p) in params.iter().enumerate() {
+                match p {
+                    Expr::Table(None, spec) if spec.items == 0 && matches!(&spec.cols, Some((a, b)) if a == b) => {
+                        if required == params.len() {
+                            required = i;
+                        }
+                        names.push(ident(&Expr::Name(spec.cols.clone().map(|c| c.0).unwrap_or_default()))?);
+                    }
+                    other => {
+                        if required != params.len() {
+                            return Err(ErrKind::Value);
+                        }
+                        names.push(ident(other)?);
+                    }
+                }
+            }
+            return Ok(Arg::F(Rc::new(Lambda { params: names, required, body: body.clone(), env: self.env.borrow().clone() })));
         }
         if a.len() < 3 || a.len().is_multiple_of(2) {
             return Err(ErrKind::Value);
@@ -1058,6 +1088,11 @@ impl<'a> Eval<'a> {
                 "ISERR" => Value::Bool(matches!(self.scalar(a.first().ok_or(ErrKind::Na)?), Value::Error(k) if k != ErrKind::Na)),
                 "ISLOGICAL" => Value::Bool(matches!(self.scalar(a.first().ok_or(ErrKind::Na)?), Value::Bool(_))),
                 "ISNONTEXT" => Value::Bool(!matches!(self.scalar(a.first().ok_or(ErrKind::Na)?), Value::Text(_))),
+                "ISOMITTED" => match a {
+                    [Expr::Name(n)] => Value::Bool(self.local(&format!("\u{1}{}", n.to_ascii_uppercase())).is_some()),
+                    [_] => return Err(ErrKind::Value),
+                    _ => return Err(ErrKind::Na),
+                },
                 "ISREF" => Value::Bool(matches!(self.arg(a.first().ok_or(ErrKind::Na)?), Arg::R(..))),
                 "NA" => return Err(ErrKind::Na),
                 "DATE" => {

@@ -19,6 +19,7 @@ import { WhatIf } from './ui/whatif';
 import { Audit } from './ui/audit';
 import { Names, wireArgs } from './ui/names';
 import { Functions } from './ui/functions';
+import { lambdaOf, NamedFunctions } from './ui/namedfn';
 import { DATE_PERIODS, describe, parseRule, PRESETS, rangeText, ruleLine, withStop } from './ui/rules';
 import { bindShortcuts, Checker, initPrefs, liveRegion, setTextSize, setTheme, Shortcuts, textSize, theme, type TextSize, type ThemeName } from './ui/a11y';
 import { cleanPage, layoutOf, PageSetupDialog, type PageSetup } from './ui/pagesetup';
@@ -231,6 +232,8 @@ export class App {
   private readonly audit: Audit;
   private readonly nameTools: Names;
   private readonly fnTools: Functions;
+  private readonly namedFns: NamedFunctions;
+  private nameNoteMap = new Map<string, string>();
   private open: Opened | null = null;
   private pending = new Map<number, Map<string, [number, number, string]>>();
   private timer = 0;
@@ -387,7 +390,10 @@ export class App {
     }
     const suggestions = (): Suggestion[] => [
       ...FUNCTIONS,
-      ...(this.open?.names ?? []).map(([name, refers]): Suggestion => ({ name, kind: 'name', summary: refers })),
+      ...(this.open?.names ?? []).filter(([name]) => !name.includes('!')).map(([name, refers]): Suggestion => {
+        const f = lambdaOf(name, refers, this.nameNoteMap.get(name) ?? '');
+        return f ? { name, kind: 'function', summary: f.comment || refers, args: f.params.length ? f.params : [] } : { name, kind: 'name', summary: this.nameNoteMap.get(name) || refers };
+      }),
       ...this.grid.tables().map((t): Suggestion => ({ name: t.name, kind: 'table', summary: `Table, ${t.cols.length} columns` })),
     ];
     const tableHints = () => this.grid.tables().map((t) => ({ name: t.name, cols: t.cols }));
@@ -427,7 +433,10 @@ export class App {
       sheet: () => this.grid.sheetIndex,
       refreshNames: async () => {
         const o = this.open;
-        if (o) o.names = await engine().names(o.book);
+        if (o) {
+          o.names = await engine().names(o.book);
+          this.nameNoteMap = new Map(await engine().nameNotes(o.book));
+        }
       },
       sync: async (op, args) => {
         const id = this.open?.id;
@@ -436,6 +445,32 @@ export class App {
       syncName: async (name, refers) => {
         const id = this.open?.id;
         if (id) await api('PUT', `/api/workbooks/${id}/names`, { name, refers });
+      },
+      say: (t, bad) => this.status(t, !!bad),
+    });
+    this.namedFns = new NamedFunctions({
+      engine: engine(),
+      book: () => this.open?.book ?? null,
+      id: () => this.open?.id ?? null,
+      refreshNames: async () => {
+        const o = this.open;
+        if (o) {
+          o.names = await engine().names(o.book);
+          this.nameNoteMap = new Map(await engine().nameNotes(o.book));
+        }
+      },
+      sync: async (op, args) => {
+        const id = this.open?.id;
+        if (id) await api('PUT', `/api/workbooks/${id}/names/tool`, { op, args: wireArgs(args) });
+      },
+      syncName: async (name, refers) => {
+        const id = this.open?.id;
+        if (id) await api('PUT', `/api/workbooks/${id}/names`, { name, refers });
+      },
+      workbooks: async () => (await api<WorkbookMeta[]>('GET', '/api/workbooks')).map((w) => ({ id: w.id, title: w.title })),
+      workbook: async (wid) => {
+        const d = await api<{ names?: [string, string][]; nameNotes?: [string, string][] }>('GET', `/api/workbooks/${wid}`);
+        return { names: d.names ?? [], nameNotes: d.nameNotes ?? [] };
       },
       say: (t, bad) => this.status(t, !!bad),
     });
@@ -565,6 +600,7 @@ export class App {
     cmd('audit.evaluate', 'Evaluate formula', 'Step through the active formula one part at a time and see each result.', false, () => this.audit.evaluate());
     cmd('names.manager', 'Name Manager', 'Create, edit, filter and delete names, set their scope and comments, and change what they refer to.', true, () => this.nameTools.open(), 'Mod+F3');
     cmd('names.create', 'Create names from selection', 'Name cells after the labels in the top row, left column, bottom row or right column of the selection.', true, () => this.nameTools.createFromSelection(), 'Mod+Shift+F3');
+    cmd('names.functions', 'Named functions', 'Save a LAMBDA under a name with a description and argument placeholders, or import named functions from another workbook.', true, () => this.namedFns.open());
     cmd('names.apply', 'Apply names', 'Replace cell references in formulas with the names that point at them.', true, () => this.nameTools.applyDialog());
     cmd('names.paste', 'Paste name', 'Paste a name into the formula you are editing, or list every name on the sheet.', false, () => this.nameTools.pasteName(), 'F3');
     cmd('formula.insert-function', 'Insert function', 'Search every function by name or category and fill in its arguments with a preview of each value and the result.', true, () => this.fnTools.insertFunction(), 'Shift+F3');
@@ -1727,6 +1763,7 @@ export class App {
     }
     for (const [n, f] of doc.names ?? []) await e.defineName(book, n, f).catch(() => []);
     for (const [n, c] of doc.nameNotes ?? []) await e.nameComment(book, n, c).catch(() => undefined);
+    this.nameNoteMap = new Map(doc.nameNotes ?? []);
     await e.loadTables(book, doc.tables ?? []);
     await e.loadPivots(book, doc.pivots ?? []);
     this.pivotLines = doc.pivots ?? [];
