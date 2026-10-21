@@ -2,8 +2,8 @@
 
 Living log of comment content and rationale for the window. Source stays comment-free; it lives here.
 
-Current build version: v0.2.0
-Last updated: 2026-10-21 · canvas grid
+Current build version: v0.3.0
+Last updated: 2026-10-21 · home, saving, sheets
 
 ---
 
@@ -16,7 +16,9 @@ frontend/
 ├── public/favicon.svg          grid mark
 ├── public/engine/formcel.wasm  built by engine/build_wasm, not committed
 └── src/
-    ├── main.ts                 mounts the shell, checks both engines
+    ├── main.ts                 mounts the shell, checks both engines, starts App
+    ├── app.ts                  routing, opening workbooks, autosave, tabs, commands
+    ├── ui/home.ts              Start, Recent, Templates, Trash; keyed cards with thumbnails
     ├── version.ts              VERSION
     ├── engine/protocol.ts      request and response types for the worker
     ├── engine/worker.ts        loads the wasm engine, answers requests
@@ -37,6 +39,7 @@ frontend/
 - [src/engine/worker.ts](#worker)
 - [src/ui/shell.ts](#shell)
 - [src/grid/grid.ts](#grid)
+- [src/app.ts and src/ui/home.ts](#app)
 - [package.json](#package)
 
 ---
@@ -110,6 +113,45 @@ Alignment is guessed from the display text (numbers right, TRUE and FALSE centre
 - logged: v0.2.0 · 2026-10-21
 
 Text overflow into empty neighbours, wrapped display and row autofit (Phase 3); the fill handle, insert and delete shifting cells, several sheets (later in Phase 1); a Go To dialog; touch input.
+
+---
+
+## src/app.ts and src/ui/home.ts {#app}
+
+### Routing and views
+- refers-to: src/app.ts :: App.route, showHome, openWorkbook
+- kind: explainer
+- logged: v0.3.0 · 2026-10-21
+
+`#w-<id>` opens a workbook, anything else shows Home, so a reload reopens what was open. Home and the sheet view are both mounted once and swapped with `hidden`; the grid is one instance that `show(book, sheet)` points at another workbook or sheet.
+
+### Autosave
+- refers-to: src/app.ts :: queueSave, flush
+- kind: explainer
+- logged: v0.3.0 · 2026-10-21
+
+Changes collect per sheet, keyed by cell so the last value wins, and go out 400 ms after the last edit, one POST per sheet, chained so they arrive in order. Leaving a workbook, opening another and closing the tab flush first. A failed save keeps the cells for the next try and shows "Not saved" with the reason on hover.
+
+### Keyed cards
+- refers-to: src/ui/home.ts :: patch
+- kind: rationale
+- logged: v0.3.0 · 2026-10-21
+
+Lists are patched by key: cards that stay are updated in place, new ones are inserted where they belong, gone ones removed. Start reserves one row of recent cards and two rows of templates with skeletons, so nothing below moves when data arrives (measured: layout shift 0 at 4x CPU on a slow network).
+
+### Cards built in the live document
+- refers-to: src/ui/home.ts :: el
+- kind: warning-context
+- logged: v0.3.0 · 2026-10-21
+
+`el` first parsed markup inside a `<template>`, whose content belongs to an inert document. Thumbnails drawn on those canvases before insertion came out blank (grid lines only, the text pass lost). Parsing in a detached `div` of the live document fixed it; every thumbnail now shows its cells.
+
+### Not yet
+- refers-to: src/app.ts
+- kind: todo
+- logged: v0.3.0 · 2026-10-21
+
+Renaming, reordering, colouring and deleting sheets in the window (the API can rename); dropping a closed workbook from the window's engine memory; Open file and drop to import (Phase 4).
 
 ---
 

@@ -22,6 +22,8 @@ interface Palette {
 export interface GridEvents {
   onActive(text: string, ref: string, range: Range): void;
   onHistory(undo: boolean, redo: boolean): void;
+  onChanged(changes: Changed[]): void;
+  onSheet(sheet: number): void;
 }
 
 export class Grid {
@@ -48,13 +50,14 @@ export class Grid {
   private editing = false;
   private raf = 0;
   private queue: Promise<void> = Promise.resolve();
+  private sheet = 0;
   private pal!: Palette;
   private drag: null | { kind: 'cells' | 'rows' | 'cols' } | { kind: 'resize-col' | 'resize-row'; index: number; start: number; size: number } = null;
 
   constructor(
     host: HTMLElement,
     private readonly engine: EngineClient,
-    private readonly book: number,
+    private book: number,
     private readonly events: GridEvents,
   ) {
     this.el = host;
@@ -134,6 +137,7 @@ export class Grid {
   }
 
   private ensureData(v: Range): void {
+    if (this.book < 0) return;
     const need = { r0: Math.min(v.r0, this.fr ? 0 : v.r0), c0: Math.min(v.c0, this.fc ? 0 : v.c0), r1: v.r1, c1: v.c1 };
     const inside = (w: Range | null) => !!w && need.r0 >= w.r0 && need.r1 <= w.r1 && need.c0 >= w.c0 && need.c1 <= w.c1;
     if (inside(this.win) || inside(this.pendingWin)) return;
@@ -146,7 +150,7 @@ export class Grid {
       c1: Math.min(MAX_COLS - 1, v.c1 + cols),
     };
     this.pendingWin = want;
-    void this.engine.read(this.book, want.r0, want.c0, want.r1, want.c1).then((cells: Cell[]) => {
+    void this.engine.read(this.book, want.r0, want.c0, want.r1, want.c1, this.sheet).then((cells: Cell[]) => {
       if (this.pendingWin !== want) return;
       this.pendingWin = null;
       this.cache.clear();
@@ -443,11 +447,38 @@ export class Grid {
     this.freeze(this.ar, this.ac);
   }
 
+  show(book: number, sheet: number): void {
+    if (this.editing) {
+      this.editing = false;
+      this.editor.hidden = true;
+    }
+    this.book = book;
+    this.sheet = sheet;
+    this.cache.clear();
+    this.win = { r0: 0, c0: 0, r1: -1, c1: -1 };
+    this.pendingWin = null;
+    this.ar = this.ac = this.fr2 = this.fc2 = 0;
+    this.sx = this.sy = 0;
+    this.fr = this.fc = 0;
+    this.announce();
+    this.paint();
+  }
+
+  get sheetIndex(): number {
+    return this.sheet;
+  }
+
   private async commitEdits(changed: Changed[]): Promise<void> {
-    for (const [, r, c, t] of changed) {
+    if (changed.length && changed.every(([s]) => s !== this.sheet)) {
+      this.events.onSheet(changed[0][0]);
+      this.show(this.book, changed[0][0]);
+    }
+    for (const [s, r, c, t] of changed) {
+      if (s !== this.sheet) continue;
       if (t) this.cache.set(KEY(r, c), t);
       else this.cache.delete(KEY(r, c));
     }
+    if (changed.length) this.events.onChanged(changed);
     const hst = await this.engine.history(this.book);
     this.events.onHistory(hst.undo, hst.redo);
     this.announce();
@@ -455,7 +486,7 @@ export class Grid {
   }
 
   async setActive(raw: string): Promise<void> {
-    await this.commitEdits(await this.engine.apply(this.book, [[this.ar, this.ac, raw]]));
+    await this.commitEdits(await this.engine.apply(this.book, [[this.ar, this.ac, raw]], this.sheet));
   }
 
   async clearSelection(): Promise<void> {
@@ -466,9 +497,9 @@ export class Grid {
       edits = [];
       for (let r = s.r0; r <= s.r1; r++) for (let c = s.c0; c <= s.c1; c++) edits.push([r, c, '']);
     } else {
-      edits = (await this.engine.read(this.book, s.r0, s.c0, s.r1, s.c1)).map(([r, c]) => [r, c, '']);
+      edits = (await this.engine.read(this.book, s.r0, s.c0, s.r1, s.c1, this.sheet)).map(([r, c]) => [r, c, '']);
     }
-    if (edits.length) await this.commitEdits(await this.engine.apply(this.book, edits));
+    if (edits.length) await this.commitEdits(await this.engine.apply(this.book, edits, this.sheet));
   }
 
   async undo(): Promise<void> {
@@ -481,7 +512,7 @@ export class Grid {
 
   private async selectionTSV(): Promise<string> {
     const s = this.sel();
-    const cells = await this.engine.read(this.book, s.r0, s.c0, s.r1, s.c1);
+    const cells = await this.engine.read(this.book, s.r0, s.c0, s.r1, s.c1, this.sheet);
     const map = new Map(cells.map(([r, c, t]) => [KEY(r, c), t]));
     const out: string[] = [];
     for (let r = s.r0; r <= s.r1; r++) {
@@ -501,16 +532,16 @@ export class Grid {
       if (r < MAX_ROWS && c < MAX_COLS) edits.push([r, c, v]);
     }));
     if (!edits.length) return;
-    await this.commitEdits(await this.engine.apply(this.book, edits));
+    await this.commitEdits(await this.engine.apply(this.book, edits, this.sheet));
     const rows = grid.length;
     const cols = Math.max(...grid.map((r) => r.length));
     this.select(this.ar, this.ac, this.ar + rows - 1, this.ac + cols - 1);
   }
 
   private async autofit(col: number): Promise<void> {
-    const ext = await this.engine.extent(this.book);
+    const ext = await this.engine.extent(this.book, this.sheet);
     if (!ext) return;
-    const cells = await this.engine.read(this.book, 0, col, Math.min(ext[0], 20000), col);
+    const cells = await this.engine.read(this.book, 0, col, Math.min(ext[0], 20000), col, this.sheet);
     this.ctx.font = '13px Inter, system-ui, -apple-system, "Segoe UI", sans-serif';
     let wmax = 40;
     for (const [, , t] of cells) wmax = Math.max(wmax, this.ctx.measureText(t.split('\n', 1)[0]).width + 12);
@@ -558,7 +589,7 @@ export class Grid {
 
   private async jump(dir: Dir, extend: boolean): Promise<void> {
     const from: [number, number] = extend ? [this.fr2, this.fc2] : [this.ar, this.ac];
-    const [r, c] = await this.engine.edge(this.book, from[0], from[1], dir);
+    const [r, c] = await this.engine.edge(this.book, from[0], from[1], dir, this.sheet);
     if (extend) this.extendTo(r, c);
     else this.select(r, c);
   }
@@ -758,7 +789,7 @@ export class Grid {
       if (k === 'a') return this.select(0, 0, MAX_ROWS - 1, MAX_COLS - 1, false);
       if (e.key === 'Home') return this.select(0, 0);
       if (e.key === 'End') {
-        const x = await this.engine.extent(this.book);
+        const x = await this.engine.extent(this.book, this.sheet);
         return this.select(x ? x[0] : 0, x ? x[1] : 0);
       }
       return;

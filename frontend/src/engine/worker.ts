@@ -10,6 +10,9 @@ interface Exports {
   fc_set(book: number, sheet: number, a1: number, a1Len: number, raw: number, rawLen: number): number;
   fc_get(book: number, sheet: number, a1: number, a1Len: number): number;
   fc_apply(book: number, sheet: number, edits: number, len: number): number;
+  fc_load(book: number, sheet: number, edits: number, len: number): number;
+  fc_add_sheet(book: number, name: number, len: number): number;
+  fc_sheet_names(book: number): number;
   fc_undo(book: number): number;
   fc_redo(book: number): number;
   fc_history(book: number): number;
@@ -90,6 +93,18 @@ function run(x: Exports, req: Request): Value {
       const body = req.edits.map(([r, c, raw]) => `${r}\t${c}\t${escape(raw)}`).join('\n');
       return withStrings(x, [body], ([p, l]) => changed(out(x, x.fc_apply(req.book, req.sheet, p, l))));
     }
+    case 'load': {
+      const body = req.edits.map(([r, c, raw]) => `${r}\t${c}\t${escape(raw)}`).join('\n');
+      return withStrings(x, [body], ([p, l]) => {
+        const n = x.fc_load(req.book, req.sheet, p, l);
+        if (n < 0) throw new Error('The engine refused that workbook data.');
+        return n;
+      });
+    }
+    case 'sheet.add':
+      return withStrings(x, [req.name], ([p, l]) => x.fc_add_sheet(req.book, p, l));
+    case 'sheet.names':
+      return out(x, x.fc_sheet_names(req.book)).split('\n').filter(Boolean).map(unescape);
     case 'undo':
     case 'redo': {
       const n = req.op === 'undo' ? x.fc_undo(req.book) : x.fc_redo(req.book);

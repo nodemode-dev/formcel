@@ -48,6 +48,18 @@ export class EngineClient {
     return (await this.call({ op: 'apply', book, sheet, edits })) as Changed[];
   }
 
+  async load(book: number, edits: Edit[], sheet = 0): Promise<number> {
+    return Number(await this.call({ op: 'load', book, sheet, edits }));
+  }
+
+  async addSheet(book: number, name: string): Promise<number> {
+    return Number(await this.call({ op: 'sheet.add', book, name }));
+  }
+
+  async sheetNames(book: number): Promise<string[]> {
+    return (await this.call({ op: 'sheet.names', book })) as string[];
+  }
+
   async undo(book: number): Promise<Changed[]> {
     return (await this.call({ op: 'undo', book })) as Changed[];
   }

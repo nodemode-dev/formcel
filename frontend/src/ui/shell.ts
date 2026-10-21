@@ -8,6 +8,14 @@ export interface ShellParts {
   nameBox: HTMLInputElement;
   formulaBar: HTMLInputElement;
   grid: HTMLElement;
+  homeBtn: HTMLButtonElement;
+  title: HTMLInputElement;
+  save: HTMLElement;
+  saveText: Text;
+  home: HTMLElement;
+  sheet: HTMLElement;
+  tabs: HTMLElement;
+  addSheet: HTMLButtonElement;
 }
 
 const tool = (cmd: string, name: Parameters<typeof icon>[0], title: string) =>
@@ -17,10 +25,14 @@ export function mountShell(root: HTMLElement): ShellParts {
   root.innerHTML = `
     <header class="fc-bar">
       <div class="fc-brand">${icon('sheet')}<span>FormCel</span><span class="fc-version">v${VERSION}</span></div>
+      <button type="button" class="fc-tool fc-home-btn" title="Home" aria-label="Home" hidden>${icon('home')}</button>
+      <input class="fc-title" aria-label="Workbook name" spellcheck="false" autocomplete="off" hidden>
+      <span class="fc-save" role="status" aria-live="polite" hidden></span>
       <div class="fc-bar-spacer"></div>
       <span class="fc-status" data-state="pending" role="status" aria-live="polite"><span class="fc-status-dot"></span><span class="fc-status-text"></span></span>
     </header>
-    <main class="fc-main fc-sheet">
+    <main class="fc-main fc-home" aria-label="Home"></main>
+    <main class="fc-main fc-sheet" hidden>
       <div class="fc-toolbar" role="toolbar" aria-label="Sheet">
         ${tool('edit.undo', 'undo', 'Undo (Ctrl+Z)')}${tool('edit.redo', 'redo', 'Redo (Ctrl+Y)')}
         <span class="fc-tool-sep" aria-hidden="true"></span>
@@ -32,7 +44,7 @@ export function mountShell(root: HTMLElement): ShellParts {
         <input class="fc-fbar" aria-label="Formula bar" spellcheck="false" autocomplete="off">
       </div>
       <div class="fc-grid" role="grid" aria-label="Sheet1"></div>
-      <div class="fc-sheetbar"><span class="fc-tab" aria-current="page">Sheet1</span></div>
+      <div class="fc-sheetbar"><div class="fc-tabs" role="tablist" aria-label="Sheets"></div><button type="button" class="fc-tool fc-add-sheet" title="Add a sheet" aria-label="Add a sheet">${icon('plus')}</button></div>
     </main>`;
   const status = root.querySelector<HTMLElement>('.fc-status')!;
   const statusText = document.createTextNode('Engine starting');
@@ -44,6 +56,14 @@ export function mountShell(root: HTMLElement): ShellParts {
     nameBox: root.querySelector<HTMLInputElement>('.fc-namebox')!,
     formulaBar: root.querySelector<HTMLInputElement>('.fc-fbar')!,
     grid: root.querySelector<HTMLElement>('.fc-grid')!,
+    homeBtn: root.querySelector<HTMLButtonElement>('.fc-home-btn')!,
+    title: root.querySelector<HTMLInputElement>('.fc-title')!,
+    save: root.querySelector<HTMLElement>('.fc-save')!,
+    saveText: root.querySelector<HTMLElement>('.fc-save')!.appendChild(document.createTextNode('Saved')),
+    home: root.querySelector<HTMLElement>('.fc-home')!,
+    sheet: root.querySelector<HTMLElement>('.fc-sheet')!,
+    tabs: root.querySelector<HTMLElement>('.fc-tabs')!,
+    addSheet: root.querySelector<HTMLButtonElement>('.fc-add-sheet')!,
   };
 }
 
