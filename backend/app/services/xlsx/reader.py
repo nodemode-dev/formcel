@@ -9,9 +9,12 @@ from openpyxl.utils.datetime import to_excel
 from openpyxl.worksheet.formula import ArrayFormula, DataTableFormula
 
 from .. import page
+from .arrays import members
 from .autofilter import filter_in
+from .calcio import calc_in, render, scan
 from .cf import rules_in
 from .drawings import objects_in
+from .extlinks import books_in, lines_in
 from .formulas import from_file
 from .protect import book_in, flags_in, notes_in, sheet_in
 from .styles import tokens_in
@@ -33,8 +36,6 @@ def _value(cell, epoch, notes: Counter) -> str | None:
     if v is None:
         return None
     if isinstance(v, ArrayFormula):
-        if v.ref and ":" in str(v.ref):
-            notes["array formulas brought in as single formulas that spill"] += 1
         return from_file(v.text or "")
     if isinstance(v, DataTableFormula):
         notes["what-if data tables left out"] += 1
@@ -117,7 +118,9 @@ def _named(wb, default_font) -> tuple[dict[str, tuple[set[str], str]], list[str]
 
 
 def read(data: bytes) -> dict:
-    wb = load_workbook(io.BytesIO(data), data_only=False, rich_text=False, keep_links=False, keep_vba=True)
+    wb = load_workbook(io.BytesIO(data), data_only=False, rich_text=False, keep_links=True, keep_vba=True)
+    books_in(wb)
+    scanned = scan(data)
     vba = macro_parts(wb.vba_archive)
     if wb.vba_archive is not None:
         wb.vba_archive.close()
@@ -131,13 +134,15 @@ def read(data: bytes) -> dict:
         pass
     known, custom = _named(wb, default_font)
     sheets = []
-    for ws in wb.worksheets:
+    for si, ws in enumerate(wb.worksheets):
         cells, formats, styles, links = [], [], [], []
         flagged: dict[tuple[int, int], int] = {}
         max_c = 0
+        found, skip = members(ws)
+        dynamic = scanned[si]["dynamic"] if si < len(scanned) else set()
         for (r, c), cell in list(ws._cells.items()):
             r0, c0 = r - 1, c - 1
-            v = _value(cell, wb.epoch, notes)
+            v = None if (r, c) in skip else _value(cell, wb.epoch, notes)
             if v is not None and v != "'":
                 cells.append((r0, c0, v))
                 max_c = max(max_c, c)
@@ -192,7 +197,7 @@ def read(data: bytes) -> dict:
                     break
         if ws.defined_names:
             notes["names scoped to one sheet left out"] += len(ws.defined_names)
-        sheets.append({"name": ws.title[:31], "cells": cells, "formats": formats, "styles": styles, "merges": merges, "links": links, "rules": rules, "filter": autofilter, "validations": valid, "view": view, "objects": objects, "notes": notes_in(ws), "protection": sheet_in(ws, flagged)})
+        sheets.append({"name": ws.title[:31], "cells": cells, "formats": formats, "styles": styles, "merges": merges, "links": links, "rules": rules, "filter": autofilter, "validations": valid, "view": view, "objects": objects, "notes": notes_in(ws), "protection": sheet_in(ws, flagged), "arrays": [a[:4] for a in found if a[4] not in dynamic]})
     for cs in wb.chartsheets:
         notes["chart sheets left out"] += 1
     names = []
@@ -203,4 +208,5 @@ def read(data: bytes) -> dict:
         text = dn.attr_text or ""
         names.append((name, "=" + from_file(text.lstrip("="))))
     tables = tables_in(wb, {ws.title: i for i, ws in enumerate(wb.worksheets)}, notes)
-    return {"sheets": sheets, "names": names, "tables": tables, "theme": theme_in(wb.loaded_theme), "cellStyles": custom, "vba": vba, "protection": book_in(wb), "notes": [f"{n} {what}" for what, n in sorted(notes.items())]}
+    settings = render(calc_in(wb), [e for s in scanned for e in s["ignored"]])
+    return {"calc": settings, "externals": lines_in(wb), "sheets": sheets, "names": names, "tables": tables, "theme": theme_in(wb.loaded_theme), "cellStyles": custom, "vba": vba, "protection": book_in(wb), "notes": [f"{n} {what}" for what, n in sorted(notes.items())]}

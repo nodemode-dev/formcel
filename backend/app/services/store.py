@@ -11,6 +11,7 @@ from pathlib import Path
 import formcel_engine
 
 from .. import config
+from . import calcstate
 from . import collab as cb
 from . import templates
 
@@ -124,6 +125,7 @@ class Store:
                "theme": b.engine.theme(), "cellStyles": b.engine.cell_styles(), "collab": b.collab, "protection": b.protection(),
                "sheets": [{"name": n, "view": b.views[i] if i < len(b.views) else {}, "cells": b.engine.cells(i), "formats": b.engine.formats(i), "styles": b.engine.styles(i), "merges": [list(m) for m in b.engine.merges(i)], "rules": b.engine.rules(i), "filter": b.engine.filter(i), "validations": b.engine.validations(i), "links": b.engine.links(i), "objects": b.fit_objects()[i]} for i, n in enumerate(b.sheet_names())]}
         doc["watches"] = b.watches
+        doc.update(calcstate.save(b.engine, len(b.sheet_names())))
         target = self.path(b.id)
         tmp = target.with_suffix(".fcel.tmp")
         with zipfile.ZipFile(tmp, "w", zipfile.ZIP_DEFLATED) as z:
@@ -209,6 +211,7 @@ class Store:
                 eng.load_tables(doc["tables"])
             if doc.get("pivots"):
                 eng.load_pivots(doc["pivots"])
+            calcstate.restore(eng, doc, doc.get("arrays") or [])
             b = Book(wid, doc["title"], doc["created"], doc["modified"], eng, doc.get("template"), [s.get("view") or {} for s in doc["sheets"]])
             b.objects = [list(s.get("objects") or []) for s in doc["sheets"]]
             b.vba = self._macros(self.path(wid))
@@ -365,6 +368,7 @@ class Store:
             kept = eng.load_tables(book["tables"])
             if kept < len(book["tables"]):
                 notes.append(f"{len(book['tables']) - kept} tables FormCel could not read brought in as plain ranges")
+        calcstate.restore(eng, book, [s.get("arrays") or [] for s in book["sheets"]])
         stamp = now()
         b = Book(uuid.uuid4().hex[:12], (title or "Imported workbook")[:120], stamp, stamp, eng, None, [s["view"] for s in book["sheets"]])
         b.objects = [list(s.get("objects") or []) for s in book["sheets"]]
@@ -446,7 +450,15 @@ class Store:
         b = self._load(wid)
         with b.lock:
             n = len(b.sheet_names())
-            return {**b.meta(), "watches": b.watches, "names": [list(x) for x in b.engine.names()], "theme": b.engine.theme(), "cellStyles": b.engine.cell_styles(), "cells": [b.engine.cells(i) for i in range(n)], "formats": [b.engine.formats(i) for i in range(n)], "styles": [b.engine.styles(i) for i in range(n)], "merges": [[list(m) for m in b.engine.merges(i)] for i in range(n)], "rules": [b.engine.rules(i) for i in range(n)], "filters": [b.engine.filter(i) for i in range(n)], "validations": [b.engine.validations(i) for i in range(n)], "tables": b.engine.tables(), "pivots": b.engine.pivots(), "whatif": b.whatif, "links": [b.engine.links(i) for i in range(n)], "collab": {"notes": b.collab["notes"], "threads": b.collab["threads"]}, "protection": b.protection(), "automation": b.auto}
+            return {**b.meta(), "watches": b.watches, "names": [list(x) for x in b.engine.names()], "theme": b.engine.theme(), "cellStyles": b.engine.cell_styles(), "cells": [b.engine.cells(i) for i in range(n)], "formats": [b.engine.formats(i) for i in range(n)], "styles": [b.engine.styles(i) for i in range(n)], "merges": [[list(m) for m in b.engine.merges(i)] for i in range(n)], "rules": [b.engine.rules(i) for i in range(n)], "filters": [b.engine.filter(i) for i in range(n)], "validations": [b.engine.validations(i) for i in range(n)], "tables": b.engine.tables(), "pivots": b.engine.pivots(), "whatif": b.whatif, "links": [b.engine.links(i) for i in range(n)], "collab": {"notes": b.collab["notes"], "threads": b.collab["threads"]}, "protection": b.protection(), "automation": b.auto, **calcstate.save(b.engine, n)}
+
+    def calc_command(self, wid: str, cmd: str) -> dict:
+        b = self._load(wid)
+        with b.lock:
+            reply = calcstate.run(b.engine, cmd)
+            b.modified = now()
+            self._write(b)
+            return {"id": b.id, "modified": b.modified, "reply": reply}
 
     def get_objects(self, wid: str) -> list[list[dict]]:
         b = self._load(wid)

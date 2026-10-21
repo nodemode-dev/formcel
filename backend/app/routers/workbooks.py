@@ -345,6 +345,20 @@ def set_whatif(wid: str, body: RulesIn) -> dict:
         raise missing(wid)
 
 
+class CalcIn(BaseModel):
+    cmd: str = Field(max_length=2_000_000)
+
+
+@router.post("/workbooks/{wid}/calc")
+def calc_command(wid: str, body: CalcIn) -> dict:
+    try:
+        return store().calc_command(wid, body.cmd)
+    except (KeyError, FileNotFoundError):
+        raise missing(wid)
+    except ValueError as e:
+        raise HTTPException(422, str(e))
+
+
 @router.put("/workbooks/{wid}/validations")
 def set_validations(wid: str, body: RulesIn) -> dict:
     try:

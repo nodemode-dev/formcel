@@ -110,6 +110,10 @@ def resolve(key: str, books, fresh: bool = False) -> tuple[str, str]:
             return encode(webdata.filter_xml(text_arg(args[0]), text_arg(args[1]))), ""
         if name == "IMPORTRANGE":
             return encode(importrange(args, books)), ""
+        if name == "XREF":
+            from . import extbooks
+
+            return extbooks.resolve(args, books), ""
         if name == "AI":
             need(args, 1, 1)
             return aiclient.cell_answer(text_arg(args[0]), text_arg(args[1]) if len(args) > 1 else ""), ""

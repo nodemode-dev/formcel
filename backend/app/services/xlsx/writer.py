@@ -8,10 +8,13 @@ from openpyxl.workbook.defined_name import DefinedName
 from openpyxl.worksheet.hyperlink import Hyperlink
 
 from .. import page
+from .arrays import write_out
 from .autofilter import filter_out
+from .calcio import calc_out, finish
 from .cf import rules_out
 from .drawings import objects_out
-from .formulas import to_file
+from .extlinks import links_out
+from .formulas import EXT_OUT, EXT_SHEETS, to_file
 from .protect import book_out, notes_out, sheet_out
 from .styles import apply_out
 from .tables import ref_of, tables_out
@@ -33,6 +36,9 @@ def _number(text: str) -> int | float:
 
 def write(eng, views: list[dict], vba: dict[str, bytes] | None = None, objects: list[list[dict]] | None = None, notes: dict | None = None) -> bytes:
     wb = Workbook()
+    EXT_OUT.set({})
+    EXT_SHEETS.set({})
+    dynamic: list[list[str]] = []
     xml, body, heading = theme_out(eng.theme())
     wb.loaded_theme = xml
     wb._fonts[0] = Font(name=body, sz=10)
@@ -74,6 +80,7 @@ def write(eng, views: list[dict], vba: dict[str, bytes] | None = None, objects: 
             elif text:
                 cell.value = text
                 cell.data_type = "s"
+        dynamic.append(write_out(eng, ws, i))
         for r, c, code in eng.auto_formats(i) + eng.formats(i):
             ws.cell(row=r + 1, column=c + 1).number_format = code
         for r, c, _ in eng.styles(i):
@@ -142,7 +149,8 @@ def write(eng, views: list[dict], vba: dict[str, bytes] | None = None, objects: 
     for i, items in enumerate(objects or []):
         if items and i < len(wb.worksheets):
             objects_out(wb, wb.worksheets[i], items, views[i] if i < len(views) else {})
-    wb.calculation.fullCalcOnLoad = True
+    links_out(wb, eng.calc("extlines").splitlines())
+    ignored = calc_out(wb, eng.calc("get"))
     if vba:
         buf = io.BytesIO()
         with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as arc:
@@ -151,4 +159,4 @@ def write(eng, views: list[dict], vba: dict[str, bytes] | None = None, objects: 
         wb.vba_archive = zipfile.ZipFile(io.BytesIO(buf.getvalue()))
     out = io.BytesIO()
     wb.save(out)
-    return out.getvalue()
+    return finish(out.getvalue(), dynamic, ignored)
