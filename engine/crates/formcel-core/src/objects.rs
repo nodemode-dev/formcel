@@ -44,10 +44,10 @@ impl Anchor {
         let limit = if s.rows { MAX_ROWS } else { MAX_COLS } - 1;
         let at = i64::from(s.at);
         let end = at - s.delta;
-        let map = |i: u32| -> (u32, bool) {
+        let map = |i: u32, edge: bool| -> (u32, bool) {
             let x = i64::from(i);
             if s.delta >= 0 {
-                (if x >= at { (x + s.delta).min(i64::from(limit)) as u32 } else { i }, false)
+                (if x > at || (x == at && !edge) { (x + s.delta).min(i64::from(limit)) as u32 } else { i }, false)
             } else if x >= end {
                 ((x + s.delta) as u32, false)
             } else if x >= at {
@@ -57,8 +57,8 @@ impl Anchor {
             }
         };
         if s.rows {
-            let (a, ca) = map(self.r0);
-            let (b, cb) = map(self.r1);
+            let (a, ca) = map(self.r0, false);
+            let (b, cb) = map(self.r1, self.dy1 == 0.0 && self.r1 > self.r0);
             self.r0 = a;
             self.r1 = b;
             if ca {
@@ -68,8 +68,8 @@ impl Anchor {
                 self.dy1 = 0.0;
             }
         } else {
-            let (a, ca) = map(self.c0);
-            let (b, cb) = map(self.c1);
+            let (a, ca) = map(self.c0, false);
+            let (b, cb) = map(self.c1, self.dx1 == 0.0 && self.c1 > self.c0);
             self.c0 = a;
             self.c1 = b;
             if ca {
