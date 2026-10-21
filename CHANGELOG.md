@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.12.0 · 2026-10-21
+
+- Names: select cells, type a name in the Name Box and press Enter. Formulas can then use it (`=SUM(Sales)`), typing it in the Name Box jumps back to it, and the box shows the name whenever that range is selected. Names are saved with the workbook and follow inserted and deleted rows and renamed sheets. A name starts with a letter, underscore or backslash, has no spaces, and is not a cell address; the Name Box says why when one is refused.
+- LET gives names to values inside one formula: `=LET(x,2,y,3,x*y)`.
+- LAMBDA makes your own functions: `=LAMBDA(n,n+1)(41)` calls one straight away, and a LAMBDA saved as a name is called like a built-in function, recursion included. An uncalled LAMBDA shows `#CALC!`, the wrong number of arguments `#VALUE!`.
+- New: SUBSTITUTE (81 functions in all).
+- Conformance with Microsoft's function pages, now including LET, LAMBDA, SEQUENCE, TRANSPOSE and SUBSTITUTE, with the LAMBDA page's Name Manager definitions entered as the page gives them: 175 pass. The 5 that fail are one example that needs TEXT, which waits for number formats.
+
 ## 0.11.0 · 2026-10-21
 
 - Dynamic arrays: a formula whose result is several cells (`=A1:A3*10`, `=SEQUENCE(4,2)`, `=TRANSPOSE(A1:C1)`) fills the cells to its right and below. If one of them is in use the formula shows `#SPILL!`; clearing that cell lets it spill again. Spilled cells are not saved as values and their formula bar is empty.
