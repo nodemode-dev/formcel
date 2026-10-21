@@ -11,8 +11,30 @@ mod fx_fin;
 mod fx_math;
 mod fx_sf;
 mod fx_stat;
+#[path = "fx_date.rs"]
+mod fx_date;
+#[path = "fx_eng.rs"]
+mod fx_eng;
+#[path = "fx_hub.rs"]
+mod fx_hub;
+#[path = "fx_info.rs"]
+mod fx_info;
+#[path = "fx_lookup.rs"]
+mod fx_lookup;
+#[path = "fx_query.rs"]
+mod fx_query;
+#[path = "fx_regex.rs"]
+mod fx_regex;
+#[path = "fx_text.rs"]
+mod fx_text;
 
 pub trait Ctx {
+    fn formula_at(&self, _sheet: usize, _a: Addr) -> Option<String> {
+        None
+    }
+    fn sheet_total(&self) -> usize {
+        1
+    }
     fn sheet_index(&self, name: &str) -> Option<usize>;
     fn cell(&self, sheet: usize, a: Addr) -> Value;
     fn each(&self, sheet: usize, area: Area, f: &mut dyn FnMut(Addr, &Value));
@@ -274,7 +296,7 @@ impl<'a> Eval<'a> {
     }
 
     fn routed(&self, name: &str) -> bool {
-        ARRAY_FNS.contains(&name) || SCOPED_FNS.contains(&name) || fx::routed(name) || self.user(name) || self.ctx.host_fn(name)
+        ARRAY_FNS.contains(&name) || fx_hub::ARRAY_MORE.contains(&name) || SCOPED_FNS.contains(&name) || fx::routed(name) || self.user(name) || self.ctx.host_fn(name)
     }
 
     fn hosted(&self, name: &str, a: &[Expr]) -> Result<Arg, ErrKind> {
@@ -1233,7 +1255,10 @@ impl<'a> Eval<'a> {
                 _ => match self.call_chart(name, a) {
                     Some(r) => r?,
                     None => match self.call_fx(name, a) {
-                        Err(ErrKind::Name) => return self.call_stat(name, a),
+                        Err(ErrKind::Name) => match self.call_stat(name, a) {
+                            Err(ErrKind::Name) => return self.call_more(name, a),
+                            r => return r,
+                        },
                         r => return r,
                     },
                 },
@@ -1774,6 +1799,7 @@ impl Eval<'_> {
                 Ok(Arg::A(Array { rows: cells.len(), cols, data }))
             }
             "LINEST" | "TREND" => self.call_stat_arr(name, a),
+            _ if fx_hub::ARRAY_MORE.contains(&name) => self.call_arg_more(name, a),
             _ => self.call_fx_arg(name, a),
         }
     }

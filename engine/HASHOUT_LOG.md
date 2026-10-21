@@ -580,3 +580,35 @@ Forecast Sheet (MS-FSHEET) writes Timeline, Values, Forecast, Lower and Upper Co
 Descriptive Statistics and Regression follow MS-TOOLPAK: the first writes Mean, Standard Error, Median, Mode, Standard Deviation, Sample Variance, Kurtosis, Skewness, Range, Minimum, Maximum, Sum, Count and optional Largest, Smallest and Confidence Level, as values. Regression writes SUMMARY OUTPUT with the regression statistics, the ANOVA table (Significance F from the F distribution), the coefficient table with standard error, t Stat, P-value and the confidence bounds, and optional residuals. They use the same least-squares code as LINEST; t and F probabilities come from a regularised incomplete beta function in stats.rs.
 
 Analyze Data (MS-ANALYZE) and Explore (GS-EXPLORE) are natural-language and cloud features; FormCel's `explore` is a narrower local reading: it takes the selection (or the data around one cell), decides whether row one is a header, types each column as number, date or text, and returns insights as title, detail and range: size, per-column total and average with highest and lowest, trend by a straight line against rows or the first date column (R squared at least 0.5), unusual values beyond three standard deviations, most common text values, highest total per category of the first text column, pairs of number columns with correlation of 0.7 or more, and blank counts. No questions in words, no charts.
+### Function library tranche B
+- refers-to: src/fx_hub.rs :: call_more, call_arg_more, ARRAY_MORE; src/fx_text.rs; src/fx_regex.rs; src/fx_date.rs; src/fx_lookup.rs; src/fx_info.rs; src/fx_eng.rs; src/eval.rs :: call, call_arg, routed, Ctx::formula_at, Ctx::sheet_total; src/formula.rs :: FUNCTIONS, is_volatile
+- kind: explainer
+- logged: v0.34.0 · 2026-10-21
+
+The new functions live in eight modules declared in eval.rs as child modules (`#[path]`), so they use Eval's private members. eval.rs gained only default-branch calls: `call` ends in `call_more`, `call_arg` in `call_arg_more`, and `routed` also asks `fx_hub::ARRAY_MORE`. fx_hub chains the scalar modules and returns the Name error when none knows a name. FUNCTIONS grew to 199 names, sorted. OFFSET and INDIRECT are volatile. Ctx gained `formula_at` and `sheet_total` for FORMULATEXT, ISFORMULA, CELL and SHEETS.
+
+Text (MS-REPLACE, MS-REPT, MS-CHAR, MS-CODE, MS-UNICHAR, MS-UNICODE, MS-CLEAN, MS-PROPER, MS-VALUE, MS-NUMBERVALUE, MS-FIXED, MS-DOLLAR, MS-TEXTBEFORE, MS-TEXTAFTER, MS-TEXTJOIN, MS-VALUETOTEXT, MS-ARRAYTOTEXT, MS-T, MS-N, GS-SPLIT): CHAR and CODE use the Windows-1252 table. UNICHAR of a surrogate gives #N/A. TEXTBEFORE and TEXTAFTER take several delimiters, a negative instance, match_mode, match_end and if_not_found. TEXTAFTER keeps the text after the delimiter as it is, so a leading space stays.
+
+Regular expressions (GS-REGEXMATCH, GS-REGEXEXTRACT, GS-REGEXREPLACE, GS-REGEXTEST) use the Rust regex crate, one implementation for all four. Sheets uses RE2 and Excel's REGEXTEST uses PCRE2, so patterns with lookaround or backreferences give #VALUE! here. REGEXEXTRACT has the Excel modes 0 (first match), 1 (all matches as a row) and 2 (capture groups as a row); with two arguments and a pattern that has capture groups it returns the groups, as Sheets does. REGEXREPLACE expands $n, ${n} and \n.
+
+Date and time (MS-DATEDIF, MS-DAYS360, MS-NETWORKDAYS, MS-NETWORKDAYSINTL, MS-WORKDAY, MS-WORKDAYINTL, MS-WEEKNUM, MS-ISOWEEKNUM, MS-YEARFRAC, GS-EPOCHTODATE): DAYS360 US method sets an end day of 31 to the 1st of the next month when the start is before the 30th, as the Microsoft page says. WEEKNUM takes return types 1, 2, 11 to 17 and 21. Weekend arguments take codes 1 to 7, 11 to 17 or a seven character string. YEARFRAC supports bases 0 to 4. EPOCHTODATE takes unit 1, 2 or 3.
+
+Lookup and information (MS-LOOKUP, MS-ADDRESS, MS-COLUMN, MS-COLUMNS, MS-ROW, MS-ROWS, MS-OFFSET, MS-INDIRECT, MS-AREAS, MS-FORMULATEXT, GS-SORTN, MS-CELL, MS-INFO, MS-ISEVEN, MS-ISODD, MS-ISFORMULA, MS-TYPE, MS-SHEET, MS-SHEETS): INDIRECT reads A1 text only; with a1 FALSE it gives #REF!, since R1C1 text is not supported. SORTN takes the tie modes 0 to 3. CELL answers address, col, row, contents, type, prefix, protect, width, format, color, parentheses and filename (blank). INFO answers a subset.
+
+Engineering (MS-BIN2DEC to MS-OCT2HEX, MS-BITAND, MS-BITOR, MS-BITXOR, MS-BITLSHIFT, MS-BITRSHIFT, MS-DELTA, MS-GESTEP, MS-ERF, MS-ERFC, MS-CONVERT, MS-COMPLEX, MS-IMREAL and the IM family, MS-BESSELJ): base conversions use 10 digit two's complement and the places argument; BIT functions work on 48 bits. Two values on the Microsoft pages are not what the formulas give: CONVERT(6,"gal","l") is 22.71247 here, the page says 22.71741274, and BESSELJ(1.9,2) is 0.3299257277 here, the page says 0.329925829. FormCel keeps the mathematical results.
+
+### QUERY
+- refers-to: src/fx_query.rs :: query, lex, parse, plan; src/fx_hub.rs :: call_arg_more
+- kind: explainer
+- logged: v0.34.0 · 2026-10-21
+
+QUERY(data, query, [headers]) (GS-QUERY) follows the Google Visualization query language (GS-QUERYLANG) as a subset: select (with *), where (comparisons, and, or, not, is null, is not null, contains, starts with, ends with, matches, like), group by with sum, count, avg, min and max, order by asc and desc, limit, offset and label. Format and options are parsed and ignored. Scalar functions are upper, lower, year, month, day, quarter, dayofweek, hour, minute, second, todate and datediff; arithmetic and the Col1 notation work. A column takes the type most of its cells have, and cells of another type count as empty. Clauses run in the order where, group, select, order, offset, limit, label. An empty result gives #N/A.
+
+### Formula auditing
+- refers-to: src/audit.rs :: Arrow, encode_arrows, precedent_arrows, dependent_arrows, evaluate_steps; formcel-wasm :: fc_trace, fc_eval_steps; formcel-py :: trace, evaluate_steps
+- kind: explainer
+- logged: v0.34.0 · 2026-10-21
+
+Trace Precedents and Dependents (MS-TRACEPREC, MS-TRACEDEP) come from `Workbook::precedent_arrows` and `dependent_arrows`, which read the formula text through `areas_of`, so they see exactly what the recalculation reads. An arrow is a source area, a target cell and a level; the wire form is nine tab-separated numbers a line. Repeating the call with a higher level adds the next ring.
+
+Evaluate Formula (MS-EVALFORMULA) is `evaluate_steps`: each step is the formula before, the part being evaluated and the formula after. It reduces the leftmost innermost part that can be evaluated, shows ranges up to 64 cells as array literals, evaluates IF one branch at a time, evaluates LET, LAMBDA, MAP and the like as a whole, and stops at 300 steps. There is no Step In or Step Out, and an empty cell shows as 0.

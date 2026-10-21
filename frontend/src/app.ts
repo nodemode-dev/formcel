@@ -15,6 +15,7 @@ import type { ShellParts } from './ui/shell';
 import { icon } from './ui/icons';
 import { emptyPivot, formatPivot, outArea, parseFields, parsePivot, PivotDialog, PivotPanel, type PivotDef } from './ui/pivot';
 import { WhatIf } from './ui/whatif';
+import { Audit } from './ui/audit';
 import { DATE_PERIODS, describe, parseRule, PRESETS, rangeText, ruleLine, withStop } from './ui/rules';
 import { bindShortcuts, Checker, initPrefs, liveRegion, setTextSize, setTheme, Shortcuts, textSize, theme, type TextSize, type ThemeName } from './ui/a11y';
 import { cleanPage, layoutOf, PageSetupDialog, type PageSetup } from './ui/pagesetup';
@@ -224,6 +225,7 @@ export class App {
   private readonly home: Home;
   private readonly grid: Grid;
   private readonly charts: Charts;
+  private readonly audit: Audit;
   private open: Opened | null = null;
   private pending = new Map<number, Map<string, [number, number, string]>>();
   private timer = 0;
@@ -289,6 +291,8 @@ export class App {
         this.auto.edited(changes);
         this.pivotAuto(changes);
         this.whatIf?.changed();
+        this.audit.invalidate();
+        void this.audit.refresh();
       },
       onSheet: (sheet) => {
         this.markTab(sheet);
@@ -343,6 +347,23 @@ export class App {
       active: () => !!this.open,
       load: async () => (this.open ? (await api<{ objects: FloatObject[][] }>('GET', `/api/workbooks/${this.open.id}/objects`)).objects : []),
       save: (sheet, list) => this.sendObjects(sheet, list),
+    });
+    this.audit = new Audit({
+      grid: this.grid,
+      engine: engine(),
+      book: () => this.open?.book ?? null,
+      sheets: () => this.open?.sheets ?? [],
+      save: (w) => {
+        const id = this.open?.id;
+        if (id) void api('PUT', `/api/workbooks/${id}/watches`, { watches: w }).catch(() => this.status('Could not save the watch list', true));
+      },
+      say: (t, bad) => {
+        if (t) this.status(t, !!bad);
+      },
+      goto: (sheet, row, col) => {
+        if (sheet !== this.grid.sheetIndex) this.showSheet(sheet);
+        this.grid.goTo(`${colName(col)}${row + 1}`);
+      },
     });
     this.button('edit.undo').disabled = true;
     this.button('edit.redo').disabled = true;
@@ -458,6 +479,11 @@ export class App {
     cmd('edit.link', 'Insert link', 'Link the active cell to a web page, an email address or a place in the workbook, or change its link.', true, () => this.linkBox(), 'Mod+K');
     cmd('edit.link-open', 'Open link', 'Open the link in the active cell. Ctrl+click a linked cell does the same.', false, () => this.grid.linkTarget().then((t) => this.followLink(t)));
     cmd('edit.link-remove', 'Remove link', 'Remove the links from the selected cells and keep their text.', true, () => this.grid.removeLinks());
+    cmd('audit.precedents', 'Trace precedents', 'Draw arrows from the cells the active formula reads to the active cell. Click again to go one level further back.', false, () => this.audit.trace('p'));
+    cmd('audit.dependents', 'Trace dependents', 'Draw arrows from the active cell to the formulas that read it. Click again to go one level further out.', false, () => this.audit.trace('d'));
+    cmd('audit.remove-arrows', 'Remove arrows', 'Take the trace arrows off the sheet.', false, () => this.audit.removeArrows());
+    cmd('audit.evaluate', 'Evaluate formula', 'Step through the active formula one part at a time and see each result.', false, () => this.audit.evaluate());
+    cmd('audit.watch', 'Watch window', 'Show or hide a panel that lists watched cells with their value and formula, and keeps them current.', false, () => this.audit.toggleWatch());
     cmd('format.cf', 'Conditional formatting', 'Format cells by rules on their values: highlights, top and bottom, data bars, colour scales, icons and formulas.', true, () => this.cfMenu());
     cmd('format.cf-manage', 'Manage conditional formatting rules', 'See, reorder, stop and delete the rules on this sheet.', false, () => this.openPanel());
     cmd('format.styles', 'Cell styles', 'Apply a named cell style, or make one from the selection.', true, () => this.stylesMenu());
@@ -1522,7 +1548,7 @@ export class App {
     this.flush();
     await this.saving;
     this.collab.detach();
-    let doc: WorkbookMeta & { collab?: { notes: Record<string, { text: string; author: string; time: string }>; threads: never[]; people: string[] }; protection?: { book: string[]; sheets: string[][] }; cells: [number, number, string][][]; formats?: [number, number, string][][]; styles?: [number, number, string][][]; merges?: Area[][]; rules?: string[][]; filters?: string[]; validations?: string[][]; tables?: string[]; pivots?: string[]; whatif?: string[]; links?: [number, number, string][][]; theme?: string; cellStyles?: string[]; views?: SheetView[]; names?: Name[] };
+    let doc: WorkbookMeta & { collab?: { notes: Record<string, { text: string; author: string; time: string }>; threads: never[]; people: string[] }; protection?: { book: string[]; sheets: string[][] }; cells: [number, number, string][][]; formats?: [number, number, string][][]; styles?: [number, number, string][][]; merges?: Area[][]; rules?: string[][]; filters?: string[]; validations?: string[][]; tables?: string[]; pivots?: string[]; whatif?: string[]; links?: [number, number, string][][]; theme?: string; cellStyles?: string[]; views?: SheetView[]; names?: Name[]; watches?: [number, number, number][] };
     try {
       doc = await api('GET', `/api/workbooks/${id}`);
     } catch {
@@ -1570,6 +1596,7 @@ export class App {
     document.title = `${doc.title} · FormCel`;
     this.renderTabs();
     await this.charts.layer.open();
+    this.audit.load((doc.watches ?? []) as [number, number, number][]);
     this.showSheet(0);
     this.button('edit.undo').disabled = true;
     this.button('edit.redo').disabled = true;

@@ -1,4 +1,4 @@
-import type { Cell, CfCell, Changed, Effect, FilterList, FormatChange, LinkChange, Request, Response, Shift, StyleChange, Value } from './protocol';
+import type { Arrow, EvalStep, Cell, CfCell, Changed, Effect, FilterList, FormatChange, LinkChange, Request, Response, Shift, StyleChange, Value } from './protocol';
 
 interface Exports {
   memory: WebAssembly.Memory;
@@ -90,6 +90,8 @@ interface Exports {
   fc_extent(book: number, sheet: number): number;
   fc_edge(book: number, sheet: number, row: number, col: number, dir: number): number;
   fc_offset(src: number, len: number, dr: number, dc: number): number;
+  fc_trace(book: number, sheet: number, row: number, col: number, dependents: number, levels: number): number;
+  fc_eval_steps(book: number, sheet: number, row: number, col: number): number;
   fc_set_clock(serial: number): void;
   fc_set_locale(t: number, len: number): number;
   fc_host_keys(book: number, all: number): number;
@@ -411,6 +413,10 @@ function run(x: Exports, req: Request): Value {
       return withStrings(x, [req.name], ([p, l]) => effect(styled(x, x.fc_delete_style(req.book, p, l))));
     case 'style.apply':
       return withStrings(x, [req.name], ([p, l]) => effect(styled(x, x.fc_apply_style(req.book, req.sheet, req.r0, req.c0, req.r1, req.c1, p, l))));
+    case 'audit.trace':
+      return lines(out(x, x.fc_trace(req.book, req.sheet, req.row, req.col, req.dependents ? 1 : 0, req.levels))).map((l) => l.map(Number) as Arrow);
+    case 'audit.eval':
+      return lines(out(x, x.fc_eval_steps(req.book, req.sheet, req.row, req.col))).map(([b, c, a]) => [unescape(b ?? ''), unescape(c ?? ''), unescape(a ?? '')] as EvalStep);
     case 'values.read':
       return lines(out(x, x.fc_values_in(req.book, req.sheet, req.r0, req.c0, req.r1, req.c1))).map(([r, c, v]) => [Number(r), Number(c), unescape(v ?? '')] as [number, number, string]);
     case 'link.at':

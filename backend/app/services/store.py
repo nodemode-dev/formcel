@@ -72,6 +72,7 @@ class Book:
 
     auto: dict = field(default_factory=dict)
     whatif: list[str] = field(default_factory=list)
+    watches: list[list[int]] = field(default_factory=list)
 
     def fit_views(self) -> None:
         n = len(self.sheet_names())
@@ -122,6 +123,7 @@ class Store:
                "names": [list(n) for n in b.engine.names()], "tables": b.engine.tables(), "pivots": b.engine.pivots(), "whatif": b.whatif,
                "theme": b.engine.theme(), "cellStyles": b.engine.cell_styles(), "collab": b.collab, "protection": b.protection(),
                "sheets": [{"name": n, "view": b.views[i] if i < len(b.views) else {}, "cells": b.engine.cells(i), "formats": b.engine.formats(i), "styles": b.engine.styles(i), "merges": [list(m) for m in b.engine.merges(i)], "rules": b.engine.rules(i), "filter": b.engine.filter(i), "validations": b.engine.validations(i), "links": b.engine.links(i), "objects": b.fit_objects()[i]} for i, n in enumerate(b.sheet_names())]}
+        doc["watches"] = b.watches
         target = self.path(b.id)
         tmp = target.with_suffix(".fcel.tmp")
         with zipfile.ZipFile(tmp, "w", zipfile.ZIP_DEFLATED) as z:
@@ -222,6 +224,7 @@ class Store:
             except (KeyError, ValueError, zipfile.BadZipFile):
                 b.auto = {}
             b.whatif = list(doc.get("whatif", []))
+            b.watches = [list(w) for w in doc.get("watches", []) if isinstance(w, list) and len(w) == 3]
             self.open[wid] = b
             return b
 
@@ -393,7 +396,7 @@ class Store:
         b = self._load(wid)
         with b.lock:
             n = len(b.sheet_names())
-            return {**b.meta(), "names": [list(x) for x in b.engine.names()], "theme": b.engine.theme(), "cellStyles": b.engine.cell_styles(), "cells": [b.engine.cells(i) for i in range(n)], "formats": [b.engine.formats(i) for i in range(n)], "styles": [b.engine.styles(i) for i in range(n)], "merges": [[list(m) for m in b.engine.merges(i)] for i in range(n)], "rules": [b.engine.rules(i) for i in range(n)], "filters": [b.engine.filter(i) for i in range(n)], "validations": [b.engine.validations(i) for i in range(n)], "tables": b.engine.tables(), "pivots": b.engine.pivots(), "whatif": b.whatif, "links": [b.engine.links(i) for i in range(n)], "collab": {"notes": b.collab["notes"], "threads": b.collab["threads"]}, "protection": b.protection(), "automation": b.auto}
+            return {**b.meta(), "watches": b.watches, "names": [list(x) for x in b.engine.names()], "theme": b.engine.theme(), "cellStyles": b.engine.cell_styles(), "cells": [b.engine.cells(i) for i in range(n)], "formats": [b.engine.formats(i) for i in range(n)], "styles": [b.engine.styles(i) for i in range(n)], "merges": [[list(m) for m in b.engine.merges(i)] for i in range(n)], "rules": [b.engine.rules(i) for i in range(n)], "filters": [b.engine.filter(i) for i in range(n)], "validations": [b.engine.validations(i) for i in range(n)], "tables": b.engine.tables(), "pivots": b.engine.pivots(), "whatif": b.whatif, "links": [b.engine.links(i) for i in range(n)], "collab": {"notes": b.collab["notes"], "threads": b.collab["threads"]}, "protection": b.protection(), "automation": b.auto}
 
     def get_objects(self, wid: str) -> list[list[dict]]:
         b = self._load(wid)
@@ -475,6 +478,15 @@ class Store:
             if sheet >= len(b.sheet_names()):
                 raise IndexError(sheet)
             b.engine.load_rules(lines, sheet)
+            b.modified = now()
+            self._write(b)
+            return {"id": b.id, "modified": b.modified}
+
+    def set_watches(self, wid: str, watches: list[list[int]]) -> dict:
+        b = self._load(wid)
+        with b.lock:
+            n = len(b.sheet_names())
+            b.watches = [w for w in watches if len(w) == 3 and 0 <= w[0] < n]
             b.modified = now()
             self._write(b)
             return {"id": b.id, "modified": b.modified}

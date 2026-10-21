@@ -180,6 +180,7 @@ export class Grid {
     c0: number;
     sheet: number;
   } | null = null;
+  private overlay: ((ctx: CanvasRenderingContext2D, box: (r0: number, c0: number, r1: number, c1: number) => [number, number, number, number]) => void) | null = null;
   private wins: (Range | null)[] = [null, null, null, null];
   private pendingWins: (Range | null)[] = [null, null, null, null];
   private sh = 0;
@@ -462,6 +463,11 @@ export class Grid {
     this.pr = this.apr;
     this.pc = this.apc;
     this.paintListArrow();
+    if (this.overlay) {
+      ctx.save();
+      this.overlay(ctx, (r0, c0, r1, c1) => this.areaRect(r0, c0, r1, c1));
+      ctx.restore();
+    }
     ctx.strokeStyle = pal.frozen;
     ctx.lineWidth = 2;
     if (this.fr) this.line(HEAD_W, HEAD_H + fh, w, HEAD_H + fh);
@@ -1717,6 +1723,11 @@ export class Grid {
         ctx.restore();
       }
     }
+  }
+
+  setOverlay(fn: ((ctx: CanvasRenderingContext2D, box: (r0: number, c0: number, r1: number, c1: number) => [number, number, number, number]) => void) | null): void {
+    this.overlay = fn;
+    this.paint();
   }
 
   async linkTarget(): Promise<string> {

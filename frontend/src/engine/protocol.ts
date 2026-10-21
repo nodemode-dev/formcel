@@ -81,6 +81,8 @@ export type Request =
   | { id: number; op: 'host.set'; book: number; key: string; data: string | null }
   | { id: number; op: 'host.custom'; book: number; names: string[] }
   | { id: number; op: 'host.clear'; book: number }
+  | { id: number; op: 'audit.trace'; book: number; sheet: number; row: number; col: number; dependents: boolean; levels: number }
+  | { id: number; op: 'audit.eval'; book: number; sheet: number; row: number; col: number }
   | { id: number; op: 'offset'; items: [src: string, dr: number, dc: number][] };
 
 export type ProtKind = 'text' | 'load' | 'sheet' | 'book' | 'final' | 'flags' | 'flagsAt' | 'ranges' | 'user' | 'guard' | 'hides' | 'isFinal';
@@ -127,7 +129,9 @@ export interface WhatIfReply {
   text: string;
   effect: Effect;
 }
-export type Value = WhatIfReply | string | number | boolean | number[] | string[] | Cell[] | Changed[] | Name[] | Edit[] | Area[] | CfCell[] | LinkChange[] | [number, number] | Shift | Effect | FilterList | null;
+export type Arrow = [fromSheet: number, r0: number, c0: number, r1: number, c1: number, toSheet: number, row: number, col: number, level: number];
+export type EvalStep = [before: string, evaluating: string, after: string];
+export type Value = WhatIfReply | Arrow[] | EvalStep[] | string | number | boolean | number[] | string[] | Cell[] | Changed[] | Name[] | Edit[] | Area[] | CfCell[] | LinkChange[] | [number, number] | Shift | Effect | FilterList | null;
 
 export type Response =
   | { id: number; ok: true; value: Value }

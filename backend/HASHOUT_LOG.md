@@ -396,3 +396,9 @@ PivotTable definitions are workbook-wide in the .fcel file (`pivots`, the engine
 - logged: v0.34.0 · 2026-10-21
 
 Data tables, scenarios and the saved Solver model are lines of text the engine writes and reads; the backend keeps them as `whatif` in `workbook.json` and returns them from the workbook read, without interpreting them. `PUT /api/workbooks/{id}/whatif` replaces the list. The Python engine does not need them, so xlsx export leaves them out: data table results go out as the plain numbers they are, and Scenario Manager and Solver models have no xlsx part written by FormCel. FORECAST.ETS and its siblings are written with the `_xlfn.` prefix already listed in future.json.
+### Watch list in the .fcel file
+- refers-to: app/services/store.py :: Book.watches, set_watches, _write, _load, get; app/routers/workbooks.py :: WatchIn; PUT /api/workbooks/{id}/watches
+- kind: explainer
+- logged: v0.34.0 · 2026-10-21
+
+The Watch Window's cells are kept in `workbook.json` under `watches`, a list of [sheet, row, col] triples (zero based). GET returns them as `watches` and PUT /api/workbooks/{id}/watches stores the window's list. Entries that are not three numbers long are dropped when the file is read. .xlsx and .ods files do not carry the list.

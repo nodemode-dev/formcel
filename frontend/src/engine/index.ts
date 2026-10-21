@@ -1,6 +1,6 @@
-import type { Area, Cell, CfCell, Changed, Dir, Edit, Effect, FilterList, FormatItem, LinkChange, MergeMode, Name, RequestBody, Response, Shift, StyleOp, Value, WhatIfReply } from './protocol';
+import type { Arrow, EvalStep, Area, Cell, CfCell, Changed, Dir, Edit, Effect, FilterList, FormatItem, LinkChange, MergeMode, Name, RequestBody, Response, Shift, StyleOp, Value, WhatIfReply } from './protocol';
 
-export type { Area, Cell, CfCell, Changed, Dir, Edit, Effect, FilterList, FormatChange, FormatItem, LinkChange, MergeMode, Name, Shift, StyleChange, StyleOp } from './protocol';
+export type { Arrow, EvalStep, Area, Cell, CfCell, Changed, Dir, Edit, Effect, FilterList, FormatChange, FormatItem, LinkChange, MergeMode, Name, Shift, StyleChange, StyleOp } from './protocol';
 
 type Pending = { resolve: (v: Value) => void; reject: (e: Error) => void };
 
@@ -413,6 +413,14 @@ export class EngineClient {
 
   async edge(book: number, row: number, col: number, dir: Dir, sheet = 0): Promise<[number, number]> {
     return (await this.call({ op: 'edge', book, sheet, row, col, dir })) as [number, number];
+  }
+
+  async trace(book: number, row: number, col: number, dependents: boolean, levels: number, sheet = 0): Promise<Arrow[]> {
+    return (await this.call({ op: 'audit.trace', book, sheet, row, col, dependents, levels })) as Arrow[];
+  }
+
+  async evalSteps(book: number, row: number, col: number, sheet = 0): Promise<EvalStep[]> {
+    return (await this.call({ op: 'audit.eval', book, sheet, row, col })) as EvalStep[];
   }
 
   async offset(items: [src: string, dr: number, dc: number][]): Promise<string[]> {
