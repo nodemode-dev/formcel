@@ -1034,7 +1034,7 @@ export class Grid {
     const right = target.c0 > s.c1;
     const vertical = down || up;
     const src = await this.engine.read(this.book, s.r0, s.c0, s.r1, s.c1, this.sheet);
-    const map = new Map(src.map(([r, c, t, f]) => [KEY(r, c), f ?? t]));
+    const map = new Map(src.map(([r, c, t, f]) => [KEY(r, c), f || t]));
     const edits: [number, number, string][] = [];
     const moves: [string, number, number][] = [];
     const moved: number[] = [];

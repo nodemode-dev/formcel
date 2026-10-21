@@ -2,10 +2,17 @@
 
 Living log of comment content and rationale for the window. Source stays comment-free; it lives here.
 
-Current build version: v0.10.1
-Last updated: 2026-10-21 · formulas
+Current build version: v0.11.0
+Last updated: 2026-10-21 · dynamic arrays
 
 ---
+
+## Spilled cells · v0.11.0 (2026-10-21)
+
+- refers-to: src/grid/grid.ts :: fill; src/engine/worker.ts :: cells, changed
+- kind: explainer
+
+The engine sends a spilled cell with an empty formula field. The window keeps that empty string in `fx`, so the formula bar and the in-cell editor start empty on a spilled cell, and `queueSave` sends an empty input, so spilled values are never saved as typed values. `fill` reads `f || t` instead of `f ?? t`, so dragging the fill handle from spilled cells continues their values. Copy already uses shown values.
 
 ## App icon · v0.5.0 (2026-10-21)
 
