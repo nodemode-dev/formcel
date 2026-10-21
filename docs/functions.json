@@ -473,6 +473,43 @@
    }
   },
   {
+   "name": "ERROR.TYPE",
+   "args": [
+    "error_val"
+   ],
+   "summary": "The number of an error value, or #N/A for anything else.",
+   "category": "Information",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/error-type-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Info",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "EXACT",
+   "args": [
+    "text1",
+    "text2"
+   ],
+   "summary": "TRUE when two texts are the same, case included.",
+   "category": "Text",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/exact-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Text",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
    "name": "EXPAND",
    "args": [
     "array",

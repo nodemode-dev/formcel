@@ -684,6 +684,12 @@ impl<'a> Eval<'a> {
                 "LEN" => Value::Number(self.t(a, 0)?.chars().count() as f64),
                 "UPPER" => Value::Text(self.t(a, 0)?.to_uppercase()),
                 "LOWER" => Value::Text(self.t(a, 0)?.to_lowercase()),
+                "EXACT" => {
+                    if !count(2, 2) {
+                        return Err(ErrKind::Na);
+                    }
+                    Value::Bool(self.t(a, 0)? == self.t(a, 1)?)
+                }
                 "TRIM" => Value::Text(self.t(a, 0)?.split(' ').filter(|w| !w.is_empty()).collect::<Vec<_>>().join(" ")),
                 "LEFT" | "RIGHT" => {
                     let s: Vec<char> = self.t(a, 0)?.chars().collect();
@@ -753,6 +759,19 @@ impl<'a> Eval<'a> {
                 "ISTEXT" => Value::Bool(matches!(self.scalar(a.first().ok_or(ErrKind::Na)?), Value::Text(_))),
                 "ISERROR" => Value::Bool(matches!(self.scalar(a.first().ok_or(ErrKind::Na)?), Value::Error(_))),
                 "ISNA" => Value::Bool(matches!(self.scalar(a.first().ok_or(ErrKind::Na)?), Value::Error(ErrKind::Na))),
+                "ERROR.TYPE" => {
+                    let code = match self.scalar(a.first().ok_or(ErrKind::Na)?) {
+                        Value::Error(ErrKind::Null) => 1.0,
+                        Value::Error(ErrKind::Div0) => 2.0,
+                        Value::Error(ErrKind::Value) => 3.0,
+                        Value::Error(ErrKind::Ref) => 4.0,
+                        Value::Error(ErrKind::Name) => 5.0,
+                        Value::Error(ErrKind::Num) => 6.0,
+                        Value::Error(ErrKind::Na) => 7.0,
+                        _ => return Err(ErrKind::Na),
+                    };
+                    Value::Number(code)
+                }
                 "ISERR" => Value::Bool(matches!(self.scalar(a.first().ok_or(ErrKind::Na)?), Value::Error(k) if k != ErrKind::Na)),
                 "ISLOGICAL" => Value::Bool(matches!(self.scalar(a.first().ok_or(ErrKind::Na)?), Value::Bool(_))),
                 "ISNONTEXT" => Value::Bool(!matches!(self.scalar(a.first().ok_or(ErrKind::Na)?), Value::Text(_))),

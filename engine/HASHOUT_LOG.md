@@ -2,8 +2,15 @@
 
 Living log of comment content and rationale for the Rust engine. Source stays near comment-free; it lives here.
 
-Current build version: v0.15.0
-Last updated: 2026-10-21 · array shaping, TEXTSPLIT
+Current build version: v0.16.0
+Last updated: 2026-10-21 · ERROR.TYPE, EXACT
+
+### ERROR.TYPE and EXACT
+- refers-to: src/eval.rs :: call ("ERROR.TYPE", "EXACT"); src/formula.rs :: FUNCTIONS (106)
+- kind: explainer
+- logged: v0.16.0 · 2026-10-21
+
+Both were added so the conformance workbook can test each case inside the sheet: ERROR.TYPE tells error kinds apart, and EXACT compares text with case. ERROR.TYPE follows its Microsoft page: `#NULL!` 1, `#DIV/0!` 2, `#VALUE!` 3, `#REF!` 4, `#NAME?` 5, `#NUM!` 6, `#N/A` 7, and `#N/A` for anything that is not an error. FormCel's own `#SPILL!`, `#CALC!` and `#ERROR!` are not on the page, so they also give `#N/A`; that is FormCel's choice. EXACT is case-sensitive, as its page says. Both pages' examples pass in the conformance run (181 pass, 5 fail).
 
 ### Workbook::load, clear_history, rename_sheet (v0.3.0)
 - refers-to: crates/formcel-core/src/lib.rs :: load, clear_history, rename_sheet; formcel-wasm fc_load, fc_add_sheet, fc_sheet_names; formcel-py load, cells, rename_sheet
