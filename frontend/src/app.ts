@@ -351,6 +351,7 @@ export class App {
       onLinkBox: () => this.linkBox(),
       onPainter: (state) => this.button('format.painter').setAttribute('aria-pressed', String(state !== 'off')),
       onView: (sheet, view) => this.saveView(sheet, view),
+      onBreakMove: (axis, from, to) => this.moveBreak(axis, from, to),
       onMenu: (kind, x, y) => this.cellMenu(kind, x, y),
       onGoto: () => {
         p.nameBox.focus();
@@ -1385,6 +1386,15 @@ export class App {
     }
     this.sendPage(sheet);
     this.grid.focus();
+  }
+
+  private moveBreak(axis: 'row' | 'col', from: number, to: number): void {
+    if (!this.open || to < 1) return;
+    const sheet = this.grid.sheetIndex;
+    const p = this.pageOf(sheet);
+    const key = axis === 'row' ? 'rowBreaks' : 'colBreaks';
+    p[key] = [...new Set([...p[key].filter((x) => x !== from), to])].sort((a, b) => a - b);
+    this.sendPage(sheet);
   }
 
   private printArea(set: boolean): void {

@@ -2,6 +2,7 @@ import type { EngineClient } from '../engine';
 import type { Range } from '../grid/a1';
 import type { Grid } from '../grid/grid';
 import { registerCommand } from '../ui/commands';
+import { Timeline } from '../ui/timeline';
 import { Decor } from './decor';
 import { recommend, readMatrix, rangeLabel, parseRangeText } from './data';
 import { askAlt, askSparkline } from './dialogs';
@@ -25,9 +26,11 @@ export class Charts {
   private readonly editor: ChartEditor;
   private readonly file: HTMLInputElement;
   private readonly cellFile: HTMLInputElement;
+  private readonly timeline: Timeline;
 
   constructor(private readonly grid: Grid, private readonly eng: EngineClient, private readonly host: ChartsHost) {
     this.layer = new ObjectLayer(grid, eng, host);
+    this.timeline = new Timeline({ grid, eng, book: () => host.book() });
     this.decor = new Decor(grid, eng, this.layer, () => host.book(), () => host.sheetNames());
     this.layer.onAlt = (o) => void this.alt(o);
     this.cellFile = document.createElement('input');
@@ -66,6 +69,9 @@ export class Charts {
     cmd('insert.cell-picture', 'Insert picture in cell', 'Choose an image file and place it inside the active cell. It stays in the cell, moves with it when rows and columns are inserted or deleted, and is saved with the workbook.', () => this.cellFile.click());
     cmd('insert.sparkline', 'Insert sparklines', 'Draw a line, column or win/loss sparkline in each cell of a location range from a data range, with markers for the high, low, first, last and negative points and axis options.', () => this.sparkline());
     cmd('insert.sparkline-clear', 'Clear sparklines', 'Remove the sparklines in the selected cells.', () => this.clearSparklines());
+    cmd('view.timeline', 'Timeline view', 'Lay out the rows of the selected range as cards on a time axis by their start and end dates, grouped by a column, with day, week, month, quarter and year zoom. Choose a card to go to its row.', () => {
+      if (this.host.active()) void this.timeline.open();
+    });
     cmd('insert.alt-text', 'Alt text for the selected object', 'Describe the selected chart, picture, shape or text box for people who use a screen reader, or mark it decorative.', () => {
       const o = this.layer.selectedObject();
       if (o) void this.alt(o);

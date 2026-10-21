@@ -1,0 +1,21 @@
+.fc-spark-bound { display: grid; grid-template-columns: 1fr auto; gap: var(--space-2); align-items: end; }
+.fc-spark-points { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-1) var(--space-3); margin: var(--space-2) 0; }
+
+.fc-sr-grid { pointer-events: none; }
+
+.fc-tl-modal { width: min(1200px, 96vw); max-width: 96vw; }
+.fc-tl-bar { display: flex; flex-wrap: wrap; align-items: end; gap: var(--space-2); }
+.fc-tl-bar .fc-fmt-input { min-width: 0; }
+.fc-tl-scroll { position: relative; height: min(60vh, 560px); overflow: auto; border: 1px solid var(--border-light); border-radius: var(--radius-sm); background: var(--cell-bg); margin-top: var(--space-2); }
+.fc-tl-axis { position: sticky; top: 0; z-index: var(--z-raised); background: var(--bg-secondary); border-bottom: 1px solid var(--border-light); overflow: hidden; }
+.fc-tl-tick { position: absolute; top: 0; bottom: 0; left: 0; padding-left: var(--space-1); border-left: 1px solid var(--border-light); display: grid; align-content: space-between; font-size: var(--text-sm); color: var(--text-secondary); white-space: nowrap; }
+.fc-tl-major { font-weight: 600; color: var(--text-primary); min-height: 1.2em; }
+.fc-tl-body { position: relative; }
+.fc-tl-today { position: absolute; top: 0; bottom: 0; left: 0; width: 2px; background: var(--accent-color); pointer-events: none; }
+.fc-tl-today[hidden] { display: none; }
+.fc-tl-group { position: absolute; top: 0; left: 0; height: 28px; padding: 0 var(--space-2); display: flex; align-items: center; font-size: var(--text-sm); font-weight: 600; color: var(--text-secondary); will-change: transform; }
+.fc-tl-group[hidden] { display: none; }
+.fc-tl-card { --tl-color: var(--accent-color); position: absolute; top: 0; left: 0; box-sizing: border-box; display: grid; align-content: center; gap: 2px; padding: 0 var(--space-2); text-align: left; overflow: hidden; border: 1px solid var(--tl-color); border-left-width: 4px; border-radius: var(--radius-sm); background: var(--bg-secondary); color: var(--text-primary); cursor: pointer; will-change: transform; }
+.fc-tl-card:hover, .fc-tl-card:focus-visible { box-shadow: var(--shadow-md); outline: 2px solid var(--accent-color); outline-offset: 1px; }
+.fc-tl-title { font-size: var(--text-sm); font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fc-tl-dates { font-size: 11px; color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

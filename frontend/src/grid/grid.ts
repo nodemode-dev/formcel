@@ -123,6 +123,7 @@ export interface GridEvents {
   onOpenLink(): void;
   onLinkBox(): void;
   onView(sheet: number, view: SheetView): void;
+  onBreakMove?(axis: 'row' | 'col', from: number, to: number): void;
   onMenu(kind: MenuKind, x: number, y: number): void;
   onGoto(): void;
   onError?(message: string): void;
@@ -223,7 +224,7 @@ export class Grid {
   private viewColor: string | undefined;
   private fillTo: { r: number; c: number } | null = null;
   private pal!: Palette;
-  private drag: null | { kind: 'cells' | 'rows' | 'cols' | 'fill' | 'split-r' | 'split-c' } | { kind: 'resize-col' | 'resize-row'; index: number; start: number; size: number } = null;
+  private drag: null | { kind: 'cells' | 'rows' | 'cols' | 'fill' | 'split-r' | 'split-c' } | { kind: 'resize-col' | 'resize-row'; index: number; start: number; size: number } | { kind: 'break'; axis: 'row' | 'col'; from: number; to: number } = null;
 
   constructor(
     host: HTMLElement,
@@ -1382,6 +1383,20 @@ export class Grid {
     return { row: Math.min(MAX_ROWS - 1, row), col: Math.min(MAX_COLS - 1, col), pr, pc };
   }
 
+  private breakAt(px: number, py: number): { axis: 'row' | 'col'; index: number } | null {
+    const v = this.breakView;
+    if (!v || px <= HEAD_W || py <= HEAD_H) return null;
+    const { pr, pc } = this.hit(px, py);
+    const [ar0, ac0, ar1, ac1] = v.area;
+    if (px >= this.x(ac0, pc) - 4 && px <= this.x(ac1 + 1, pc) + 4) {
+      for (const r of v.rowBreaks) if (Math.abs(py - this.y(r, pr)) <= 4) return { axis: 'row', index: r };
+    }
+    if (py >= this.y(ar0, pr) - 4 && py <= this.y(ar1 + 1, pr) + 4) {
+      for (const c of v.colBreaks) if (Math.abs(px - this.x(c, pc)) <= 4) return { axis: 'col', index: c };
+    }
+    return null;
+  }
+
   private splitBar(px: number, py: number): 'split-r' | 'split-c' | null {
     if (this.sh && Math.abs(py - (HEAD_H + this.sh)) <= 3) return 'split-r';
     if (this.sw && Math.abs(px - (HEAD_W + this.sw)) <= 3) return 'split-c';
@@ -1826,8 +1841,15 @@ export class Grid {
         ctx.strokeStyle = '#2563eb';
         ctx.lineWidth = 2;
         const edges: [number, number, number, number, boolean][] = [[left, top, right, top, false], [left, bottom, right, bottom, false], [left, top, left, bottom, false], [right, top, right, bottom, false]];
-        for (const r of v.rowBreaks) edges.push([left, this.y(r, pr), right, this.y(r, pr), v.manualRows.has(r)]);
-        for (const c of v.colBreaks) edges.push([this.x(c, pc), top, this.x(c, pc), bottom, v.manualCols.has(c)]);
+        const moving = this.drag?.kind === 'break' ? this.drag : null;
+        for (const r of v.rowBreaks) {
+          const at = moving && moving.axis === 'row' && moving.from === r ? moving.to : r;
+          edges.push([left, this.y(at, pr), right, this.y(at, pr), at !== r || v.manualRows.has(r)]);
+        }
+        for (const c of v.colBreaks) {
+          const at = moving && moving.axis === 'col' && moving.from === c ? moving.to : c;
+          edges.push([this.x(at, pc), top, this.x(at, pc), bottom, at !== c || v.manualCols.has(c)]);
+        }
         for (const [x0, y0, x1, y1, manual] of edges) {
           ctx.setLineDash(manual || x0 === x1 && (x0 === left || x0 === right) || y0 === y1 && (y0 === top || y0 === bottom) ? [] : [6, 4]);
           this.line(x0, y0, x1, y1);
@@ -2539,6 +2561,15 @@ export class Grid {
     el.addEventListener('pointermove', (e) => {
       if (e.target !== this.canvas) return;
       const p = this.local(e);
+      if (this.drag?.kind === 'break') {
+        const at = this.hit(p.x, p.y);
+        const to = this.drag.axis === 'row' ? at.row : at.col;
+        if (to > 0 && to !== this.drag.to) {
+          this.drag.to = to;
+          this.paint();
+        }
+        return;
+      }
       if (this.drag?.kind === 'split-r' || this.drag?.kind === 'split-c') {
         if (this.drag.kind === 'split-r') this.sh = Math.max(1, Math.round(p.y - HEAD_H));
         else this.sw = Math.max(1, Math.round(p.x - HEAD_W));
@@ -2581,6 +2612,11 @@ export class Grid {
       }
       const b = this.boundary(p.x, p.y);
       const bar = this.splitBar(p.x, p.y);
+      const brk = this.breakAt(p.x, p.y);
+      if (brk) {
+        this.canvas.style.cursor = brk.axis === 'row' ? 'row-resize' : 'col-resize';
+        return;
+      }
       this.canvas.style.cursor = bar ? (bar === 'split-r' ? 'row-resize' : 'col-resize') : this.onFillHandle(p.x, p.y) ? 'crosshair' : b ? (b.kind === 'col' ? 'col-resize' : 'row-resize') : 'cell';
     });
 
@@ -2601,6 +2637,11 @@ export class Grid {
       this.focus();
       const p = this.local(e);
       this.canvas.setPointerCapture(e.pointerId);
+      const brk = this.breakAt(p.x, p.y);
+      if (brk) {
+        this.drag = { kind: 'break', axis: brk.axis, from: brk.index, to: brk.index };
+        return;
+      }
       const bar = this.splitBar(p.x, p.y);
       if (bar) {
         this.drag = { kind: bar };
@@ -2659,7 +2700,10 @@ export class Grid {
       if (this.canvas.hasPointerCapture(e.pointerId)) this.canvas.releasePointerCapture(e.pointerId);
       const d = this.drag;
       this.drag = null;
-      if (this.painter && (d?.kind === 'cells' || d?.kind === 'rows' || d?.kind === 'cols')) this.enqueue(() => this.applyPainter());
+      if (d?.kind === 'break') {
+        if (d.to !== d.from) this.events.onBreakMove?.(d.axis, d.from, d.to);
+        this.paint();
+      } else if (this.painter && (d?.kind === 'cells' || d?.kind === 'rows' || d?.kind === 'cols')) this.enqueue(() => this.applyPainter());
       else if (d?.kind === 'fill') {
         const f = this.fillRange();
         this.fillTo = null;
