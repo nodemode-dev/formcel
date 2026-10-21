@@ -42,6 +42,8 @@ pub struct Style {
     pub v: Option<VAlign>,
     pub wrap: bool,
     pub indent: u8,
+    pub rot: i8,
+    pub vertical: bool,
     pub borders: [Option<Border>; 4],
 }
 
@@ -134,6 +136,13 @@ impl Style {
                         },
                     }
                 }
+                "rot" => {
+                    (self.rot, self.vertical) = match val {
+                        None | Some("") | Some("0") => (0, false),
+                        Some("v") => (0, true),
+                        Some(v) => (v.parse::<i8>().ok().filter(|d| (-90..=90).contains(d))?, false),
+                    }
+                }
                 "bt" | "br" | "bb" | "bl" => {
                     let i = EDGES.iter().position(|e| *e == key)?;
                     self.borders[i] = if clear {
@@ -186,6 +195,11 @@ impl Style {
         }
         if self.indent > 0 {
             out.push(format!("in:{}", self.indent));
+        }
+        if self.vertical {
+            out.push("rot:v".into());
+        } else if self.rot != 0 {
+            out.push(format!("rot:{}", self.rot));
         }
         for (i, b) in self.borders.iter().enumerate() {
             if let Some(b) = b {

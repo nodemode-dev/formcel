@@ -303,6 +303,98 @@ pub unsafe extern "C" fn fc_load_styles(id: u32, sheet: u32, lines: *const u8, l
     }
 }
 
+/// Merges, merges across, merges and centers, or unmerges a rectangle as one undo step (mode 0 center, 1 across, 2 cells, 3 unmerge).
+#[no_mangle]
+pub extern "C" fn fc_merge(id: u32, sheet: u32, r0: u32, c0: u32, r1: u32, c1: u32, mode: u32) -> i32 {
+    use formcel_core::MergeMode;
+    let mode = match mode {
+        0 => MergeMode::Center,
+        1 => MergeMode::Across,
+        2 => MergeMode::Cells,
+        _ => MergeMode::Unmerge,
+    };
+    match with_book(id, |wb| wb.merge(sheet as usize, Addr { row: r0, col: c0 }, Addr { row: r1, col: c1 }, mode).map(|e| wire::encode_effect(&e, &|s, a| wb.meta(s, a)))) {
+        Some(Ok(s)) => emit(&s) as i32,
+        _ => -1,
+    }
+}
+
+/// The merged areas of a sheet as `r0\tc0\tr1\tc1` lines.
+#[no_mangle]
+pub extern "C" fn fc_merges(id: u32, sheet: u32) -> i32 {
+    match with_book(id, |wb| wb.merges(sheet as usize)) {
+        Some(list) => emit(&list.iter().map(|m| format!("{}\t{}\t{}\t{}\n", m.r0, m.c0, m.r1, m.c1)).collect::<String>()) as i32,
+        None => -1,
+    }
+}
+
+/// Replaces a sheet's merged areas from `r0\tc0\tr1\tc1` lines without an undo step.
+///
+/// # Safety
+/// `lines` must point at `len` readable bytes.
+#[no_mangle]
+pub unsafe extern "C" fn fc_load_merges(id: u32, sheet: u32, lines: *const u8, len: u32) -> i32 {
+    let mut list = Vec::new();
+    for l in text(lines, len).split('\n').filter(|l| !l.is_empty()) {
+        let n: Vec<u32> = l.split('\t').filter_map(|p| p.parse().ok()).collect();
+        if n.len() != 4 {
+            return -1;
+        }
+        list.push(formcel_core::formula::Area { r0: n[0], c0: n[1], r1: n[2], c1: n[3] });
+    }
+    match with_book(id, |wb| wb.load_merges(sheet as usize, &list)) {
+        Some(Ok(n)) => n as i32,
+        _ => -1,
+    }
+}
+
+/// Sets styles and number formats cell by cell from `row\tcol\tstyle\tcode` lines as one undo step.
+///
+/// # Safety
+/// `lines` must point at `len` readable bytes.
+#[no_mangle]
+pub unsafe extern "C" fn fc_put_formats(id: u32, sheet: u32, lines: *const u8, len: u32) -> i32 {
+    let mut items = Vec::new();
+    for l in text(lines, len).split('\n').filter(|l| !l.is_empty()) {
+        let p: Vec<&str> = l.splitn(4, '\t').collect();
+        let (Some(row), Some(col)) = (p.first().and_then(|s| s.parse().ok()), p.get(1).and_then(|s| s.parse().ok())) else { return -1 };
+        let opt = |i: usize| p.get(i).map(|s| wire::unescape(s));
+        items.push((Addr { row, col }, opt(2), opt(3)));
+    }
+    match with_book(id, |wb| wb.put_formats(sheet as usize, &items).map(|e| wire::encode_effect(&e, &|s, a| wb.meta(s, a)))) {
+        Some(Ok(s)) => emit(&s) as i32,
+        _ => -1,
+    }
+}
+
+/// The current length of the undo history, to pass to `fc_undo_group` later.
+#[no_mangle]
+pub extern "C" fn fc_undo_mark(id: u32) -> i32 {
+    with_book(id, |wb| wb.undo_mark() as i32).unwrap_or(-1)
+}
+
+/// Joins every undo step made since `mark` into one.
+#[no_mangle]
+pub extern "C" fn fc_undo_group(id: u32, mark: u32) -> i32 {
+    match with_book(id, |wb| wb.undo_group(mark as usize)) {
+        Some(()) => 0,
+        None => -1,
+    }
+}
+
+/// Number format codes inside a rectangle as `%\trow\tcol\tcode` lines.
+#[no_mangle]
+pub extern "C" fn fc_formats_in(id: u32, sheet: u32, r0: u32, c0: u32, r1: u32, c1: u32) -> i32 {
+    let s = sheet as usize;
+    match with_book(id, |wb| wb.formats_in(s, Addr { row: r0, col: c0 }, Addr { row: r1, col: c1 })) {
+        Some(list) => {
+            let list: Vec<(usize, Addr, String)> = list.into_iter().map(|(a, t)| (s, a, t)).collect();
+            emit(&wire::encode_styles('%', Some(s), &list)) as i32
+        }
+        None => -1,
+    }
+}
+
 /// Lists workbook names as `name\t=formula` lines.
 #[no_mangle]
 pub extern "C" fn fc_names(id: u32) -> i32 {

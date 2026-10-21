@@ -188,11 +188,12 @@ pub fn to_a1(addr: Addr) -> String {
 pub struct Sheet {
     pub name: String,
     cells: Store,
+    merges: Vec<Area>,
 }
 
 impl Sheet {
     pub fn new(name: &str) -> Self {
-        Sheet { name: name.to_string(), cells: Store::default() }
+        Sheet { name: name.to_string(), cells: Store::default(), merges: Vec::new() }
     }
 
     pub fn len(&self) -> usize {
@@ -244,6 +245,45 @@ type Key = (usize, Addr);
 type Dropped = Vec<(Addr, String)>;
 type Rewritten = Vec<(usize, Addr, String)>;
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum MergeMode {
+    Center,
+    Across,
+    Cells,
+    Unmerge,
+}
+
+fn shift_area(m: Area, s: Shift) -> Option<Area> {
+    let (a0, a1) = if s.rows { (m.r0, m.r1) } else { (m.c0, m.c1) };
+    let (a0, a1, at) = (i64::from(a0), i64::from(a1), i64::from(s.at));
+    let limit = i64::from(if s.rows { MAX_ROWS } else { MAX_COLS }) - 1;
+    let (n0, n1) = if s.delta >= 0 {
+        (if a0 >= at { a0 + s.delta } else { a0 }, if a1 >= at { a1 + s.delta } else { a1 })
+    } else {
+        let end = at - s.delta;
+        let map = |x: i64| if x >= end { x + s.delta } else if x >= at { at } else { x };
+        let lo = map(a0);
+        let hi = if a1 >= at && a1 < end { at - 1 } else { map(a1) };
+        if hi < lo {
+            return None;
+        }
+        (lo, hi)
+    };
+    if n0 > limit {
+        return None;
+    }
+    let n1 = n1.min(limit);
+    let out = if s.rows { Area { r0: n0 as u32, r1: n1 as u32, ..m } } else { Area { c0: n0 as u32, c1: n1 as u32, ..m } };
+    (out.r0 < out.r1 || out.c0 < out.c1).then_some(out)
+}
+
+#[derive(Clone, Debug, Default)]
+struct Lost {
+    codes: Vec<(Key, Option<String>, Option<String>)>,
+    styles: Vec<(Key, Option<String>, Option<String>)>,
+    merges: Vec<Area>,
+}
+
 pub type Changed = Vec<(usize, Addr, Value)>;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -260,6 +300,18 @@ pub struct Effect {
     pub shift: Option<Shift>,
     pub formats: Vec<(usize, Addr, String)>,
     pub styles: Vec<(usize, Addr, String)>,
+    pub merges: Option<usize>,
+}
+
+impl Effect {
+    fn join(mut self, o: Effect) -> Effect {
+        self.cells.extend(o.cells);
+        self.shift = o.shift.or(self.shift);
+        self.formats.extend(o.formats);
+        self.styles.extend(o.styles);
+        self.merges = o.merges.or(self.merges);
+        self
+    }
 }
 
 type FormatChange = (Key, Option<String>, Option<String>);
@@ -270,9 +322,11 @@ const FORMAT_LIMIT: u64 = 1_000_000;
 #[derive(Clone, Debug)]
 enum Tx {
     Cells(Vec<Change>),
-    Shift { shift: Shift, dropped: Vec<(Addr, String)>, rewritten: Vec<(usize, Addr, String)> },
+    Shift { shift: Shift, dropped: Vec<(Addr, String)>, rewritten: Vec<(usize, Addr, String)>, lost: Box<Lost> },
     Formats(Vec<FormatChange>),
     Styles(Vec<FormatChange>),
+    Merges { sheet: usize, before: Vec<Area>, after: Vec<Area> },
+    Group(Vec<Tx>),
 }
 
 #[derive(Debug)]
@@ -542,7 +596,7 @@ impl Workbook {
                 cells.push((k.0, k.1, v.clone()));
             }
         }
-        Effect { cells, shift: None, formats, styles: Vec::new() }
+        Effect { cells, formats, ..Effect::default() }
     }
 
     pub fn style_text(&self, sheet: usize, a: Addr) -> Option<String> {
@@ -1049,7 +1103,10 @@ impl Workbook {
         self.redo.clear();
     }
 
-    fn do_shift(&mut self, s: Shift) -> (Dropped, Rewritten) {
+    fn do_shift(&mut self, s: Shift) -> (Dropped, Rewritten, Lost) {
+        let mut lost_fmt = Lost { merges: self.sheets[s.sheet].merges.clone(), ..Lost::default() };
+        let merges = std::mem::take(&mut self.sheets[s.sheet].merges);
+        self.sheets[s.sheet].merges = merges.into_iter().filter_map(|m| shift_area(m, s)).collect();
         let limit = i64::from(if s.rows { MAX_ROWS } else { MAX_COLS });
         let moved = |a: Addr| -> Option<Addr> {
             let c = i64::from(if s.rows { a.row } else { a.col });
@@ -1113,8 +1170,11 @@ impl Workbook {
             self.codes.remove(k);
         }
         for ((sh, a), c) in codes {
-            if let Some(b) = moved(a) {
-                self.codes.insert((sh, b), c);
+            match moved(a) {
+                Some(b) => {
+                    self.codes.insert((sh, b), c);
+                }
+                None => lost_fmt.codes.push(((sh, a), Some(c.0.clone()), None)),
             }
         }
         let styles: Vec<(Key, StyleRef)> = self.styles.iter().filter(|((sh, _), _)| *sh == s.sheet).map(|(k, st)| (*k, st.clone())).collect();
@@ -1122,12 +1182,146 @@ impl Workbook {
             self.styles.remove(k);
         }
         for ((sh, a), st) in styles {
-            if let Some(b) = moved(a) {
-                self.styles.insert((sh, b), st);
+            match moved(a) {
+                Some(b) => {
+                    self.styles.insert((sh, b), st);
+                }
+                None => lost_fmt.styles.push(((sh, a), Some(st.0.clone()), None)),
             }
         }
+        if s.delta > 0 && s.at > 0 {
+            self.inherit(s);
+        }
         self.recalc_all();
-        (dropped, rewritten)
+        (dropped, rewritten, lost_fmt)
+    }
+
+    fn group_since(&mut self, mark: usize) {
+        let mark = mark.min(self.undo.len());
+        if self.undo.len() - mark < 2 {
+            return;
+        }
+        let txs: Vec<Tx> = self.undo.drain(mark..).collect();
+        self.undo.push(Tx::Group(txs));
+    }
+
+    pub fn undo_mark(&self) -> usize {
+        self.undo.len()
+    }
+
+    pub fn undo_group(&mut self, mark: usize) {
+        self.group_since(mark);
+    }
+
+    pub fn formats_in(&self, sheet: usize, top: Addr, bottom: Addr) -> Vec<(Addr, String)> {
+        let mut out: Vec<(Addr, String)> = self
+            .codes
+            .iter()
+            .filter(|((s, a), _)| *s == sheet && a.row >= top.row && a.row <= bottom.row && a.col >= top.col && a.col <= bottom.col)
+            .map(|((_, a), c)| (*a, c.0.clone()))
+            .collect();
+        out.sort_by_key(|(a, _)| (a.row, a.col));
+        out
+    }
+
+    pub fn merges(&self, sheet: usize) -> Vec<Area> {
+        self.sheets.get(sheet).map(|s| s.merges.clone()).unwrap_or_default()
+    }
+
+    pub fn load_merges(&mut self, sheet: usize, list: &[Area]) -> Result<usize, EngineError> {
+        let s = self.sheets.get_mut(sheet).ok_or(EngineError::NoSheet(sheet))?;
+        s.merges = list.iter().filter(|m| m.r1 < MAX_ROWS && m.c1 < MAX_COLS && (m.r0 < m.r1 || m.c0 < m.c1)).copied().collect();
+        Ok(s.merges.len())
+    }
+
+    pub fn merge(&mut self, sheet: usize, top: Addr, bottom: Addr, mode: MergeMode) -> Result<Effect, EngineError> {
+        self.check(sheet, top)?;
+        self.check(sheet, bottom)?;
+        let all = Area { r0: top.row.min(bottom.row), r1: top.row.max(bottom.row), c0: top.col.min(bottom.col), c1: top.col.max(bottom.col) };
+        let overlaps = |m: &Area| m.r0 <= all.r1 && m.r1 >= all.r0 && m.c0 <= all.c1 && m.c1 >= all.c0;
+        let before = self.sheets[sheet].merges.clone();
+        let mut after: Vec<Area> = before.iter().filter(|m| !overlaps(m)).copied().collect();
+        let new: Vec<Area> = match mode {
+            MergeMode::Unmerge => Vec::new(),
+            MergeMode::Across => (all.r0..=all.r1).map(|r| Area { r0: r, r1: r, ..all }).filter(|m| m.c0 < m.c1).collect(),
+            MergeMode::Cells | MergeMode::Center => vec![all].into_iter().filter(|m| m.r0 < m.r1 || m.c0 < m.c1).collect(),
+        };
+        if u64::from(all.r1 - all.r0 + 1) * u64::from(all.c1 - all.c0 + 1) > FORMAT_LIMIT && !new.is_empty() {
+            return Err(EngineError::OutOfRange { row: all.r1, col: all.c1 });
+        }
+        let mut clear = Vec::new();
+        for m in &new {
+            self.sheets[sheet].cells.for_each_in(Addr { row: m.r0, col: m.c0 }, Addr { row: m.r1, col: m.c1 }, |a, _| {
+                if a.row != m.r0 || a.col != m.c0 {
+                    clear.push((a, String::new()));
+                }
+            });
+        }
+        after.extend(new.iter().copied());
+        let mark = self.undo.len();
+        let mut out = Effect { cells: if clear.is_empty() { Vec::new() } else { self.apply(sheet, &clear)? }, ..Effect::default() };
+        if after != before {
+            self.sheets[sheet].merges = after.clone();
+            self.record(Tx::Merges { sheet, before, after });
+            out.merges = Some(sheet);
+        }
+        if mode == MergeMode::Center {
+            let ops: Vec<(Addr, Addr, String)> = new.iter().map(|m| (Addr { row: m.r0, col: m.c0 }, Addr { row: m.r0, col: m.c0 }, "ha:center".to_string())).collect();
+            out = out.join(self.set_styles(sheet, &ops)?);
+        }
+        self.group_since(mark);
+        Ok(out)
+    }
+
+    pub fn put_formats(&mut self, sheet: usize, items: &[(Addr, Option<String>, Option<String>)]) -> Result<Effect, EngineError> {
+        let mut codes = Vec::new();
+        let mut styles = Vec::new();
+        for (a, st, code) in items {
+            self.check(sheet, *a)?;
+            let k = (sheet, *a);
+            let code = code.as_ref().filter(|c| !c.is_empty() && fmtcode::parse(c).is_some()).cloned();
+            let st = st.as_ref().and_then(|t| style::Style::parse(t)).filter(|s| !s.is_plain()).map(|s| s.text());
+            let bc = self.codes.get(&k).map(|c| c.0.clone());
+            if bc != code {
+                codes.push((k, bc, code));
+            }
+            let bs = self.styles.get(&k).map(|s| s.0.clone());
+            if bs != st {
+                styles.push((k, bs, st));
+            }
+        }
+        let mark = self.undo.len();
+        let mut out = self.apply_formats(&codes, true);
+        out.cells = self.present(out.cells);
+        if !codes.is_empty() {
+            self.record(Tx::Formats(codes));
+        }
+        out = out.join(self.apply_styles(&styles, true));
+        if !styles.is_empty() {
+            self.record(Tx::Styles(styles));
+        }
+        self.group_since(mark);
+        Ok(out)
+    }
+
+    fn inherit(&mut self, s: Shift) {
+        let src = s.at - 1;
+        let line = |a: &Addr| if s.rows { a.row } else { a.col };
+        let at = |a: Addr, i: u32| if s.rows { Addr { row: s.at + i, ..a } } else { Addr { col: s.at + i, ..a } };
+        let n = s.delta as u32;
+        let codes: Vec<(Addr, std::sync::Arc<(String, fmtcode::Code)>)> = self.codes.iter().filter(|((sh, a), _)| *sh == s.sheet && line(a) == src).map(|((_, a), c)| (*a, c.clone())).collect();
+        let styles: Vec<(Addr, StyleRef)> = self.styles.iter().filter(|((sh, a), _)| *sh == s.sheet && line(a) == src).map(|((_, a), st)| (*a, st.clone())).collect();
+        if u64::from(n) * (codes.len() + styles.len()) as u64 > FORMAT_LIMIT {
+            return;
+        }
+        for i in 0..n {
+            for (a, c) in &codes {
+                self.codes.insert((s.sheet, at(*a, i)), c.clone());
+            }
+            for (a, st) in &styles {
+                self.styles.insert((s.sheet, at(*a, i)), st.clone());
+            }
+        }
     }
 
     fn rekey(&mut self, map: impl Fn(usize) -> Option<usize>) {
@@ -1166,8 +1360,8 @@ impl Workbook {
             return Err(EngineError::OutOfRange { row: at, col: n });
         }
         let shift = Shift { sheet, rows, at, delta: i64::from(n) };
-        let (dropped, rewritten) = self.do_shift(shift);
-        self.record(Tx::Shift { shift, dropped, rewritten });
+        let (dropped, rewritten, lost) = self.do_shift(shift);
+        self.record(Tx::Shift { shift, dropped, rewritten, lost: Box::new(lost) });
         Ok(shift)
     }
 
@@ -1181,8 +1375,8 @@ impl Workbook {
         }
         let n = n.min(limit - at);
         let shift = Shift { sheet, rows, at, delta: -i64::from(n) };
-        let (dropped, rewritten) = self.do_shift(shift);
-        self.record(Tx::Shift { shift, dropped, rewritten });
+        let (dropped, rewritten, lost) = self.do_shift(shift);
+        self.record(Tx::Shift { shift, dropped, rewritten, lost: Box::new(lost) });
         Ok(shift)
     }
 
@@ -1250,13 +1444,34 @@ impl Workbook {
             }
             Tx::Formats(changes) => self.apply_formats(changes, forward),
             Tx::Styles(changes) => self.apply_styles(changes, forward),
-            Tx::Shift { shift, dropped, rewritten } => {
+            Tx::Merges { sheet, before, after } => {
+                self.sheets[*sheet].merges = if forward { after.clone() } else { before.clone() };
+                Effect { merges: Some(*sheet), ..Effect::default() }
+            }
+            Tx::Group(txs) => {
+                let mut out = Effect::default();
+                if forward {
+                    for t in txs {
+                        let e = self.replay(t, true);
+                        out = out.join(e);
+                    }
+                } else {
+                    for t in txs.iter().rev() {
+                        let e = self.replay(t, false);
+                        out = out.join(e);
+                    }
+                }
+                out
+            }
+            Tx::Shift { shift, dropped, rewritten, lost } => {
                 if forward {
                     self.do_shift(*shift);
-                    return Effect { shift: Some(*shift), ..Effect::default() };
+                    return Effect { shift: Some(*shift), merges: Some(shift.sheet), ..Effect::default() };
                 }
                 let back = Shift { delta: -shift.delta, ..*shift };
                 self.do_shift(back);
+                self.sheets[shift.sheet].merges = lost.merges.clone();
+                let restored = self.apply_formats(&lost.codes, false).join(self.apply_styles(&lost.styles, false));
                 for (s, a, raw) in rewritten {
                     self.set_raw(*s, *a, raw);
                 }
@@ -1265,7 +1480,7 @@ impl Workbook {
                 }
                 self.recalc_all();
                 let cells = dropped.iter().map(|(a, _)| (shift.sheet, *a, self.sheets[shift.sheet].cells.get(*a).cloned().unwrap_or(Value::Empty))).collect();
-                Effect { cells, shift: Some(back), ..Effect::default() }
+                Effect { cells, shift: Some(back), merges: Some(shift.sheet), formats: restored.formats, styles: restored.styles }
             }
         }
     }

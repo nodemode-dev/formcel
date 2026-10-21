@@ -130,6 +130,32 @@ impl Workbook {
         self.inner.load_styles(sheet, &cells).map_err(|e| PyValueError::new_err(e.to_string()))
     }
 
+    #[pyo3(signature = (top, bottom, mode = "center", sheet = 0))]
+    fn merge(&mut self, top: &str, bottom: &str, mode: &str, sheet: usize) -> PyResult<usize> {
+        use formcel_core::MergeMode;
+        let t = parse_a1(top).map_err(|e| PyValueError::new_err(e.to_string()))?;
+        let b = parse_a1(bottom).map_err(|e| PyValueError::new_err(e.to_string()))?;
+        let m = match mode {
+            "center" => MergeMode::Center,
+            "across" => MergeMode::Across,
+            "cells" => MergeMode::Cells,
+            "unmerge" => MergeMode::Unmerge,
+            _ => return Err(PyValueError::new_err(format!("unknown merge mode {mode}"))),
+        };
+        self.inner.merge(sheet, t, b, m).map(|_| self.inner.merges(sheet).len()).map_err(|e| PyValueError::new_err(e.to_string()))
+    }
+
+    #[pyo3(signature = (sheet = 0))]
+    fn merges(&self, sheet: usize) -> Vec<(u32, u32, u32, u32)> {
+        self.inner.merges(sheet).into_iter().map(|m| (m.r0, m.c0, m.r1, m.c1)).collect()
+    }
+
+    #[pyo3(signature = (areas, sheet = 0))]
+    fn load_merges(&mut self, areas: Vec<(u32, u32, u32, u32)>, sheet: usize) -> PyResult<usize> {
+        let list: Vec<formcel_core::formula::Area> = areas.into_iter().map(|(r0, c0, r1, c1)| formcel_core::formula::Area { r0, c0, r1, c1 }).collect();
+        self.inner.load_merges(sheet, &list).map_err(|e| PyValueError::new_err(e.to_string()))
+    }
+
     fn undo(&mut self) -> Option<Vec<(String, String)>> {
         self.inner.undo().map(|e| pairs(e.cells))
     }

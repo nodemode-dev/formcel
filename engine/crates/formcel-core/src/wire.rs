@@ -34,6 +34,9 @@ pub fn encode_formats(formats: &[(usize, Addr, String)]) -> String {
 
 pub fn encode_effect(e: &Effect, fx: FxOf) -> String {
     let mut out = e.shift.as_ref().map(encode_shift).unwrap_or_default();
+    if let Some(s) = e.merges {
+        out.push_str(&format!("=\t{s}\n"));
+    }
     out.push_str(&encode_formats(&e.formats));
     out.push_str(&encode_styles('&', None, &e.styles));
     out.push_str(&encode_changed(&e.cells, fx));
