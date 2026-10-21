@@ -17,6 +17,7 @@ pub mod protect;
 pub mod sort;
 pub mod stats;
 pub mod whatif;
+mod cellinfo;
 mod datatools;
 mod flash;
 pub use numfmt::Fmt;
@@ -450,6 +451,7 @@ pub struct Workbook {
     host: host::Host,
     pivots: Vec<pivot::Pivot>,
     whatif: whatif::State,
+    file: String,
 }
 
 const SPILL_PASSES: usize = 8;
@@ -504,6 +506,10 @@ impl eval::Ctx for Workbook {
         self.host.is_fn(name)
     }
 
+    fn cell_prop(&self, sheet: usize, a: Addr, what: &str) -> Option<Value> {
+        self.prop_of(sheet, a, what)
+    }
+
     fn host_get(&self, key: &str) -> Option<eval::Array> {
         self.host.results.get(key).cloned()
     }
@@ -545,6 +551,7 @@ impl Workbook {
             host: host::Host::default(),
             pivots: Vec::new(),
             whatif: whatif::State::default(),
+            file: String::new(),
         }
         .with_named_codes()
     }

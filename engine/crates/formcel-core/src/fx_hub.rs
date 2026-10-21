@@ -19,6 +19,9 @@ impl Eval<'_> {
         if let Some(r) = self.call_info(name, a) {
             return r;
         }
+        if let Some(r) = self.call_info2(name, a) {
+            return r;
+        }
         if let Some(r) = self.call_eng(name, a) {
             return r;
         }

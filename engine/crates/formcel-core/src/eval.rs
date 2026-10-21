@@ -19,6 +19,8 @@ mod fx_eng;
 mod fx_hub;
 #[path = "fx_info.rs"]
 mod fx_info;
+#[path = "fx_info2.rs"]
+mod fx_info2;
 #[path = "fx_lookup.rs"]
 mod fx_lookup;
 #[path = "fx_query.rs"]
@@ -60,6 +62,9 @@ pub trait Ctx {
         None
     }
     fn host_want(&self, _key: &str) {}
+    fn cell_prop(&self, _sheet: usize, _a: Addr, _what: &str) -> Option<Value> {
+        None
+    }
 }
 
 #[derive(Debug)]
@@ -1040,6 +1045,9 @@ impl<'a> Eval<'a> {
                         Value::Error(ErrKind::Name) => 5.0,
                         Value::Error(ErrKind::Num) => 6.0,
                         Value::Error(ErrKind::Na) => 7.0,
+                        Value::Error(ErrKind::Spill) => 9.0,
+                        Value::Error(ErrKind::Error) => 12.0,
+                        Value::Error(ErrKind::Calc) => 14.0,
                         _ => return Err(ErrKind::Na),
                     };
                     Value::Number(code)
