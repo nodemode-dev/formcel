@@ -147,6 +147,22 @@ impl Workbook {
         self.inner.load_styles(sheet, &cells).map_err(|e| PyValueError::new_err(e.to_string()))
     }
 
+    #[pyo3(signature = (top, bottom, keys, header = false, case = false, sheet = 0))]
+    fn sort(&mut self, top: &str, bottom: &str, keys: Vec<(u32, bool)>, header: bool, case: bool, sheet: usize) -> PyResult<usize> {
+        let t = parse_a1(top).map_err(|e| PyValueError::new_err(e.to_string()))?;
+        let b = parse_a1(bottom).map_err(|e| PyValueError::new_err(e.to_string()))?;
+        let keys: Vec<formcel_core::sort::SortKey> = keys.into_iter().map(|(col, descending)| formcel_core::sort::SortKey { col, descending }).collect();
+        let area = formcel_core::formula::Area { r0: t.row, c0: t.col, r1: b.row, c1: b.col };
+        self.inner.sort(sheet, area, &keys, header, case).map(|e| e.cells.len()).map_err(|e| PyValueError::new_err(e.to_string()))
+    }
+
+    #[pyo3(signature = (a1, sheet = 0))]
+    fn region(&self, a1: &str, sheet: usize) -> PyResult<(String, String)> {
+        let a = parse_a1(a1).map_err(|e| PyValueError::new_err(e.to_string()))?;
+        let r = self.inner.region(sheet, a).map_err(|e| PyValueError::new_err(e.to_string()))?;
+        Ok((to_a1(Addr { row: r.r0, col: r.c0 }), to_a1(Addr { row: r.r1, col: r.c1 })))
+    }
+
     #[pyo3(signature = (top, bottom, mode = "center", sheet = 0))]
     fn merge(&mut self, top: &str, bottom: &str, mode: &str, sheet: usize) -> PyResult<usize> {
         use formcel_core::MergeMode;

@@ -410,3 +410,14 @@ Text that starts with `=` (typed as `'=1+1`, or from a CSV file) was saved and s
 - logged: v0.29.0 · 2026-10-21
 
 ARRAYFORMULA(array_formula) (GS-ARRAYFORMULA) returns its argument. Its job in Sheets is to let a formula work over ranges and show the result in neighbouring cells; every FormCel formula does that already, so it adds nothing but keeps formulas from Sheets working. 109 functions.
+
+### Sorting rows
+- refers-to: src/sort.rs :: SortKey, rank, order, region, guess_header, sort; crates/formcel-wasm/src/lib.rs :: fc_sort, fc_region, fc_guess_header; crates/formcel-py/src/lib.rs :: sort, region
+- kind: explainer
+- logged: v0.30.0 · 2026-10-21
+
+`sort` reorders the rows of a rectangle by one or more columns (MS-SORT: Add Level, Then by; Sort A to Z and Z to A; My data has headers; case sensitive under Options), as one undo step. Whole rows of the rectangle move: values, formulas, number format codes, cell styles and links. A formula's relative references move with its row, as a pasted formula's would, so `=B2*2` sorted into row 5 reads `=B5*2`. Conditional formatting stays where it is, as it belongs to the range, not the row. Ties keep their order (a stable sort), so sorting by one column and then by another gives the second as the main order.
+
+Order, smallest first: numbers, then text (case blind, unless case sensitive is asked, when a lowercase letter comes before its capital), then FALSE and TRUE, then errors, and blank cells last in both directions. MS-SORT does not state this order; it is the one FormCel's SORT function already uses, with logical values after text, and blanks always last as Excel shows them. A rectangle that holds merged cells is refused (the window says to unmerge first). A whole-column selection is cut to the sheet's used range.
+
+`region` is the block of data around a cell: the rectangle grows while any cell touching its edge, corners included, holds a value. A one-cell selection sorts its region. `guess_header` says the first row is a header when its filled cells are all text and something below it is not, or when it is bold and the next row is not; FormCel's rule, which the custom sort dialog shows as a ticked box that can be changed. Sorting 100,000 rows of five columns by two keys takes about 2.5 seconds in the engine process's build.

@@ -450,6 +450,42 @@ pub unsafe extern "C" fn fc_delete_style(id: u32, name: *const u8, len: u32) -> 
     effect_or(with_book(id, |wb| wb.delete_style(&name).map(|e| wb.encode(&e))))
 }
 
+/// Sorts the rows of a rectangle as one undo step; `keys` is `col:a` or `col:d` items joined by commas, columns absolute.
+///
+/// # Safety
+/// `keys` must point at `len` readable bytes.
+#[no_mangle]
+pub unsafe extern "C" fn fc_sort(id: u32, sheet: u32, r0: u32, c0: u32, r1: u32, c1: u32, keys: *const u8, len: u32, header: u32, case: u32) -> i32 {
+    let keys: Vec<formcel_core::sort::SortKey> = text(keys, len)
+        .split(',')
+        .filter_map(|k| {
+            let (c, d) = k.split_once(':')?;
+            Some(formcel_core::sort::SortKey { col: c.parse().ok()?, descending: d == "d" })
+        })
+        .collect();
+    let area = formcel_core::formula::Area { r0, c0, r1, c1 };
+    match with_book(id, |wb| wb.sort(sheet as usize, area, &keys, header != 0, case != 0).map(|e| wb.encode(&e))) {
+        Some(Ok(s)) => emit(&s) as i32,
+        Some(Err(formcel_core::EngineError::BadStyle(_))) => -3,
+        _ => -1,
+    }
+}
+
+/// The data region around a cell, as `r0,c0,r1,c1,h` where `h` is 1 when its first row looks like headers.
+#[no_mangle]
+pub extern "C" fn fc_region(id: u32, sheet: u32, row: u32, col: u32) -> i32 {
+    match with_book(id, |wb| wb.region(sheet as usize, Addr { row, col }).map(|a| (a, wb.guess_header(sheet as usize, a)))) {
+        Some(Ok((a, h))) => emit(&format!("{},{},{},{},{}", a.r0, a.c0, a.r1, a.c1, u8::from(h))) as i32,
+        _ => -1,
+    }
+}
+
+/// 1 when the first row of a rectangle looks like headers, else 0.
+#[no_mangle]
+pub extern "C" fn fc_guess_header(id: u32, sheet: u32, r0: u32, c0: u32, r1: u32, c1: u32) -> i32 {
+    with_book(id, |wb| i32::from(wb.guess_header(sheet as usize, formcel_core::formula::Area { r0, c0, r1, c1 }))).unwrap_or(0)
+}
+
 /// Applies a named style to a rectangle as one undo step.
 ///
 /// # Safety

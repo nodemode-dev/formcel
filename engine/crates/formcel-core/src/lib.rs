@@ -9,6 +9,7 @@ pub mod formula;
 mod graph;
 pub mod fmtcode;
 pub mod numfmt;
+pub mod sort;
 pub use numfmt::Fmt;
 mod store;
 pub mod style;
