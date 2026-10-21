@@ -19,6 +19,7 @@ interface Exports {
   fc_rename_sheet(book: number, sheet: number, name: number, len: number): number;
   fc_define_name(book: number, name: number, nameLen: number, refers: number, refersLen: number): number;
   fc_names(book: number): number;
+  fc_name_tool(book: number, op: number, opLen: number, args: number, argsLen: number): number;
   fc_set_format(book: number, sheet: number, r0: number, c0: number, r1: number, c1: number, code: number, len: number): number;
   fc_format_at(book: number, sheet: number, row: number, col: number): number;
   fc_load_formats(book: number, sheet: number, lines: number, len: number): number;
@@ -552,6 +553,17 @@ function run(x: Exports, req: Request): Value {
         if (len === -3) throw new Error('A name starts with a letter or underscore, has no spaces, and is not a cell address.');
         if (len === -4) throw new Error('That is not a formula FormCel can read.');
         return changed(out(x, len));
+      });
+    case 'name.tool':
+      return withStrings(x, [req.tool, req.args.map((a) => a.replace(/\\/g, '\\\\').replace(/\t/g, '\\t').replace(/\n/g, '\\n').replace(/\r/g, '\\r')).join('\t')], ([o, ol, a, al]) => {
+        const text = out(x, x.fc_name_tool(req.book, o, ol, a, al));
+        if (text.startsWith('e')) throw new Error(text.slice(1));
+        const body = text.slice(1);
+        if (req.tool === 'rename') return changed(body);
+        if (req.tool === 'rows') return JSON.stringify(lines(body).map(([name, scope, refers, comment, value]) => ({ name: unescape(name ?? ''), scope: unescape(scope ?? ''), refers: unescape(refers ?? ''), comment: unescape(comment ?? ''), value: unescape(value ?? '') })));
+        if (req.tool === 'notes') return JSON.stringify(lines(body).map(([n, c]) => [unescape(n ?? ''), unescape(c ?? '')]));
+        if (req.tool === 'select') return JSON.stringify(lines(body).map(([k, v]) => [k, unescape(v ?? '')]));
+        return body;
       });
     case 'name.list':
       return lines(out(x, x.fc_names(req.book))).map(([n, f]) => [unescape(n ?? ''), unescape(f ?? '')] as [string, string]);

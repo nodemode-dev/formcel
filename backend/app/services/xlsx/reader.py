@@ -190,17 +190,28 @@ def read(data: bytes) -> dict:
                 if t.autoFilter is not None and t.autoFilter.filterColumn:
                     autofilter = filter_in(ws, wb, view, notes, af=t.autoFilter)
                     break
-        if ws.defined_names:
-            notes["names scoped to one sheet left out"] += len(ws.defined_names)
         sheets.append({"name": ws.title[:31], "cells": cells, "formats": formats, "styles": styles, "merges": merges, "links": links, "rules": rules, "filter": autofilter, "validations": valid, "view": view, "objects": objects, "notes": notes_in(ws), "protection": sheet_in(ws, flagged)})
     for cs in wb.chartsheets:
         notes["chart sheets left out"] += 1
     names = []
+    name_notes = []
     for name, dn in wb.defined_names.items():
         if name.startswith("_xlnm.") or dn.hidden:
             notes["print areas and hidden names left out"] += 1
             continue
         text = dn.attr_text or ""
         names.append((name, "=" + from_file(text.lstrip("="))))
+        if dn.comment:
+            name_notes.append((name, dn.comment))
+    for ws in wb.worksheets:
+        local = "'" + ws.title[:31].replace("'", "''") + "'"
+        for name, dn in ws.defined_names.items():
+            if name.startswith("_xlnm.") or dn.hidden:
+                notes["print areas and hidden names left out"] += 1
+                continue
+            scoped = f"{local}!{name}"
+            names.append((scoped, "=" + from_file((dn.attr_text or "").lstrip("="))))
+            if dn.comment:
+                name_notes.append((scoped, dn.comment))
     tables = tables_in(wb, {ws.title: i for i, ws in enumerate(wb.worksheets)}, notes)
-    return {"sheets": sheets, "names": names, "tables": tables, "theme": theme_in(wb.loaded_theme), "cellStyles": custom, "vba": vba, "protection": book_in(wb), "notes": [f"{n} {what}" for what, n in sorted(notes.items())]}
+    return {"sheets": sheets, "names": names, "nameNotes": name_notes, "tables": tables, "theme": theme_in(wb.loaded_theme), "cellStyles": custom, "vba": vba, "protection": book_in(wb), "notes": [f"{n} {what}" for what, n in sorted(notes.items())]}

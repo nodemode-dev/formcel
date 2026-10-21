@@ -222,6 +222,29 @@ impl Workbook {
                 out = self.apply_names(region, &names, arg(6) != "0").map_err(e)?.to_string();
             }
             "file" => self.set_file_name(&arg(0), &arg(1)),
+            "eval" => {
+                let (sheet, at) = (num(0)? as usize, Addr { row: num(1)?, col: num(2)? });
+                let text = arg(3);
+                if text.trim().is_empty() {
+                    return Ok(String::new());
+                }
+                let e = formula::parse(text.trim().trim_start_matches('=')).ok_or_else(|| "That is not a formula FormCel can read.".to_string())?;
+                let shown = |v: &Value| match v {
+                    Value::Text(t) => format!("\"{t}\""),
+                    Value::Error(k) => k.text().to_string(),
+                    o => o.to_string(),
+                };
+                out = match Eval::new(self, sheet).placed(at).formula(&e) {
+                    Out::V(v) => match v {
+                        Value::Text(t) if arg(4) != "1" => t,
+                        other => shown(&other),
+                    },
+                    Out::A(a) => {
+                        let rows: Vec<String> = (0..a.rows).map(|r| (0..a.cols).map(|c| shown(&a.data[r * a.cols + c])).collect::<Vec<_>>().join(",")).collect();
+                        format!("{{{}}}", rows.join(";"))
+                    }
+                };
+            }
             "notes" => {
                 for (n, c) in self.name_notes() {
                     crate::wire::escape(&n, &mut out);

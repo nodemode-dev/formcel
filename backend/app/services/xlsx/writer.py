@@ -129,8 +129,18 @@ def write(eng, views: list[dict], vba: dict[str, bytes] | None = None, objects: 
         notes_out(ws, notes or {}, i)
         sheet_out(ws, eng.protection(i))
     book_out(wb, eng.protection())
+    notes_of = dict(eng.name_notes())
     for name, refers in eng.names():
-        wb.defined_names[name] = DefinedName(name, attr_text=to_file(refers).lstrip("="))
+        scope, _, local = name.rpartition("!")
+        comment = notes_of.get(name)
+        dn = DefinedName(local, attr_text=to_file(refers).lstrip("="), comment=comment)
+        if not scope:
+            wb.defined_names[local] = dn
+            continue
+        title = scope[1:-1].replace("''", "'") if scope.startswith("'") else scope
+        sheet = next((w for w in wb.worksheets if w.title.lower() == title.lower()), None)
+        if sheet is not None:
+            sheet.defined_names[local] = dn
     for i, items in tables_out(wb, eng).items():
         ws = wb.worksheets[i]
         for tb, area in items:
