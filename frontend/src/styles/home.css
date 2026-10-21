@@ -570,3 +570,7 @@
 .fc-pvt-sugg[data-empty="1"]::before { content: "Recommendations appear when the source has text and number columns."; font-size: var(--text-xs); color: var(--text-muted); }
 .fc-pvt-pick { justify-self: stretch; height: 24px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left; font-size: var(--text-xs); }
 .fc-pvt-dialog .fc-pvt-pick { justify-self: stretch; }
+.fc-tabled-types { display: grid; gap: var(--space-1); max-height: 160px; overflow-y: auto; }
+.fc-tabled-type { display: grid; grid-template-columns: 1fr 110px; gap: var(--space-1); align-items: center; }
+.fc-tabled-type input { grid-column: 1 / -1; }
+.fc-tabled-tools { display: flex; flex-wrap: wrap; gap: var(--space-1); }

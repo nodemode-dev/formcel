@@ -9,6 +9,7 @@ export interface TableInfo {
   cols: string[];
   calc: string[];
   kept: string[];
+  types: string[];
   line: string;
 }
 
@@ -37,7 +38,7 @@ export function parseTable(line: string): TableInfo | null {
   const n = Number(p[5]);
   const a = (p[2] ?? '').split(',').map(Number);
   if (a.length !== 4 || !Number.isFinite(n)) return null;
-  return { sheet: Number(p[0]), name: p[1], area: [a[0], a[1], a[2], a[3]], flags: p[3] ?? '', style: p[4] ?? '', cols: p.slice(6, 6 + n), calc: p.slice(6 + n, 6 + 2 * n), kept: p.slice(6 + 2 * n, 6 + 3 * n), line };
+  return { sheet: Number(p[0]), name: p[1], area: [a[0], a[1], a[2], a[3]], flags: p[3] ?? '', style: p[4] ?? '', cols: p.slice(6, 6 + n), calc: p.slice(6 + n, 6 + 2 * n), kept: p.slice(6 + 2 * n, 6 + 3 * n), types: p.length >= 6 + 4 * n ? p.slice(6 + 3 * n, 6 + 4 * n) : [], line };
 }
 
 export interface TablePaint {

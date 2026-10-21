@@ -979,6 +979,30 @@ export class App {
     const [r0, c0, r1, c1] = t.area;
     q<HTMLInputElement>('range').value = `${colName(c0)}${r0 + 1}:${colName(c1)}${r1 + 1}`;
     for (const [k, ch] of [['totals', 't'], ['rows', 'r'], ['cols', 'c'], ['first', 'f'], ['last', 'l'], ['button', 'b']]) q<HTMLInputElement>(k).checked = t.flags.includes(ch);
+    const holder = q<HTMLElement>('types');
+    holder.replaceChildren();
+    const kinds = ['text', 'number', 'date', 'dropdown', 'checkbox', 'people'];
+    t.cols.forEach((name, i) => {
+      const cur = t.types[i] ?? '';
+      const base = cur.split(':')[0] || 'text';
+      const row = document.createElement('div');
+      row.className = 'fc-tabled-type';
+      const label = document.createElement('span');
+      label.textContent = name || `Column ${i + 1}`;
+      const sel = document.createElement('select');
+      sel.className = 'fc-fmt-input';
+      sel.dataset.col = String(i);
+      sel.dataset.was = cur;
+      for (const k of kinds) sel.add(new Option(k[0].toUpperCase() + k.slice(1), k, false, k === base));
+      const items = document.createElement('input');
+      items.className = 'fc-fmt-input';
+      items.placeholder = 'Items, separated by commas';
+      items.value = cur.split(':').slice(1).join(':').replace(/\|/g, ', ');
+      items.hidden = base !== 'dropdown';
+      sel.addEventListener('change', () => { items.hidden = sel.value !== 'dropdown'; });
+      row.append(label, sel, items);
+      holder.appendChild(row);
+    });
     f.querySelector<HTMLElement>('.fc-fmt-hint')!.textContent = '';
     f.dataset.state = '';
     f.hidden = false;
@@ -992,7 +1016,7 @@ export class App {
     form.setAttribute('role', 'dialog');
     const styles = TABLE_STYLES.map(([id, label]) => `<option value="${id}">${label}</option>`).join('');
     const box = (k: string, label: string) => `<label class="fc-sort-check"><input type="checkbox" data-k="${k}"> ${label}</label>`;
-    form.innerHTML = `<span class="fc-fmt-title">Table design</span><label class="fc-fmt-label">Table name<input class="fc-fmt-input" data-k="name" spellcheck="false" autocomplete="off"></label><label class="fc-fmt-label">Table style<select class="fc-fmt-input" data-k="style">${styles}</select></label><label class="fc-fmt-label">Resize table (keep the top-left cell)<input class="fc-fmt-input" data-k="range" spellcheck="false" autocomplete="off"></label><div class="fc-tabled-opts">${box('totals', 'Total row')}${box('rows', 'Banded rows')}${box('cols', 'Banded columns')}${box('first', 'First column')}${box('last', 'Last column')}${box('button', 'Filter button')}</div><span class="fc-fmt-hint" aria-live="polite"></span><div class="fc-csv-actions"><button type="button" class="fc-btn" data-a="convert">Convert to range</button><button type="button" class="fc-btn" data-a="cancel">Cancel</button><button type="submit" class="fc-btn fc-btn-primary">OK</button></div>`;
+    form.innerHTML = `<span class="fc-fmt-title">Table design</span><label class="fc-fmt-label">Table name<input class="fc-fmt-input" data-k="name" spellcheck="false" autocomplete="off"></label><label class="fc-fmt-label">Table style<select class="fc-fmt-input" data-k="style">${styles}</select></label><label class="fc-fmt-label">Resize table (keep the top-left cell)<input class="fc-fmt-input" data-k="range" spellcheck="false" autocomplete="off"></label><div class="fc-tabled-opts">${box('totals', 'Total row')}${box('rows', 'Banded rows')}${box('cols', 'Banded columns')}${box('first', 'First column')}${box('last', 'Last column')}${box('button', 'Filter button')}</div><span class="fc-fmt-title">Column types</span><div class="fc-tabled-types" data-k="types"></div><div class="fc-tabled-tools"><button type="button" class="fc-btn" data-a="dedupe">Remove duplicates</button><button type="button" class="fc-btn" data-a="pivot">Summarize with PivotTable</button><button type="button" class="fc-btn" data-a="slicer">Insert slicer</button></div><span class="fc-fmt-hint" aria-live="polite"></span><div class="fc-csv-actions"><button type="button" class="fc-btn" data-a="convert">Convert to range</button><button type="button" class="fc-btn" data-a="cancel">Cancel</button><button type="submit" class="fc-btn fc-btn-primary">OK</button></div>`;
     document.getElementById('overlay-root')!.appendChild(form);
     const q = <T extends HTMLElement>(k: string) => form.querySelector<T>(`[data-k="${k}"]`)!;
     const hint = form.querySelector<HTMLElement>('.fc-fmt-hint')!;
@@ -1004,6 +1028,10 @@ export class App {
     form.addEventListener('click', (e) => {
       const a = (e.target as HTMLElement).closest<HTMLElement>('[data-a]')?.dataset.a;
       if (a === 'cancel') close();
+      if (a === 'dedupe' || a === 'pivot' || a === 'slicer') {
+        close();
+        void runCommand(a === 'dedupe' ? 'data.dedupe' : a === 'pivot' ? 'pivot.create' : 'data.slicer');
+      }
       if (a === 'convert') {
         const t = this.grid.tables().find((x) => x.name === form.dataset.table);
         if (!t) return;
@@ -1033,10 +1061,18 @@ export class App {
       const w = r.c1 - r.c0 + 1;
       const cols = Array.from({ length: w }, (_, i) => t.cols[i] ?? '');
       const pad = (list: string[]) => Array.from({ length: w }, (_, i) => list[i] ?? '');
-      const parts = [name, `${r.r0},${r.c0},${r1},${r.c1}`, t.flags.includes('t') ? `${flags.replace('t', '')}t` : flags.replace('t', ''), q<HTMLSelectElement>('style').value, String(w), ...cols, ...pad(t.calc), ...pad(t.kept)];
+      const parts = [name, `${r.r0},${r.c0},${r1},${r.c1}`, t.flags.includes('t') ? `${flags.replace('t', '')}t` : flags.replace('t', ''), q<HTMLSelectElement>('style').value, String(w), ...cols, ...pad(t.calc), ...pad(t.kept), ...pad(t.types)];
       const want = flags.includes('t');
+      const picks: [number, string][] = [];
+      for (const sel of form.querySelectorAll<HTMLSelectElement>('[data-col]')) {
+        const items = (sel.nextElementSibling as HTMLInputElement).value.split(',').map((s) => s.trim()).filter(Boolean).join('|');
+        const kind = sel.value === 'dropdown' ? `dropdown:${items}` : sel.value === 'text' && !sel.dataset.was ? '' : sel.value;
+        if (sel.value === 'dropdown' && !items) return fail(new Error('Type the dropdown items.'));
+        if (kind !== (sel.dataset.was ?? '') && Number(sel.dataset.col) < w) picks.push([Number(sel.dataset.col), kind]);
+      }
       void (async () => {
         await this.grid.setTable(t.name, parts.map(fieldEsc).join('\t'));
+        for (const [col, kind] of picks) await this.grid.runTool('tabletype', name, String(col), kind);
         if (want !== t.flags.includes('t')) {
           const now = this.grid.tables().find((x) => x.name === name) ?? t;
           const p2 = now.line.split('\t').slice(1);
