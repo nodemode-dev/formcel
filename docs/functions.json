@@ -585,6 +585,26 @@
    }
   },
   {
+   "name": "FIND",
+   "args": [
+    "find_text",
+    "within_text",
+    "[start_num]"
+   ],
+   "summary": "Position of text inside other text, matching case.",
+   "category": "Text",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/how-to-correct-a-value-error-in-find-findb-and-search-searchb-functions"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Text",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
    "name": "HLOOKUP",
    "args": [
     "lookup_value",
@@ -1449,6 +1469,26 @@
    "sheets": {
     "listed": true,
     "category": "Array",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "SEARCH",
+   "args": [
+    "find_text",
+    "within_text",
+    "[start_num]"
+   ],
+   "summary": "Position of text inside other text, ignoring case, with ? and * wildcards.",
+   "category": "Text",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/search-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Text",
     "source": "https://support.google.com/docs/table/25273?hl=en"
    }
   },

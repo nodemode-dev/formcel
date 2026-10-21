@@ -335,6 +335,23 @@ impl<'a> Eval<'a> {
         self.env.borrow_mut().truncate(base);
         Ok(out)
     }
+    pub fn listed(&self, e: &Expr) -> Vec<Value> {
+        match self.arg(e) {
+            Arg::R(s, area) => {
+                let mut out = Vec::new();
+                for r in area.r0..=area.r1.min(area.r0 + 100_000) {
+                    for c in area.c0..=area.c1.min(area.c0 + 1_000) {
+                        out.push(self.ctx.cell(s, Addr { row: r, col: c }));
+                    }
+                }
+                out
+            }
+            Arg::A(a) => a.data,
+            Arg::V(v) => vec![v],
+            Arg::F(_) => vec![err(ErrKind::Value)],
+        }
+    }
+
     pub fn formula(&self, e: &Expr) -> Out {
         let a = self.arg(e);
         if !multi(&a) {
@@ -734,6 +751,29 @@ impl<'a> Eval<'a> {
                         return Err(ErrKind::Na);
                     }
                     Value::Bool(self.t(a, 0)? == self.t(a, 1)?)
+                }
+                "FIND" | "SEARCH" => {
+                    if !count(2, 3) {
+                        return Err(ErrKind::Na);
+                    }
+                    let (want, within) = (self.t(a, 0)?, self.t(a, 1)?);
+                    let start = if a.len() > 2 && !matches!(a[2], Expr::Missing) { self.n(a, 2)?.trunc() } else { 1.0 };
+                    let chars: Vec<char> = within.chars().collect();
+                    if start < 1.0 || start > chars.len().max(1) as f64 {
+                        return Err(ErrKind::Value);
+                    }
+                    let from = start as usize - 1;
+                    let hit = if name == "FIND" {
+                        let w: Vec<char> = want.chars().collect();
+                        (from..=chars.len().saturating_sub(w.len())).find(|&i| chars[i..].starts_with(&w))
+                    } else {
+                        let pat = format!("{want}*");
+                        (from..chars.len().max(from + 1)).find(|&i| wild_match(&pat, &chars[i.min(chars.len())..].iter().collect::<String>()))
+                    };
+                    match hit {
+                        Some(i) => Value::Number((i + 1) as f64),
+                        None => return Err(ErrKind::Value),
+                    }
                 }
                 "TRIM" => Value::Text(self.t(a, 0)?.split(' ').filter(|w| !w.is_empty()).collect::<Vec<_>>().join(" ")),
                 "LEFT" | "RIGHT" => {
