@@ -78,6 +78,89 @@ interface Exports {
   fc_edge(book: number, sheet: number, row: number, col: number, dir: number): number;
   fc_offset(src: number, len: number, dr: number, dc: number): number;
   fc_set_clock(serial: number): void;
+  fc_protect_text(book: number, sheet: number): number;
+  fc_protect_load(book: number, sheet: number, lines: number, len: number): number;
+  fc_protect_sheet(book: number, sheet: number, on: number, pw: number, pwLen: number, allow: number, allowLen: number): number;
+  fc_protect_book(book: number, on: number, pw: number, len: number): number;
+  fc_mark_final(book: number, on: number): number;
+  fc_set_flags(book: number, sheet: number, r0: number, c0: number, r1: number, c1: number, unlocked: number, hidden: number): number;
+  fc_cell_flags(book: number, sheet: number, row: number, col: number): number;
+  fc_edit_ranges(book: number, sheet: number, lines: number, len: number): number;
+  fc_set_user(book: number, name: number, len: number): number;
+  fc_guard(book: number, sheet: number, op: number, len: number, r0: number, c0: number, r1: number, c1: number): number;
+  fc_hides_formula(book: number, sheet: number, row: number, col: number): number;
+  fc_is_final(book: number): number;
+  fc_bypass(book: number, on: number): number;
+  fc_last_refusal(book: number): number;
+}
+
+const NO_SHEET = 4294967295;
+
+function protect(x: Exports, req: Extract<Request, { op: 'prot' }>): Value {
+  const s = req.sheet < 0 ? NO_SHEET : req.sheet;
+  const [r0, c0, r1, c1] = [req.r0 ?? 0, req.c0 ?? 0, req.r1 ?? 0, req.c1 ?? 0];
+  const verdict = (n: number): string => {
+    const m = out(x, n);
+    if (m) throw new Error(m);
+    return '';
+  };
+  switch (req.kind) {
+    case 'text':
+      return out(x, x.fc_protect_text(req.book, s)).split('\n').filter(Boolean);
+    case 'load':
+      return withStrings(x, [req.a ?? ''], ([p, l]) => ok(x.fc_protect_load(req.book, s, p, l), 'The engine refused that protection.'));
+    case 'sheet':
+      return withStrings(x, [req.b ?? '', req.a ?? ''], ([p, l, q, m]) => verdict(x.fc_protect_sheet(req.book, s, req.on ? 1 : 0, p, l, q, m)));
+    case 'book':
+      return withStrings(x, [req.b ?? ''], ([p, l]) => verdict(x.fc_protect_book(req.book, req.on ? 1 : 0, p, l)));
+    case 'final':
+      return verdict(x.fc_mark_final(req.book, req.on ? 1 : 0));
+    case 'flags':
+      return verdict(x.fc_set_flags(req.book, s, r0, c0, r1, c1, Number(req.a ?? 2), Number(req.b ?? 2)));
+    case 'flagsAt':
+      return x.fc_cell_flags(req.book, s, r0, c0);
+    case 'ranges':
+      return withStrings(x, [req.a ?? ''], ([p, l]) => verdict(x.fc_edit_ranges(req.book, s, p, l)));
+    case 'user':
+      return withStrings(x, [req.a ?? ''], ([p, l]) => x.fc_set_user(req.book, p, l));
+    case 'guard':
+      return withStrings(x, [req.a ?? ''], ([p, l]) => out(x, x.fc_guard(req.book, s, p, l, r0, c0, r1, c1)));
+    case 'hides':
+      return x.fc_hides_formula(req.book, s, r0, c0);
+    case 'isFinal':
+      return x.fc_is_final(req.book);
+  }
+}
+
+function guardOf(req: Request): [string, number, number, number, number, number] | null {
+  switch (req.op) {
+    case 'shift':
+      return [`${req.insert ? 'insert' : 'delete'}_${req.rows ? 'rows' : 'cols'}`, req.sheet, req.rows ? req.at : 0, req.rows ? 0 : req.at, req.rows ? req.at + req.n - 1 : 0, req.rows ? 0 : req.at + req.n - 1];
+    case 'sheet.add':
+      return ['structure', 0, 0, 0, 0, 0];
+    case 'sheet.delete':
+    case 'sheet.move':
+    case 'sheet.rename':
+      return ['structure', req.sheet, 0, 0, 0, 0];
+    case 'format.set':
+    case 'style.apply':
+      return ['format', req.sheet, req.r0, req.c0, req.r1, req.c1];
+    case 'style.set':
+      return req.ops.length ? ['format', req.sheet, Math.min(...req.ops.map((o) => o[0])), Math.min(...req.ops.map((o) => o[1])), Math.max(...req.ops.map((o) => o[2])), Math.max(...req.ops.map((o) => o[3]))] : null;
+    case 'merge.set':
+      return ['merge', req.sheet, req.r0, req.c0, req.r1, req.c1];
+    case 'sort':
+      return ['sort', req.sheet, req.r0, req.c0, req.r1, req.c1];
+    case 'filter.set':
+      return ['filter', req.sheet, 0, 0, 0, 0];
+    case 'table.create':
+      return ['edit', req.sheet, req.r0, req.c0, req.r1, req.c1];
+    case 'undo':
+    case 'redo':
+      return ['any', 0, 0, 0, 0, 0];
+    default:
+      return null;
+  }
 }
 
 function localSerial(): number {
@@ -181,7 +264,14 @@ function withStrings<T>(x: Exports, parts: string[], fn: (args: number[]) => T):
 }
 
 function run(x: Exports, req: Request): Value {
+  const g = guardOf(req);
+  if (g && 'book' in req) {
+    const m = withStrings(x, [g[0]], ([p, l]) => out(x, x.fc_guard(req.book, g[1], p, l, g[2], g[3], g[4], g[5])));
+    if (m) throw new Error(m);
+  }
   switch (req.op) {
+    case 'prot':
+      return protect(x, req);
     case 'version':
       return out(x, x.fc_version());
     case 'workbook.new':
@@ -192,7 +282,16 @@ function run(x: Exports, req: Request): Value {
       return withStrings(x, [req.a1], ([a, al]) => out(x, x.fc_get(req.book, req.sheet, a, al)));
     case 'apply': {
       const body = req.edits.map(([r, c, raw]) => `${r}\t${c}\t${escape(raw)}`).join('\n');
-      return withStrings(x, [body], ([p, l]) => changed(out(x, x.fc_apply(req.book, req.sheet, p, l))));
+      if (req.remote) x.fc_bypass(req.book, 1);
+      try {
+        return withStrings(x, [body], ([p, l]) => {
+          const n = x.fc_apply(req.book, req.sheet, p, l);
+          if (n === -9) throw new Error(out(x, x.fc_last_refusal(req.book)));
+          return changed(out(x, n));
+        });
+      } finally {
+        if (req.remote) x.fc_bypass(req.book, 0);
+      }
     }
     case 'load': {
       const body = req.edits.map(([r, c, raw]) => `${r}\t${c}\t${escape(raw)}`).join('\n');

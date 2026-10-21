@@ -3,7 +3,8 @@ export type Request =
   | { id: number; op: 'workbook.new' }
   | { id: number; op: 'cell.set'; book: number; sheet: number; a1: string; raw: string }
   | { id: number; op: 'cell.get'; book: number; sheet: number; a1: string }
-  | { id: number; op: 'apply'; book: number; sheet: number; edits: Edit[] }
+  | { id: number; op: 'apply'; book: number; sheet: number; edits: Edit[]; remote?: boolean }
+  | { id: number; op: 'prot'; book: number; kind: ProtKind; sheet: number; r0?: number; c0?: number; r1?: number; c1?: number; a?: string; b?: string; on?: boolean; flag?: number }
   | { id: number; op: 'load'; book: number; sheet: number; edits: Edit[] }
   | { id: number; op: 'sheet.add'; book: number; name: string }
   | { id: number; op: 'sheet.names'; book: number }
@@ -65,6 +66,7 @@ export type Request =
   | { id: number; op: 'edge'; book: number; sheet: number; row: number; col: number; dir: Dir }
   | { id: number; op: 'offset'; items: [src: string, dr: number, dc: number][] };
 
+export type ProtKind = 'text' | 'load' | 'sheet' | 'book' | 'final' | 'flags' | 'flagsAt' | 'ranges' | 'user' | 'guard' | 'hides' | 'isFinal';
 export type Dir = 'up' | 'down' | 'left' | 'right';
 export type Edit = [row: number, col: number, raw: string];
 export type Cell = [row: number, col: number, text: string, formula?: string, numeric?: boolean, color?: string, link?: boolean];

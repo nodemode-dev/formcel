@@ -48,6 +48,54 @@ export class EngineClient {
     return (await this.call({ op: 'apply', book, sheet, edits })) as Changed[];
   }
 
+  async applyRemote(book: number, edits: Edit[], sheet = 0): Promise<Changed[]> {
+    return (await this.call({ op: 'apply', book, sheet, edits, remote: true })) as Changed[];
+  }
+
+  async protText(book: number, sheet: number): Promise<string[]> {
+    return (await this.call({ op: 'prot', kind: 'text', book, sheet })) as string[];
+  }
+
+  async protLoad(book: number, sheet: number, lines: string[]): Promise<void> {
+    await this.call({ op: 'prot', kind: 'load', book, sheet, a: lines.join('\n') });
+  }
+
+  async protectSheet(book: number, sheet: number, on: boolean, password: string, allow: string[]): Promise<void> {
+    await this.call({ op: 'prot', kind: 'sheet', book, sheet, on, a: allow.join(','), b: password });
+  }
+
+  async protectBook(book: number, on: boolean, password: string): Promise<void> {
+    await this.call({ op: 'prot', kind: 'book', book, sheet: -1, on, b: password });
+  }
+
+  async markFinal(book: number, on: boolean): Promise<void> {
+    await this.call({ op: 'prot', kind: 'final', book, sheet: -1, on });
+  }
+
+  async setCellFlags(book: number, sheet: number, r0: number, c0: number, r1: number, c1: number, unlocked: boolean | null, hidden: boolean | null): Promise<void> {
+    await this.call({ op: 'prot', kind: 'flags', book, sheet, r0, c0, r1, c1, a: String(unlocked === null ? 2 : Number(unlocked)), b: String(hidden === null ? 2 : Number(hidden)) });
+  }
+
+  async cellFlags(book: number, sheet: number, row: number, col: number): Promise<number> {
+    return Number(await this.call({ op: 'prot', kind: 'flagsAt', book, sheet, r0: row, c0: col }));
+  }
+
+  async setEditRanges(book: number, sheet: number, lines: string[]): Promise<void> {
+    await this.call({ op: 'prot', kind: 'ranges', book, sheet, a: lines.join('\n') });
+  }
+
+  async setUser(book: number, name: string): Promise<void> {
+    await this.call({ op: 'prot', kind: 'user', book, sheet: -1, a: name });
+  }
+
+  async guard(book: number, sheet: number, op: string, r0 = 0, c0 = 0, r1 = 0, c1 = 0): Promise<string> {
+    return String(await this.call({ op: 'prot', kind: 'guard', book, sheet, a: op, r0, c0, r1, c1 }));
+  }
+
+  async hidesFormula(book: number, sheet: number, row: number, col: number): Promise<boolean> {
+    return Number(await this.call({ op: 'prot', kind: 'hides', book, sheet, r0: row, c0: col })) === 1;
+  }
+
   async load(book: number, edits: Edit[], sheet = 0): Promise<number> {
     return Number(await this.call({ op: 'load', book, sheet, edits }));
   }

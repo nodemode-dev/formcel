@@ -18,6 +18,42 @@ impl Workbook {
         self.inner.sheet_names()
     }
 
+    #[pyo3(signature = (sheet = None))]
+    fn protection(&self, sheet: Option<usize>) -> Vec<String> {
+        self.inner.protection_lines(sheet)
+    }
+
+    #[pyo3(signature = (lines, sheet = None))]
+    fn load_protection(&mut self, lines: Vec<String>, sheet: Option<usize>) -> bool {
+        self.inner.load_protection(sheet, &lines)
+    }
+
+    fn set_user(&mut self, name: &str) {
+        self.inner.set_user(name);
+    }
+
+    fn is_final(&self) -> bool {
+        self.inner.is_final()
+    }
+
+    #[pyo3(signature = (op, sheet, r0, c0, r1, c1))]
+    fn guard(&self, op: &str, sheet: usize, r0: u32, c0: u32, r1: u32, c1: u32) -> PyResult<()> {
+        let area = formcel_core::formula::Area { r0, c0, r1, c1 };
+        self.inner.guard(op, sheet, area).map_err(pyo3::exceptions::PyPermissionError::new_err)
+    }
+
+    fn guard_cells(&self, sheet: usize, cells: Vec<(u32, u32)>) -> PyResult<()> {
+        self.inner.guard_cells(sheet, &cells).map_err(pyo3::exceptions::PyPermissionError::new_err)
+    }
+
+    fn hides_formula(&self, sheet: usize, row: u32, col: u32) -> bool {
+        self.inner.hides_formula(sheet, row, col)
+    }
+
+    fn cell_flags(&self, sheet: usize, row: u32, col: u32) -> u8 {
+        self.inner.cell_flags(sheet, row, col)
+    }
+
     fn add_sheet(&mut self, name: &str) -> usize {
         self.inner.add_sheet(name)
     }

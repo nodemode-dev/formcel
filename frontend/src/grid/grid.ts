@@ -84,6 +84,15 @@ export interface GridEvents {
   onView(sheet: number, view: SheetView): void;
   onMenu(kind: MenuKind, x: number, y: number): void;
   onGoto(): void;
+  onError?(message: string): void;
+  onHover?(row: number, col: number, x: number, y: number): void;
+}
+
+export interface Presence {
+  row: number;
+  col: number;
+  color: string;
+  name: string;
 }
 
 export class Grid {
@@ -105,6 +114,9 @@ export class Grid {
   private readonly linked = new Set<number>();
   private readonly styles = new Map<number, CellStyle>();
   private merges: Area[] = [];
+  private marks = new Map<number, string>();
+  private others: Presence[] = [];
+  private masked = new Set<number>();
   private readonly cfs = new Map<number, Mark>();
   private ruleLines: string[] = [];
   private filterArea: Area | null = null;
@@ -402,6 +414,7 @@ export class Grid {
         ctx.clip();
         this.paintCells(ra, rb, ca, cb);
         this.paintFilterButtons(ra, rb, ca, cb);
+        this.paintMarks(ra, rb, ca, cb);
         ctx.restore();
       }
     }
@@ -419,6 +432,58 @@ export class Grid {
     if (this.sw) ctx.fillRect(HEAD_W + this.sw - 2, 0, 4, h);
     if (!this.og.hidden) this.paintOutline();
     if (this.editing) this.placeEditor();
+  }
+
+  setMarks(marks: Map<number, string>): void {
+    this.marks = marks;
+    this.paint();
+  }
+
+  setOthers(others: Presence[]): void {
+    this.others = others;
+    this.paint();
+  }
+
+  setMasked(keys: Set<number>): void {
+    this.masked = keys;
+    this.announce();
+  }
+
+  keyOf(row: number, col: number): number {
+    return KEY(row, col);
+  }
+
+  private paintMarks(r0: number, r1: number, c0: number, c1: number): void {
+    if (!this.marks.size && !this.others.length) return;
+    const { ctx } = this;
+    for (const [k, color] of this.marks) {
+      const r = Math.floor(k / MAX_COLS);
+      const c = k - r * MAX_COLS;
+      if (r < r0 || r > r1 || c < c0 || c > c1 || !this.rows.size(r) || !this.cols.size(c)) continue;
+      const right = this.x(c) + this.cols.size(c);
+      const top = this.y(r);
+      ctx.fillStyle = color;
+      ctx.beginPath();
+      ctx.moveTo(right - 8, top + 1);
+      ctx.lineTo(right - 1, top + 1);
+      ctx.lineTo(right - 1, top + 8);
+      ctx.closePath();
+      ctx.fill();
+    }
+    for (const o of this.others) {
+      if (o.row < r0 || o.row > r1 || o.col < c0 || o.col > c1) continue;
+      const [x, y, w, h] = this.areaRect(o.row, o.col, o.row, o.col);
+      ctx.strokeStyle = o.color;
+      ctx.lineWidth = 2;
+      ctx.strokeRect(x + 1, y + 1, w - 2, h - 2);
+      ctx.font = '11px Inter, system-ui, sans-serif';
+      const tw = ctx.measureText(o.name).width + 8;
+      ctx.fillStyle = o.color;
+      ctx.fillRect(x + 1, y - 14, tw, 14);
+      ctx.fillStyle = '#ffffff';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(o.name, x + 5, y - 7);
+    }
   }
 
   private paintOutline(): void {
@@ -1302,7 +1367,7 @@ export class Grid {
 
   private announce(): void {
     const k = KEY(this.ar, this.ac);
-    this.events.onActive(this.fx.get(k) ?? this.cache.get(k) ?? '', rangeText(this.sel()), this.sel());
+    this.events.onActive(this.masked.has(k) ? this.cache.get(k) ?? '' : this.fx.get(k) ?? this.cache.get(k) ?? '', rangeText(this.sel()), this.sel());
     void this.loadRule();
   }
 
@@ -1759,7 +1824,13 @@ export class Grid {
         }
       }
     }
-    await this.commitEdits(await this.engine.apply(this.book, [[this.ar, this.ac, raw]], this.sheet));
+    try {
+      await this.commitEdits(await this.engine.apply(this.book, [[this.ar, this.ac, raw]], this.sheet));
+    } catch (err) {
+      this.events.onError?.(err instanceof Error ? err.message : String(err));
+      this.paint();
+      return true;
+    }
     if (this.tableList.length) await this.tablesMoved();
     return true;
   }
@@ -2102,7 +2173,7 @@ export class Grid {
     if (this.editing) return;
     this.editing = true;
     const k = KEY(this.ar, this.ac);
-    this.editor.value = initial ?? this.fx.get(k) ?? this.cache.get(k) ?? '';
+    this.editor.value = initial ?? (this.masked.has(k) ? this.cache.get(k) : this.fx.get(k) ?? this.cache.get(k)) ?? '';
     this.reveal(this.ar, this.ac);
     this.placeEditor();
     this.editor.hidden = false;
@@ -2233,6 +2304,10 @@ export class Grid {
           else this.extendTo(row, col);
         });
         return;
+      }
+      if (this.events.onHover) {
+        const h = p.x > HEAD_W && p.y > HEAD_H ? this.hit(p.x, p.y) : null;
+        this.events.onHover(h ? h.row : -1, h ? h.col : -1, e.clientX, e.clientY);
       }
       const b = this.boundary(p.x, p.y);
       const bar = this.splitBar(p.x, p.y);
@@ -2498,7 +2573,10 @@ export class Grid {
   }
 
   private enqueue(fn: () => void | Promise<void>): void {
-    this.queue = this.queue.then(fn).catch((err: unknown) => console.error(err));
+    this.queue = this.queue.then(fn).catch((err: unknown) => {
+      console.error(err);
+      if (err instanceof Error && this.events.onError) this.events.onError(err.message);
+    });
   }
 
   private editorKey(e: KeyboardEvent): void {

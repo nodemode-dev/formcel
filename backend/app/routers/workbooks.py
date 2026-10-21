@@ -1,5 +1,5 @@
 import zipfile
-from urllib.parse import quote
+from urllib.parse import quote, unquote
 
 import xlrd
 
@@ -180,9 +180,11 @@ def get_workbook(wid: str) -> dict:
 
 
 @router.post("/workbooks/{wid}/cells")
-def edit_cells(wid: str, body: EditIn) -> dict:
+def edit_cells(wid: str, body: EditIn, request: Request) -> dict:
     try:
-        return store().edit(wid, body.sheet, body.cells)
+        return store().edit(wid, body.sheet, body.cells, unquote(request.headers.get("x-formcel-user", "")).strip()[:60], request.headers.get("x-formcel-client"))
+    except PermissionError as e:
+        raise HTTPException(403, str(e))
     except (KeyError, FileNotFoundError):
         raise missing(wid)
     except (IndexError, ValueError) as e:

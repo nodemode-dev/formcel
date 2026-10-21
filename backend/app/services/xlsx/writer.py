@@ -10,6 +10,7 @@ from openpyxl.worksheet.hyperlink import Hyperlink
 from .autofilter import filter_out
 from .cf import rules_out
 from .formulas import to_file
+from .protect import book_out, notes_out, sheet_out
 from .styles import apply_out
 from .tables import ref_of, tables_out
 from .theme import theme_out
@@ -28,7 +29,7 @@ def _number(text: str) -> int | float:
     return int(n) if n.is_integer() and abs(n) < 2**53 else n
 
 
-def write(eng, views: list[dict], vba: dict[str, bytes] | None = None) -> bytes:
+def write(eng, views: list[dict], vba: dict[str, bytes] | None = None, notes: dict | None = None) -> bytes:
     wb = Workbook()
     xml, body, heading = theme_out(eng.theme())
     wb.loaded_theme = xml
@@ -120,6 +121,9 @@ def write(eng, views: list[dict], vba: dict[str, bytes] | None = None) -> bytes:
             ws.sheet_view.zoomScale = round(view["zoom"] * 100)
         if view.get("color"):
             ws.sheet_properties.tabColor = "FF" + view["color"].lstrip("#").upper()
+        notes_out(ws, notes or {}, i)
+        sheet_out(ws, eng.protection(i))
+    book_out(wb, eng.protection())
     for name, refers in eng.names():
         wb.defined_names[name] = DefinedName(name, attr_text=to_file(refers).lstrip("="))
     for i, items in tables_out(wb, eng).items():
