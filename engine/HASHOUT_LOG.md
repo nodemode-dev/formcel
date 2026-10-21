@@ -394,3 +394,12 @@ Text that starts with `=` (typed as `'=1+1`, or from a CSV file) was saved and s
 - logged: v0.27.0 · 2026-10-21
 
 `results` lists each formula's current value with its kind, the way `typed` lists stored cells, so the .ods writer can store a formula's result next to it.
+
+### The spilled range operator and implicit intersection
+- refers-to: src/formula.rs :: Tok::Hash, Tok::At, Expr::Spill, Expr::Single, lex, unary, print, children, walk_mut; src/eval.rs :: Ctx::spill, Eval::placed, single, arg; src/lib.rs :: Ctx::spill, the recalc loop
+- kind: explainer
+- logged: v0.28.0 · 2026-10-21
+
+`A1#` is the whole spill of the formula in A1 (MS-SPILLOP), with or without a sheet name; `#` after a cell reference is the operator, while `#` followed by a letter still starts an error such as #REF!. When A1 does not hold a spill the result is #REF!. A formula using `A1#` depends on A1, so it recalculates when the spill grows or shrinks, and the reference moves with inserted and deleted rows like any other.
+
+`@` is implicit intersection, after MS-IMPLICIT: a single value stays itself; a range gives the cell on the formula's own row (for a column range) or column (for a row range), and #VALUE! when there is none; an array gives its top-left value. To know its own row and column, evaluation now carries the formula's cell (`Eval::placed`); rules, links and names evaluate without one, so a range under `@` there needs to be a single cell.

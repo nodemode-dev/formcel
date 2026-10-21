@@ -383,6 +383,10 @@ impl eval::Ctx for Workbook {
         self.sheets.get(sheet).and_then(|s| s.cells.get(a)).cloned().unwrap_or(Value::Empty)
     }
 
+    fn spill(&self, sheet: usize, a: Addr) -> Option<(u32, u32)> {
+        self.spills.get(&(sheet, a)).copied()
+    }
+
     fn each(&self, sheet: usize, area: Area, f: &mut dyn FnMut(Addr, &Value)) {
         if let Some(s) = self.sheets.get(sheet) {
             s.cells.for_each_in(Addr { row: area.r0, col: area.c0 }, Addr { row: area.r1, col: area.c1 }, |a, v| f(a, v));
@@ -1265,7 +1269,7 @@ impl Workbook {
             let (s, a) = ids[i];
             let (o, f) = match &self.formulas[&(s, a)].ast {
                 None => (eval::Out::V(Value::Error(ErrKind::Error)), None),
-                Some(e) => (eval::Eval::new(&*self, s).formula(e), self.infer(s, e)),
+                Some(e) => (eval::Eval::new(&*self, s).placed(a).formula(e), self.infer(s, e)),
             };
             let v = match o {
                 eval::Out::V(v) => {

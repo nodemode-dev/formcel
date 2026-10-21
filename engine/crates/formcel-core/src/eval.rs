@@ -8,6 +8,9 @@ pub trait Ctx {
     fn cell(&self, sheet: usize, a: Addr) -> Value;
     fn each(&self, sheet: usize, area: Area, f: &mut dyn FnMut(Addr, &Value));
     fn name(&self, name: &str) -> Option<&Expr>;
+    fn spill(&self, _sheet: usize, _a: Addr) -> Option<(u32, u32)> {
+        None
+    }
 }
 
 #[derive(Debug)]
@@ -204,11 +207,30 @@ pub struct Eval<'a> {
     sheet: usize,
     env: RefCell<Vec<(String, Arg)>>,
     depth: Cell<u32>,
+    at: Option<Addr>,
 }
 
 impl<'a> Eval<'a> {
     pub fn new(ctx: &'a dyn Ctx, sheet: usize) -> Self {
-        Eval { ctx, sheet, env: RefCell::new(Vec::new()), depth: Cell::new(0) }
+        Eval { ctx, sheet, env: RefCell::new(Vec::new()), depth: Cell::new(0), at: None }
+    }
+
+    pub fn placed(mut self, a: Addr) -> Self {
+        self.at = Some(a);
+        self
+    }
+
+    fn single(&self, a: Arg) -> Arg {
+        match a {
+            Arg::R(s, area) if area.r0 == area.r1 && area.c0 == area.c1 => Arg::R(s, area),
+            Arg::R(s, area) => match self.at {
+                Some(at) if area.c0 == area.c1 && (area.r0..=area.r1).contains(&at.row) => Arg::R(s, Area { r0: at.row, c0: area.c0, r1: at.row, c1: area.c0 }),
+                Some(at) if area.r0 == area.r1 && (area.c0..=area.c1).contains(&at.col) => Arg::R(s, Area { r0: area.r0, c0: at.col, r1: area.r0, c1: at.col }),
+                _ => Arg::V(err(ErrKind::Value)),
+            },
+            Arg::A(x) => Arg::V(x.data.first().cloned().unwrap_or(Value::Empty)),
+            o => o,
+        }
     }
 
     fn local(&self, name: &str) -> Option<Arg> {
@@ -368,6 +390,15 @@ impl<'a> Eval<'a> {
                 None => Arg::V(err(ErrKind::Ref)),
             },
             Expr::Paren(x) => self.arg(x),
+            Expr::Single(x) => self.single(self.arg(x)),
+            Expr::Spill(x) => match self.arg(x) {
+                Arg::R(s, a) if a.r0 == a.r1 && a.c0 == a.c1 => match self.ctx.spill(s, Addr { row: a.r0, col: a.c0 }) {
+                    Some((h, w)) => Arg::R(s, Area { r0: a.r0, c0: a.c0, r1: a.r0 + h - 1, c1: a.c0 + w - 1 }),
+                    None => Arg::V(err(ErrKind::Ref)),
+                },
+                Arg::V(Value::Error(k)) => Arg::V(err(k)),
+                _ => Arg::V(err(ErrKind::Ref)),
+            },
             Expr::Array(rows) => Arg::A(Array { rows: rows.len(), cols: rows[0].len(), data: rows.iter().flatten().map(|x| self.scalar(x)).collect() }),
             Expr::Range(a, b) => match (self.arg(a), self.arg(b)) {
                 (Arg::R(s1, x), Arg::R(s2, y)) if s1 == s2 => Arg::R(s1, hull(x, y)),
