@@ -380,3 +380,10 @@ A number in a cell with a date or time code is saved and edited as date or time 
 - logged: v0.25.0 · 2026-10-21
 
 `typed` lists each stored cell with its kind (`f` formula, `n` number, `t` text, `b` TRUE or FALSE, `e` error) and its plain text, numbers in full precision, so a file writer never has to read numbers back from shown text. `auto_formats` gives the codes for the formats FormCel picked up from typing (currency and percent with their decimals, date, time, date and time), for cells with no code of their own. `reads_as_text` says whether FormCel would keep a typed string as text.
+
+### Text that starts with =
+- refers-to: src/lib.rs :: const_text, meta
+- kind: explainer
+- logged: v0.26.0 · 2026-10-21
+
+Text that starts with `=` (typed as `'=1+1`, or from a CSV file) was saved and shown in the edit bar without its apostrophe, so reopening the workbook turned it into a formula. Such text now gets the apostrophe back, like text that would read as a number.

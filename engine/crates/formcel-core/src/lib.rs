@@ -691,7 +691,7 @@ impl Workbook {
     fn const_text(&self, sheet: usize, a: Addr, v: &Value) -> String {
         let Some(c) = self.code_of(&(sheet, a)) else {
             if let Value::Text(s) = v {
-                if s.starts_with('\'') || !matches!(Value::parse_input(s), Value::Text(_)) {
+                if s.starts_with(['\'', '=']) || !matches!(Value::parse_input(s), Value::Text(_)) {
                     return format!("'{s}");
                 }
             }
@@ -713,7 +713,7 @@ impl Workbook {
         let v = self.sheets.get(sheet).and_then(|s| s.cells.get(a));
         let num = matches!(v, Some(Value::Number(_)));
         let code = self.code_of(&(sheet, a));
-        let quoted = matches!(v, Some(Value::Text(s)) if s.starts_with('\'') || !matches!(Value::parse_input(s), Value::Text(_)));
+        let quoted = matches!(v, Some(Value::Text(s)) if s.starts_with(['\'', '=']) || !matches!(Value::parse_input(s), Value::Text(_)));
         let raw = self.formula_text(sheet, a).or_else(|| ((code.is_some() || quoted) && !self.spilled.contains_key(&(sheet, a))).then(|| self.input(sheet, a)).filter(|s| !s.is_empty()));
         let color = code.zip(v).and_then(|(c, v)| c.1.render(v)).and_then(|(_, col)| col).map(fmtcode::Color::rgb);
         (raw, num, color, self.has_link(sheet, a))
