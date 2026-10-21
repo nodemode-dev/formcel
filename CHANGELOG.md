@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.11.0 · 2026-10-21
+
+- Dynamic arrays: a formula whose result is several cells (`=A1:A3*10`, `=SEQUENCE(4,2)`, `=TRANSPOSE(A1:C1)`) fills the cells to its right and below. If one of them is in use the formula shows `#SPILL!`; clearing that cell lets it spill again. Spilled cells are not saved as values and their formula bar is empty.
+- Array constants such as `{1,2;3,4}`, usable in lookups (`=HLOOKUP(3,{1,2,3;"a","b","c"},2,TRUE)`) and arithmetic.
+- INDEX takes row or column 0 for a whole column or row, a list of areas with an area number (`=INDEX((A1:C6,A8:C11),2,2,2)`), and INDEX, CHOOSE and IF can end a range (`=SUM(B2:INDEX(A2:C6,5,2))`).
+- New: SEQUENCE, TRANSPOSE (78 functions in all).
+- Conformance with Microsoft's function pages: all 159 runnable cases pass; 2 are inconsistent on the page itself, 9 depend on the day they run, 5 have their data only in a picture.
+
 ## 0.10.1 · 2026-10-21
 
 - DATEVALUE and TIMEVALUE return plain serial numbers, as Microsoft's pages show (they were shown as a date and a time).
