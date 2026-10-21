@@ -42,6 +42,16 @@ export type Request =
   | { id: number; op: 'table.create'; book: number; sheet: number; r0: number; c0: number; r1: number; c1: number; header: boolean }
   | { id: number; op: 'table.set'; book: number; name: string; line: string }
   | { id: number; op: 'table.remove'; book: number; name: string }
+  | { id: number; op: 'pivot.list'; book: number }
+  | { id: number; op: 'pivot.load'; book: number; lines: string[] }
+  | { id: number; op: 'pivot.source'; book: number; sheet: number; src: string }
+  | { id: number; op: 'pivot.fields'; book: number; name: string }
+  | { id: number; op: 'pivot.items'; book: number; name: string; field: string }
+  | { id: number; op: 'pivot.suggest'; book: number; sheet: number; src: string }
+  | { id: number; op: 'pivot.create'; book: number; line: string }
+  | { id: number; op: 'pivot.set'; book: number; name: string; line: string }
+  | { id: number; op: 'pivot.refresh'; book: number; name: string }
+  | { id: number; op: 'pivot.remove'; book: number; name: string }
   | { id: number; op: 'valid.list'; book: number; sheet: number }
   | { id: number; op: 'valid.load'; book: number; sheet: number; lines: string[] }
   | { id: number; op: 'valid.set'; book: number; sheet: number; r0: number; c0: number; r1: number; c1: number; line: string }

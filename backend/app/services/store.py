@@ -118,7 +118,7 @@ class Store:
     def _write(self, b: Book) -> None:
         doc = {"format": FORMAT, "version": FORMAT_VERSION, "id": b.id, "title": b.title, "created": b.created,
                "modified": b.modified, "template": b.template, "locale": b.locale, "preview": b.preview(),
-               "names": [list(n) for n in b.engine.names()], "tables": b.engine.tables(),
+               "names": [list(n) for n in b.engine.names()], "tables": b.engine.tables(), "pivots": b.engine.pivots(),
                "theme": b.engine.theme(), "cellStyles": b.engine.cell_styles(), "collab": b.collab, "protection": b.protection(),
                "sheets": [{"name": n, "view": b.views[i] if i < len(b.views) else {}, "cells": b.engine.cells(i), "formats": b.engine.formats(i), "styles": b.engine.styles(i), "merges": [list(m) for m in b.engine.merges(i)], "rules": b.engine.rules(i), "filter": b.engine.filter(i), "validations": b.engine.validations(i), "links": b.engine.links(i), "objects": b.fit_objects()[i]} for i, n in enumerate(b.sheet_names())]}
         target = self.path(b.id)
@@ -204,6 +204,8 @@ class Store:
                     continue
             if doc.get("tables"):
                 eng.load_tables(doc["tables"])
+            if doc.get("pivots"):
+                eng.load_pivots(doc["pivots"])
             b = Book(wid, doc["title"], doc["created"], doc["modified"], eng, doc.get("template"), [s.get("view") or {} for s in doc["sheets"]])
             b.objects = [list(s.get("objects") or []) for s in doc["sheets"]]
             b.vba = self._macros(self.path(wid))
@@ -389,7 +391,7 @@ class Store:
         b = self._load(wid)
         with b.lock:
             n = len(b.sheet_names())
-            return {**b.meta(), "names": [list(x) for x in b.engine.names()], "theme": b.engine.theme(), "cellStyles": b.engine.cell_styles(), "cells": [b.engine.cells(i) for i in range(n)], "formats": [b.engine.formats(i) for i in range(n)], "styles": [b.engine.styles(i) for i in range(n)], "merges": [[list(m) for m in b.engine.merges(i)] for i in range(n)], "rules": [b.engine.rules(i) for i in range(n)], "filters": [b.engine.filter(i) for i in range(n)], "validations": [b.engine.validations(i) for i in range(n)], "tables": b.engine.tables(), "links": [b.engine.links(i) for i in range(n)], "collab": {"notes": b.collab["notes"], "threads": b.collab["threads"]}, "protection": b.protection(), "automation": b.auto}
+            return {**b.meta(), "names": [list(x) for x in b.engine.names()], "theme": b.engine.theme(), "cellStyles": b.engine.cell_styles(), "cells": [b.engine.cells(i) for i in range(n)], "formats": [b.engine.formats(i) for i in range(n)], "styles": [b.engine.styles(i) for i in range(n)], "merges": [[list(m) for m in b.engine.merges(i)] for i in range(n)], "rules": [b.engine.rules(i) for i in range(n)], "filters": [b.engine.filter(i) for i in range(n)], "validations": [b.engine.validations(i) for i in range(n)], "tables": b.engine.tables(), "pivots": b.engine.pivots(), "links": [b.engine.links(i) for i in range(n)], "collab": {"notes": b.collab["notes"], "threads": b.collab["threads"]}, "protection": b.protection(), "automation": b.auto}
 
     def get_objects(self, wid: str) -> list[list[dict]]:
         b = self._load(wid)
@@ -471,6 +473,14 @@ class Store:
         b = self._load(wid)
         with b.lock:
             b.engine.load_tables(lines)
+            b.modified = now()
+            self._write(b)
+            return {"id": b.id, "modified": b.modified}
+
+    def set_pivots(self, wid: str, lines: list[str]) -> dict:
+        b = self._load(wid)
+        with b.lock:
+            b.engine.load_pivots(lines)
             b.modified = now()
             self._write(b)
             return {"id": b.id, "modified": b.modified}

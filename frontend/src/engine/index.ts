@@ -278,6 +278,46 @@ export class EngineClient {
     return (await this.call({ op: 'table.set', book, name, line })) as Effect;
   }
 
+  async pivots(book: number): Promise<string[]> {
+    return (await this.call({ op: 'pivot.list', book })) as string[];
+  }
+
+  async loadPivots(book: number, lines: string[]): Promise<void> {
+    if (lines.length) await this.call({ op: 'pivot.load', book, lines });
+  }
+
+  async pivotSource(book: number, sheet: number, src: string): Promise<string> {
+    return (await this.call({ op: 'pivot.source', book, sheet, src })) as string;
+  }
+
+  async pivotFields(book: number, name: string): Promise<string> {
+    return (await this.call({ op: 'pivot.fields', book, name })) as string;
+  }
+
+  async pivotItems(book: number, name: string, field: string): Promise<string[]> {
+    return (await this.call({ op: 'pivot.items', book, name, field })) as string[];
+  }
+
+  async pivotSuggest(book: number, sheet: number, src: string): Promise<string[]> {
+    return (await this.call({ op: 'pivot.suggest', book, sheet, src })) as string[];
+  }
+
+  async createPivot(book: number, line: string): Promise<Effect> {
+    return (await this.call({ op: 'pivot.create', book, line })) as Effect;
+  }
+
+  async setPivot(book: number, name: string, line: string): Promise<Effect> {
+    return (await this.call({ op: 'pivot.set', book, name, line })) as Effect;
+  }
+
+  async refreshPivot(book: number, name: string): Promise<Effect> {
+    return (await this.call({ op: 'pivot.refresh', book, name })) as Effect;
+  }
+
+  async removePivot(book: number, name: string): Promise<Effect> {
+    return (await this.call({ op: 'pivot.remove', book, name })) as Effect;
+  }
+
   async removeTable(book: number, name: string): Promise<Effect> {
     return (await this.call({ op: 'table.remove', book, name })) as Effect;
   }

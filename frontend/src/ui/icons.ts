@@ -58,6 +58,8 @@ export const icons = {
   shapeArrow: svg('<path d="M4 12h15M13.5 6.5L19 12l-5.5 5.5"/>'),
   textBox: svg('<rect x="3.5" y="5.5" width="17" height="13" rx="1.5" stroke-dasharray="2 2.5"/><path d="M8.5 9.5h7M12 9.5v6"/>'),
   table: svg('<rect x="3.5" y="4.5" width="17" height="15" rx="2"/><path d="M3.5 9.5h17M3.5 14.5h17M9.5 9.5v10"/><path d="M3.5 7h17" stroke-width="3.5"/>'),
+  pivot: svg('<rect x="3.5" y="4.5" width="17" height="15" rx="2"/><path d="M3.5 10h17M10 4.5v15"/><path d="M13 13.5h4.5M13 16.5h4.5"/><path d="M5.5 13l2 2 2-2"/>'),
+  refresh: svg('<path d="M19.5 12a7.5 7.5 0 1 1-2.2-5.3M19.5 4.5v4h-4"/>'),
   validation: svg('<rect x="3.5" y="4.5" width="17" height="15" rx="2"/><path d="M7.5 12l3 3 6-6"/>'),
   download: svg('<path d="M12 4v11M7.5 10.5L12 15l4.5-4.5M5 19.5h14"/>'),
   note: svg('<path d="M5 4.5h14v10.5l-4.5 4.5H5z"/><path d="M14.5 19.5V15H19M8.5 9h7M8.5 12.5h4"/>'),

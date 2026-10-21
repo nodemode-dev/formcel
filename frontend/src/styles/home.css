@@ -503,3 +503,60 @@
   .fc-nav-foot { display: none; }
   .fc-home-body { padding: var(--space-4); }
 }
+
+.fc-pvt {
+  position: fixed;
+  top: calc(var(--bar-h) + var(--space-8) * 2);
+  right: max(var(--space-4), env(safe-area-inset-right, 0px));
+  z-index: var(--z-dropdown);
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  gap: var(--space-2);
+  width: min(340px, calc(100vw - var(--space-8)));
+  height: min(640px, calc(100vh - var(--bar-h) - var(--space-8) * 3));
+  padding: var(--space-3);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-md);
+  background: var(--bg-secondary);
+  box-shadow: var(--shadow-md);
+  overflow: hidden;
+}
+.fc-pvt[hidden] { display: none; }
+.fc-pvt-head { display: flex; align-items: center; gap: var(--space-2); font-size: var(--text-md); }
+.fc-pvt-head strong { flex: none; }
+.fc-pvt-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-muted); font-size: var(--text-sm); }
+.fc-pvt-body { display: grid; align-content: start; gap: var(--space-3); overflow-y: auto; padding-right: var(--space-1); }
+.fc-pvt-note { margin: 0; font-size: var(--text-xs); color: var(--text-muted); }
+.fc-pvt-fields, .fc-pvt-list, .fc-pvt-calcs { display: grid; gap: var(--space-1); margin: 0; padding: 0; list-style: none; }
+.fc-pvt-fields { max-height: 168px; overflow-y: auto; border: 1px solid var(--border-color); border-radius: var(--radius-sm); padding: var(--space-1); }
+.fc-pvt-field { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); padding: 2px var(--space-1); border-radius: var(--radius-sm); cursor: grab; }
+.fc-pvt-field:hover { background: var(--bg-tertiary); }
+.fc-pvt-move { width: 76px; height: 24px; padding: 0 var(--space-1); font-size: var(--text-xs); }
+.fc-pvt-areas { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-2); }
+.fc-pvt-area { display: grid; align-content: start; gap: var(--space-1); min-height: 76px; padding: var(--space-2); border: 1px dashed var(--border-light); border-radius: var(--radius-sm); }
+.fc-pvt-area[data-area="values"] { grid-column: 1 / -1; }
+.fc-pvt-label { font-size: var(--text-xs); color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.04em; }
+.fc-pvt-chip { display: grid; gap: var(--space-1); padding: var(--space-1) var(--space-2); border: 1px solid var(--border-color); border-radius: var(--radius-sm); background: var(--bg-tertiary); font-size: var(--text-sm); cursor: grab; }
+.fc-pvt-chip-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-primary); }
+.fc-pvt-chip-acts { display: flex; flex-wrap: wrap; gap: var(--space-1); }
+.fc-pvt-chip-acts .fc-btn, .fc-pvt-calc-item .fc-btn, .fc-pvt-calc-new .fc-btn { height: 22px; padding: 0 var(--space-2); font-size: var(--text-xs); }
+.fc-pvt-chip-acts [hidden] { display: none; }
+.fc-pvt-vset { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-1); }
+.fc-pvt-vset input { grid-column: 1 / -1; }
+.fc-pvt-vset .fc-fmt-input, .fc-pvt-calc-new .fc-fmt-input { height: 26px; font-size: var(--text-xs); }
+.fc-pvt-items { display: grid; gap: 2px; max-height: 140px; overflow-y: auto; padding: var(--space-1); border: 1px solid var(--border-color); border-radius: var(--radius-sm); background: var(--bg-secondary); }
+.fc-pvt-items[hidden] { display: none; }
+.fc-pvt-calc { display: grid; gap: var(--space-1); }
+.fc-pvt-calc-item { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); font-size: var(--text-xs); color: var(--text-secondary); }
+.fc-pvt-calc-item span { min-width: 0; overflow-wrap: anywhere; font-family: var(--font-mono); }
+.fc-pvt-calc-new { display: grid; grid-template-columns: 90px 1fr auto; gap: var(--space-1); }
+.fc-pvt-opts { display: grid; gap: var(--space-1); }
+.fc-pvt-foot { display: flex; align-items: center; justify-content: flex-end; gap: var(--space-2); }
+.fc-pvt-hint { flex: 1; min-height: 16px; font-size: var(--text-xs); color: var(--bad); }
+.fc-pvt-dialog { width: 380px; }
+.fc-pvt-dest { display: grid; gap: var(--space-1); margin: 0; padding: var(--space-2); border: 1px solid var(--border-color); border-radius: var(--radius-sm); }
+.fc-pvt-dest legend { font-size: var(--text-xs); color: var(--text-muted); padding: 0 var(--space-1); }
+.fc-pvt-sugg { display: grid; align-content: start; gap: var(--space-1); min-height: 132px; }
+.fc-pvt-sugg[data-empty="1"]::before { content: "Recommendations appear when the source has text and number columns."; font-size: var(--text-xs); color: var(--text-muted); }
+.fc-pvt-pick { justify-self: stretch; height: 24px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left; font-size: var(--text-xs); }
+.fc-pvt-dialog .fc-pvt-pick { justify-self: stretch; }

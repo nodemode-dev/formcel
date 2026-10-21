@@ -556,6 +556,137 @@ pub unsafe extern "C" fn fc_remove_table(id: u32, name: *const u8, len: u32) -> 
     effect_or(with_book(id, |wb| wb.remove_table(&name).map(|e| wb.encode(&e))))
 }
 
+thread_local! {
+    static PIVOT_ERR: RefCell<String> = const { RefCell::new(String::new()) };
+}
+
+fn pivot_text(r: Option<Result<String, formcel_core::EngineError>>) -> i32 {
+    match r {
+        Some(Ok(s)) => emit(&s) as i32,
+        Some(Err(e)) => {
+            PIVOT_ERR.with(|p| *p.borrow_mut() = e.to_string());
+            -3
+        }
+        None => -1,
+    }
+}
+
+/// The message of the last PivotTable call that was refused.
+#[no_mangle]
+pub extern "C" fn fc_pivot_error() -> i32 {
+    PIVOT_ERR.with(|p| emit(&p.borrow()) as i32)
+}
+
+/// Every PivotTable in the workbook, one line each.
+#[no_mangle]
+pub extern "C" fn fc_pivots(id: u32) -> i32 {
+    match with_book(id, |wb| wb.pivots().join("\n")) {
+        Some(s) => emit(&s) as i32,
+        None => -1,
+    }
+}
+
+/// Loads the workbook's PivotTables without an undo step or any change to the cells.
+///
+/// # Safety
+/// `lines` must point at `len` readable bytes.
+#[no_mangle]
+pub unsafe extern "C" fn fc_load_pivots(id: u32, lines: *const u8, len: u32) -> i32 {
+    let list: Vec<String> = text(lines, len).split('\n').filter(|l| !l.is_empty()).map(String::from).collect();
+    with_book(id, |wb| wb.load_pivots(&list) as i32).unwrap_or(-1)
+}
+
+/// The sheet, area, table and typed field names of a PivotTable source typed as a range or table name.
+///
+/// # Safety
+/// `src` must point at `len` readable bytes.
+#[no_mangle]
+pub unsafe extern "C" fn fc_pivot_source(id: u32, sheet: u32, src: *const u8, len: u32) -> i32 {
+    let src = text(src, len).to_string();
+    pivot_text(with_book(id, |wb| wb.pivot_source(sheet as usize, &src)))
+}
+
+/// The same description for an existing PivotTable's own source.
+///
+/// # Safety
+/// `name` must point at `len` readable bytes.
+#[no_mangle]
+pub unsafe extern "C" fn fc_pivot_fields(id: u32, name: *const u8, len: u32) -> i32 {
+    let name = text(name, len).to_string();
+    pivot_text(with_book(id, |wb| wb.pivot_fields(&name)))
+}
+
+/// The items of one field of a PivotTable's source, sorted, one escaped line each.
+///
+/// # Safety
+/// `name` and `field` must point at readable bytes.
+#[no_mangle]
+pub unsafe extern "C" fn fc_pivot_items(id: u32, name: *const u8, name_len: u32, field: *const u8, field_len: u32) -> i32 {
+    let (name, field) = (text(name, name_len).to_string(), text(field, field_len).to_string());
+    pivot_text(with_book(id, |wb| {
+        wb.pivot_items(&name, &field).map(|v| {
+            v.iter()
+                .map(|s| {
+                    let mut o = String::new();
+                    wire::escape(s, &mut o);
+                    o
+                })
+                .collect::<Vec<_>>()
+                .join("\n")
+        })
+    }))
+}
+
+/// Suggested PivotTable layouts for a source, one PivotTable line each.
+///
+/// # Safety
+/// `src` must point at `len` readable bytes.
+#[no_mangle]
+pub unsafe extern "C" fn fc_pivot_suggest(id: u32, sheet: u32, src: *const u8, len: u32) -> i32 {
+    let src = text(src, len).to_string();
+    pivot_text(with_book(id, |wb| wb.pivot_suggest(sheet as usize, &src).map(|v| v.join("\n"))))
+}
+
+/// Builds a PivotTable from a line as one undo step; -3 when refused, with the reason in fc_pivot_error.
+///
+/// # Safety
+/// `line` must point at `len` readable bytes.
+#[no_mangle]
+pub unsafe extern "C" fn fc_create_pivot(id: u32, line: *const u8, len: u32) -> i32 {
+    let line = text(line, len).to_string();
+    pivot_text(with_book(id, |wb| wb.create_pivot(&line).map(|e| wb.encode(&e))))
+}
+
+/// Replaces a PivotTable's definition and redraws it.
+///
+/// # Safety
+/// `name` and `line` must point at readable bytes.
+#[no_mangle]
+pub unsafe extern "C" fn fc_set_pivot(id: u32, name: *const u8, name_len: u32, line: *const u8, len: u32) -> i32 {
+    let (name, line) = (text(name, name_len).to_string(), text(line, len).to_string());
+    pivot_text(with_book(id, |wb| wb.set_pivot(&name, &line).map(|e| wb.encode(&e))))
+}
+
+/// Recomputes one PivotTable from its current source, or every PivotTable when the name is empty.
+///
+/// # Safety
+/// `name` must point at `len` readable bytes.
+#[no_mangle]
+pub unsafe extern "C" fn fc_refresh_pivot(id: u32, name: *const u8, len: u32) -> i32 {
+    let name = text(name, len).to_string();
+    pivot_text(with_book(id, |wb| wb.refresh_pivot(&name).map(|e| wb.encode(&e))))
+}
+
+/// Removes a PivotTable and clears the cells it drew.
+///
+/// # Safety
+/// `name` must point at `len` readable bytes.
+#[no_mangle]
+pub unsafe extern "C" fn fc_remove_pivot(id: u32, name: *const u8, len: u32) -> i32 {
+    let name = text(name, len).to_string();
+    pivot_text(with_book(id, |wb| wb.remove_pivot(&name).map(|e| wb.encode(&e))))
+}
+
 /// A sheet's data validation rules, one line each.
 #[no_mangle]
 pub extern "C" fn fc_validations(id: u32, sheet: u32) -> i32 {

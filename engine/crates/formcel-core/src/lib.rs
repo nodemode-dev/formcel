@@ -17,6 +17,7 @@ pub mod sort;
 pub use numfmt::Fmt;
 mod store;
 pub mod style;
+pub mod pivot;
 pub mod table;
 pub mod theme;
 pub mod valid;
@@ -384,6 +385,7 @@ enum Tx {
     Filter { sheet: usize, before: Option<filter::Filter>, after: Option<filter::Filter> },
     Valid { sheet: usize, before: Vec<valid::Validation>, after: Vec<valid::Validation> },
     Tables { before: Vec<table::Table>, after: Vec<table::Table> },
+    Pivots { before: Vec<pivot::Pivot>, after: Vec<pivot::Pivot> },
     Links(Vec<FormatChange>),
 }
 
@@ -410,6 +412,7 @@ pub struct Workbook {
     table_quiet: bool,
     wprot: protect::BookProt,
     host: host::Host,
+    pivots: Vec<pivot::Pivot>,
 }
 
 const SPILL_PASSES: usize = 8;
@@ -495,6 +498,7 @@ impl Workbook {
             table_quiet: false,
             wprot: protect::BookProt::default(),
             host: host::Host::default(),
+            pivots: Vec::new(),
         }
         .with_named_codes()
     }
@@ -1869,6 +1873,10 @@ impl Workbook {
                 self.graph.built = false;
                 let cells = self.recalc_all();
                 Effect { cells, tables: true, ..Effect::default() }
+            }
+            Tx::Pivots { before, after } => {
+                self.pivots = if forward { after.clone() } else { before.clone() };
+                Effect { tables: true, ..Effect::default() }
             }
             Tx::Theme { before, after } => {
                 self.theme = if forward { (**after).clone() } else { (**before).clone() };
