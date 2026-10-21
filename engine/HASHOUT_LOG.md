@@ -626,3 +626,49 @@ Consolidate takes sum, count, average, max or min of several ranges, by position
 Flash Fill infers a small program from the examples already typed in the column: a sequence of literals and pieces of the source cells (a token split at one of twelve delimiters, a token of a token, first or last N characters, initials, digits, letters, each in original, lower, upper or proper case). It searches the first example's output for such a sequence, ranks candidates so that fewer literal characters and token pieces beat position pieces, and keeps the best one that reproduces every example. It fills the blank cells in the contiguous block next to the source columns and leaves anything it cannot compute empty. This is FormCel's own search; Excel's patterns are not documented, so a single example can pick a different reading than Excel (a second example settles it).
 
 Checkboxes are cells holding TRUE or FALSE with a new validation kind `checkbox` (blank allowed, only booleans accepted); the window draws a box for them. Insert and delete cells shifting neighbours moves the raw entries, formats and styles of the cells in the selection's rows or columns by the selection's height or width; formulas move as written, and references to the moved cells are not rewritten (partial). Paste special operations add, subtract, multiply or divide the pasted numbers into the destination, skip blanks, transpose, and paste values, formulas or formats. AutoComplete returns the nearest other text in the column that begins with what was typed. Table column types are kept on the table line as a fourth per-column list (older files without it read as no types); `checkbox` and `dropdown` also set a validation on the column's data cells, and `number`, `date`, `checkbox` are checked on entry by `typecheck`, which the window turns into a Continue? warning.
+
+## v0.35.0 entries
+
+Built in nine worktrees in parallel and merged by hand. One entry per area.
+
+### Calculation control, R1C1, arrays, error checking, external references, threads
+- refers-to: src/calc.rs, carray.rs, errcheck.rs, r1c1.rs, xref.rs; src/lib.rs :: Workbook.calc, apply, undo, do_shift; src/eval.rs :: Ctx ext_cells, calc_mode, r1c1
+- kind: explainer
+- logged: v0.35.0 · 2026-10-21
+
+`calc_run(cmd)` is the single command channel for everything here: tab separated escaped arguments in, reply text plus an Effect out, so wasm has one `fc_calc` and Python one `Workbook.calc`. Settings (mode Automatic, Automatic except data tables or Manual; R1C1; iterate, maximum iterations, maximum change; threads; error rule mask and ignored cells) parse from `key=value` lines. `evaluate_levels` replaces the body of evaluate: Kahn levels, iterative Tarjan strongly connected components, Gauss-Seidel inside a component when iteration is on (with it off a cycle stays `#REF!` and `status` lists the cells). In Manual mode edited formulas are evaluated and their dependents are marked stale until a `calculate` verb (all, sheet:N, full, rebuild for F9, Shift+F9, Ctrl+Alt+F9, Ctrl+Alt+Shift+F9). Legacy CSE arrays are a registry of areas per sheet; a partial edit is refused with Excel's sentence and the whole area clears or shifts as one. R1C1 conversion works on the AST for formulas and on a quote and bracket aware scan for typed text; stored formulas stay A1. `[Book]Sheet!A1` references resolve through the host call mechanism (key XREF) so both builds ask the window or the engine process and keep cached values for closed books. errcheck.rs implements nine Excel rules as bits with Excel's default mask 383. The `parallel` cargo feature (rayon) is enabled only by formcel-py; a level of 512 or more formulas is evaluated in chunks of 256; the wasm build has no rayon in its tree.
+
+### Floating object anchors and IMAGE
+- refers-to: src/objects.rs; src/lib.rs :: Sheet.objects, Tx::Objects, Lost.objects; src/fx_image.rs
+- kind: explainer
+- logged: v0.35.0 · 2026-10-21
+
+The engine owns where floating objects sit, not what they are: an Anchor is an id, a from pin and a to pin (cell index plus pixel offset) and opaque data. set_objects is one undo step; every row or column insert or delete runs `objects::shift_all` (pins at or after the change move, pins inside a deleted run clamp to its start) and undo restores the exact anchors. Range companions use an exclusive end pin so deleting the last row shrinks them. IMAGE returns text starting with U+E001 carrying sizing, height, width, alt and source, the way SPARKLINE uses U+E000, and the grid draws it.
+
+### Function library, names and LAMBDA
+- refers-to: src/fx_regex.rs, fx_xl.rs, fx_info2.rs, cellinfo.rs, names.rs, fx_query.rs, host.rs, audit.rs
+- kind: explainer
+- logged: v0.35.0 · 2026-10-21
+
+fancy-regex replaces regex in the regular expression functions and QUERY matches, for lookaround and backreferences. names.rs holds sheet-scoped names (stored as `'Sheet'!Name`), name comments and the Name Manager tools (create from selection, apply names, paste list). A LAMBDA keeps its required count and an omitted marker for ISOMITTED. QUERY gained pivot, format and options. XLOOKUP and XMATCH binary modes are real binary searches; results of several columns spill. Evaluate Formula steps carry an `into` cell for Step In. FUNCTIONS is 428.
+
+### Data tools, entry and locale
+- refers-to: src/cellshift.rs, formlocale.rs, datatools.rs (series, pastex, gotospecial, fmtdialog, outline), sort.rs, filter.rs, valid.rs, table.rs, formula.rs :: Expr::Intersect
+- kind: explainer
+- logged: v0.35.0 · 2026-10-21
+
+Insert and Delete Cells now rewrite every reference, range, name and validation to the moved block (cellshift.rs reuses shift_index and shift_span). formlocale.rs converts formula text for de-DE and fr-FR (semicolon lists, decimal comma) on typing and display only; stored formulas stay en-US. Series, Go To Special, Auto Outline and the paste layers are datatools children. Sort keys carry a kind (value, custom list, fill, font, icon) as `col:a|d[:kind:arg]` and an across flag. Filters gained date trees, Excel dynamic filters and icon filters; rows hidden by hand are tracked so SUBTOTAL 101 to 111 leave them out. Validation lists can be chips with colours and multi-select. A space between two references is the intersection operator; the lexer emits it only between operands. Table styles accept all 60 Excel names and a `Custom:` form carried on the table line.
+
+### PivotTables and what-if
+- refers-to: src/pivot.rs, pivot_show.rs, pivot_group.rs, pivot_suggest.rs, whatif.rs, whatif_sens.rs, whatif_toolpak.rs, whatif_ask.rs
+- kind: explainer
+- logged: v0.35.0 · 2026-10-21
+
+Show Values As has all fifteen choices, computed by re-aggregating over the records matching the row and column path prefixes; base fields resolve to an axis and level. Grouping runs before dimensions are built and appends derived fields (Years, Quarters, Months, Days, Hours, Minutes, Seconds, or number bands with below and above groups). Suggestions are scored on spread and fit and previewed through the real renderer. Solver keeps the solved problem so Sensitivity and Limits reports are built afterwards (re-solving with bisection for ranges; nonlinear and integer models report finite-difference gradients). The ToolPak tools share one entry point; random numbers use xorshift and Fourier a radix-2 FFT up to 4096 points. Analyze Data questions are stemmed, matched to columns by phrase then stem, and mapped to an intent by keyword; no model is involved.
+
+### Chart number formats
+- refers-to: src/fmtcode.rs :: render_numbers
+- kind: explainer
+- logged: v0.35.0 · 2026-10-21
+
+render_numbers formats many numbers with one code so chart axes and labels use the same format engine as cells.

@@ -499,3 +499,68 @@ The Watch Window is a panel the person can drag by its header and resize. Add wa
 - logged: v0.34.0 · 2026-10-21
 
 The toolbar's Data tools button lists every data tool; each is also a command, so the palette finds them. `DataTools` builds each dialog once from a field list the first time it is opened and fills it before showing it; a tool that has something to report (rows removed, cells replaced) leaves its dialog open on that line and turns OK into Close. Engine work goes through `Grid.runTool`, which sends one `tool` request to the worker, applies the returned effect like any other (several shifts for a subtotal, then the cells) and refreshes undo. Ctrl+E is Flash Fill, Ctrl+F opens Find and Ctrl+H Find and replace; the panel has match case, entire cell, look in values or formulas, within sheet or workbook, a Find all list that jumps to a hit, Replace for the selected hit and Replace all as one undo step. Checkbox cells are the cells of a `checkbox` validation: the grid draws a box, a click on the box or Space toggles TRUE and FALSE. AutoComplete asks the engine for a completion after each typed character in a text cell and selects the added tail; Enter keeps it, Backspace or more typing drops it; the Data tools menu switches it off (kept in this browser). Filter views and slicers live in the sheet's saved view (`fviews`, `slicers`): a view is a filter text without its hidden rows, a slicer is a floating panel for one filter column whose buttons rewrite that column's value list through the sheet filter. Hidden sheets are `hidden` in the view and the tab is hidden; the tab menu hides and unhides, and one visible sheet always remains. Ctrl-click or Shift-click on tabs groups sheets; while grouped, each change made on the active sheet is written again to the same cells of the other grouped sheets as part of the same undo step (the displayed text is replayed, so a number shown rounded is replayed as shown). Undo and redo are not mirrored. A zoom slider sits beside the zoom buttons.
+
+## v0.35.0 entries
+
+### Calculation options, spill outline and error checking
+- refers-to: src/ui/calc.ts, ui/errcheck.ts, ui/links.ts, engine/calc.ts, engine/worker.ts :: calc.run, rcBooks; grid/grid.ts :: calcDraw, setDecor, arrayHook
+- kind: explainer
+- logged: v0.35.0 · 2026-10-21
+
+Calc owns the settings, the options dialog, F9 keys, the Calculate and Circular References cells in the sheet bar, Ctrl+Shift+Enter arrays, the spill outline and forwarding state-changing commands to the engine process. The worker keeps the set of R1C1 books and converts formulas in its shared cell parsers and typed input, so no other module knows the style. The grid's calculation overlay is `calcDraw` (set through setDecor), separate from `decor`, the cell decoration hook objects use. The error smart tag is one button repositioned on paint.
+
+### Anchored objects, sparklines, pictures in cells, timeline, screen reader grid
+- refers-to: src/charts/anchor.ts, layer.ts :: commit, shifted; charts/decor.ts, sparkgroup.ts, dialogs.ts; ui/timeline.ts, ui/srgrid.ts
+- kind: explainer
+- logged: v0.35.0 · 2026-10-21
+
+ObjectLayer.commit is the single write path: anchor every object, send the anchors to the engine for undo, persist, notify the decor. shifted() reloads from the engine after a shift, undo or redo. Sparkline groups and pictures in cells are objects too, painted by Decor in the cell loop. The screen reader grid keeps an 80 by 30 window of ARIA nodes and patches text and aria-selected in place. The timeline rebuilds only its axis ticks on zoom; cards move by transform.
+
+### Charts
+- refers-to: src/charts/svg.ts :: renderChartAsync; chartfx.ts, map.ts, world.ts, pivotchart.ts, data.ts :: recommendRanked, resolveRange; editor.ts
+- kind: explainer
+- logged: v0.35.0 · 2026-10-21
+
+renderChartAsync primes number formats from the engine (one call per chart) and then draws. Trendline fits, equation and R squared, and error bar amounts are in chartfx.ts. world.ts is generated from Natural Earth 1:110m (public domain), equirectangular. Pivot charts read the pivot's output through pivotChartData and draw a filter bar of selects. resolveRange is the one place that turns a typed range or a defined name into a sheet and range; the editor reads from the stored spec so fields it does not show survive.
+
+### Names, functions and autocomplete
+- refers-to: src/ui/names.ts, functions.ts, namedfn.ts, autocomplete.ts :: ENUMS, structuredMatches, KIND_LABEL; ui/audit.ts
+- kind: explainer
+- logged: v0.35.0 · 2026-10-21
+
+The Name Manager, Insert Function and Function Arguments dialogs, and Named functions (LAMBDA names with argument placeholders and import from another workbook) sync through PUT names/tool. Autocomplete lists functions, names, LAMBDA names as functions, tables and structured items through the table hints, and enumerated argument values; the current argument in the tip is bold and opens the function help. The formula bar is a textarea so it can expand (Ctrl+Shift+U) and be dragged taller; the fx button opens Insert Function.
+
+### Entry tools
+- refers-to: src/ui/numberformat.ts, ui/datatools.ts (goto, series, rowheight, colwidth, stdwidth, movecopy, docprops); grid/axis.ts; grid/grid.ts :: ghost, peers, pasteLayers, autofitSelection
+- kind: explainer
+- logged: v0.35.0 · 2026-10-21
+
+Dialogs use the DataTools Spec framework. Flash Fill ghosts are drawn italic at half opacity and accepted with Enter. Grouped sheets get formatting, insert and delete through grid.peers as one undo step.
+
+### Data tools
+- refers-to: src/ui/datatools.ts, filterx.ts, sortlists.ts; grid/tables.ts :: builtin; app.ts :: makeDesignForm
+- kind: explainer
+- logged: v0.35.0 · 2026-10-21
+
+The 60 built-in table styles are built from theme slots (an approximation of Excel's tints) and custom styles drawn directly. Temporary filter views are a per-window map; while a sheet is in one, the filter and view are not saved. Personal views use localStorage keyed by workbook and sheet; shared view links carry the filter in `?view=`.
+
+### Sharing, inbox, people and offline queue
+- refers-to: src/ui/review.ts :: PeoplePane, NoticesPane, SharePane; ui/offline.ts; ui/action.ts; ui/collab.ts
+- kind: explainer
+- logged: v0.35.0 · 2026-10-21
+
+Lists are patched by key; share cards rebuild only when their record changes, so a typed embed range survives refreshes. Network failures (TypeError or 5xx) queue saves in IndexedDB and replay in order; 4xx errors are shown, not queued. action.ts labels the next save (sorts) for the change history.
+
+### Automation, assistant and app install
+- refers-to: src/automation/tabData.ts, tabAssistant.ts, scriptCheck.ts, picture.ts, pwa.ts; public/manifest.webmanifest, public/sw.js
+- kind: explainer
+- logged: v0.35.0 · 2026-10-21
+
+The assistant reaches charts and pivots only through the fc-ai-chart and fc-ai-pivot window events. Scripts with @customfunction are saved with compiled JS for the engine process. The service worker caches the shell only and never /api. PWA icons were drawn for the purpose.
+
+### Analysis panels
+- refers-to: src/ui/pivot.ts, ui/whatif.ts :: TOOLS, tableText
+- kind: explainer
+- logged: v0.35.0 · 2026-10-21
+
+Value chips carry base field and item selects; the ToolPak dialogs come from one TOOLS table of fields and engine argument slots; the formula bar shows `{=TABLE(...)}` inside a data table.

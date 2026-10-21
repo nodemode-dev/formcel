@@ -3417,6 +3417,27 @@
    }
   },
   {
+   "name": "IMAGE",
+   "args": [
+    "url",
+    "[mode]",
+    "[height]",
+    "[width]"
+   ],
+   "summary": "Shows a picture from a web address in the cell, fitted, filled, at its own size or at a set size.",
+   "category": "Google",
+   "excel": {
+    "listed": true,
+    "since": "2024",
+    "source": null
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Google",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
    "name": "IMAGINARY",
    "args": [
     "inumber"
@@ -3459,6 +3480,27 @@
     "url"
    ],
    "summary": "CSV or TSV fetched from a URL by the engine process, spilled into cells.",
+   "category": "Web",
+   "excel": {
+    "listed": false,
+    "since": null,
+    "source": null
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Web",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "IMPORTFEED",
+   "args": [
+    "url",
+    "[query]",
+    "[headers]",
+    "[num_items]"
+   ],
+   "summary": "Items of an RSS or Atom feed.",
    "category": "Web",
    "excel": {
     "listed": false,
@@ -3743,6 +3785,28 @@
    }
   },
   {
+   "name": "ISBETWEEN",
+   "args": [
+    "value_to_compare",
+    "lower_value",
+    "upper_value",
+    "lower_value_is_inclusive",
+    "upper_value_is_inclusive"
+   ],
+   "summary": "TRUE when a value lies between two others, each end included or not.",
+   "category": "Operator",
+   "excel": {
+    "listed": false,
+    "since": null,
+    "source": null
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Operator",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
    "name": "ISBLANK",
    "args": [
     "value"
@@ -3753,6 +3817,42 @@
     "listed": true,
     "since": null,
     "source": "https://support.microsoft.com/en-us/excel/is-functions"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Info",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "ISDATE",
+   "args": [
+    "value"
+   ],
+   "summary": "TRUE when a value is a date.",
+   "category": "Info",
+   "excel": {
+    "listed": false,
+    "since": null,
+    "source": null
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Info",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "ISEMAIL",
+   "args": [
+    "value"
+   ],
+   "summary": "TRUE when text is a valid email address.",
+   "category": "Info",
+   "excel": {
+    "listed": false,
+    "since": null,
+    "source": null
    },
    "sheets": {
     "listed": true,
@@ -3923,6 +4023,22 @@
    }
   },
   {
+   "name": "ISOMITTED",
+   "args": [],
+   "summary": "TRUE when a LAMBDA argument was left out of the call.",
+   "category": "Information",
+   "excel": {
+    "listed": true,
+    "since": "2024",
+    "source": null
+   },
+   "sheets": {
+    "listed": false,
+    "category": null,
+    "source": null
+   }
+  },
+  {
    "name": "ISOWEEKNUM",
    "args": [
     "date"
@@ -3994,6 +4110,24 @@
    "sheets": {
     "listed": true,
     "category": "Info",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "ISURL",
+   "args": [
+    "value"
+   ],
+   "summary": "TRUE when text is a valid web address.",
+   "category": "Web",
+   "excel": {
+    "listed": false,
+    "since": null,
+    "source": null
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Web",
     "source": "https://support.google.com/docs/table/25273?hl=en"
    }
   },

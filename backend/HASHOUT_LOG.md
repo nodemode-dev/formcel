@@ -408,3 +408,61 @@ The Watch Window's cells are kept in `workbook.json` under `watches`, a list of 
 - logged: v0.34.0 · 2026-10-21
 
 Save as template (MS-SAVETPL) writes the workbook's `.fcel` into `Templates/` beside `Workbooks/`, with the chosen name and description inside; `GET /api/templates` lists them first, in a Personal category, and creating a workbook from an id that starts with `my-` copies the saved file under a new id. Filter views, slicers and the hidden flag are kept in each sheet's `view`, which the sheet PATCH already merges, so they are saved in the `.fcel` with no new route. A hidden sheet is written as `sheet_state = hidden` in .xlsx unless every sheet is hidden, and a sheet that is not visible in an .xlsx comes in as hidden (MS-HIDESHEET). Checkbox validation cells are not written as data validation in .xlsx; their TRUE and FALSE values are written as booleans.
+
+## v0.35.0 entries
+
+### The .xlsx writer's passes
+- refers-to: app/services/xlsx/writer.py :: write; calcio.py, pivots.py, props.py, review.py, chartex.py, overlay.py
+- kind: explainer
+- logged: v0.35.0 · 2026-10-21
+
+openpyxl cannot write several parts Excel uses, so after `wb.save` the package goes through post-processing passes in a fixed order: calcio.finish (cm attributes on dynamic array anchors, metadata.xml, ignoredErrors), pivots.finish (x14 pivotShowAs for the newer Show Values As choices), props.patch_app (docProps app.xml), review.finish (threaded comments, persons, protectedRanges), chartex.inject (cx: chart parts in mc:AlternateContent) and overlay.finish (xdr:sp shapes and text boxes, descr alt text, x14 sparkline groups). Each pass reads the zip it is given and keeps every part it does not own. The reader mirrors them: calcio.scan, chartex scan (imported as scan_charts), overlay.Package, review.threads_in and ranges_in, pivots_in, whatif_in, read_props. Sheet-scoped names come in as `'Sheet'!Name`, except the solver_ names, which whatif_in reads.
+
+### Pivots, scenarios and data tables in .xlsx
+- refers-to: app/services/xlsx/pivots.py, whatif.py; app/services/store.py :: import_xlsx, export_xlsx
+- kind: explainer
+- logged: v0.35.0 · 2026-10-21
+
+Each engine pivot gets its own cache (definition and records, shared items only for text and axis fields) and a pivotTable part with refreshOnLoad. Date groups follow Excel's model: the finest unit on the original field with par to the next unit, coarser units as databaseField=0 cache fields. Data tables are written as dataTable formulas on the first interior cell, scenarios as worksheet scenarios, the Solver model as solver_ names; whatif_in reverses all three and reads the cached first cell of each table from a data-only load. The what-if state lives in Book.whatif lines.
+
+### Calculation state, arrays and external links
+- refers-to: app/services/calcstate.py, xlsx/calcio.py, xlsx/arrays.py, xlsx/extlinks.py, services/extbooks.py, routers/workbooks.py :: calc_command
+- kind: explainer
+- logged: v0.35.0 · 2026-10-21
+
+calcstate.save and restore carry the engine settings text, the CSE array areas and the external cache in workbook.json. POST /calc accepts only the verbs that change state from the window (WINDOW_VERBS) so the engine process mirrors the window. calcPr, refMode and iteration settings round-trip in .xlsx. Sheet XML is scanned with regular expressions, not an XML parser, so hostile files cannot expand entities. External references resolve through hostcalls to extbooks, which finds a library workbook by title or id.
+
+### Sharing on the LAN, notifications, chat and offline
+- refers-to: app/services/sharing.py, routers/share.py, services/share_page.html, services/collab.py, services/store.py :: edit, record_access
+- kind: explainer
+- logged: v0.35.0 · 2026-10-21
+
+The LAN listener is a second uvicorn server on a thread, started only by PUT /api/lan, serving only the token routes; the window's engine process stays on 127.0.0.1 (FORMCEL_LAN_PORT, default 8200). `grant(token, need)` is the single permission gate for view, comment and edit links. Guest edits go through store.edit, so protection, history, notifications and the live event stream apply unchanged. Notifications, watched ranges, chat, access log and chips are kept in the collab block of the .fcel; the access log flushes at most every 15 seconds. share_page.html is served outside the window and keeps its own z-index properties. Threaded comments carry uuid5 ids so a re-export is stable; protected-range people are kept in custom document properties because Excel's descriptor needs Windows account ids.
+
+### Legacy .xls formulas and styles
+- refers-to: app/services/xlsformula.py, xlsstyle.py
+- kind: explainer
+- logged: v0.35.0 · 2026-10-21
+
+FORMULA and SHRFMLA records are decompiled with xlrd's own decompiler from the Workbook stream (sheet substreams found by BOUNDSHEET offsets); formulas it cannot decode stay as values and are counted in the import notes. xf records map to FormCel style tokens through book.colour_map.
+
+### Queries, databases, OCR, Python cells, custom functions, extensions
+- refers-to: app/services/pqx.py, ocr.py, pysand.py, jsfn.py, extpkg.py, offline_ai.py, scheduler.py, routers/automation_x.py
+- kind: explainer
+- logged: v0.35.0 · 2026-10-21
+
+pqx.py extends Power Query (split, merge, fill, replace, pivot, unpivot, custom column, merge and append queries, Excel and folder sources); the custom column language is translated to a Python expression and walked against an AST whitelist, never eval'd. Database sources use read-only sessions and allow a single SELECT; psycopg (LGPL) is imported lazily, server side only. ocr.py runs an installed tesseract with TSV output and rebuilds columns from word positions. pysand.py runs PY cells in `python -I -S` with CPU, memory, file and process limits and AST checks, only when the owner turned Python cells on. jsfn.py runs window-compiled @customfunction scripts in a node vm context. extpkg.py installs manifest packages from a folder or zip with traversal and size checks. offline_ai.py gives rule-based cleaning and chart or pivot plans when no model endpoint is set. automation_x.py is included into the existing routers so main.py is unchanged.
+
+### Charts, shapes and accessibility in .xlsx
+- refers-to: app/services/xlsx/chartex.py, chartstyle.py, drawings.py, overlay.py, services/a11y.py
+- kind: explainer
+- logged: v0.35.0 · 2026-10-21
+
+chartex.py writes histogram, box and whisker, waterfall, funnel, treemap, sunburst and region map as cx: parts with the 2014 chartEx relationship and content type; FormCel-only kinds (gauge, scorecard, org, timeline) travel as a base64 JSON tag in the frame title with a column chart fallback. The chartex XML follows the published schema but has not been opened in Excel yet. chartstyle.py maps colours, axis formats, log scale, gridlines, label formats, fills, trendlines and error bars. A chart range that is a defined name is resolved before writing. a11y.check reads the real object lists and returns fix data.
+
+### Document properties and sheet copies
+- refers-to: app/services/xlsx/props.py, store.py :: properties, set_properties, copy_sheet
+- kind: explainer
+- logged: v0.35.0 · 2026-10-21
+
+docProps core is written through openpyxl and app.xml patched after save. Copying a sheet goes through the store so names collide into "Sheet (2)" style names.
