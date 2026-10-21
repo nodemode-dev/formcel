@@ -776,8 +776,12 @@ impl Workbook {
             }
         }
         let n = edits.len();
+        if flag(p, 3) {
+            let lines: Vec<String> = edits.iter().map(|(ad, v)| format!("{}\t{}\t{}", ad.row, ad.col, v)).collect();
+            return Ok((Effect::default(), say(&format!("Flash Fill can fill {n} cells.\n{}", lines.join("\n")))));
+        }
         let cells = self.apply(sheet, &edits)?;
-        Ok((Effect { cells, ..Effect::default() }, say(&format!("Flash Fill filled {n} cells."))))
+        Ok((Effect { cells, ..Effect::default() }, say(&format!("Flash Fill filled {n} cells.\n{}\t{}\t{}\t{}", r0, col, r1, col))))
     }
 
     fn t_find(&mut self, sheet: usize, p: &[String]) -> Out {

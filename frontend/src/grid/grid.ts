@@ -770,6 +770,21 @@ export class Grid {
       const [x, y, w, h] = this.areaRect(mr0, mc0, mr1, mc1);
       this.cellText(KEY(mr0, mc0), t, x, x + w, y, h);
     }
+    for (const [k, text] of this.ghost) {
+      const r = Math.floor(k / MAX_COLS);
+      const c = k % MAX_COLS;
+      if (r < r0 || r > r1 || c < ca || c > cb || this.cache.get(k) || !this.cols.size(c) || !this.rows.size(r)) continue;
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(this.x(c) + 1, this.y(r), this.cols.size(c) - 2, this.rows.size(r));
+      ctx.clip();
+      ctx.globalAlpha = 0.5;
+      ctx.fillStyle = pal.fg;
+      ctx.font = 'italic 13px Inter, system-ui, -apple-system, "Segoe UI", sans-serif';
+      ctx.textAlign = 'left';
+      ctx.fillText(text.split('\n', 1)[0], this.x(c) + 5, this.y(r) + this.rows.size(r) - 6);
+      ctx.restore();
+    }
     ctx.textBaseline = 'middle';
     ctx.font = '13px Inter, system-ui, -apple-system, "Segoe UI", sans-serif';
     if (!this.styles.size && !this.cfs.size) return;
@@ -1534,6 +1549,37 @@ export class Grid {
     return rows.flatMap(([r0, r1]) => cols.map(([c0, c1]) => ({ r0, c0, r1, c1 })));
   }
 
+  private ghost = new Map<number, string>();
+
+  clearGhost(): void {
+    if (!this.ghost.size) return;
+    this.ghost.clear();
+    this.paint();
+  }
+
+  async flashPreview(row: number, col: number): Promise<void> {
+    this.ghost.clear();
+    if (this.book >= 0) {
+      try {
+        const e = await this.engine.tool(this.book, this.sheet, 'flash', String(row), String(col), '1');
+        for (const line of (e.message ?? '').split('\n').slice(1)) {
+          const [r, c, ...rest] = line.split('\t');
+          if (rest.length) this.ghost.set(KEY(Number(r), Number(c)), rest.join('\t'));
+        }
+      } catch {
+        this.ghost.clear();
+      }
+    }
+    this.paint();
+  }
+
+  async acceptGhost(): Promise<void> {
+    const edits: [number, number, string][] = [...this.ghost].map(([k, v]) => [Math.floor(k / MAX_COLS), k % MAX_COLS, v]);
+    this.ghost.clear();
+    if (edits.length) await this.commitEdits(await this.engine.apply(this.book, edits, this.sheet));
+    this.paint();
+  }
+
   copiedSource(): { sheet: number; r0: number; c0: number; r1: number; c1: number } | null {
     const s = this.copied;
     return s ? { sheet: s.sheet, r0: s.r0, c0: s.c0, r1: s.r0 + s.h - 1, c1: s.c0 + s.w - 1 } : null;
@@ -1707,6 +1753,7 @@ export class Grid {
     }
     this.book = book;
     this.sheet = sheet;
+    this.ghost.clear();
     this.dropWindows();
     this.merges = [];
     this.ruleLines = [];
@@ -2951,6 +2998,14 @@ export class Grid {
   private async gridKey(e: KeyboardEvent): Promise<void> {
     const mod = e.ctrlKey || e.metaKey;
     const dir = ARROWS[e.key];
+    if (this.ghost.size && !this.editing) {
+      if (e.key === 'Enter' && !mod) {
+        await this.acceptGhost();
+        return;
+      }
+      this.clearGhost();
+      if (e.key === 'Escape') return;
+    }
     if (this.editing) {
       if (this.editorHook?.(e)) return;
       const before = this.editor.value;

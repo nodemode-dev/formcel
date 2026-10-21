@@ -297,6 +297,7 @@ export class App {
         this.audit.invalidate();
         void this.audit.refresh();
         void this.mirror(changes);
+        this.autoFlash(changes);
       },
       onSheet: (sheet) => {
         this.markTab(sheet);
@@ -588,6 +589,7 @@ export class App {
     cmd('data.consolidate', 'Consolidate', 'Combine ranges from one or more sheets with sum, count, average, max or min, by position or by their row and column labels.', true, () => T().consolidate());
     cmd('data.subtotal', 'Subtotal', 'Insert SUBTOTAL rows at each change in a column, group the detail rows in an outline and add a grand total, or remove them all.', true, () => T().subtotal());
     cmd('data.advanced-filter', 'Advanced filter', 'Filter a list in place or copy the matching records elsewhere using a criteria range, with unique records only if you want.', true, () => T().advancedFilter());
+    cmd('data.flash-auto', 'Automatically Flash Fill', 'Turn on or off the grey Flash Fill suggestion that appears under an example you type next to your data; Enter accepts it, Esc or any other key dismisses it.', false, () => this.toggleFlashAuto());
     cmd('data.flash-fill', 'Flash Fill', 'Fill the cells next to your data by following the pattern of the examples you typed.', true, () => T().flashFill(), 'Mod+E');
     cmd('data.checkbox-insert', 'Insert checkboxes', 'Turn the selected cells into checkboxes that hold TRUE or FALSE. Click one or press Space to toggle it.', true, () => T().checkboxes(true));
     cmd('data.checkbox-remove', 'Remove checkboxes', 'Turn the selected checkbox cells back into plain cells.', true, () => T().checkboxes(false));
@@ -743,6 +745,34 @@ export class App {
         this.grid.focus();
       }
     });
+  }
+
+  private flashAuto = ((): boolean => {
+    try {
+      return localStorage.getItem('fc-flash-auto') !== '0';
+    } catch {
+      return true;
+    }
+  })();
+
+  private autoFlash(changes: Changed[]): void {
+    const at = this.grid.sheetIndex;
+    if (!this.flashAuto || this.grid.replaying || changes.length !== 1) return;
+    const [s, r, c, t, f] = changes[0];
+    if (s !== at || f || !t) return;
+    void this.grid.flashPreview(r, c);
+  }
+
+  private toggleFlashAuto(): void {
+    this.flashAuto = !this.flashAuto;
+    if (!this.flashAuto) this.grid.clearGhost();
+    try {
+      localStorage.setItem('fc-flash-auto', this.flashAuto ? '1' : '0');
+    } catch {
+      this.status('Flash Fill setting changed for this session only');
+      return;
+    }
+    this.status(`Automatically Flash Fill ${this.flashAuto ? 'on: suggestions appear in grey, press Enter to accept' : 'off: use Ctrl+E'}`);
   }
 
   private fbarOpen(): boolean {
@@ -2861,6 +2891,7 @@ export class App {
       { label: 'Trim whitespace', run: run('data.trim') },
       { label: 'Data cleanup', run: run('data.cleanup') },
       { label: 'Flash Fill', keys: 'Ctrl+E', run: run('data.flash-fill') },
+      { label: this.flashAuto ? 'Automatically Flash Fill: on' : 'Automatically Flash Fill: off', run: run('data.flash-auto') },
       { sep: true },
       { label: 'Consolidate', run: run('data.consolidate') },
       { label: 'Subtotal', run: run('data.subtotal') },

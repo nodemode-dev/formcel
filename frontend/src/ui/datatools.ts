@@ -560,6 +560,7 @@ export class DataTools {
   async flashFill(): Promise<void> {
     const g = this.c.grid;
     const sel = g.selection();
+    g.clearGhost();
     try {
       this.c.status(this.line(await g.runTool('flash', String(sel.r0), String(sel.c0))));
     } catch (err) {
