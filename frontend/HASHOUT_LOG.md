@@ -2,10 +2,19 @@
 
 Living log of comment content and rationale for the window. Source stays comment-free; it lives here.
 
-Current build version: v0.11.0
-Last updated: 2026-10-21 · dynamic arrays
+Current build version: v0.12.0
+Last updated: 2026-10-21 · names
 
 ---
+
+## Names in the Name Box · v0.12.0 (2026-10-21)
+
+- refers-to: src/app.ts :: nameBoxEnter, nameBoxResult, nameOf, refreshNames, sheetPrefix, absRange, Opened.names; src/grid/grid.ts :: patch; src/engine/protocol.ts, worker.ts, index.ts :: name.define, name.list
+- kind: explainer
+
+Enter in the Name Box tries three things in order. A cell or range jumps there. An existing name, matched without case, jumps to its range, switching sheet if it has to; a name that is not a plain range (a constant or a LAMBDA) is reported in the box's tooltip. Anything else is defined as a new workbook name for the current selection, with absolute references and the sheet written out (`=Sheet1!$A$1:$A$3`), as Microsoft's names page describes for the Name box. The engine's message for an invalid name goes in the box's tooltip, with the same red border as a bad reference. When the selection is exactly a named range, the box shows the name instead of the address.
+
+`patch` updates only cached cells on the shown sheet whose text or formula changed, then paints once. Recalculation caused by a name does not count as an edit, so nothing is saved or put in undo for it. The window keeps its own copy of the name list and refreshes it after a sheet rename or a shift, because the engine rewrites names then. Verified at 4x CPU throttle with slow network: no layout shifts while defining, jumping and reporting an invalid name, or on reload.
 
 ## Spilled cells · v0.11.0 (2026-10-21)
 

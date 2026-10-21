@@ -11,6 +11,8 @@ export type Request =
   | { id: number; op: 'sheet.delete'; book: number; sheet: number }
   | { id: number; op: 'sheet.move'; book: number; sheet: number; to: number }
   | { id: number; op: 'sheet.rename'; book: number; sheet: number; name: string }
+  | { id: number; op: 'name.define'; book: number; name: string; refers: string }
+  | { id: number; op: 'name.list'; book: number }
   | { id: number; op: 'undo' | 'redo' | 'history'; book: number }
   | { id: number; op: 'read'; book: number; sheet: number; r0: number; c0: number; r1: number; c1: number }
   | { id: number; op: 'extent'; book: number; sheet: number }
@@ -31,7 +33,8 @@ export interface Effect {
   changes: Changed[];
   shift: Shift | null;
 }
-export type Value = string | number | string[] | Cell[] | Changed[] | [number, number] | Shift | Effect | null;
+export type Name = [name: string, refers: string];
+export type Value = string | number | string[] | Cell[] | Changed[] | Name[] | [number, number] | Shift | Effect | null;
 
 export type Response =
   | { id: number; ok: true; value: Value }

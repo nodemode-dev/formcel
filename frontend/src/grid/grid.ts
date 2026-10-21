@@ -854,6 +854,23 @@ export class Grid {
     return this.sheet;
   }
 
+  patch(changed: Changed[]): void {
+    let hit = false;
+    for (const [s, r, c, t, f] of changed) {
+      if (s !== this.sheet) continue;
+      const k = KEY(r, c);
+      if (this.cache.get(k) === t && this.fx.get(k) === f) continue;
+      hit = true;
+      if (t || f !== undefined) this.cache.set(k, t);
+      else this.cache.delete(k);
+      if (f !== undefined) this.fx.set(k, f);
+      else this.fx.delete(k);
+    }
+    if (!hit) return;
+    this.announce();
+    this.paint();
+  }
+
   private async commitEdits(changed: Changed[]): Promise<void> {
     if (changed.length && changed.every(([s]) => s !== this.sheet)) {
       this.show(this.book, changed[0][0], this.events.onSheet(changed[0][0]));

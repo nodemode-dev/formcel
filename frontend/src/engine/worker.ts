@@ -17,6 +17,8 @@ interface Exports {
   fc_delete_sheet(book: number, sheet: number): number;
   fc_move_sheet(book: number, from: number, to: number): number;
   fc_rename_sheet(book: number, sheet: number, name: number, len: number): number;
+  fc_define_name(book: number, name: number, nameLen: number, refers: number, refersLen: number): number;
+  fc_names(book: number): number;
   fc_undo(book: number): number;
   fc_redo(book: number): number;
   fc_history(book: number): number;
@@ -153,6 +155,15 @@ function run(x: Exports, req: Request): Value {
       return ok(x.fc_move_sheet(req.book, req.sheet, req.to), 'That sheet cannot move there.');
     case 'sheet.rename':
       return withStrings(x, [req.name], ([p, l]) => ok(x.fc_rename_sheet(req.book, req.sheet, p, l), 'That sheet cannot be renamed.'));
+    case 'name.define':
+      return withStrings(x, [req.name, req.refers], ([n, nl, r, rl]) => {
+        const len = x.fc_define_name(req.book, n, nl, r, rl);
+        if (len === -3) throw new Error('A name starts with a letter or underscore, has no spaces, and is not a cell address.');
+        if (len === -4) throw new Error('That is not a formula FormCel can read.');
+        return changed(out(x, len));
+      });
+    case 'name.list':
+      return lines(out(x, x.fc_names(req.book))).map(([n, f]) => [unescape(n ?? ''), unescape(f ?? '')] as [string, string]);
     case 'history':
       return x.fc_history(req.book);
     case 'read':

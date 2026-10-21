@@ -1,4 +1,5 @@
-import { engine, type Changed, type Shift } from './engine';
+import { engine, type Changed, type Name, type Shift } from './engine';
+import { colName, type Range } from './grid/a1';
 import { Grid, type MenuKind, type SheetView } from './grid/grid';
 import { listCommands, registerCommand, runCommand } from './ui/commands';
 import { Home, type TemplateMeta, type WorkbookMeta } from './ui/home';
@@ -11,6 +12,16 @@ interface Opened {
   title: string;
   sheets: string[];
   views: SheetView[];
+  names: Name[];
+}
+
+function sheetPrefix(name: string): string {
+  return /^[\p{L}\p{N}_]+$/u.test(name) && !/^\d/.test(name) ? `${name}!` : `'${name.replace(/'/g, "''")}'!`;
+}
+
+function absRange(r: Range): string {
+  const cell = (row: number, col: number) => `$${colName(col)}$${row + 1}`;
+  return r.r0 === r.r1 && r.c0 === r.c1 ? cell(r.r0, r.c0) : `${cell(r.r0, r.c0)}:${cell(r.r1, r.c1)}`;
 }
 
 const TAB_COLOURS = ['', '#ef4444', '#f97316', '#eab308', '#22c55e', '#14b8a6', '#3b82f6', '#8b5cf6', '#ec4899', '#94a3b8'];
@@ -37,6 +48,7 @@ export class App {
   private saving: Promise<void> = Promise.resolve();
   private current = '';
   private currentRef = 'A1';
+  private currentRange: Range = { r0: 0, c0: 0, r1: 0, c1: 0 };
   private readonly menu = new Menu();
   private viewTimers = new Map<number, number>();
 
@@ -49,10 +61,11 @@ export class App {
       purge: (id) => void this.act(() => api('DELETE', `/api/trash/${id}`)),
     });
     this.grid = new Grid(p.grid, engine(), -1, {
-      onActive: (text, ref) => {
+      onActive: (text, ref, range) => {
         this.current = text;
-        this.currentRef = ref;
-        if (document.activeElement !== p.nameBox) p.nameBox.value = ref;
+        this.currentRange = range;
+        this.currentRef = this.nameOf(range) ?? ref;
+        if (document.activeElement !== p.nameBox) p.nameBox.value = this.currentRef;
         if (document.activeElement !== p.formulaBar) p.formulaBar.value = text;
       },
       onHistory: (undo, redo) => {
@@ -165,9 +178,7 @@ export class App {
     p.nameBox.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') {
         e.preventDefault();
-        const ok = this.grid.goTo(p.nameBox.value);
-        p.nameBox.setAttribute('aria-invalid', String(!ok));
-        p.nameBox.title = ok ? '' : 'Type a cell like B12 or a range like B2:D9.';
+        void this.nameBoxEnter(p.nameBox.value.trim());
       } else if (e.key === 'Escape') {
         e.preventDefault();
         this.grid.focus();
@@ -237,7 +248,7 @@ export class App {
   private async openWorkbook(id: string, setHash = true): Promise<void> {
     this.flush();
     await this.saving;
-    let doc: WorkbookMeta & { cells: [number, number, string][][]; views?: SheetView[] };
+    let doc: WorkbookMeta & { cells: [number, number, string][][]; views?: SheetView[]; names?: Name[] };
     try {
       doc = await api('GET', `/api/workbooks/${id}`);
     } catch {
@@ -250,7 +261,9 @@ export class App {
       if (i) await e.addSheet(book, doc.sheets[i]);
       if (doc.cells[i]?.length) await e.load(book, doc.cells[i], i);
     }
-    this.open = { id, book, title: doc.title, sheets: doc.sheets, views: doc.sheets.map((_, i) => doc.views?.[i] ?? {}) };
+    for (const [n, f] of doc.names ?? []) await e.defineName(book, n, f).catch(() => []);
+    const names = doc.names?.length ? await e.names(book) : [];
+    this.open = { id, book, title: doc.title, sheets: doc.sheets, views: doc.sheets.map((_, i) => doc.views?.[i] ?? {}), names };
     const p = this.p;
     p.home.hidden = true;
     p.sheet.hidden = false;
@@ -266,6 +279,47 @@ export class App {
     this.button('edit.redo').disabled = true;
     this.grid.focus();
     if (setHash && location.hash !== `#w-${id}`) location.hash = `w-${id}`;
+  }
+
+  private nameOf(r: Range): string | null {
+    const o = this.open;
+    if (!o?.names.length) return null;
+    const refers = `=${sheetPrefix(o.sheets[this.grid.sheetIndex] ?? '')}${absRange(r)}`.toLowerCase();
+    return o.names.find(([, f]) => f.toLowerCase() === refers)?.[0] ?? null;
+  }
+
+  private nameBoxResult(problem: string | null): void {
+    const box = this.p.nameBox;
+    box.setAttribute('aria-invalid', String(problem !== null));
+    box.title = problem ?? '';
+  }
+
+  private async nameBoxEnter(text: string): Promise<void> {
+    const o = this.open;
+    if (this.grid.goTo(text)) return this.nameBoxResult(null);
+    if (!o || !text) return this.nameBoxResult('Type a cell like B12, a range like B2:D9, or a name.');
+    const hit = o.names.find(([n]) => n.toLowerCase() === text.toLowerCase());
+    if (hit) {
+      const m = /^=(?:'((?:[^']|'')+)'|([^!']+))!([$A-Za-z0-9:]+)$/.exec(hit[1]);
+      const sheet = m ? o.sheets.findIndex((s) => s.toLowerCase() === (m[1] ?? m[2]).replace(/''/g, "'").toLowerCase()) : -1;
+      if (!m || sheet < 0) return this.nameBoxResult(`${hit[0]} is ${hit[1]}, which is not a range of cells.`);
+      if (sheet !== this.grid.sheetIndex) this.showSheet(sheet);
+      this.grid.goTo(m[3].replace(/\$/g, ''));
+      return this.nameBoxResult(null);
+    }
+    const refers = `=${sheetPrefix(o.sheets[this.grid.sheetIndex])}${absRange(this.currentRange)}`;
+    try {
+      this.grid.patch(await engine().defineName(o.book, text, refers));
+      o.names = await engine().names(o.book);
+      this.nameBoxResult(null);
+      this.currentRef = this.nameOf(this.currentRange) ?? this.currentRef;
+      this.p.nameBox.value = this.currentRef;
+      this.grid.focus();
+      await api('PUT', `/api/workbooks/${o.id}/names`, { name: text, refers });
+      this.status('Saved');
+    } catch (err) {
+      this.nameBoxResult(err instanceof Error ? err.message : String(err));
+    }
   }
 
   private renderTabs(): void {
@@ -316,9 +370,15 @@ export class App {
     }, 500));
   }
 
+  private async refreshNames(): Promise<void> {
+    const o = this.open;
+    if (o?.names.length) o.names = await engine().names(o.book);
+  }
+
   private sendShift(s: Shift): void {
     const o = this.open;
     if (!o) return;
+    void this.refreshNames();
     this.flush();
     this.status('Saving');
     this.saving = this.saving.then(async () => {
@@ -385,7 +445,7 @@ export class App {
       } else {
         o.sheets[i] = name;
         t.textContent = name;
-        void engine().renameSheet(o.book, i, name);
+        void engine().renameSheet(o.book, i, name).then(() => this.refreshNames());
         void api('PATCH', `/api/workbooks/${o.id}/sheets/${i}`, { name }).catch(() => this.status('Name not saved', true));
       }
       this.grid.focus();

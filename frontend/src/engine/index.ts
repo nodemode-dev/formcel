@@ -1,6 +1,6 @@
-import type { Cell, Changed, Dir, Edit, Effect, RequestBody, Response, Shift, Value } from './protocol';
+import type { Cell, Changed, Dir, Edit, Effect, Name, RequestBody, Response, Shift, Value } from './protocol';
 
-export type { Cell, Changed, Dir, Edit, Effect, Shift } from './protocol';
+export type { Cell, Changed, Dir, Edit, Effect, Name, Shift } from './protocol';
 
 type Pending = { resolve: (v: Value) => void; reject: (e: Error) => void };
 
@@ -82,6 +82,14 @@ export class EngineClient {
 
   async renameSheet(book: number, sheet: number, name: string): Promise<void> {
     await this.call({ op: 'sheet.rename', book, sheet, name });
+  }
+
+  async defineName(book: number, name: string, refers: string): Promise<Changed[]> {
+    return (await this.call({ op: 'name.define', book, name, refers })) as Changed[];
+  }
+
+  async names(book: number): Promise<Name[]> {
+    return (await this.call({ op: 'name.list', book })) as Name[];
   }
 
   async history(book: number): Promise<{ undo: boolean; redo: boolean }> {
