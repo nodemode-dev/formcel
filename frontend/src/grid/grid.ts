@@ -1794,6 +1794,7 @@ export class Grid {
     void this.loadTheme();
     this.rows.restore(view.rows);
     this.cols.restore(view.cols);
+    this.pushHidden();
     this.fr = view.fr ?? 0;
     this.fc = view.fc ?? 0;
     this.sh = view.split?.[0] ?? 0;
@@ -2347,6 +2348,18 @@ export class Grid {
 
   private emitView(): void {
     if (this.book >= 0) this.events.onView(this.sheet, this.view());
+    this.pushHidden();
+  }
+
+  private hiddenKey = '';
+
+  private pushHidden(): void {
+    if (this.book < 0) return;
+    const rows = [...this.rows.state().hidden];
+    const key = `${this.book}:${this.sheet}:${rows.join(',')}`;
+    if (key === this.hiddenKey) return;
+    this.hiddenKey = key;
+    void this.engine.setHiddenRows(this.book, this.sheet, rows).then((e) => this.applyEffect(e));
   }
 
   private async refreshHistory(): Promise<void> {

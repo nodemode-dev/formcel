@@ -76,6 +76,7 @@ interface Exports {
   fc_set_filter(book: number, sheet: number, t: number, len: number): number;
   fc_load_filter(book: number, sheet: number, t: number, len: number): number;
   fc_reapply_filter(book: number, sheet: number): number;
+  fc_set_hidden_rows(book: number, sheet: number, t: number, len: number): number;
   fc_tool(book: number, sheet: number, cmd: number, len: number): number;
   fc_filter_values(book: number, sheet: number, col: number): number;
   fc_cf_in(book: number, sheet: number, r0: number, c0: number, r1: number, c1: number): number;
@@ -534,6 +535,8 @@ function run(x: Exports, req: Request): Value {
       return withStrings(x, [req.text], ([p, l]) => ok(x.fc_load_filter(req.book, req.sheet, p, l), 'The engine refused that filter.'));
     case 'filter.reapply':
       return effect(out(x, x.fc_reapply_filter(req.book, req.sheet)));
+    case 'rows.hidden':
+      return withStrings(x, [req.text], ([p, l]) => effect(out(x, x.fc_set_hidden_rows(req.book, req.sheet, p, l))));
     case 'tool':
       return withStrings(x, [req.cmd], ([p, l]) => {
         const text = out(x, x.fc_tool(req.book, req.sheet, p, l));

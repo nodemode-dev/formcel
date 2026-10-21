@@ -833,6 +833,16 @@ pub unsafe extern "C" fn fc_tool(id: u32, sheet: u32, cmd: *const u8, len: u32) 
     }
 }
 
+/// Tells the engine which rows of a sheet are hidden by hand, as `a-b,c` ranges, so SUBTOTAL 101 to 111 leave them out.
+///
+/// # Safety
+/// `t` must point at `len` readable bytes.
+#[no_mangle]
+pub unsafe extern "C" fn fc_set_hidden_rows(id: u32, sheet: u32, t: *const u8, len: u32) -> i32 {
+    let t = text(t, len).to_string();
+    effect_or(with_book(id, |wb| wb.set_hand_hidden(sheet as usize, &t).map(|e| wb.encode(&e))))
+}
+
 /// Runs the filter again over current values, taking in rows added below it.
 #[no_mangle]
 pub extern "C" fn fc_reapply_filter(id: u32, sheet: u32) -> i32 {

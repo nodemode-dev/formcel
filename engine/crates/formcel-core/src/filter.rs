@@ -277,6 +277,21 @@ impl Workbook {
         self.sheets.get(sheet).and_then(|s| s.filter.clone())
     }
 
+    pub fn set_hand_hidden(&mut self, sheet: usize, text: &str) -> Result<Effect, EngineError> {
+        let s = self.sheets.get_mut(sheet).ok_or(EngineError::NoSheet(sheet))?;
+        let rows = unranges(text);
+        if s.hand_hidden == rows {
+            return Ok(Effect::default());
+        }
+        s.hand_hidden = rows;
+        let seeds: Vec<(usize, Addr)> = self.formulas.iter().filter(|(_, f)| f.src.to_ascii_uppercase().contains("SUBTOTAL(")).map(|(k, _)| *k).collect();
+        if seeds.is_empty() {
+            return Ok(Effect::default());
+        }
+        let cells = self.recalc_with(&seeds, true);
+        Ok(Effect { cells: self.present(cells), ..Effect::default() })
+    }
+
     pub fn filter_text(&self, sheet: usize) -> String {
         self.filter(sheet).map(|f| f.text()).unwrap_or_default()
     }

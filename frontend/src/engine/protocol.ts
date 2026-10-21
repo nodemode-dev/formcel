@@ -64,6 +64,7 @@ export type Request =
   | { id: number; op: 'valid.at' | 'valid.items'; book: number; sheet: number; row: number; col: number }
   | { id: number; op: 'valid.check'; book: number; sheet: number; row: number; col: number; raw: string }
   | { id: number; op: 'filter.get' | 'filter.reapply'; book: number; sheet: number }
+  | { id: number; op: 'rows.hidden'; book: number; sheet: number; text: string }
   | { id: number; op: 'filter.set' | 'filter.load'; book: number; sheet: number; text: string }
   | { id: number; op: 'filter.values'; book: number; sheet: number; col: number }
   | { id: number; op: 'cf.read'; book: number; sheet: number; r0: number; c0: number; r1: number; c1: number }

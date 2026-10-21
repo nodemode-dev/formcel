@@ -48,6 +48,9 @@ pub trait Ctx {
     fn filtered(&self, _sheet: usize, _row: u32) -> bool {
         false
     }
+    fn hidden_row(&self, _sheet: usize, _row: u32) -> bool {
+        false
+    }
     fn subtotal_at(&self, _sheet: usize, _a: Addr) -> bool {
         false
     }
@@ -852,7 +855,7 @@ impl<'a> Eval<'a> {
                     for x in &a[1..] {
                         match self.arg(x) {
                             Arg::R(s, area) => self.ctx.each(s, area, &mut |at, v| {
-                                if self.ctx.filtered(s, at.row) || self.ctx.subtotal_at(s, at) {
+                                if self.ctx.filtered(s, at.row) || self.ctx.subtotal_at(s, at) || (n > 100 && self.ctx.hidden_row(s, at.row)) {
                                     return;
                                 }
                                 match v {

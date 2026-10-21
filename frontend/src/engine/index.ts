@@ -383,6 +383,18 @@ export class EngineClient {
     return (await this.call({ op: 'tool', book, sheet, cmd })) as Effect;
   }
 
+  async setHiddenRows(book: number, sheet: number, rows: number[]): Promise<Effect> {
+    const sorted = [...rows].sort((a, b) => a - b);
+    const parts: string[] = [];
+    for (let i = 0; i < sorted.length; ) {
+      let j = i;
+      while (j + 1 < sorted.length && sorted[j + 1] === sorted[j] + 1) j++;
+      parts.push(i === j ? String(sorted[i]) : `${sorted[i]}-${sorted[j]}`);
+      i = j + 1;
+    }
+    return (await this.call({ op: 'rows.hidden', book, sheet, text: parts.join(',') })) as Effect;
+  }
+
   async reapplyFilter(book: number, sheet: number): Promise<Effect> {
     return (await this.call({ op: 'filter.reapply', book, sheet })) as Effect;
   }
