@@ -84,6 +84,8 @@ def validations_out(ws, lines: list[str]) -> None:
         p += [""] * (11 - len(p))
         r0, c0, r1, c1 = (int(x) for x in p[0].split(","))
         kind, op, a, b, flags, style = p[1:7]
+        if kind == "checkbox":
+            continue
         if kind == "list":
             f1 = to_file(a[1:]) if a.startswith("=") else '"' + a.replace('"', '""') + '"'
             f2 = None

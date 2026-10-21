@@ -14,6 +14,7 @@ export type BorderKind ='all' | 'outside' | 'inside' | 'top' | 'bottom' | 'left'
 import { Axis, type AxisState } from './axis';
 import { MAX_COLS, MAX_ROWS, a1, colName, parseRef, rangeText, type Range } from './a1';
 import { fillSeries } from './fill';
+import { runCommand } from '../ui/commands';
 import { parseTable, tablePaint, type TableInfo } from './tables';
 import { drawSpark, SPARK_CODE } from '../charts/spark';
 
@@ -39,6 +40,9 @@ export interface SheetView {
   zoom?: number;
   color?: string;
   split?: [number, number] | null;
+  hidden?: boolean | null;
+  fviews?: { name: string; text: string }[] | null;
+  slicers?: { id: string; col: number; title: string; x: number; y: number }[] | null;
 }
 
 export type MenuKind = 'rows' | 'cols' | 'cells';
@@ -751,6 +755,10 @@ export class Grid {
         const k = KEY(r, c);
         const t = this.cache.get(k);
         if (!t || !this.cols.size(c) || merged(r, c)) continue;
+        if (this.isCheck(r, c) && (t === 'TRUE' || t === 'FALSE')) {
+          if (c >= c0 && c <= c1) this.paintCheck(t === 'TRUE', this.x(c), this.y(r), this.cols.size(c), rh);
+          continue;
+        }
         const span = this.textSpan(k, t, r, c, merged);
         if ((c < c0 || c > c1) && span[1] - span[0] <= this.cols.size(c)) continue;
         this.cellText(k, t, span[0], span[1], this.y(r), rh);
@@ -1429,7 +1437,87 @@ export class Grid {
     const lines = await this.engine.validations(this.book, sheet);
     if (sheet !== this.sheet) return;
     this.validLines = lines;
+    this.checks = lines.map((l) => l.split('\t')).filter((p) => p[1] === 'checkbox').map((p) => p[0].split(',').map(Number) as [number, number, number, number]);
+    this.paint();
     await this.loadRule();
+  }
+
+  private checks: [number, number, number, number][] = [];
+
+  private isCheck(r: number, c: number): boolean {
+    return this.checks.some((a) => r >= a[0] && r <= a[2] && c >= a[1] && c <= a[3]);
+  }
+
+  private paintCheck(on: boolean, x: number, y: number, w: number, h: number): void {
+    const { ctx, pal } = this;
+    const s = Math.min(14, h - 6, w - 6);
+    if (s < 6) return;
+    const bx = Math.round(x + (w - s) / 2) + 0.5;
+    const by = Math.round(y + (h - s) / 2) + 0.5;
+    ctx.save();
+    ctx.lineWidth = 1.5;
+    ctx.strokeStyle = on ? '#f97316' : pal.headFg;
+    if (on) {
+      ctx.fillStyle = '#f97316';
+      ctx.fillRect(bx, by, s, s);
+      ctx.strokeStyle = '#ffffff';
+      ctx.beginPath();
+      ctx.moveTo(bx + s * 0.22, by + s * 0.52);
+      ctx.lineTo(bx + s * 0.43, by + s * 0.74);
+      ctx.lineTo(bx + s * 0.78, by + s * 0.28);
+      ctx.stroke();
+    } else {
+      ctx.strokeRect(bx, by, s, s);
+    }
+    ctx.restore();
+  }
+
+  autoComplete = true;
+
+  private async suggest(e: InputEvent): Promise<void> {
+    const ed = this.editor;
+    const typed = ed.value;
+    if (!this.autoComplete || !this.editing || e.inputType !== 'insertText' || ed.selectionStart !== typed.length || ed.selectionEnd !== typed.length || /[\n=]/.test(typed.slice(0, 1) + (typed.includes('\n') ? '\n' : '')) || this.book < 0) return;
+    const done = await this.engine.tool(this.book, this.sheet, 'complete', String(this.ar), String(this.ac), typed);
+    const full = done.message ?? '';
+    if (!full || ed.value !== typed || !this.editing || ed.selectionStart !== typed.length || full.length <= typed.length) return;
+    ed.value = typed + full.slice(typed.length);
+    ed.setSelectionRange(typed.length, ed.value.length);
+    ed.dispatchEvent(new Event('input'));
+  }
+
+  async toggleCheck(r = this.ar, c = this.ac): Promise<boolean> {
+    if (!this.isCheck(r, c)) return false;
+    const on = this.cache.get(KEY(r, c)) === 'TRUE';
+    await this.commitEdits(await this.engine.apply(this.book, [[r, c, on ? 'FALSE' : 'TRUE']], this.sheet));
+    return true;
+  }
+
+  checkAt(px: number, py: number): { row: number; col: number } | null {
+    const { row, col } = this.hit(px, py);
+    return this.isCheck(row, col) ? { row, col } : null;
+  }
+
+  async runTool(...fields: string[]): Promise<string> {
+    const e = await this.engine.tool(this.book, this.sheet, ...fields);
+    await this.applyEffect(e);
+    await this.refreshHistory();
+    return e.message ?? '';
+  }
+
+  async pasteWith(what: string, op: string, skip: boolean, transpose: boolean): Promise<string> {
+    const src = this.copied;
+    if (!src || this.book < 0) return '';
+    const area = `${src.r0},${src.c0},${src.r0 + src.h - 1},${src.c0 + src.w - 1}`;
+    return this.runTool('pastespecial', area, String(this.ar), String(this.ac), what, op, skip ? '1' : '0', transpose ? '1' : '0', String(src.sheet));
+  }
+
+  outlineRows(groups: [number, number][], clear: [number, number] | null): void {
+    if (clear) for (let n = 0; n < 7; n++) if (!this.rows.group(clear[0], clear[1], -1)) break;
+    for (const [a, b] of groups) this.rows.group(a, b, 1);
+    this.resize();
+    this.emitView();
+    this.paint();
   }
 
   private async loadRule(): Promise<void> {
@@ -1941,6 +2029,21 @@ export class Grid {
         }
       }
     }
+    if (this.tableList.length && raw !== '' && this.activeTable()) {
+      const typed = await this.engine.tool(this.book, this.sheet, 'typecheck', String(this.ar), String(this.ac), raw);
+      if (typed.message) {
+        const choice = await this.events.onInvalid(['', 'custom', '', '', '', 'e', 'warning', '', '', 'Column type', typed.message]);
+        if (choice === 'retry') {
+          this.startEdit(raw);
+          this.editor.select();
+          return false;
+        }
+        if (choice === 'cancel') {
+          this.paint();
+          return false;
+        }
+      }
+    }
     this.recorder?.({ k: 'edit', sheet: this.sheet, r: this.ar, c: this.ac, raw });
     try {
       await this.commitEdits(await this.engine.apply(this.book, [[this.ar, this.ac, raw]], this.sheet));
@@ -1975,15 +2078,28 @@ export class Grid {
     return r.text;
   }
 
+  replaying = false;
+
   async undo(): Promise<void> {
-    await this.applyEffect(await this.engine.undo(this.book));
+    this.replaying = true;
+    try {
+      await this.applyEffect(await this.engine.undo(this.book));
+    } finally {
+      this.replaying = false;
+    }
   }
 
   async redo(): Promise<void> {
-    await this.applyEffect(await this.engine.redo(this.book));
+    this.replaying = true;
+    try {
+      await this.applyEffect(await this.engine.redo(this.book));
+    } finally {
+      this.replaying = false;
+    }
   }
 
   async applyEffect(e: Effect): Promise<void> {
+    for (const s of e.more ?? []) this.afterShift(s);
     if (e.shift) this.afterShift(e.shift);
     if (e.formats.length) this.events.onFormats(e.formats);
     if (e.styles.length) {
@@ -2501,10 +2617,12 @@ export class Grid {
       } else {
         this.drag = { kind: 'cells' };
         const open = (e.ctrlKey || e.metaKey) && !shift && this.linked.has(KEY(row, col));
-        this.enqueue(() => {
+        const box = !shift && !e.ctrlKey && !e.metaKey && this.isCheck(row, col) && Math.abs(p.x - (this.x(col) + this.cols.size(col) / 2)) <= 9 && Math.abs(p.y - (this.y(row) + this.rows.size(row) / 2)) <= 9;
+        this.enqueue(async () => {
           pane(true, true);
           if (shift) this.extendTo(row, col);
           else this.select(row, col);
+          if (box) await this.toggleCheck(row, col);
           if (open) this.events.onOpenLink();
         });
       }
@@ -2573,6 +2691,8 @@ export class Grid {
     this.editor.addEventListener('blur', () => {
       if (this.editing) void this.endEdit(true);
     });
+
+    this.editor.addEventListener('input', (e) => void this.suggest(e as InputEvent));
 
     document.addEventListener('copy', (e) => {
       if (document.activeElement !== el) return;
@@ -2780,6 +2900,7 @@ export class Grid {
       if (e.code === 'Digit0') return this.hide(false, !e.shiftKey);
       if (e.shiftKey && e.code in SHORT_FORMATS) return this.setFormat(SHORT_FORMATS[e.code]);
       if (k === 'g') return this.events.onGoto();
+      if (!e.shiftKey && (k === 'e' || k === 'f' || k === 'h')) return void (await runCommand(k === 'e' ? 'data.flash-fill' : k === 'f' ? 'edit.find' : 'edit.replace'));
       if (e.shiftKey && e.code === 'KeyL') return this.events.onFilterKey();
       if (!e.shiftKey && e.code === 'KeyT') return this.events.onTableKey();
       if (k === 'k' && !e.shiftKey) return this.events.onLinkBox();
@@ -2809,6 +2930,12 @@ export class Grid {
         else this.select(this.ar + n, this.ac);
         return;
       }
+      case ' ':
+        if (!e.ctrlKey && !e.metaKey && !e.shiftKey && this.isCheck(this.ar, this.ac)) {
+          e.preventDefault();
+          return void (await this.toggleCheck());
+        }
+        break;
       case 'F2':
         return this.startEdit();
       case 'F5':
@@ -2925,7 +3052,7 @@ function wants(e: KeyboardEvent): boolean {
   if (ARROWS[e.key]) return true;
   const mod = e.ctrlKey || e.metaKey;
   if (mod && e.altKey && e.code === 'KeyV') return true;
-  if (mod) return !e.altKey && (['z', 'y', 'a', 'home', 'end', '+', '=', '-', '_', 'g', 'k'].includes(e.key.toLowerCase()) || (e.shiftKey && e.code === 'KeyL') || (!e.shiftKey && e.code === 'KeyT') || e.code === 'Digit9' || e.code === 'Digit0' || (e.shiftKey && (e.code in SHORT_FORMATS || e.code === 'Digit7')) || (!e.shiftKey && e.code in TOGGLE_KEYS));
+  if (mod) return !e.altKey && (['z', 'y', 'a', 'home', 'end', '+', '=', '-', '_', 'g', 'k', 'e', 'f', 'h'].includes(e.key.toLowerCase()) || (e.shiftKey && e.code === 'KeyL') || (!e.shiftKey && e.code === 'KeyT') || e.code === 'Digit9' || e.code === 'Digit0' || (e.shiftKey && (e.code in SHORT_FORMATS || e.code === 'Digit7')) || (!e.shiftKey && e.code in TOGGLE_KEYS));
   if (['Enter', 'Tab', 'Escape', 'Home', 'PageDown', 'PageUp', 'F2', 'F5', 'Delete', 'Backspace'].includes(e.key)) return true;
   return e.key.length === 1 && !e.altKey;
 }

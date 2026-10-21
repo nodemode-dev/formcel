@@ -402,3 +402,9 @@ Data tables, scenarios and the saved Solver model are lines of text the engine w
 - logged: v0.34.0 · 2026-10-21
 
 The Watch Window's cells are kept in `workbook.json` under `watches`, a list of [sheet, row, col] triples (zero based). GET returns them as `watches` and PUT /api/workbooks/{id}/watches stores the window's list. Entries that are not three numbers long are dropped when the file is read. .xlsx and .ods files do not carry the list.
+### Personal templates, hidden sheets and checkbox cells in files
+- refers-to: app/services/store.py :: save_template, personal_templates, create_from_personal, app/routers/workbooks.py :: save_as_template, app/services/xlsx/writer.py, reader.py
+- kind: explainer
+- logged: v0.34.0 · 2026-10-21
+
+Save as template (MS-SAVETPL) writes the workbook's `.fcel` into `Templates/` beside `Workbooks/`, with the chosen name and description inside; `GET /api/templates` lists them first, in a Personal category, and creating a workbook from an id that starts with `my-` copies the saved file under a new id. Filter views, slicers and the hidden flag are kept in each sheet's `view`, which the sheet PATCH already merges, so they are saved in the `.fcel` with no new route. A hidden sheet is written as `sheet_state = hidden` in .xlsx unless every sheet is hidden, and a sheet that is not visible in an .xlsx comes in as hidden (MS-HIDESHEET). Checkbox validation cells are not written as data validation in .xlsx; their TRUE and FALSE values are written as booleans.

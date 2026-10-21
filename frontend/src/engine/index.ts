@@ -366,6 +366,11 @@ export class EngineClient {
     if (text) await this.call({ op: 'filter.load', book, sheet, text });
   }
 
+  async tool(book: number, sheet: number, ...fields: string[]): Promise<Effect> {
+    const cmd = fields.map((f) => f.replace(/\\/g, '\\\\').replace(/\t/g, '\\t').replace(/\n/g, '\\n').replace(/\r/g, '\\r')).join('\t');
+    return (await this.call({ op: 'tool', book, sheet, cmd })) as Effect;
+  }
+
   async reapplyFilter(book: number, sheet: number): Promise<Effect> {
     return (await this.call({ op: 'filter.reapply', book, sheet })) as Effect;
   }

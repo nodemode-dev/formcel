@@ -67,6 +67,7 @@ export const icons = {
   removeArrows: svg('<path d="M4 18l9-9M13 9H8.5M13 9v4.5"/><path d="M14.5 14.5l6 6M20.5 14.5l-6 6"/>'),
   evalFormula: svg('<path d="M5 6.5h14M5 12h8M5 17.5h5"/><path d="M15 15.5l2.2 2.2 3.8-4.2"/>'),
   watch: svg('<path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z"/><circle cx="12" cy="12" r="2.8"/>'),
+  dataTools: svg('<rect x="3.5" y="4.5" width="17" height="15" rx="2"/><path d="M3.5 9.5h17M9.5 9.5v10M13 14l2 2 3-3.5"/>'),
   download: svg('<path d="M12 4v11M7.5 10.5L12 15l4.5-4.5M5 19.5h14"/>'),
   note: svg('<path d="M5 4.5h14v10.5l-4.5 4.5H5z"/><path d="M14.5 19.5V15H19M8.5 9h7M8.5 12.5h4"/>'),
   comment: svg('<path d="M4.5 5.5h15v10h-8l-4.5 3.5v-3.5h-2.5z"/><path d="M8.5 9.5h7M8.5 12h4"/>'),

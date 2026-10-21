@@ -169,6 +169,8 @@ def read(data: bytes) -> dict:
         view["cols"] = _axis(ws.column_dimensions, lambda d: _px_width(d.width) if d.customWidth or d.width else None,
                              _px_width(base), max(WIDE_TO, max_c), notes)
         view["rows"] = _axis(ws.row_dimensions, lambda d: round(d.ht / 0.75) if d.ht and d.customHeight else None, None, 0, notes)
+        if ws.sheet_state != "visible":
+            view["hidden"] = True
         z = (ws.sheet_view.zoomScale or 100) / 100
         view["zoom"] = min(ZOOMS, key=lambda x: abs(x - z))
         setup = page.from_xlsx(ws)

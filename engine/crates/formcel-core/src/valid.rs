@@ -2,7 +2,7 @@ use crate::formula::{self, Area, Expr};
 use crate::wire::{escape, unescape};
 use crate::{eval, fmtcode, Addr, Effect, EngineError, Tx, Value, Workbook};
 
-pub const KINDS: [&str; 8] = ["any", "whole", "decimal", "list", "date", "time", "length", "custom"];
+pub const KINDS: [&str; 9] = ["any", "whole", "decimal", "list", "date", "time", "length", "custom", "checkbox"];
 pub const OPS: [&str; 8] = ["between", "notbetween", "eq", "ne", "gt", "lt", "ge", "le"];
 pub const ALERTS: [&str; 3] = ["stop", "warning", "info"];
 pub const MESSAGE_LIMIT: usize = 225;
@@ -43,7 +43,7 @@ impl Validation {
         if !KINDS.contains(&kind.as_str()) {
             return None;
         }
-        if matches!(kind.as_str(), "any" | "list" | "custom") {
+        if matches!(kind.as_str(), "any" | "list" | "custom" | "checkbox") {
             op = String::new();
         } else if !OPS.contains(&op.as_str()) {
             return None;
@@ -286,6 +286,7 @@ impl Workbook {
         let operands = || (num(self.rule_value(sheet, v, &v.a, a, self)), num(self.rule_value(sheet, v, &v.b, a, self)));
         match v.kind.as_str() {
             "any" => true,
+            "checkbox" => matches!(x, Value::Bool(_)),
             "whole" | "decimal" | "date" | "time" => {
                 let Value::Number(n) = x else { return false };
                 if v.kind == "whole" && n.fract() != 0.0 {

@@ -803,6 +803,20 @@ pub unsafe extern "C" fn fc_load_filter(id: u32, sheet: u32, t: *const u8, len: 
     }
 }
 
+/// Runs one data tool (dedupe, text to columns, subtotal, flash fill, find and replace and the rest) as one undo step; the result is the escaped report line, then the encoded effect. A refusal comes back as `ERR` and the reason.
+///
+/// # Safety
+/// `cmd` must point at `len` readable bytes.
+#[no_mangle]
+pub unsafe extern "C" fn fc_tool(id: u32, sheet: u32, cmd: *const u8, len: u32) -> i32 {
+    let cmd = text(cmd, len).to_string();
+    match with_book(id, |wb| wb.tool(sheet as usize, &cmd).map(|(e, msg)| wb.tool_encode(&e, &msg))) {
+        Some(Ok(s)) => emit(&s) as i32,
+        Some(Err(e)) => emit(&format!("ERR\t{e}")) as i32,
+        None => -1,
+    }
+}
+
 /// Runs the filter again over current values, taking in rows added below it.
 #[no_mangle]
 pub extern "C" fn fc_reapply_filter(id: u32, sheet: u32) -> i32 {

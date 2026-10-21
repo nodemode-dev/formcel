@@ -33,7 +33,8 @@ pub fn encode_formats(formats: &[(usize, Addr, String)]) -> String {
 }
 
 pub fn encode_effect(e: &Effect, fx: FxOf, shown: &dyn Fn(usize, Addr) -> String) -> String {
-    let mut out = e.shift.as_ref().map(encode_shift).unwrap_or_default();
+    let mut out: String = e.more.iter().map(encode_shift).collect();
+    out.push_str(&e.shift.as_ref().map(encode_shift).unwrap_or_default());
     if let Some(s) = e.merges {
         out.push_str(&format!("=\t{s}\n"));
     }

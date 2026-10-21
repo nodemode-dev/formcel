@@ -19,6 +19,7 @@ export type Request =
   | { id: number; op: 'style.read'; book: number; sheet: number; r0: number; c0: number; r1: number; c1: number }
   | { id: number; op: 'style.at'; book: number; sheet: number; row: number; col: number }
   | { id: number; op: 'style.load'; book: number; sheet: number; cells: Edit[] }
+  | { id: number; op: 'tool'; book: number; sheet: number; cmd: string }
   | { id: number; op: 'merge.set'; book: number; sheet: number; r0: number; c0: number; r1: number; c1: number; mode: MergeMode }
   | { id: number; op: 'sort'; book: number; sheet: number; r0: number; c0: number; r1: number; c1: number; keys: [number, boolean][]; header: boolean; caseSensitive: boolean }
   | { id: number; op: 'region'; book: number; sheet: number; row: number; col: number }
@@ -105,6 +106,8 @@ export interface Shift {
 export interface Effect {
   changes: Changed[];
   shift: Shift | null;
+  more?: Shift[];
+  message?: string;
   formats: FormatChange[];
   styles: StyleChange[];
   merges: number | null;
