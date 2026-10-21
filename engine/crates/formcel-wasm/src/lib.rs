@@ -1074,3 +1074,59 @@ pub extern "C" fn fc_is_final(id: u32) -> i32 {
 pub extern "C" fn fc_last_refusal(id: u32) -> i32 {
     emit(&with_book(id, |wb| wb.take_refusal()).unwrap_or_default()) as i32
 }
+
+/// Keys of host calls (web functions, custom functions) the engine is waiting on, one per line; `all` lists the cached ones instead.
+#[no_mangle]
+pub extern "C" fn fc_host_keys(id: u32, all: u32) -> i32 {
+    let mut s = String::new();
+    let Some(keys) = with_book(id, |wb| if all != 0 { wb.host_keys() } else { wb.host_pending() }) else { return -1 };
+    for k in keys {
+        wire::escape(&k, &mut s);
+        s.push('\n');
+    }
+    emit(&s) as i32
+}
+
+/// Stores the result of one host call (rows split by newline, cells by tab, each `n:`, `t:`, `b:`, `e:` or `z:`); `has` 0 forgets it. The out buffer gets the changed cells.
+///
+/// # Safety
+/// `key` and `data` must point at `key_len` and `data_len` readable bytes.
+#[no_mangle]
+pub unsafe extern "C" fn fc_host_set(id: u32, key: *const u8, key_len: u32, data: *const u8, data_len: u32, has: u32) -> i32 {
+    let (key, data) = (wire::unescape(text(key, key_len)), text(data, data_len).to_string());
+    match with_book(id, |wb| {
+        let c = wb.host_set(&key, if has != 0 { Some(&data) } else { None });
+        wire::encode_changed(&c, &|s, a| wb.meta(s, a))
+    }) {
+        Some(s) => emit(&s) as i32,
+        None => -1,
+    }
+}
+
+/// Registers the names of custom functions the window computes; the out buffer gets the changed cells.
+///
+/// # Safety
+/// `names` must point at `len` readable bytes.
+#[no_mangle]
+pub unsafe extern "C" fn fc_host_custom(id: u32, names: *const u8, len: u32) -> i32 {
+    let list: Vec<String> = text(names, len).split('\n').filter(|l| !l.is_empty()).map(String::from).collect();
+    match with_book(id, |wb| {
+        let c = wb.host_custom(&list);
+        wire::encode_changed(&c, &|s, a| wb.meta(s, a))
+    }) {
+        Some(s) => emit(&s) as i32,
+        None => -1,
+    }
+}
+
+/// Forgets every cached host result and recalculates; the out buffer gets the changed cells.
+#[no_mangle]
+pub extern "C" fn fc_host_clear(id: u32) -> i32 {
+    match with_book(id, |wb| {
+        let c = wb.host_clear();
+        wire::encode_changed(&c, &|s, a| wb.meta(s, a))
+    }) {
+        Some(s) => emit(&s) as i32,
+        None => -1,
+    }
+}

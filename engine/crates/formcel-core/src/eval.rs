@@ -29,6 +29,13 @@ pub trait Ctx {
     fn subtotal_at(&self, _sheet: usize, _a: Addr) -> bool {
         false
     }
+    fn host_fn(&self, _name: &str) -> bool {
+        false
+    }
+    fn host_get(&self, _key: &str) -> Option<Array> {
+        None
+    }
+    fn host_want(&self, _key: &str) {}
 }
 
 #[derive(Debug)]
@@ -261,7 +268,33 @@ impl<'a> Eval<'a> {
     }
 
     fn routed(&self, name: &str) -> bool {
-        ARRAY_FNS.contains(&name) || SCOPED_FNS.contains(&name) || fx::routed(name) || self.user(name)
+        ARRAY_FNS.contains(&name) || SCOPED_FNS.contains(&name) || fx::routed(name) || self.user(name) || self.ctx.host_fn(name)
+    }
+
+    fn hosted(&self, name: &str, a: &[Expr]) -> Result<Arg, ErrKind> {
+        let mut key = name.to_ascii_uppercase();
+        for e in a {
+            key.push('\u{1f}');
+            match self.arg(e) {
+                Arg::V(Value::Error(k)) => return Err(k),
+                Arg::V(v) => key.push_str(&crate::host::token(&v)),
+                other => {
+                    let g = self.grid(other)?;
+                    key.push_str(&format!("a:{}:{}", g.rows, g.cols));
+                    for v in &g.data {
+                        key.push('\u{1e}');
+                        key.push_str(&crate::host::token(v));
+                    }
+                }
+            }
+        }
+        match self.ctx.host_get(&key) {
+            Some(g) => Ok(Arg::A(g)),
+            None => {
+                self.ctx.host_want(&key);
+                Err(ErrKind::Na)
+            }
+        }
     }
 
     fn deeper<T>(&self, f: impl FnOnce() -> Result<T, ErrKind>) -> Result<T, ErrKind> {
@@ -468,6 +501,8 @@ impl<'a> Eval<'a> {
             Expr::Call(name, args) if self.routed(name) => {
                 let r = if self.user(name) {
                     self.named(name).and_then(|f| self.invoke(f, args))
+                } else if self.ctx.host_fn(name) {
+                    self.hosted(name, args)
                 } else if SCOPED_FNS.contains(&name.as_str()) {
                     self.scoped(name, args)
                 } else {

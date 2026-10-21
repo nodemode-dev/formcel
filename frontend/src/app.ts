@@ -3,6 +3,7 @@ import { colName, parseRef, type Range } from './grid/a1';
 import { Autocomplete, FUNCTIONS, type Suggestion } from './ui/autocomplete';
 import { Charts } from './charts';
 import type { FloatObject } from './charts/types';
+import { Automation } from './automation';
 import { Grid, type BorderKind, type MenuKind, type PasteKind, type SheetView } from './grid/grid';
 import { paint } from './grid/style';
 import { TABLE_STYLES } from './grid/tables';
@@ -244,6 +245,7 @@ export class App {
     },
     alt: (sheet, name, text) => void this.setAlt(sheet, name, text),
   });
+  private readonly auto: Automation;
 
   constructor(private readonly p: ShellParts) {
     initPrefs();
@@ -277,7 +279,10 @@ export class App {
         this.button('edit.undo').disabled = !undo;
         this.button('edit.redo').disabled = !redo;
       },
-      onChanged: (changes) => this.queueSave(changes),
+      onChanged: (changes) => {
+        this.queueSave(changes);
+        this.auto.edited(changes);
+      },
       onSheet: (sheet) => {
         this.markTab(sheet);
         queueMicrotask(() => this.zoomLabel());
@@ -338,6 +343,7 @@ export class App {
       e.preventDefault();
       this.collab.refused(e.reason.message);
     });
+    this.auto = new Automation({ grid: this.grid, book: () => this.open?.book ?? -1, id: () => this.open?.id ?? '', sheets: () => this.open?.sheets ?? [], title: () => this.open?.title ?? '', status: (t, e) => this.status(t, e), addSheet: (n) => this.addSheetNamed(n) });
     this.commands();
     this.collab.commands((id, title, description, changes, run, keys) => registerCommand({ id, title, description, changes, run, keys }));
     bindShortcuts(this.shortcuts, () => !!this.open);
@@ -551,6 +557,7 @@ export class App {
     const p = this.p;
     this.open = null;
     this.collab.detach();
+    this.auto.closed();
     p.sheet.hidden = true;
     p.home.hidden = false;
     p.homeBtn.hidden = true;
@@ -1531,6 +1538,7 @@ export class App {
     this.button('edit.undo').disabled = true;
     this.button('edit.redo').disabled = true;
     this.grid.focus();
+    this.auto.opened(id, (doc as unknown as { automation?: Parameters<Automation['opened']>[1] }).automation);
     if (setHash && location.hash !== `#w-${id}`) location.hash = `w-${id}`;
     this.collab.attach(id, book, doc.sheets, doc.collab, doc.protection);
   }
@@ -2490,6 +2498,19 @@ export class App {
 
   private markTab(sheet: number): void {
     for (const t of this.p.tabs.children) t.setAttribute('aria-selected', String((t as HTMLElement).dataset.sheet === String(sheet)));
+  }
+
+  private async addSheetNamed(name: string): Promise<number> {
+    const o = this.open;
+    if (!o) return 0;
+    const at = o.sheets.indexOf(name);
+    if (at >= 0) return at;
+    await api('POST', `/api/workbooks/${o.id}/sheets`, { name });
+    const i = await engine().addSheet(o.book, name);
+    o.sheets.push(name);
+    o.views.push({});
+    this.renderTabs();
+    return i;
   }
 
   private async addSheet(): Promise<void> {

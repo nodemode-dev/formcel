@@ -3,7 +3,10 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from . import config
-from .routers import collab, commands, workbooks
+import asyncio
+
+from .routers import automation, collab, commands, workbooks
+from .services import scheduler
 from .version import VERSION
 
 try:
@@ -15,13 +18,17 @@ except ImportError:
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     config.ensure_data_dir()
+    task = asyncio.create_task(scheduler.loop())
     yield
+    task.cancel()
 
 
-app = FastAPI(title="FormCel engine", version=VERSION, lifespan=lifespan)
+app = FastAPI(title="FormCel engine", version=VERSION, lifespan=lifespan, docs_url="/api/docs", openapi_url="/api/openapi.json", redoc_url=None)
 app.include_router(workbooks.router)
 app.include_router(commands.router)
 app.include_router(collab.router)
+app.include_router(automation.router)
+app.include_router(automation.v1)
 
 
 def engine_info() -> dict:

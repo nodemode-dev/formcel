@@ -7,6 +7,7 @@ pub mod eval;
 pub mod link;
 pub mod filter;
 pub mod formula;
+pub mod host;
 mod graph;
 pub mod fmtcode;
 pub mod locale;
@@ -408,6 +409,7 @@ pub struct Workbook {
     tables: Vec<table::Table>,
     table_quiet: bool,
     wprot: protect::BookProt,
+    host: host::Host,
 }
 
 const SPILL_PASSES: usize = 8;
@@ -449,6 +451,18 @@ impl eval::Ctx for Workbook {
     fn subtotal_at(&self, sheet: usize, a: Addr) -> bool {
         self.formulas.get(&(sheet, a)).is_some_and(|f| f.src.to_ascii_uppercase().contains("SUBTOTAL("))
     }
+
+    fn host_fn(&self, name: &str) -> bool {
+        self.host.is_fn(name)
+    }
+
+    fn host_get(&self, key: &str) -> Option<eval::Array> {
+        self.host.results.get(key).cloned()
+    }
+
+    fn host_want(&self, key: &str) {
+        self.host.ask(key);
+    }
 }
 
 impl Default for Workbook {
@@ -480,6 +494,7 @@ impl Workbook {
             tables: Vec::new(),
             table_quiet: false,
             wprot: protect::BookProt::default(),
+            host: host::Host::default(),
         }
         .with_named_codes()
     }

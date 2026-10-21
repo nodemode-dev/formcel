@@ -79,6 +79,10 @@ interface Exports {
   fc_offset(src: number, len: number, dr: number, dc: number): number;
   fc_set_clock(serial: number): void;
   fc_set_locale(t: number, len: number): number;
+  fc_host_keys(book: number, all: number): number;
+  fc_host_set(book: number, key: number, keyLen: number, data: number, dataLen: number, has: number): number;
+  fc_host_custom(book: number, names: number, len: number): number;
+  fc_host_clear(book: number): number;
   fc_protect_text(book: number, sheet: number): number;
   fc_protect_load(book: number, sheet: number, lines: number, len: number): number;
   fc_protect_sheet(book: number, sheet: number, on: number, pw: number, pwLen: number, allow: number, allowLen: number): number;
@@ -500,6 +504,14 @@ function run(x: Exports, req: Request): Value {
       return pair(out(x, x.fc_edge(req.book, req.sheet, req.row, req.col, DIRS[req.dir])));
     case 'offset':
       return req.items.map(([src, dr, dc]) => withStrings(x, [src], ([p, l]) => out(x, x.fc_offset(p, l, dr, dc))));
+    case 'host.keys':
+      return out(x, x.fc_host_keys(req.book, req.all ? 1 : 0)).split('\n').filter(Boolean).map(unescape);
+    case 'host.set':
+      return withStrings(x, [escape(req.key), req.data ?? ''], ([k, kl, d, dl]) => changed(out(x, x.fc_host_set(req.book, k, kl, d, dl, req.data === null ? 0 : 1))));
+    case 'host.custom':
+      return withStrings(x, [req.names.join('\n')], ([p, l]) => changed(out(x, x.fc_host_custom(req.book, p, l))));
+    case 'host.clear':
+      return changed(out(x, x.fc_host_clear(req.book)));
   }
 }
 

@@ -371,6 +371,22 @@ export class EngineClient {
     if (!items.length) return [];
     return (await this.call({ op: 'offset', items })) as string[];
   }
+
+  async hostKeys(book: number, all = false): Promise<string[]> {
+    return (await this.call({ op: 'host.keys', book, all })) as string[];
+  }
+
+  async hostSet(book: number, key: string, data: string | null): Promise<Changed[]> {
+    return (await this.call({ op: 'host.set', book, key, data })) as Changed[];
+  }
+
+  async hostCustom(book: number, names: string[]): Promise<Changed[]> {
+    return (await this.call({ op: 'host.custom', book, names })) as Changed[];
+  }
+
+  async hostClear(book: number): Promise<Changed[]> {
+    return (await this.call({ op: 'host.clear', book })) as Changed[];
+  }
 }
 
 let shared: EngineClient | null = null;
