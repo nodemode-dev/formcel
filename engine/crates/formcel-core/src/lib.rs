@@ -19,6 +19,7 @@ pub mod stats;
 pub mod whatif;
 mod cellshift;
 mod datatools;
+mod formlocale;
 mod flash;
 pub use numfmt::Fmt;
 mod store;

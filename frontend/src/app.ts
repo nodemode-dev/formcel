@@ -272,7 +272,14 @@ export class App {
         this.currentRange = range;
         this.currentRef = this.nameOf(range) ?? ref;
         if (document.activeElement !== p.nameBox) p.nameBox.value = this.currentRef;
-        if (document.activeElement !== p.formulaBar) p.formulaBar.value = text;
+        if (document.activeElement !== p.formulaBar) {
+          p.formulaBar.value = text;
+          if (this.grid?.localForms && text.startsWith('=')) {
+            void this.grid.localise(text, true).then((v) => {
+              if (this.current === text && document.activeElement !== p.formulaBar) p.formulaBar.value = v;
+            });
+          }
+        }
         if (this.grid) {
           const [ar, ac] = this.grid.activeCell();
           const shown = this.grid.shownAt(ar, ac);
@@ -744,6 +751,7 @@ export class App {
       } else if (e.key === 'Escape') {
         e.preventDefault();
         p.formulaBar.value = this.current;
+        void this.grid.localise(this.current, true).then((v) => (p.formulaBar.value = v));
         this.grid.focus();
       }
     });
@@ -1779,6 +1787,7 @@ export class App {
     this.whatIf.load(doc.whatif ?? []);
     const names = doc.names?.length ? await e.names(book) : [];
     this.grouped.clear();
+    this.grid.localForms = ((doc as { locale?: string }).locale ?? 'en-US') !== 'en-US';
     this.open = { id, book, title: doc.title, sheets: doc.sheets, views: doc.sheets.map((_, i) => doc.views?.[i] ?? {}), names, macros: !!doc.macros, pages: doc.sheets.map((_, i) => cleanPage((doc.views?.[i] as { page?: unknown } | undefined)?.page)), locale: (doc as { locale?: string }).locale ?? 'en-US' };
     this.preview = false;
     this.grid.setBreakView(null);

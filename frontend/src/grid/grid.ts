@@ -2117,13 +2117,21 @@ export class Grid {
     if (changed.length) this.objectsHook?.data();
   }
 
-  async setActive(raw: string): Promise<boolean> {
+  localForms = false;
+
+  async localise(text: string, toLocal: boolean): Promise<string> {
+    if (!this.localForms || this.book < 0 || !text.trimStart().startsWith('=')) return text;
+    return (await this.engine.tool(this.book, this.sheet, 'localform', toLocal ? 'to' : 'from', text)).message ?? text;
+  }
+
+  async setActive(entered: string): Promise<boolean> {
+    const raw = await this.localise(entered, false);
     if (this.validLines.length && raw !== '') {
       const line = await this.engine.checkInput(this.book, this.sheet, this.ar, this.ac, raw);
       if (line) {
         const choice = await this.events.onInvalid(line.split('\t').map(unescapeField));
         if (choice === 'retry') {
-          this.startEdit(raw);
+          this.startEdit(entered);
           this.editor.select();
           return false;
         }
@@ -2138,7 +2146,7 @@ export class Grid {
       if (typed.message) {
         const choice = await this.events.onInvalid(['', 'custom', '', '', '', 'e', 'warning', '', '', 'Column type', typed.message]);
         if (choice === 'retry') {
-          this.startEdit(raw);
+          this.startEdit(entered);
           this.editor.select();
           return false;
         }
@@ -2572,6 +2580,15 @@ export class Grid {
     const end = this.editor.value.length;
     this.editor.setSelectionRange(end, end);
     this.editor.dispatchEvent(new Event('input'));
+    if (initial === undefined && this.localForms && this.editor.value.startsWith('=')) {
+      const shown = this.editor.value;
+      void this.localise(shown, true).then((v) => {
+        if (!this.editing || this.editor.value !== shown || v === shown) return;
+        this.editor.value = v;
+        this.editor.setSelectionRange(v.length, v.length);
+        this.editor.dispatchEvent(new Event('input'));
+      });
+    }
     this.paint();
   }
 
