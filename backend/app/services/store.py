@@ -34,6 +34,7 @@ class Book:
     views: list[dict] = field(default_factory=list)
     lock: threading.Lock = field(default_factory=threading.Lock)
     vba: dict[str, bytes] | None = None
+    whatif: list[str] = field(default_factory=list)
 
     def fit_views(self) -> None:
         n = len(self.sheet_names())
@@ -70,7 +71,7 @@ class Store:
     def _write(self, b: Book) -> None:
         doc = {"format": FORMAT, "version": FORMAT_VERSION, "id": b.id, "title": b.title, "created": b.created,
                "modified": b.modified, "template": b.template, "preview": b.preview(),
-               "names": [list(n) for n in b.engine.names()], "tables": b.engine.tables(),
+               "names": [list(n) for n in b.engine.names()], "tables": b.engine.tables(), "whatif": b.whatif,
                "theme": b.engine.theme(), "cellStyles": b.engine.cell_styles(),
                "sheets": [{"name": n, "view": b.views[i] if i < len(b.views) else {}, "cells": b.engine.cells(i), "formats": b.engine.formats(i), "styles": b.engine.styles(i), "merges": [list(m) for m in b.engine.merges(i)], "rules": b.engine.rules(i), "filter": b.engine.filter(i), "validations": b.engine.validations(i), "links": b.engine.links(i)} for i, n in enumerate(b.sheet_names())]}
         target = self.path(b.id)
@@ -128,6 +129,7 @@ class Store:
                 eng.load_tables(doc["tables"])
             b = Book(wid, doc["title"], doc["created"], doc["modified"], eng, doc.get("template"), [s.get("view") or {} for s in doc["sheets"]])
             b.vba = self._macros(self.path(wid))
+            b.whatif = list(doc.get("whatif", []))
             self.open[wid] = b
             return b
 
@@ -288,7 +290,15 @@ class Store:
         b = self._load(wid)
         with b.lock:
             n = len(b.sheet_names())
-            return {**b.meta(), "names": [list(x) for x in b.engine.names()], "theme": b.engine.theme(), "cellStyles": b.engine.cell_styles(), "cells": [b.engine.cells(i) for i in range(n)], "formats": [b.engine.formats(i) for i in range(n)], "styles": [b.engine.styles(i) for i in range(n)], "merges": [[list(m) for m in b.engine.merges(i)] for i in range(n)], "rules": [b.engine.rules(i) for i in range(n)], "filters": [b.engine.filter(i) for i in range(n)], "validations": [b.engine.validations(i) for i in range(n)], "tables": b.engine.tables(), "links": [b.engine.links(i) for i in range(n)]}
+            return {**b.meta(), "names": [list(x) for x in b.engine.names()], "theme": b.engine.theme(), "cellStyles": b.engine.cell_styles(), "cells": [b.engine.cells(i) for i in range(n)], "formats": [b.engine.formats(i) for i in range(n)], "styles": [b.engine.styles(i) for i in range(n)], "merges": [[list(m) for m in b.engine.merges(i)] for i in range(n)], "rules": [b.engine.rules(i) for i in range(n)], "filters": [b.engine.filter(i) for i in range(n)], "validations": [b.engine.validations(i) for i in range(n)], "tables": b.engine.tables(), "whatif": b.whatif, "links": [b.engine.links(i) for i in range(n)]}
+
+    def set_whatif(self, wid: str, lines: list[str]) -> dict:
+        b = self._load(wid)
+        with b.lock:
+            b.whatif = list(lines)
+            b.modified = now()
+            self._write(b)
+            return {"id": b.id, "modified": b.modified}
 
     def set_links(self, wid: str, sheet: int, cells: list[tuple[int, int, str]]) -> dict:
         b = self._load(wid)

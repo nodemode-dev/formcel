@@ -337,3 +337,10 @@ The .fcel file keeps each sheet's rules under `validations`; GET returns them as
 - logged: v0.33.0 · 2026-10-21
 
 Tables are workbook-wide in the .fcel file (`tables`, the engine's lines) and PUT /api/workbooks/{id}/tables stores the window's. In .xlsx each table is a table part: displayName and ref, headerRowCount, totalsRowCount, tableStyleInfo with its four stripes and column options, one tableColumn per column with calculatedColumnFormula and, in the total row, totalsRowLabel or a custom totalsRowFormula. Formulas with structured references are written in the long qualified form (`Table1[[#This Row],[Qty]]`) from the engine's `file_formula`. A sheet filter over the table's header and data rows is written as the table's own autoFilter, since a sheet autoFilter on the same range is not valid; on reading, a table's autoFilter becomes the sheet filter when the sheet has none. Tables without a header row and table styles FormCel does not draw come in with a note. LibreOffice 24.2 opens a written table and computes `SUBTOTAL(109,Table1[Total])` and the calculated column. .ods has no tables here: formulas with structured references are written with plain absolute references (`plain_formula`).
+
+### What-if definitions in the .fcel
+- refers-to: backend/app/services/store.py :: Book.whatif, set_whatif; backend/app/routers/workbooks.py :: set_whatif
+- kind: explainer
+- logged: v0.34.0 · 2026-10-21
+
+Data tables, scenarios and the saved Solver model are lines of text the engine writes and reads; the backend keeps them as `whatif` in `workbook.json` and returns them from the workbook read, without interpreting them. `PUT /api/workbooks/{id}/whatif` replaces the list. The Python engine does not need them, so xlsx export leaves them out: data table results go out as the plain numbers they are, and Scenario Manager and Solver models have no xlsx part written by FormCel. FORECAST.ETS and its siblings are written with the `_xlfn.` prefix already listed in future.json.

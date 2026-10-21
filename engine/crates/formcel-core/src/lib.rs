@@ -11,6 +11,8 @@ mod graph;
 pub mod fmtcode;
 pub mod numfmt;
 pub mod sort;
+pub mod stats;
+pub mod whatif;
 pub use numfmt::Fmt;
 mod store;
 pub mod style;
@@ -371,6 +373,7 @@ enum Tx {
     Valid { sheet: usize, before: Vec<valid::Validation>, after: Vec<valid::Validation> },
     Tables { before: Vec<table::Table>, after: Vec<table::Table> },
     Links(Vec<FormatChange>),
+    WhatIf { before: Vec<String>, after: Vec<String> },
 }
 
 #[derive(Debug)]
@@ -394,6 +397,7 @@ pub struct Workbook {
     link_log: Vec<(usize, Addr, String)>,
     tables: Vec<table::Table>,
     table_quiet: bool,
+    whatif: whatif::State,
 }
 
 const SPILL_PASSES: usize = 8;
@@ -465,6 +469,7 @@ impl Workbook {
             link_log: Vec::new(),
             tables: Vec::new(),
             table_quiet: false,
+            whatif: whatif::State::default(),
         }
         .with_named_codes()
     }
@@ -1817,6 +1822,10 @@ impl Workbook {
             Tx::Valid { sheet, before, after } => {
                 self.sheets[*sheet].valid = if forward { after.clone() } else { before.clone() };
                 Effect { valid: Some(*sheet), ..Effect::default() }
+            }
+            Tx::WhatIf { before, after } => {
+                self.whatif_replay(if forward { after } else { before });
+                Effect::default()
             }
             Tx::Tables { before, after } => {
                 self.tables = if forward { after.clone() } else { before.clone() };

@@ -105,7 +105,11 @@ fn hull(a: Area, b: Area) -> Area {
     Area { r0: a.r0.min(b.r0), c0: a.c0.min(b.c0), r1: a.r1.max(b.r1), c1: a.c1.max(b.c1) }
 }
 
-const ARRAY_FNS: [&str; 28] = [
+#[path = "fx_stat.rs"]
+mod fx_stat;
+
+const ARRAY_FNS: [&str; 30] = [
+    "LINEST", "TREND",
     "ARRAYFORMULA", "INDEX", "CHOOSE", "SEQUENCE", "TRANSPOSE", "IF", "FILTER", "SORT", "SORTBY", "UNIQUE", "MAP", "REDUCE", "SCAN", "BYROW", "BYCOL", "MAKEARRAY", "VSTACK", "HSTACK", "TOCOL", "TOROW", "TAKE",
     "DROP", "CHOOSECOLS", "CHOOSEROWS", "WRAPROWS", "WRAPCOLS", "EXPAND", "TEXTSPLIT",
 ];
@@ -1179,7 +1183,7 @@ impl<'a> Eval<'a> {
                         None => return Err(ErrKind::Na),
                     }
                 }
-                _ => return Err(ErrKind::Name),
+                _ => return self.call_stat(name, a),
             })
         })();
         r.unwrap_or_else(err)
@@ -1715,7 +1719,7 @@ impl Eval<'_> {
                 }
                 Ok(Arg::A(Array { rows: cells.len(), cols, data }))
             }
-            _ => Err(ErrKind::Name),
+            _ => self.call_stat_arr(name, a),
         }
     }
 

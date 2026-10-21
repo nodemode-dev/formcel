@@ -1,4 +1,4 @@
-import type { Area, Cell, CfCell, Changed, Dir, Edit, Effect, FilterList, FormatItem, LinkChange, MergeMode, Name, RequestBody, Response, Shift, StyleOp, Value } from './protocol';
+import type { Area, Cell, CfCell, Changed, Dir, Edit, Effect, FilterList, FormatItem, LinkChange, MergeMode, Name, RequestBody, Response, Shift, StyleOp, Value, WhatIfReply } from './protocol';
 
 export type { Area, Cell, CfCell, Changed, Dir, Edit, Effect, FilterList, FormatChange, FormatItem, LinkChange, MergeMode, Name, Shift, StyleChange, StyleOp } from './protocol';
 
@@ -224,6 +224,14 @@ export class EngineClient {
 
   async setTable(book: number, name: string, line: string): Promise<Effect> {
     return (await this.call({ op: 'table.set', book, name, line })) as Effect;
+  }
+
+  async whatif(book: number, cmd: string): Promise<WhatIfReply> {
+    return (await this.call({ op: 'whatif.run', book, cmd })) as WhatIfReply;
+  }
+
+  async loadWhatif(book: number, lines: string[]): Promise<void> {
+    if (lines.length) await this.call({ op: 'whatif.load', book, lines });
   }
 
   async removeTable(book: number, name: string): Promise<Effect> {

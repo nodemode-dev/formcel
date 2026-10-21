@@ -9,6 +9,7 @@ import { Home, type TemplateMeta, type WorkbookMeta } from './ui/home';
 import { Menu, type MenuItem } from './ui/menu';
 import type { ShellParts } from './ui/shell';
 import { icon } from './ui/icons';
+import { WhatIf } from './ui/whatif';
 import { DATE_PERIODS, describe, parseRule, PRESETS, rangeText, ruleLine, withStop } from './ui/rules';
 
 interface CsvPreview {
@@ -219,6 +220,7 @@ export class App {
   private currentRef = 'A1';
   private currentRange: Range = { r0: 0, c0: 0, r1: 0, c1: 0 };
   private readonly menu = new Menu();
+  private whatIf!: WhatIf;
   private viewTimers = new Map<number, number>();
   private importNotes: string[] = [];
 
@@ -244,8 +246,12 @@ export class App {
       onHistory: (undo, redo) => {
         this.button('edit.undo').disabled = !undo;
         this.button('edit.redo').disabled = !redo;
+        void this.whatIf?.sync();
       },
-      onChanged: (changes) => this.queueSave(changes),
+      onChanged: (changes) => {
+        this.queueSave(changes);
+        this.whatIf?.changed();
+      },
       onSheet: (sheet) => {
         this.markTab(sheet);
         queueMicrotask(() => this.zoomLabel());
@@ -277,6 +283,13 @@ export class App {
         p.nameBox.focus();
         p.nameBox.select();
       },
+    });
+    this.whatIf = new WhatIf({
+      grid: this.grid,
+      book: () => this.open?.book ?? -1,
+      sheetNames: () => this.open?.sheets ?? [],
+      makeSheet: (base) => this.makeSheet(base),
+      persist: (lines) => this.sendWhatif(lines),
     });
     const suggestions = (): Suggestion[] => [...FUNCTIONS, ...(this.open?.names ?? []).map(([name, refers]): Suggestion => ({ name, kind: 'name', summary: refers }))];
     new Autocomplete(p.formulaBar, suggestions);
@@ -379,6 +392,16 @@ export class App {
     cmd('data.sort', 'Custom sort', 'Sort by several columns, each A to Z or Z to A, with or without a header row.', true, () => this.sortBox());
     cmd('data.filter', 'Filter', 'Add filter buttons to the header row of the data around the active cell, or take them off.', true, () => this.toggleFilter(), 'Mod+Shift+L');
     cmd('table.create', 'Table', 'Turn the data around the active cell into a table with a header row, banded rows and filter buttons, or change the table the active cell is in.', true, () => (g.activeTable() ? this.designBox() : this.tableBox()), 'Mod+T');
+    cmd('data.whatif', 'What-If Analysis and data analysis', 'Open the menu of Goal Seek, Data Table, Scenario Manager, Solver, Forecast Sheet, Descriptive Statistics, Regression and Analyze Data.', false, () => this.whatIfMenu());
+    cmd('data.goal-seek', 'Goal Seek', 'Find the input value that makes a formula give the result you want, and apply it as one undo step.', true, () => this.whatIf.goalSeek());
+    cmd('data.data-table', 'Data Table', 'Fill a grid of results by putting a list of values into one or two input cells and recalculating a formula for each.', true, () => this.whatIf.dataTable());
+    cmd('data.scenarios', 'Scenario Manager', 'Save named sets of values for changing cells, show one on the sheet, or write a summary of them to a new sheet.', true, () => this.whatIf.scenarios());
+    cmd('data.solver', 'Solver', 'Find the maximum, minimum or a set value of an objective cell by changing variable cells within constraints.', true, () => this.whatIf.solver());
+    cmd('data.forecast-sheet', 'Forecast Sheet', 'Write a table of historical and forecast values, with confidence bounds, to a new sheet using FORECAST.ETS.', true, () => this.whatIf.forecast());
+    cmd('data.describe', 'Descriptive Statistics', 'Write the mean, median, spread and other statistics of the selected numbers to a new sheet.', true, () => this.whatIf.describe());
+    cmd('data.regression', 'Regression', 'Fit a least-squares line to selected Y and X columns and write the statistics and coefficients to a new sheet.', true, () => this.whatIf.regression());
+    cmd('data.analyze', 'Analyze Data', 'Open a panel of simple insights about the selected data: totals, top values, trends and unusual numbers.', false, () => this.whatIf.analyze());
+    cmd('data.datatable-refresh', 'Recalculate data tables', 'Recalculate every data table now.', true, () => this.whatIf.refresh());
     cmd('data.validation', 'Data validation', 'Limit what can be typed in the selected cells, offer a dropdown list, show a message when a cell is selected and an alert when a value is not allowed.', true, () => this.validBox());
     cmd('data.filter-clear', 'Clear filter', 'Show every row again and keep the filter buttons.', true, () => this.filterWith(null));
     cmd('data.filter-reapply', 'Reapply filter', 'Run the filter again over the current values, taking in rows added below it.', true, () => g.reapplyFilter());
@@ -1277,7 +1300,7 @@ export class App {
   private async openWorkbook(id: string, setHash = true): Promise<void> {
     this.flush();
     await this.saving;
-    let doc: WorkbookMeta & { cells: [number, number, string][][]; formats?: [number, number, string][][]; styles?: [number, number, string][][]; merges?: Area[][]; rules?: string[][]; filters?: string[]; validations?: string[][]; tables?: string[]; links?: [number, number, string][][]; theme?: string; cellStyles?: string[]; views?: SheetView[]; names?: Name[] };
+    let doc: WorkbookMeta & { cells: [number, number, string][][]; formats?: [number, number, string][][]; styles?: [number, number, string][][]; merges?: Area[][]; rules?: string[][]; filters?: string[]; validations?: string[][]; tables?: string[]; whatif?: string[]; links?: [number, number, string][][]; theme?: string; cellStyles?: string[]; views?: SheetView[]; names?: Name[] };
     try {
       doc = await api('GET', `/api/workbooks/${id}`);
     } catch {
@@ -1302,6 +1325,8 @@ export class App {
     }
     for (const [n, f] of doc.names ?? []) await e.defineName(book, n, f).catch(() => []);
     await e.loadTables(book, doc.tables ?? []);
+    await e.loadWhatif(book, doc.whatif ?? []);
+    this.whatIf.load(doc.whatif ?? []);
     const names = doc.names?.length ? await e.names(book) : [];
     this.open = { id, book, title: doc.title, sheets: doc.sheets, views: doc.sheets.map((_, i) => doc.views?.[i] ?? {}), names, macros: !!doc.macros };
     const p = this.p;
@@ -2288,6 +2313,52 @@ export class App {
     o.views.push({});
     this.renderTabs();
     this.showSheet(i);
+  }
+
+  private async makeSheet(base: string): Promise<number> {
+    const o = this.open;
+    if (!o) throw new Error('No workbook is open.');
+    let name = base;
+    for (let n = 2; o.sheets.includes(name); n++) name = `${base} ${n}`;
+    await api('POST', `/api/workbooks/${o.id}/sheets`, { name });
+    const i = await engine().addSheet(o.book, name);
+    o.sheets.push(name);
+    o.views.push({});
+    this.renderTabs();
+    return i;
+  }
+
+  private whatIfMenu(): void {
+    const b = this.button('data.whatif').getBoundingClientRect();
+    const run = (id: string) => () => void runCommand(id);
+    this.menu.show(b.left, b.bottom + 4, [
+      { label: 'Goal Seek', run: run('data.goal-seek') },
+      { label: 'Data Table', run: run('data.data-table') },
+      { label: 'Scenario Manager', run: run('data.scenarios') },
+      { label: 'Solver', run: run('data.solver') },
+      { sep: true },
+      { label: 'Forecast Sheet', run: run('data.forecast-sheet') },
+      { label: 'Descriptive Statistics', run: run('data.describe') },
+      { label: 'Regression', run: run('data.regression') },
+      { label: 'Analyze Data', run: run('data.analyze') },
+      { sep: true },
+      { label: 'Recalculate data tables', run: run('data.datatable-refresh') },
+    ], () => this.grid.focus());
+  }
+
+  private sendWhatif(lines: string[]): void {
+    const o = this.open;
+    if (!o) return;
+    this.status('Saving');
+    this.saving = this.saving.then(async () => {
+      try {
+        await api('PUT', `/api/workbooks/${o.id}/whatif`, { lines });
+        if (!this.pending.size) this.status('Saved');
+      } catch (err) {
+        this.status('Not saved', true);
+        this.p.save.title = err instanceof Error ? err.message : '';
+      }
+    });
   }
 
   private status(text: string, error = false): void {
