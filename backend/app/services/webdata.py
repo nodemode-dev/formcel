@@ -9,6 +9,8 @@ from html.parser import HTMLParser
 from urllib.parse import urljoin
 from xml.etree import ElementTree
 
+from . import xpath as xp
+
 MAX_BYTES = 10 * 1024 * 1024
 TIMEOUT = 15
 TTL = 300
@@ -174,95 +176,136 @@ def lists_of(root: Node) -> list[list[list[str]]]:
     out = []
     for t in root.walk():
         if t.tag in ("ul", "ol"):
-            items = [[clean(li.text())] for li in t.kids if li.tag == "li"]
+            items = [[clean(own_text(li))] for li in t.kids if li.tag == "li"]
             if items:
                 out.append(items)
     return out
 
 
-STEP = re.compile(r"(//|/)?([A-Za-z_*][\w:.-]*|@[\w:.-]+|text\(\)|\.\.?)((?:\[[^\]]*\])*)")
+def own_text(n: Node) -> str:
+    parts: list[str] = []
+    order = sorted([(i, 0, t) for i, t in n.chunks] + [(i, 1, k) for i, k in enumerate(n.kids)], key=lambda x: (x[0], x[1]))
+    for _, kind, v in order:
+        if kind == 0:
+            parts.append(v)
+        elif v.tag not in ("ul", "ol"):
+            parts.append(v.text())
+    return "".join(parts)
 
 
-def _preds(node: Node, sibs: list[Node], preds: str, pos: int) -> bool:
-    for p in re.findall(r"\[([^\]]*)\]", preds):
-        p = p.strip()
-        if p.isdigit():
-            if int(p) != pos:
-                return False
-        elif m := re.fullmatch(r"@([\w:.-]+)\s*=\s*(['\"])(.*?)\2", p):
-            if node.attrs.get(m.group(1)) != m.group(3):
-                return False
-        elif m := re.fullmatch(r"@([\w:.-]+)", p):
-            if m.group(1) not in node.attrs:
-                return False
-        elif m := re.fullmatch(r"contains\(\s*@([\w:.-]+)\s*,\s*(['\"])(.*?)\2\s*\)", p):
-            if m.group(3) not in node.attrs.get(m.group(1), ""):
-                return False
-        elif m := re.fullmatch(r"contains\(\s*(?:text\(\)|\.)\s*,\s*(['\"])(.*?)\1\s*\)", p):
-            if m.group(2) not in node.text():
-                return False
-        elif m := re.fullmatch(r"([\w:.-]+)\s*=\s*(['\"])(.*?)\2", p):
-            if not any(k.tag == m.group(1) and clean(k.text()) == m.group(3) for k in node.kids):
-                return False
-        elif p == "last()":
-            if node is not sibs[-1]:
-                return False
-        else:
-            raise FetchError(f"unsupported XPath predicate [{p}]")
-    return True
+FEED_KEYS = ("title", "author", "url", "created", "summary")
+
+
+def _local(tag: str) -> str:
+    return tag.split("}")[-1]
+
+
+def _kid(e, *names: str):
+    for c in e:
+        if _local(c.tag) in names:
+            return c
+    return None
+
+
+def _kid_text(e, *names: str) -> str:
+    c = _kid(e, *names)
+    return clean("".join(c.itertext())) if c is not None else ""
+
+
+def parse_feed(text: str) -> tuple[dict, list[dict]]:
+    try:
+        root = ElementTree.fromstring(text.strip())
+    except ElementTree.ParseError as e:
+        raise FetchError(f"not a valid feed: {e}")
+    kind = _local(root.tag)
+    if kind == "rss" or kind == "RDF":
+        chan = _kid(root, "channel") if kind == "rss" else root
+        if chan is None:
+            raise FetchError("the feed has no channel")
+        head = {"title": _kid_text(chan, "title"), "author": _kid_text(chan, "managingEditor", "creator", "author"), "description": _kid_text(chan, "description"), "url": _kid_text(chan, "link")}
+        rows = [e for e in (chan if kind == "rss" else root) if _local(e.tag) == "item"]
+        items = [
+            {
+                "title": _kid_text(e, "title"),
+                "author": _kid_text(e, "author", "creator"),
+                "url": _kid_text(e, "link"),
+                "created": _kid_text(e, "pubDate", "date"),
+                "summary": _kid_text(e, "description", "encoded"),
+            }
+            for e in rows
+        ]
+        return head, items
+    if kind == "feed":
+        def link(e) -> str:
+            best = ""
+            for c in e:
+                if _local(c.tag) == "link":
+                    if c.get("rel", "alternate") == "alternate":
+                        return c.get("href", "")
+                    best = best or c.get("href", "")
+            return best
+
+        head = {"title": _kid_text(root, "title"), "author": _kid_text(_kid(root, "author"), "name") if _kid(root, "author") is not None else "", "description": _kid_text(root, "subtitle"), "url": link(root)}
+        items = []
+        for e in root:
+            if _local(e.tag) != "entry":
+                continue
+            who = _kid(e, "author")
+            items.append(
+                {
+                    "title": _kid_text(e, "title"),
+                    "author": _kid_text(who, "name") if who is not None else "",
+                    "url": link(e),
+                    "created": _kid_text(e, "published", "updated"),
+                    "summary": _kid_text(e, "summary", "content"),
+                }
+            )
+        return head, items
+    raise FetchError("the address is not an RSS or Atom feed")
+
+
+def import_feed(url: str, query: str, headers: bool, count: int | None, fresh: bool = False) -> list[list[str]]:
+    body, ctype = fetch(url, fresh)
+    head, items = parse_feed(decode(body, ctype))
+    words = (query or "items").lower().split()
+    scope = words[0]
+    field = words[1] if len(words) > 1 else None
+    if scope == "feed":
+        if field is None:
+            cols = ["title", "author", "description", "url"]
+            return ([[c for c in cols]] if headers else []) + [[head[c] for c in cols]]
+        if field not in head:
+            raise FetchError("the feed query is feed, feed title, feed author, feed description or feed url")
+        return ([[field]] if headers else []) + [[head[field]]]
+    if scope != "items":
+        raise FetchError("the query is feed or items, with an optional field")
+    if count is not None:
+        items = items[:count]
+    if field is not None and field not in FEED_KEYS:
+        raise FetchError("the item field is title, author, url, created or summary")
+    cols = [field] if field else list(FEED_KEYS)
+    return ([cols] if headers else []) + [[it[c] for c in cols] for it in items]
 
 
 def xpath(root: Node, query: str) -> list[str]:
     q = query.strip()
-    if not q.startswith("/"):
+    if not q:
+        raise FetchError("the XPath query is empty")
+    call = re.match(r"([A-Za-z_][\w.\-]*)\s*\(", q)
+    if not q.startswith(("/", "(", ".")) and not (call and call.group(1) not in ("text", "node")) and not re.match(r"[a-z\-]+::", q):
         q = "//" + q
-    nodes = [root]
-    out: list[str] | None = None
-    pos = 0
-    while pos < len(q):
-        m = STEP.match(q, pos)
-        if not m or m.end() == pos:
-            raise FetchError(f"unsupported XPath near '{q[pos:pos + 12]}'")
-        axis, name, preds = m.group(1) or "/", m.group(2), m.group(3)
-        pos = m.end()
-        if name.startswith("@"):
-            vals = []
-            pool = [n for b in nodes for n in ([b] + list(b.walk()) if axis == "//" else [b])]
-            for n in pool:
-                if name[1:] in n.attrs:
-                    vals.append(n.attrs[name[1:]])
-            out = vals
-            nodes = []
-            continue
-        if name == "text()":
-            pool = [n for b in nodes for n in ([b] + list(b.walk()) if axis == "//" else [b])]
-            out = [clean("".join(t for _, t in n.chunks)) for n in pool if any(t.strip() for _, t in n.chunks)]
-            nodes = []
-            continue
-        if name == "." or name == "..":
-            nodes = [n if name == "." else n.parent for n in nodes if n is not None]
-            continue
-        nxt: list[Node] = []
-        for b in nodes:
-            cand = list(b.walk()) if axis == "//" else b.kids
-            cand = [c for c in cand if name == "*" or c.tag == name.lower() or c.tag == name]
-            by_parent: dict[int, list[Node]] = {}
-            for c in cand:
-                by_parent.setdefault(id(c.parent), []).append(c)
-            for grp in by_parent.values():
-                k = 0
-                for c in grp:
-                    k += 1
-                    if _preds(c, grp, preds, k):
-                        nxt.append(c)
-        seen, nodes = set(), []
-        for n in nxt:
-            if id(n) not in seen:
-                seen.add(id(n))
-                nodes.append(n)
-    if out is not None:
+    try:
+        found = xp.evaluate(root, q)
+    except xp.XPathError as e:
+        raise FetchError(str(e))
+    if isinstance(found, list):
+        out = []
+        for n in found:
+            s = clean(xp.string_of(n))
+            if s != "" or not isinstance(n, xp.Text):
+                out.append(s)
         return out
-    return [clean(n.text()) for n in nodes]
+    return [xp.string(found)]
 
 
 def import_xml(url: str, query: str, fresh: bool = False) -> list[list[str]]:
