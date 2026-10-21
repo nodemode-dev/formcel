@@ -19,6 +19,7 @@ from .styles import apply_out
 from .tables import ref_of, tables_out
 from .theme import theme_out
 from .validation import validations_out
+from .whatif import whatif_out
 
 COL_PX = 100
 ROW_PX = 24
@@ -33,7 +34,7 @@ def _number(text: str) -> int | float:
     return int(n) if n.is_integer() and abs(n) < 2**53 else n
 
 
-def write(eng, views: list[dict], vba: dict[str, bytes] | None = None, objects: list[list[dict]] | None = None, notes: dict | None = None) -> bytes:
+def write(eng, views: list[dict], vba: dict[str, bytes] | None = None, objects: list[list[dict]] | None = None, notes: dict | None = None, whatif: list[str] | None = None) -> bytes:
     wb = Workbook()
     xml, body, heading = theme_out(eng.theme())
     wb.loaded_theme = xml
@@ -142,6 +143,7 @@ def write(eng, views: list[dict], vba: dict[str, bytes] | None = None, objects: 
                 ws.auto_filter.ref = None
                 ws.auto_filter.filterColumn = []
     shows = pivots_out(wb, eng)
+    whatif_out(wb, whatif or [])
     for i, items in enumerate(objects or []):
         if items and i < len(wb.worksheets):
             objects_out(wb, wb.worksheets[i], items, views[i] if i < len(views) else {})

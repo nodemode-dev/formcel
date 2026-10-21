@@ -372,6 +372,7 @@ class Store:
         stamp = now()
         b = Book(uuid.uuid4().hex[:12], (title or "Imported workbook")[:120], stamp, stamp, eng, None, [s["view"] for s in book["sheets"]])
         b.objects = [list(s.get("objects") or []) for s in book["sheets"]]
+        b.whatif = list(book.get("whatif") or [])
         b.vba = book.get("vba")
         for i, s in enumerate(book["sheets"]):
             for r, c, text, author in s.get("notes", []):
@@ -444,7 +445,7 @@ class Store:
             b.fit_views()
             if macros and not b.vba:
                 raise LookupError(wid)
-            return b.title, xlsx.write(b.engine, b.views, b.vba if macros else None, b.fit_objects(), b.collab["notes"])
+            return b.title, xlsx.write(b.engine, b.views, b.vba if macros else None, b.fit_objects(), b.collab["notes"], b.whatif)
 
     def get(self, wid: str) -> dict:
         b = self._load(wid)

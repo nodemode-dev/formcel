@@ -16,6 +16,7 @@ from .formulas import from_file
 from .protect import book_in, flags_in, notes_in, sheet_in
 from .styles import tokens_in
 from .pivots import pivots_in
+from .whatif import whatif_in
 from .tables import tables_in
 from .theme import theme_in
 from .validation import validations_in
@@ -38,7 +39,6 @@ def _value(cell, epoch, notes: Counter) -> str | None:
             notes["array formulas brought in as single formulas that spill"] += 1
         return from_file(v.text or "")
     if isinstance(v, DataTableFormula):
-        notes["what-if data tables left out"] += 1
         return None
     if cell.data_type == "f" or (isinstance(v, str) and v.startswith("=") and cell.data_type != "s"):
         return from_file(str(v))
@@ -189,8 +189,9 @@ def read(data: bytes) -> dict:
                 if t.autoFilter is not None and t.autoFilter.filterColumn:
                     autofilter = filter_in(ws, wb, view, notes, af=t.autoFilter)
                     break
-        if ws.defined_names:
-            notes["names scoped to one sheet left out"] += len(ws.defined_names)
+        scoped = [k for k in ws.defined_names if not k.startswith("solver_")]
+        if scoped:
+            notes["names scoped to one sheet left out"] += len(scoped)
         sheets.append({"name": ws.title[:31], "cells": cells, "formats": formats, "styles": styles, "merges": merges, "links": links, "rules": rules, "filter": autofilter, "validations": valid, "view": view, "objects": objects, "notes": notes_in(ws), "protection": sheet_in(ws, flagged)})
     for cs in wb.chartsheets:
         notes["chart sheets left out"] += 1
@@ -203,4 +204,8 @@ def read(data: bytes) -> dict:
         names.append((name, "=" + from_file(text.lstrip("="))))
     tables = tables_in(wb, {ws.title: i for i, ws in enumerate(wb.worksheets)}, notes)
     pivots = pivots_in(wb, data, {ws.title: i for i, ws in enumerate(wb.worksheets)}, notes)
-    return {"sheets": sheets, "names": names, "tables": tables, "pivots": pivots, "theme": theme_in(wb.loaded_theme), "cellStyles": custom, "vba": vba, "protection": book_in(wb), "notes": [f"{n} {what}" for what, n in sorted(notes.items())]}
+    what, filled = whatif_in(wb, data, {ws.title: i for i, ws in enumerate(wb.worksheets)}, notes)
+    for i, r, c, v in filled:
+        if i < len(sheets):
+            sheets[i]["cells"].append((r, c, v))
+    return {"sheets": sheets, "names": names, "tables": tables, "pivots": pivots, "whatif": what, "theme": theme_in(wb.loaded_theme), "cellStyles": custom, "vba": vba, "protection": book_in(wb), "notes": [f"{n} {what}" for what, n in sorted(notes.items())]}
