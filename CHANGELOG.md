@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.32.0 · 2026-10-21
+
+- Data validation: the Data validation button opens a dialog with Settings, Input message and Error alert. Allow whole numbers, decimals, a list, dates, times, a text length or a custom formula, between or beyond limits that can be values or formulas such as `=TODAY()+3`.
+- Lists: items typed with commas or taken from a range. A cell with a list shows an arrow when selected; the arrow or Alt+Down opens the items.
+- An input message shows beside the selected cell. Typing a value that is not allowed brings up the alert: Stop (Retry or Cancel), Warning (Continue? Yes, No or Cancel) or Information (OK or Cancel).
+- Rules are saved in .xlsx files and read from them. Clearing cells and pasting are not checked yet, and rules in .ods files are left out with a note.
+- New functions: FIND (matching case) and SEARCH (ignoring case, with `?` and `*`). 111 functions.
+
 ## 0.31.0 · 2026-10-21
 
 - Filters: Filter on the toolbar, or Ctrl+Shift+L, puts a button on each header of the data around the active cell. A button, or Alt+Down on a header, opens the filter panel: sort by that column, filter by values (with search, Select all and Blanks), by one or two conditions joined by And or Or (equals, begins with, contains, greater than and the rest, with `?` and `*` wildcards), top or bottom N items or percent, above or below average, or by fill or text colour.
