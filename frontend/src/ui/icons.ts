@@ -47,6 +47,9 @@ export const icons = {
   numFormat: svg('<path d="M10 4l-2 16M16 4l-2 16M4.5 9h15M4 15h15"/>'),
   decMore: svg('<circle cx="4.5" cy="18" r="1" fill="currentColor" stroke="none"/><rect x="8" y="11" width="4.5" height="8" rx="2.25"/><rect x="15" y="11" width="4.5" height="8" rx="2.25"/><path d="M12 5.5H4M6.5 3L4 5.5 6.5 8"/>'),
   decLess: svg('<circle cx="4.5" cy="18" r="1" fill="currentColor" stroke="none"/><rect x="8" y="11" width="4.5" height="8" rx="2.25"/><path d="M12 5.5h8M17.5 3L20 5.5 17.5 8"/>'),
+  sortAsc: svg('<path d="M7 4v16M3.5 16.5L7 20l3.5-3.5M13 6h4M13 11h6M13 16h8"/>'),
+  sortDesc: svg('<path d="M7 4v16M3.5 16.5L7 20l3.5-3.5M13 6h8M13 11h6M13 16h4"/>'),
+  sort: svg('<path d="M4 6h10M4 11h7M4 16h4M17 4v16M14 7l3-3 3 3M14 17l3 3 3-3"/>'),
   download: svg('<path d="M12 4v11M7.5 10.5L12 15l4.5-4.5M5 19.5h14"/>'),
   upload: svg('<path d="M12 15V4M7.5 8.5L12 4l4.5 4.5M5 19.5h14"/>'),
 } as const;

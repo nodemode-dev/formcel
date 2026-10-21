@@ -28,6 +28,9 @@ interface Exports {
   fc_load_styles(book: number, sheet: number, lines: number, len: number): number;
   fc_merge(book: number, sheet: number, r0: number, c0: number, r1: number, c1: number, mode: number): number;
   fc_merges(book: number, sheet: number): number;
+  fc_sort(book: number, sheet: number, r0: number, c0: number, r1: number, c1: number, keys: number, len: number, header: number, caseSensitive: number): number;
+  fc_region(book: number, sheet: number, row: number, col: number): number;
+  fc_guess_header(book: number, sheet: number, r0: number, c0: number, r1: number, c1: number): number;
   fc_load_merges(book: number, sheet: number, lines: number, len: number): number;
   fc_put_formats(book: number, sheet: number, lines: number, len: number): number;
   fc_theme(book: number): number;
@@ -228,6 +231,18 @@ function run(x: Exports, req: Request): Value {
     }
     case 'merge.set':
       return effect(out(x, x.fc_merge(req.book, req.sheet, req.r0, req.c0, req.r1, req.c1, MERGE_MODES[req.mode])));
+    case 'sort': {
+      const keys = req.keys.map(([c, d]) => `${c}:${d ? 'd' : 'a'}`).join(',');
+      return withStrings(x, [keys], ([p, l]) => {
+        const n = x.fc_sort(req.book, req.sheet, req.r0, req.c0, req.r1, req.c1, p, l, req.header ? 1 : 0, req.caseSensitive ? 1 : 0);
+        if (n === -3) throw new Error('Unmerge the cells in the range to sort it.');
+        return effect(out(x, n));
+      });
+    }
+    case 'region':
+      return out(x, x.fc_region(req.book, req.sheet, req.row, req.col)).split(',').map(Number) as [number, number, number, number, number];
+    case 'header':
+      return x.fc_guess_header(req.book, req.sheet, req.r0, req.c0, req.r1, req.c1) === 1;
     case 'merge.list':
       return lines(out(x, x.fc_merges(req.book, req.sheet))).map((l) => l.map(Number) as [number, number, number, number]);
     case 'merge.load': {

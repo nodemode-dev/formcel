@@ -18,6 +18,21 @@ interface CsvPreview {
   sample: string[][];
 }
 
+interface SortForm {
+  form: HTMLFormElement;
+  title: HTMLElement;
+  levels: HTMLElement;
+  header: HTMLInputElement;
+  caseSensitive: HTMLInputElement;
+  hint: HTMLElement;
+  range: Range | null;
+  names: [number, string][];
+}
+
+function escapeHtml(s: string): string {
+  return s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
+}
+
 interface PasswordForm {
   form: HTMLFormElement;
   title: HTMLElement;
@@ -301,6 +316,9 @@ export class App {
       const r = this.p.grid.getBoundingClientRect();
       this.pasteMenu(r.left + 80, r.top + 40);
     }, 'Mod+Alt+V');
+    cmd('data.sort-asc', 'Sort A to Z', 'Sort the rows of the selection, or the data around the active cell, by the active column, smallest first.', true, () => this.sorted(g.quickSort(false)));
+    cmd('data.sort-desc', 'Sort Z to A', 'Sort the rows of the selection, or the data around the active cell, by the active column, largest first.', true, () => this.sorted(g.quickSort(true)));
+    cmd('data.sort', 'Custom sort', 'Sort by several columns, each A to Z or Z to A, with or without a header row.', true, () => this.sortBox());
     cmd('format.merge', 'Merge cells', 'Merge the selected cells into one, or split a merged cell.', true, () => this.mergeMenu());
     cmd('format.merge-center', 'Merge and center', 'Merge the selection into one cell and center its text. Only the upper-left value is kept.', true, () => g.merge('center'));
     cmd('format.merge-across', 'Merge across', 'Merge each selected row into one cell.', true, () => g.merge('across'));
@@ -429,6 +447,99 @@ export class App {
     this.flush();
     const meta = await api<WorkbookMeta>('POST', '/api/workbooks', template ? { template } : {});
     location.hash = `w-${meta.id}`;
+  }
+
+  private async sorted(p: Promise<void>): Promise<void> {
+    try {
+      await p;
+    } catch (e) {
+      this.status(e instanceof Error ? e.message : 'Not sorted', true);
+    }
+  }
+
+  private async sortBox(): Promise<void> {
+    const o = this.open;
+    if (!o) return;
+    const { range, header } = await this.grid.sortTarget();
+    const f = this.sortForm ??= this.makeSortForm();
+    f.range = range;
+    f.header.checked = header;
+    f.caseSensitive.checked = false;
+    const heads = await engine().readValues(o.book, this.grid.sheetIndex, range.r0, range.c0, range.r0, range.c1);
+    f.names = [];
+    for (let c = range.c0; c <= range.c1; c++) {
+      const h = heads.find(([, cc]) => cc === c)?.[2].replace(/^'/, '') ?? '';
+      f.names.push([c, h]);
+    }
+    f.levels.replaceChildren();
+    const active = this.grid.activeColumn();
+    this.addSortLevel(f, active >= range.c0 && active <= range.c1 ? active : range.c0, false);
+    f.title.textContent = `Sort ${colName(range.c0)}${range.r0 + 1}:${colName(range.c1)}${range.r1 + 1}`;
+    f.hint.textContent = '';
+    f.form.dataset.state = '';
+    f.form.hidden = false;
+    f.levels.querySelector('select')?.focus();
+  }
+
+  private addSortLevel(f: SortForm, col: number, descending: boolean): void {
+    if (f.levels.children.length >= 64) return;
+    const row = document.createElement('div');
+    row.className = 'fc-sort-level';
+    const label = f.levels.children.length ? 'Then by' : 'Sort by';
+    const opts = f.names.map(([c, h]) => `<option value="${c}">${f.header.checked && h ? escapeHtml(h) : `Column ${colName(c)}`}</option>`).join('');
+    row.innerHTML = `<span class="fc-sort-by">${label}</span><select class="fc-fmt-input fc-sort-col" aria-label="${label}">${opts}</select><select class="fc-fmt-input fc-sort-dir" aria-label="Order"><option value="a">A to Z</option><option value="d">Z to A</option></select><button type="button" class="fc-tool" data-a="drop" title="Remove this level" aria-label="Remove this level">${icon('close')}</button>`;
+    row.querySelector<HTMLSelectElement>('.fc-sort-col')!.value = String(col);
+    row.querySelector<HTMLSelectElement>('.fc-sort-dir')!.value = descending ? 'd' : 'a';
+    f.levels.appendChild(row);
+  }
+
+  private makeSortForm(): SortForm {
+    const form = document.createElement('form');
+    form.className = 'fc-fmt-custom fc-pw fc-sort';
+    form.hidden = true;
+    form.setAttribute('role', 'dialog');
+    form.innerHTML = '<span class="fc-fmt-title"></span><div class="fc-sort-levels"></div><button type="button" class="fc-btn fc-sort-add" data-a="add">Add level</button><label class="fc-sort-check"><input type="checkbox" class="fc-sort-header"> My data has headers</label><label class="fc-sort-check"><input type="checkbox" class="fc-sort-case"> Case sensitive</label><span class="fc-fmt-hint" aria-live="polite"></span><div class="fc-csv-actions"><button type="button" class="fc-btn" data-a="cancel">Cancel</button><button type="submit" class="fc-btn fc-btn-primary">Sort</button></div>';
+    document.getElementById('overlay-root')!.appendChild(form);
+    const f: SortForm = {
+      form,
+      title: form.querySelector<HTMLElement>('.fc-fmt-title')!,
+      levels: form.querySelector<HTMLElement>('.fc-sort-levels')!,
+      header: form.querySelector<HTMLInputElement>('.fc-sort-header')!,
+      caseSensitive: form.querySelector<HTMLInputElement>('.fc-sort-case')!,
+      hint: form.querySelector<HTMLElement>('.fc-fmt-hint')!,
+      range: null,
+      names: [],
+    };
+    const close = () => { form.hidden = true; this.grid.focus(); };
+    form.addEventListener('click', (e) => {
+      const a = (e.target as HTMLElement).closest<HTMLElement>('[data-a]')?.dataset.a;
+      if (a === 'cancel') close();
+      if (a === 'add') this.addSortLevel(f, f.names[Math.min(f.levels.children.length, f.names.length - 1)]?.[0] ?? 0, false);
+      if (a === 'drop' && f.levels.children.length > 1) {
+        (e.target as HTMLElement).closest('.fc-sort-level')?.remove();
+        const first = f.levels.querySelector('.fc-sort-by');
+        if (first) first.textContent = 'Sort by';
+      }
+    });
+    f.header.addEventListener('change', () => {
+      for (const sel of f.levels.querySelectorAll<HTMLSelectElement>('.fc-sort-col')) {
+        for (const opt of sel.options) {
+          const h = f.names.find(([c]) => String(c) === opt.value)?.[1] ?? '';
+          opt.textContent = f.header.checked && h ? h : `Column ${colName(Number(opt.value))}`;
+        }
+      }
+    });
+    form.addEventListener('keydown', (e) => { if (e.key === 'Escape') close(); });
+    form.addEventListener('submit', (e) => {
+      e.preventDefault();
+      if (!f.range) return;
+      const keys = [...f.levels.querySelectorAll('.fc-sort-level')].map((row) => [Number(row.querySelector<HTMLSelectElement>('.fc-sort-col')!.value), row.querySelector<HTMLSelectElement>('.fc-sort-dir')!.value === 'd'] as [number, boolean]);
+      void this.grid.sortRange(f.range, keys, f.header.checked, f.caseSensitive.checked).then(close, (err: unknown) => {
+        form.dataset.state = 'error';
+        f.hint.textContent = err instanceof Error ? err.message : 'Not sorted';
+      });
+    });
+    return f;
   }
 
   private downloadMenu(): void {
@@ -912,6 +1023,7 @@ export class App {
   private linkForm: { form: HTMLFormElement; text: HTMLInputElement; url: HTMLInputElement; hint: HTMLElement } | null = null;
   private csvForm: CsvForm | null = null;
   private pwForm: PasswordForm | null = null;
+  private sortForm: SortForm | null = null;
 
   private linkBox(): void {
     const g = this.grid;

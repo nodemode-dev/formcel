@@ -821,6 +821,30 @@ export class Grid {
     this.paint();
   }
 
+  async sortTarget(): Promise<{ range: Range; header: boolean }> {
+    const s = this.sel();
+    if (s.r0 === s.r1 && s.c0 === s.c1) {
+      const { area, header } = await this.engine.region(this.book, this.sheet, s.r0, s.c0);
+      return { range: { r0: area[0], c0: area[1], r1: area[2], c1: area[3] }, header };
+    }
+    return { range: s, header: await this.engine.guessHeader(this.book, this.sheet, s.r0, s.c0, s.r1, s.c1) };
+  }
+
+  async sortRange(range: Range, keys: [number, boolean][], header: boolean, caseSensitive = false): Promise<void> {
+    await this.applyEffect(await this.engine.sort(this.book, this.sheet, range.r0, range.c0, range.r1, range.c1, keys, header, caseSensitive));
+    this.select(range.r0, range.c0, range.r1, range.c1, false);
+  }
+
+  async quickSort(descending: boolean): Promise<void> {
+    const col = this.ac;
+    const { range, header } = await this.sortTarget();
+    await this.sortRange(range, [[col, descending]], header);
+  }
+
+  activeColumn(): number {
+    return this.ac;
+  }
+
   async merge(mode: MergeMode): Promise<void> {
     const s = this.sel();
     await this.applyEffect(await this.engine.merge(this.book, this.sheet, s.r0, s.c0, s.r1, s.c1, mode));

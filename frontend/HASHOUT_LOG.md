@@ -406,3 +406,10 @@ v0.27.0: the menu adds .ods, and .xlsm when the workbook was opened from a file 
 - logged: v0.28.0 · 2026-10-21
 
 One password dialog, built once in the overlay root, serves both ways: opening a protected file (one field; a wrong password keeps the dialog open with the message) and Download with a password (two fields that must match). The password is sent once and the fields are cleared when the dialog closes. A locked download is fetched with POST, so the password is not in an address, and saved through an object URL. The Download menu adds This sheet as PDF and Every sheet as one PDF.
+
+### Sort buttons and the Sort dialog
+- refers-to: src/grid/grid.ts :: sortTarget, sortRange, quickSort, activeColumn; src/app.ts :: sortBox, addSortLevel, makeSortForm, sorted; src/engine :: sort, region, guessHeader
+- kind: explainer
+- logged: v0.30.0 · 2026-10-21
+
+Three toolbar buttons: Sort A to Z and Sort Z to A by the active column, and Sort, which opens the dialog. With one cell selected the sort takes the data region around it and guesses the header row; with a range selected it sorts that range. The dialog lists levels (Sort by, then Then by), each a column (named from the header row when My data has headers is ticked) and A to Z or Z to A, with Add level, remove, My data has headers and Case sensitive. Ticking or clearing the header box renames the column choices in place. The dialog is built once; opening it replaces only its list of levels before it is shown. After a sort the sorted range is selected.

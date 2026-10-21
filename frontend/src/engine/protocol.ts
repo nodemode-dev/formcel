@@ -19,6 +19,9 @@ export type Request =
   | { id: number; op: 'style.at'; book: number; sheet: number; row: number; col: number }
   | { id: number; op: 'style.load'; book: number; sheet: number; cells: Edit[] }
   | { id: number; op: 'merge.set'; book: number; sheet: number; r0: number; c0: number; r1: number; c1: number; mode: MergeMode }
+  | { id: number; op: 'sort'; book: number; sheet: number; r0: number; c0: number; r1: number; c1: number; keys: [number, boolean][]; header: boolean; caseSensitive: boolean }
+  | { id: number; op: 'region'; book: number; sheet: number; row: number; col: number }
+  | { id: number; op: 'header'; book: number; sheet: number; r0: number; c0: number; r1: number; c1: number }
   | { id: number; op: 'merge.list'; book: number; sheet: number }
   | { id: number; op: 'merge.load'; book: number; sheet: number; areas: Area[] }
   | { id: number; op: 'format.put'; book: number; sheet: number; items: FormatItem[] }
@@ -78,7 +81,7 @@ export interface Effect {
 export type CfCell = [row: number, col: number, style: string, bar: string, icon: string];
 export type StyleChange = [sheet: number, row: number, col: number, raw: string, shown: string];
 export type Name = [name: string, refers: string];
-export type Value = string | number | string[] | Cell[] | Changed[] | Name[] | Edit[] | Area[] | CfCell[] | LinkChange[] | [number, number] | Shift | Effect | null;
+export type Value = string | number | boolean | number[] | string[] | Cell[] | Changed[] | Name[] | Edit[] | Area[] | CfCell[] | LinkChange[] | [number, number] | Shift | Effect | null;
 
 export type Response =
   | { id: number; ok: true; value: Value }

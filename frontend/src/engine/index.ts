@@ -116,6 +116,19 @@ export class EngineClient {
     return (await this.call({ op: 'merge.set', book, sheet, r0, c0, r1, c1, mode })) as Effect;
   }
 
+  async sort(book: number, sheet: number, r0: number, c0: number, r1: number, c1: number, keys: [number, boolean][], header: boolean, caseSensitive = false): Promise<Effect> {
+    return (await this.call({ op: 'sort', book, sheet, r0, c0, r1, c1, keys, header, caseSensitive })) as Effect;
+  }
+
+  async region(book: number, sheet: number, row: number, col: number): Promise<{ area: Area; header: boolean }> {
+    const [r0, c0, r1, c1, h] = (await this.call({ op: 'region', book, sheet, row, col })) as number[];
+    return { area: [r0, c0, r1, c1], header: h === 1 };
+  }
+
+  async guessHeader(book: number, sheet: number, r0: number, c0: number, r1: number, c1: number): Promise<boolean> {
+    return (await this.call({ op: 'header', book, sheet, r0, c0, r1, c1 })) as boolean;
+  }
+
   async merges(book: number, sheet: number): Promise<Area[]> {
     return (await this.call({ op: 'merge.list', book, sheet })) as Area[];
   }
