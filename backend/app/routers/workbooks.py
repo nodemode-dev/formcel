@@ -1,4 +1,7 @@
-from fastapi import APIRouter, HTTPException
+import zipfile
+from urllib.parse import quote
+
+from fastapi import APIRouter, HTTPException, Request, Response
 from pydantic import BaseModel, Field
 
 from ..services import templates
@@ -64,6 +67,34 @@ def create_workbook(body: CreateIn) -> dict:
         return store().create(body.title, body.template)
     except KeyError:
         raise HTTPException(404, f"No template {body.template}.")
+
+
+MAX_IMPORT = 100 * 1024 * 1024
+
+
+@router.post("/import", status_code=201)
+async def import_file(request: Request, name: str = "Imported workbook.xlsx") -> dict:
+    data = await request.body()
+    if len(data) > MAX_IMPORT:
+        raise HTTPException(413, "That file is over 100 MB.")
+    stem, _, ext = name.rpartition(".")
+    if ext.lower() not in ("xlsx", "xlsm"):
+        raise HTTPException(415, "FormCel opens .xlsx and .xlsm files so far.")
+    try:
+        return store().import_xlsx(data, stem or name)
+    except (KeyError, ValueError, OSError, zipfile.BadZipFile) as e:
+        raise HTTPException(422, f"FormCel could not read {name}: {e}")
+
+
+@router.get("/workbooks/{wid}/export.xlsx")
+def export_xlsx(wid: str) -> Response:
+    try:
+        title, data = store().export_xlsx(wid)
+    except (KeyError, FileNotFoundError):
+        raise missing(wid)
+    fname = "".join(ch for ch in title if ch not in '\\/:*?"<>|').strip() or "Workbook"
+    return Response(data, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    headers={"Content-Disposition": f"attachment; filename*=UTF-8''{quote(fname)}.xlsx"})
 
 
 @router.get("/workbooks/{wid}")

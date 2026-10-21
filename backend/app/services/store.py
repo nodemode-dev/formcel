@@ -160,6 +160,49 @@ class Store:
         self._write(b)
         return b.meta()
 
+    def import_xlsx(self, data: bytes, title: str) -> dict:
+        from . import xlsx
+
+        book = xlsx.read(data)
+        notes = list(book["notes"])
+        eng = formcel_engine.Workbook()
+        if book["theme"] and not eng.load_theme(book["theme"]):
+            notes.append("1 theme left out")
+        if book["cellStyles"]:
+            eng.load_cell_styles(eng.cell_styles() + book["cellStyles"])
+        for i, s in enumerate(book["sheets"] or [{"name": "Sheet1", "cells": [], "formats": [], "styles": [], "merges": [], "links": [], "view": {}}]):
+            if i:
+                eng.add_sheet(s["name"])
+            else:
+                eng.rename_sheet(0, s["name"])
+            eng.load_formats(s["formats"], i)
+            eng.load_styles(s["styles"], i)
+            eng.load(s["cells"], i)
+            eng.load_merges(s["merges"], i)
+            eng.load_links(s["links"], i)
+        dropped = 0
+        for name, refers in book["names"]:
+            try:
+                eng.define_name(name, refers)
+            except ValueError:
+                dropped += 1
+        if dropped:
+            notes.append(f"{dropped} names FormCel could not read left out")
+        stamp = now()
+        b = Book(uuid.uuid4().hex[:12], (title or "Imported workbook")[:120], stamp, stamp, eng, None, [s["view"] for s in book["sheets"]])
+        with self.guard:
+            self.open[b.id] = b
+        self._write(b)
+        return {**b.meta(), "notes": notes}
+
+    def export_xlsx(self, wid: str) -> tuple[str, bytes]:
+        from . import xlsx
+
+        b = self._load(wid)
+        with b.lock:
+            b.fit_views()
+            return b.title, xlsx.write(b.engine, b.views)
+
     def get(self, wid: str) -> dict:
         b = self._load(wid)
         with b.lock:

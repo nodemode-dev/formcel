@@ -24,3 +24,5 @@ FormCel ports code from two sibling repositories by the same owner, both Apache-
 | Uvicorn | BSD-3-Clause | engine process |
 | PyO3 | MIT or Apache-2.0 | Python build of the engine |
 | maturin | MIT or Apache-2.0 | builds the Python module |
+| openpyxl 3.1.5 | MIT | engine process: reading and writing .xlsx (`backend/app/services/xlsx`) |
+| et_xmlfile 2.0.0 | MIT | engine process: XML writing for openpyxl |
