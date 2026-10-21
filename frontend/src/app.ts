@@ -462,10 +462,10 @@ export class App {
   }
 
   private queueSave(changes: Changed[]): void {
-    for (const [s, r, c, t] of changes) {
+    for (const [s, r, c, t, f] of changes) {
       let m = this.pending.get(s);
       if (!m) this.pending.set(s, (m = new Map()));
-      m.set(`${r}:${c}`, [r, c, t]);
+      m.set(`${r}:${c}`, [r, c, f ?? t]);
     }
     this.status('Saving');
     window.clearTimeout(this.timer);

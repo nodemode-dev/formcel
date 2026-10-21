@@ -24,6 +24,7 @@ const HEAD_H = 24;
 const HEAD_W = 60;
 const KEY = (r: number, c: number) => r * MAX_COLS + c;
 const NUMERIC = /^-?(\d+\.?\d*|\.\d+)(e[+-]?\d+)?$/i;
+const ERRORS = new Set(['#DIV/0!', '#VALUE!', '#REF!', '#NAME?', '#N/A', '#NUM!', '#NULL!', '#ERROR!']);
 const OUTLINE_PAD = 3;
 const OUTLINE_STEP = 16;
 
@@ -62,6 +63,7 @@ export class Grid {
   private gh = 0;
   private readonly editor: HTMLTextAreaElement;
   private readonly cache = new Map<number, string>();
+  private readonly fx = new Map<number, string>();
   private wins: (Range | null)[] = [null, null, null, null];
   private pendingWins: (Range | null)[] = [null, null, null, null];
   private sh = 0;
@@ -239,6 +241,7 @@ export class Grid {
 
   private dropWindows(): void {
     this.cache.clear();
+    this.fx.clear();
     this.wins = [null, null, null, null];
     this.pendingWins = [null, null, null, null];
   }
@@ -268,15 +271,24 @@ export class Grid {
         for (const k of [...this.cache.keys()]) {
           const r = Math.floor(k / MAX_COLS);
           const c = k % MAX_COLS;
-          if (r >= old.r0 && r <= old.r1 && c >= old.c0 && c <= old.c1 && !keep(r, c)) this.cache.delete(k);
+          if (r >= old.r0 && r <= old.r1 && c >= old.c0 && c <= old.c1 && !keep(r, c)) {
+            this.cache.delete(k);
+            this.fx.delete(k);
+          }
         }
       }
       for (const k of [...this.cache.keys()]) {
         const r = Math.floor(k / MAX_COLS);
         const c = k % MAX_COLS;
-        if (r >= want.r0 && r <= want.r1 && c >= want.c0 && c <= want.c1) this.cache.delete(k);
+        if (r >= want.r0 && r <= want.r1 && c >= want.c0 && c <= want.c1) {
+          this.cache.delete(k);
+          this.fx.delete(k);
+        }
       }
-      for (const [r, c, t] of cells) this.cache.set(KEY(r, c), t);
+      for (const [r, c, t, f] of cells) {
+        this.cache.set(KEY(r, c), t);
+        if (f !== undefined) this.fx.set(KEY(r, c), f);
+      }
       if (!this.editing && this.ar >= want.r0 && this.ar <= want.r1 && this.ac >= want.c0 && this.ac <= want.c1) this.announce();
       this.paint();
     });
@@ -538,7 +550,7 @@ export class Grid {
         if (NUMERIC.test(text)) {
           ctx.textAlign = 'right';
           ctx.fillText(text, xx + cw - 5, yy + rh / 2);
-        } else if (text === 'TRUE' || text === 'FALSE') {
+        } else if (text === 'TRUE' || text === 'FALSE' || ERRORS.has(text)) {
           ctx.textAlign = 'center';
           ctx.fillText(text, xx + cw / 2, yy + rh / 2);
         } else {
@@ -747,7 +759,8 @@ export class Grid {
   }
 
   private announce(): void {
-    this.events.onActive(this.cache.get(KEY(this.ar, this.ac)) ?? '', rangeText(this.sel()), this.sel());
+    const k = KEY(this.ar, this.ac);
+    this.events.onActive(this.fx.get(k) ?? this.cache.get(k) ?? '', rangeText(this.sel()), this.sel());
   }
 
   goTo(ref: string): boolean {
@@ -845,10 +858,12 @@ export class Grid {
     if (changed.length && changed.every(([s]) => s !== this.sheet)) {
       this.show(this.book, changed[0][0], this.events.onSheet(changed[0][0]));
     }
-    for (const [s, r, c, t] of changed) {
+    for (const [s, r, c, t, f] of changed) {
       if (s !== this.sheet) continue;
-      if (t) this.cache.set(KEY(r, c), t);
+      if (t || f !== undefined) this.cache.set(KEY(r, c), t);
       else this.cache.delete(KEY(r, c));
+      if (f !== undefined) this.fx.set(KEY(r, c), f);
+      else this.fx.delete(KEY(r, c));
     }
     if (changed.length) this.events.onChanged(changed);
     const hst = await this.engine.history(this.book);
@@ -1019,27 +1034,45 @@ export class Grid {
     const right = target.c0 > s.c1;
     const vertical = down || up;
     const src = await this.engine.read(this.book, s.r0, s.c0, s.r1, s.c1, this.sheet);
-    const map = new Map(src.map(([r, c, t]) => [KEY(r, c), t]));
+    const map = new Map(src.map(([r, c, t, f]) => [KEY(r, c), f ?? t]));
     const edits: [number, number, string][] = [];
+    const moves: [string, number, number][] = [];
+    const moved: number[] = [];
+    const lane = (cells: [number, number][], targets: [number, number][]) => {
+      const seq = cells.map(([r, c]) => map.get(KEY(r, c)) ?? '');
+      if (!seq.some((v) => v.startsWith('='))) {
+        fillSeries(seq, targets.length).forEach((v, i) => edits.push([targets[i][0], targets[i][1], v]));
+        return;
+      }
+      targets.forEach(([tr, tc], i) => {
+        const k = i % seq.length;
+        const [sr, sc] = cells[k];
+        if (seq[k].startsWith('=')) {
+          moved.push(edits.length);
+          moves.push([seq[k], tr - sr, tc - sc]);
+        }
+        edits.push([tr, tc, seq[k]]);
+      });
+    };
     if (vertical) {
       const n = target.r1 - target.r0 + 1;
       for (let c = s.c0; c <= s.c1; c++) {
-        let seq: string[] = [];
-        for (let r = s.r0; r <= s.r1; r++) seq.push(map.get(KEY(r, c)) ?? '');
-        if (up) seq = seq.reverse();
-        const out = fillSeries(seq, n);
-        out.forEach((v, i) => edits.push([down ? target.r0 + i : target.r1 - i, c, v]));
+        let cells: [number, number][] = [];
+        for (let r = s.r0; r <= s.r1; r++) cells.push([r, c]);
+        if (up) cells = cells.reverse();
+        lane(cells, Array.from({ length: n }, (_, i) => [down ? target.r0 + i : target.r1 - i, c] as [number, number]));
       }
     } else {
       const n = target.c1 - target.c0 + 1;
       for (let r = s.r0; r <= s.r1; r++) {
-        let seq: string[] = [];
-        for (let c = s.c0; c <= s.c1; c++) seq.push(map.get(KEY(r, c)) ?? '');
-        if (!right) seq = seq.reverse();
-        const out = fillSeries(seq, n);
-        out.forEach((v, i) => edits.push([r, right ? target.c0 + i : target.c1 - i, v]));
+        let cells: [number, number][] = [];
+        for (let c = s.c0; c <= s.c1; c++) cells.push([r, c]);
+        if (!right) cells = cells.reverse();
+        lane(cells, Array.from({ length: n }, (_, i) => [r, right ? target.c0 + i : target.c1 - i] as [number, number]));
       }
     }
+    const texts = await this.engine.offset(moves);
+    texts.forEach((t, i) => (edits[moved[i]][2] = t));
     if (edits.length) await this.commitEdits(await this.engine.apply(this.book, edits, this.sheet));
     this.select(Math.min(s.r0, target.r0), Math.min(s.c0, target.c0), Math.max(s.r1, target.r1), Math.max(s.c1, target.c1), false);
     this.ar = s.r0;
@@ -1097,7 +1130,8 @@ export class Grid {
   startEdit(initial?: string): void {
     if (this.editing) return;
     this.editing = true;
-    this.editor.value = initial ?? this.cache.get(KEY(this.ar, this.ac)) ?? '';
+    const k = KEY(this.ar, this.ac);
+    this.editor.value = initial ?? this.fx.get(k) ?? this.cache.get(k) ?? '';
     this.reveal(this.ar, this.ac);
     this.placeEditor();
     this.editor.hidden = false;

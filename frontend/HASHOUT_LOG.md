@@ -160,6 +160,13 @@ Each axis keeps an outline level per row or column (1 to 7, `MAX_LEVEL`) and, pe
 
 The gutters are a second canvas (`.fc-outline`) behind the grid canvas, which is moved right and down by the gutter sizes; all cell and header maths keep their header-relative coordinates. A gutter appears when the first group is made and goes when the last is removed, as Excel's outline symbols do; on open the grid is laid out with its gutters before the first frame (checked at 4x CPU and a slow network: one canvas position seen, layout shift 0). Grouping is a view change, like hiding, and is not on the undo stack yet.
 
+### Formulas in the window
+- refers-to: src/grid/grid.ts :: fx, ensureData, commitEdits, announce, startEdit, fill; src/engine/worker.ts :: cells, changed, offset; src/app.ts :: queueSave
+- kind: explainer
+- logged: v0.7.0 · 2026-10-21
+
+Cells and changes from the engine carry an optional formula text after the value. The grid keeps it in `fx` beside the value cache: the canvas paints values, the formula bar and the cell editor show the formula, and autosave sends the formula. Filling from a formula copies it to each target cell with its relative references moved by the distance from its source cell (the engine's `offset`); a fill lane that mixes formulas and constants repeats the sources in order instead of continuing a series. Error values are centred like TRUE and FALSE. Copy and cut still put values on the clipboard; copying formulas between cells waits for the clipboard work in Phase 3.
+
 ### Split panes
 - refers-to: src/grid/grid.ts :: toggleSplit, y, x, hit, reveal, bands, splitBar
 - kind: explainer

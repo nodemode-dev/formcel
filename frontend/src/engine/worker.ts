@@ -23,6 +23,7 @@ interface Exports {
   fc_read(book: number, sheet: number, r0: number, c0: number, r1: number, c1: number): number;
   fc_extent(book: number, sheet: number): number;
   fc_edge(book: number, sheet: number, row: number, col: number, dir: number): number;
+  fc_offset(src: number, len: number, dr: number, dc: number): number;
 }
 
 const DIRS = { up: 0, down: 1, left: 2, right: 3 } as const;
@@ -40,11 +41,19 @@ function lines(s: string): string[][] {
 }
 
 function cells(s: string): Cell[] {
-  return lines(s).map(([r, c, t]) => [Number(r), Number(c), unescape(t ?? '')]);
+  return lines(s).map(([r, c, t, f]) => {
+    const cell: Cell = [Number(r), Number(c), unescape(t ?? '')];
+    if (f !== undefined) cell.push(unescape(f));
+    return cell;
+  });
 }
 
 function changed(s: string): Changed[] {
-  return lines(s).map(([sh, r, c, t]) => [Number(sh), Number(r), Number(c), unescape(t ?? '')]);
+  return lines(s).map(([sh, r, c, t, f]) => {
+    const ch: Changed = [Number(sh), Number(r), Number(c), unescape(t ?? '')];
+    if (f !== undefined) ch.push(unescape(f));
+    return ch;
+  });
 }
 
 function shiftOf(line: string): Shift {
@@ -146,6 +155,8 @@ function run(x: Exports, req: Request): Value {
       return pair(out(x, x.fc_extent(req.book, req.sheet)));
     case 'edge':
       return pair(out(x, x.fc_edge(req.book, req.sheet, req.row, req.col, DIRS[req.dir])));
+    case 'offset':
+      return req.items.map(([src, dr, dc]) => withStrings(x, [src], ([p, l]) => out(x, x.fc_offset(p, l, dr, dc))));
   }
 }
 

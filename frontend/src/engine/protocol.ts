@@ -14,12 +14,13 @@ export type Request =
   | { id: number; op: 'undo' | 'redo' | 'history'; book: number }
   | { id: number; op: 'read'; book: number; sheet: number; r0: number; c0: number; r1: number; c1: number }
   | { id: number; op: 'extent'; book: number; sheet: number }
-  | { id: number; op: 'edge'; book: number; sheet: number; row: number; col: number; dir: Dir };
+  | { id: number; op: 'edge'; book: number; sheet: number; row: number; col: number; dir: Dir }
+  | { id: number; op: 'offset'; items: [src: string, dr: number, dc: number][] };
 
 export type Dir = 'up' | 'down' | 'left' | 'right';
 export type Edit = [row: number, col: number, raw: string];
-export type Cell = [row: number, col: number, text: string];
-export type Changed = [sheet: number, row: number, col: number, text: string];
+export type Cell = [row: number, col: number, text: string, formula?: string];
+export type Changed = [sheet: number, row: number, col: number, text: string, formula?: string];
 export interface Shift {
   sheet: number;
   rows: boolean;

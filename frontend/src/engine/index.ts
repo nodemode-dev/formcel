@@ -100,6 +100,11 @@ export class EngineClient {
   async edge(book: number, row: number, col: number, dir: Dir, sheet = 0): Promise<[number, number]> {
     return (await this.call({ op: 'edge', book, sheet, row, col, dir })) as [number, number];
   }
+
+  async offset(items: [src: string, dr: number, dc: number][]): Promise<string[]> {
+    if (!items.length) return [];
+    return (await this.call({ op: 'offset', items })) as string[];
+  }
 }
 
 let shared: EngineClient | null = null;
