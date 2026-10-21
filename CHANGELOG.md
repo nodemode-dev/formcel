@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.30.0 · 2026-10-21
+
+- Sorting: Sort A to Z and Sort Z to A by the active column from the toolbar, and a Sort dialog for several levels (Then by), a header row and case-sensitive order. With one cell selected, FormCel sorts the block of data around it and guesses whether its first row is a header.
+- Whole rows move together, with their formatting, links and formulas; blank cells stay at the end. Sorting is one step to undo.
+- Merged cells in the range stop a sort, with a message to unmerge them first.
+
 ## 0.29.0 · 2026-10-21
 
 - Conditional formatting now travels in .ods files both ways, in the form LibreOffice uses. Stop If True and reversed icons are not part of that form and are dropped.
