@@ -15,9 +15,14 @@ from .tables import _unesc, ref_of
 CELL = re.compile(r"\$?([A-Za-z]{1,3})\$?(\d+)")
 MODES = {"max": "1", "min": "2", "value": "3"}
 MODES_IN = {v: k for k, v in MODES.items()}
-RELS = {"<=": "1", "=": "2", ">=": "3", "int": "4", "bin": "5"}
+RELS = {"<=": "1", "=": "2", ">=": "3", "int": "4", "bin": "5", "dif": "6"}
 RELS_IN = {v: k for k, v in RELS.items()}
-CONS = re.compile(r"^(.+?)\s*(<=|>=|=|\s+int|\s+bin)\s*(.*)$", re.IGNORECASE)
+CONS = re.compile(r"^(.+?)\s*(<=|>=|=|\s+int|\s+bin|\s+dif)\s*(.*)$", re.IGNORECASE)
+ENGINES = {"nl": "1", "auto": "2", "evo": "3"}
+ENGINES_IN = {"1": "nl", "2": "auto", "3": "evo"}
+OPT_NAMES = {"pre": "solver_pre", "itr": "solver_itr", "tim": "solver_tim", "cvg": "solver_cvg", "pop": "solver_ssz", "mut": "solver_mrt", "seed": "solver_rsd", "nimp": "solver_mni", "sub": "solver_nod"}
+OPT_FLAGS = {"scl": ("solver_scl", "1", "0"), "rb": ("solver_rbv", "1", "0"), "sho": ("solver_sho", "1", "2"), "ms": ("solver_msl", "1", "2")}
+BIG = "2147483647"
 SOLVER = re.compile(r"^solver_")
 
 
@@ -63,11 +68,24 @@ def _is_ref(text: str) -> bool:
 
 def _model_out(ws, sheet: str, text: str) -> None:
     try:
-        obj, mode, target, cells, cons, nonneg, method = json.loads(text)
+        parts = json.loads(text)
+        obj, mode, target, cells, cons, nonneg, method = parts[:7]
+        opts = parts[7] if len(parts) > 7 and isinstance(parts[7], dict) else {}
     except (ValueError, TypeError):
         return
-    names: dict[str, str] = {"solver_ver": "3", "solver_eng": "1" if method == "nl" else "2", "solver_lin": "0" if method == "nl" else "1",
+    names: dict[str, str] = {"solver_ver": "3", "solver_eng": ENGINES.get(method, "2"), "solver_lin": "2" if method in ("nl", "evo") else "1",
                              "solver_neg": "1" if nonneg else "0", "solver_typ": MODES.get(mode, "1"), "solver_val": str(target or 0)}
+    for key, name in OPT_NAMES.items():
+        if str(opts.get(key, "")).strip():
+            names[name] = str(opts[key]).strip()
+    for key, (name, on, off) in OPT_FLAGS.items():
+        if key in opts:
+            names[name] = on if opts[key] in (True, 1, "1") else off
+    if str(opts.get("tol", "")).strip():
+        try:
+            names["solver_tol"] = repr(float(opts["tol"]) / 100)
+        except ValueError:
+            pass
     if str(obj).strip():
         names["solver_opt"] = _absolute(str(obj), sheet)
     if str(cells).strip():
@@ -86,6 +104,8 @@ def _model_out(ws, sheet: str, text: str) -> None:
             names[f"solver_rhs{n}"] = "integer"
         elif op == "bin":
             names[f"solver_rhs{n}"] = "binary"
+        elif op == "dif":
+            names[f"solver_rhs{n}"] = "alldifferent"
         else:
             names[f"solver_rhs{n}"] = _absolute(rhs, sheet) if _is_ref(rhs) else rhs or "0"
     names["solver_num"] = str(n)
@@ -150,12 +170,28 @@ def _model_in(ws, notes: Counter) -> str | None:
             continue
         rhs = names.get(f"solver_rhs{n}", "")
         left = _relative(lhs, title)
-        if rel in ("int", "bin"):
+        if rel in ("int", "bin", "dif"):
             cons.append(f"{left} {rel}")
         else:
             cons.append(f"{left}{rel}{_relative(rhs, title) if _is_ref(rhs) else rhs.lstrip('=')}")
-    method = "nl" if names.get("solver_eng", "2").strip() in ("1", "3") else "auto"
+    method = ENGINES_IN.get(names.get("solver_eng", "2").strip(), "auto")
+    opts: dict = {}
+    for key, name in OPT_NAMES.items():
+        value = names.get(name, "").strip()
+        if value and value != BIG:
+            opts[key] = value
+    for key, (name, on, _off) in OPT_FLAGS.items():
+        value = names.get(name, "").strip()
+        if value:
+            opts[key] = value == on
+    if names.get("solver_tol", "").strip():
+        try:
+            opts["tol"] = str(round(float(names["solver_tol"]) * 100, 6)).rstrip("0").rstrip(".")
+        except ValueError:
+            pass
     model = [_relative(names.get("solver_opt", ""), title), mode, names.get("solver_val", "0"), _relative(names.get("solver_adj", ""), title), "\n".join(cons), names.get("solver_neg", "1").strip() != "0", method]
+    if opts:
+        model.append(opts)
     return json.dumps(model)
 
 

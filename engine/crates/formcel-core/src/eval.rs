@@ -16,7 +16,7 @@ mod fx_stat;
 #[path = "fx_date.rs"]
 mod fx_date;
 #[path = "fx_eng.rs"]
-mod fx_eng;
+pub(crate) mod fx_eng;
 #[path = "fx_hub.rs"]
 mod fx_hub;
 #[path = "fx_info.rs"]

@@ -412,6 +412,12 @@ export class App {
       makeSheet: (base) => this.makeSheet(base),
       persist: (lines) => this.sendWhatif(lines),
       pivotsChanged: () => this.pivotSync(),
+      showSheet: (i) => this.showSheet(i),
+      newBook: async (title, cells) => {
+        const meta = await api<WorkbookMeta>('POST', '/api/workbooks', { title });
+        await api('POST', `/api/workbooks/${meta.id}/cells`, { sheet: 0, cells });
+        window.open(`${location.pathname}#w-${meta.id}`, '_blank');
+      },
     });
     this.tools = new DataTools({
       grid: this.grid,

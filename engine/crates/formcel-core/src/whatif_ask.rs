@@ -145,7 +145,7 @@ fn apply(a: Agg, v: &[f64]) -> Option<f64> {
 }
 
 impl Workbook {
-    fn ask_table(&self, sheet: usize, text: &str) -> Result<Tab, String> {
+    fn ask_table(&self, sheet: usize, text: &str, fields: &str) -> Result<Tab, String> {
         let (sh, mut ar) = self.resolve(text, sheet)?;
         if ar.r0 == ar.r1 && ar.c0 == ar.c1 {
             let filled = |wb: &Workbook, r0: u32, c0: u32, r1: u32, c1: u32| (r0..=r1).any(|r| (c0..=c1).any(|c| !matches!(wb.val((sh, Addr { row: r, col: c })), Value::Empty)));
@@ -191,12 +191,36 @@ impl Workbook {
             let date = body.iter().enumerate().any(|(i, r)| matches!(r[c], Value::Number(_)) && self.fmt(sh, Addr { row: ar.r0 + (i + skip) as u32, col: ar.c0 + c as u32 }).is_some_and(|f| f.is_date()));
             kinds.push(if vals.is_empty() { Kind::Empty } else if date && nums * 10 >= vals.len() * 8 { Kind::Date } else if nums * 10 >= vals.len() * 8 { Kind::Num } else { Kind::Text });
         }
+        if !fields.trim().is_empty() {
+            let keep: Vec<&str> = fields.split('\u{1f}').collect();
+            for c in 0..kinds.len() {
+                if !keep.contains(&names[c].as_str()) {
+                    kinds[c] = Kind::Empty;
+                }
+            }
+        }
         Ok(Tab { ar, header, names, body, kinds })
+    }
+
+    pub(super) fn ask_fields(&self, a: &[String]) -> Reply {
+        let sheet = self.sheet_of(&a[0])?;
+        let t = self.ask_table(sheet, &a[1], "")?;
+        let word = |k: Kind| match k {
+            Kind::Num => "number",
+            Kind::Text => "text",
+            Kind::Date => "date",
+            Kind::Empty => "empty",
+        };
+        Ok(t.names.iter().zip(&t.kinds).filter(|(n, k)| !n.is_empty() && **k != Kind::Empty).map(|(n, k)| {
+            let mut s = String::new();
+            escape(n, &mut s);
+            format!("{s}\t{}", word(*k))
+        }).collect::<Vec<_>>().join("\n"))
     }
 
     pub(super) fn ask(&mut self, a: &[String], _fx: &mut Effect) -> Reply {
         let sheet = self.sheet_of(&a[0])?;
-        let t = self.ask_table(sheet, &a[1])?;
+        let t = self.ask_table(sheet, &a[1], a.get(3).map_or("", String::as_str))?;
         let q = norm(&a[2]);
         if q.trim().is_empty() {
             return Err("Type a question about the data, such as total sales by region.".to_string());
@@ -208,7 +232,17 @@ impl Workbook {
             format!("{cl}{}:{cl}{}", t.ar.r0 as usize + r0 + skip + 1, t.ar.r0 as usize + r1 + skip + 1)
         };
         let mut rows: Vec<[String; 4]> = Vec::new();
-        let mut add = |kind: &str, title: String, detail: String, range: String| rows.push([kind.to_string(), title, detail, range]);
+        let count = std::cell::Cell::new(0usize);
+        let marks: std::cell::RefCell<Vec<(usize, String)>> = std::cell::RefCell::new(Vec::new());
+        let mut add = |kind: &str, title: String, detail: String, range: String| {
+            rows.push([kind.to_string(), title, detail, range]);
+            count.set(count.get() + 1);
+        };
+        let mark = |v: String| marks.borrow_mut().push((count.get().saturating_sub(1), v));
+        let top = t.ar.r0 as usize + 1;
+        let last = t.ar.r0 as usize + skip + n;
+        let span = |c0: usize, c1: usize, from: usize| format!("{}{}:{}{}", col_label_of(t.ar.c0 + c0 as u32), from, col_label_of(t.ar.c0 + c1 as u32), last);
+        let clean = |s: &str| s.replace('|', " ");
 
         let mut mentioned: Vec<(usize, usize)> = Vec::new();
         for (c, name) in t.names.iter().enumerate() {
@@ -346,6 +380,9 @@ impl Workbook {
                 Some(r) => {
                     let strength = if r.abs() >= 0.8 { "strong" } else if r.abs() >= 0.5 { "moderate" } else if r.abs() >= 0.3 { "weak" } else { "very little" };
                     add("answer", format!("{} and {}: correlation {:.2}", t.names[c1], t.names[c2], r), format!("That is {} {} relationship across {} rows.", strength, if r >= 0.0 { "positive" } else { "negative" }, x.len()), rng(c1, 0, n - 1));
+                    if c1.abs_diff(c2) == 1 {
+                        mark(format!("chart|scatter|{}|{} against {}", span(c1.min(c2), c1.max(c2), top), clean(&t.names[c2.max(c1)]), clean(&t.names[c1.min(c2)])));
+                    }
                 }
                 None => add("answer", "No correlation could be worked out".to_string(), "One of the columns has no variation or too few numbers.".to_string(), rng(c1, 0, n - 1)),
             }
@@ -367,6 +404,7 @@ impl Workbook {
                     let dir = if f.coef[0] > 0.0 { "up" } else if f.coef[0] < 0.0 { "down" } else { "flat" };
                     let change = if first != 0.0 { format!(" From {} to {} ({:+.1}%).", fmt_n(first), fmt_n(last), (last - first) / first.abs() * 100.0) } else { String::new() };
                     add("answer", format!("{} trends {}", t.names[mc], dir), format!("A straight line explains {:.0}% of the movement, about {} per {}.{}", f.r2 * 100.0, fmt_n(f.coef[0]), if date_col.is_some() { "day" } else { "row" }, change), rng(mc, 0, n - 1));
+                    mark(format!("chart|line|{}|{}", span(mc, mc, top), clean(&t.names[mc])));
                 }
                 None => return Err("FormCel could not fit a trend to those numbers.".to_string()),
             }
@@ -382,6 +420,7 @@ impl Workbook {
             } else {
                 for p in out.iter().take(5) {
                     add("answer", format!("{} in {} is unusual", fmt_n(p.1), t.names[mc]), format!("Row {} is {:.1} standard deviations from the average of {}.", t.ar.r0 as usize + p.0 + skip + 1, (p.1 - m) / sd, fmt_n(m)), rng(mc, p.0, p.0));
+                    mark(format!("chart|column|{}|{}", span(mc, mc, top), clean(&t.names[mc])));
                 }
             }
         } else if let Some(gc) = group_by.filter(|_| has(&q, &["top", "bottom", "best", "worst", "highest", "lowest", "largest", "smallest", "most", "least", "which", "rank", "ranking", "biggest"]) || true) {
@@ -427,13 +466,31 @@ impl Workbook {
             let word = if agg == Agg::Share { format!("Share of {}", mc.map_or("rows".to_string(), |c| t.names[c].clone())) } else if mc.is_none() { "Count of rows".to_string() } else { format!("{} {}", agg_word(agg), t.names[mc.unwrap_or(0)]) };
             let unit = |v: f64| if agg == Agg::Share { format!("{v:.1}%") } else { fmt_n(v) };
             let range_g = rng(gc, 0, n - 1);
+            let pivot_spec = if t.header && conds.is_empty() {
+                let func = match agg {
+                    Agg::Avg => "average",
+                    Agg::Max => "max",
+                    Agg::Min => "min",
+                    Agg::Count => "count",
+                    _ => "sum",
+                };
+                Some(format!("pivot|{}|{}|{}|{}", span(0, t.names.len() - 1, top), clean(&t.names[gc]), mc.map_or(String::new(), |c| clean(&t.names[c])), func))
+            } else {
+                None
+            };
             if single || limit == Some(1) {
                 let w = &scored[0];
                 add("answer", format!("{} has the {} {}: {}", w.0, if low { "lowest" } else { "highest" }, mc.map_or("count".to_string(), |c| t.names[c].to_lowercase()), unit(w.1)), format!("Out of {} {}; next is {}. Based on {}.", scored.len(), plural(&t.names[gc]), scored.get(1).map_or("none".to_string(), |s| format!("{} at {}", s.0, unit(s.1))), scope), range_g.clone());
+                if let Some(v) = &pivot_spec {
+                    mark(v.clone());
+                }
             } else {
                 let show = limit.unwrap_or(scored.len()).min(scored.len()).min(12);
                 let list: Vec<String> = scored.iter().take(show).map(|s| format!("{}: {}", s.0, unit(s.1))).collect();
                 add("answer", format!("{} by {}", word, t.names[gc]), format!("{}. Based on {}.", list.join("; "), scope), range_g.clone());
+                if let Some(v) = &pivot_spec {
+                    mark(v.clone());
+                }
                 if scored.len() > 1 {
                     let top = &scored[0];
                     add("group", format!("{} is {} {}", top.0, if low { "lowest" } else { "highest" }, unit(top.1)), format!("{} is {}.", scored[scored.len() - 1].0, unit(scored[scored.len() - 1].1)), range_g);
@@ -495,7 +552,67 @@ impl Workbook {
         if rows.is_empty() {
             return Err("FormCel could not tell what to work out. Try total sales by region, average price, top 3 products by revenue or correlation between price and quantity.".to_string());
         }
-        Ok(rows.iter().map(|l| l.iter().map(|f| { let mut s = String::new(); escape(f, &mut s); s }).collect::<Vec<_>>().join("\t")).collect::<Vec<_>>().join("\n"))
+        let marks = marks.into_inner();
+        Ok(rows.iter().enumerate().map(|(i, l)| {
+            let visual = marks.iter().find(|m| m.0 == i).map(|m| m.1.clone()).unwrap_or_default();
+            l.iter().map(String::as_str).chain(std::iter::once(visual.as_str())).map(|f| { let mut s = String::new(); escape(f, &mut s); s }).collect::<Vec<_>>().join("\t")
+        }).collect::<Vec<_>>().join("\n"))
+    }
+
+    pub(super) fn ask_pivot(&mut self, a: &[String], fx: &mut Effect) -> Reply {
+        use crate::pivot::{Func, Pivot, Show, ValueField};
+        let dst = self.dst_of(&a[0])?;
+        let src = self.sheet_of(&a[1])?;
+        let (sh, ar) = self.resolve(&a[2], src)?;
+        let group = a[3].clone();
+        let measure = a[4].clone();
+        let func = match a[5].as_str() {
+            "average" => Func::Average,
+            "max" => Func::Max,
+            "min" => Func::Min,
+            "count" => Func::Count,
+            _ => Func::Sum,
+        };
+        let head = self.block(sh, Area { r0: ar.r0, c0: ar.c0, r1: ar.r0, c1: ar.c1 });
+        let names: Vec<String> = head[0].iter().map(|v| v.to_string()).collect();
+        if !names.contains(&group) || (!measure.is_empty() && !names.contains(&measure)) {
+            return Err("The table no longer has those columns. Ask the question again.".to_string());
+        }
+        if dst == usize::MAX {
+            return Ok("ok\t".to_string());
+        }
+        let field = if measure.is_empty() { group.clone() } else { measure.clone() };
+        let label = format!("{} of {}", match func {
+            Func::Average => "Average",
+            Func::Max => "Max",
+            Func::Min => "Min",
+            Func::Count => "Count",
+            _ => "Sum",
+        }, field);
+        let p = Pivot {
+            name: String::new(),
+            sheet: dst,
+            row: 0,
+            col: 0,
+            src_sheet: sh,
+            src: ar,
+            table: String::new(),
+            grand_rows: true,
+            grand_cols: true,
+            subtotals: false,
+            auto: true,
+            out: None,
+            rows: vec![group],
+            cols: Vec::new(),
+            values: vec![ValueField { field, func, show: Show::Normal, name: label, base_field: String::new(), base_item: String::new() }],
+            filters: Vec::new(),
+            calc: Vec::new(),
+            groups: Vec::new(),
+        };
+        let e = self.create_pivot(&p.line()).map_err(|e| e.to_string())?;
+        *fx = std::mem::take(fx).join(e);
+        let name = self.pivots.last().map(|p| p.name.clone()).unwrap_or_default();
+        Ok(format!("ok\t{name}"))
     }
 }
 

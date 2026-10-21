@@ -1,5 +1,10 @@
 .fc-wi { width: 380px; }
 .fc-wi .fc-fmt-hint { min-height: calc(var(--text-xs) * 7); }
+.fc-wi-wide { width: 560px; }
+.fc-wi .fc-csv-actions { flex-wrap: wrap; justify-content: flex-end; }
+.fc-pw.fc-wi { top: 4vh; max-height: 92vh; overflow: auto; }
+.fc-wi-sec { font-size: var(--text-xs); color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.04em; }
+.fc-wi-row3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-2); }
 .fc-wi-text { height: auto; min-height: 84px; padding: var(--space-2); resize: vertical; line-height: 1.4; }
 .fc-wi-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--space-2); }
 .fc-wi select.fc-fmt-input { font-family: inherit; }
@@ -11,7 +16,7 @@
   right: var(--space-3);
   bottom: 56px;
   display: grid;
-  grid-template-rows: auto auto minmax(0, 1fr);
+  grid-template-rows: auto auto auto auto minmax(0, 1fr);
   gap: var(--space-2);
   width: 320px;
   padding: var(--space-3);
@@ -44,3 +49,11 @@
 .fc-explore-card:hover, .fc-explore-card:focus-visible { border-color: var(--accent-color); outline: none; }
 .fc-explore-title { font-size: var(--text-sm); }
 .fc-explore-detail { font-size: var(--text-xs); color: var(--text-secondary); }
+.fc-explore-item { display: grid; gap: var(--space-1); }
+.fc-explore-do { display: flex; gap: var(--space-2); }
+.fc-explore-do[hidden] { display: none; }
+.fc-explore-do .fc-btn { height: 24px; padding: 0 var(--space-2); font-size: var(--text-xs); }
+.fc-explore-do .fc-btn[hidden] { display: none; }
+.fc-explore-fields { font-size: var(--text-xs); color: var(--text-secondary); }
+.fc-explore-fields summary { cursor: pointer; }
+.fc-explore-fieldlist { display: grid; gap: var(--space-1); max-height: 132px; margin-top: var(--space-1); overflow: auto; }

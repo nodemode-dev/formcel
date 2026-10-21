@@ -159,14 +159,14 @@ impl Workbook {
         if want_stats {
             put(&mut out, 0, 6, "Statistic");
             put(&mut out, 0, 7, "Value");
-            for (i, nm) in ["Alpha", "Beta", "Gamma", "MASE", "SMAPE", "MAE", "RMSE"].iter().enumerate() {
+            for (i, nm) in ["Alpha", "Beta", "Gamma", "MASE", "SMAPE", "MAE", "RMSE", "Step size"].iter().enumerate() {
                 put(&mut out, i as u32 + 1, 6, *nm);
                 put(&mut out, i as u32 + 1, 7, format!("=FORECAST.ETS.STAT({},{},{},{})", rng("B"), rng("A"), i + 1, opts));
             }
-            put(&mut out, 9, 6, "Seasonality detected");
-            put(&mut out, 9, 7, if model.m > 1 { num_raw(model.m as f64) } else { "0".to_string() });
-            put(&mut out, 10, 6, "Confidence interval");
-            put(&mut out, 10, 7, if conf > 0.0 { num_raw(conf) } else { "off".to_string() });
+            put(&mut out, 10, 6, "Seasonality detected");
+            put(&mut out, 10, 7, if model.m > 1 { num_raw(model.m as f64) } else { "0".to_string() });
+            put(&mut out, 11, 6, "Confidence interval");
+            put(&mut out, 11, 7,if conf > 0.0 { num_raw(conf) } else { "off".to_string() });
         }
         self.put_all(dst, &out, fx)?;
         if dst != usize::MAX {
@@ -175,13 +175,20 @@ impl Workbook {
                 fx.formats.extend(e.formats);
             }
         }
-        Ok(format!("ok\t{}\t{}\t{}", if model.m > 1 { model.m } else { 0 }, n_hist, future))
+        let mut reply = format!("ok\t{}\t{}\t{}", if model.m > 1 { model.m } else { 0 }, n_hist, future);
+        let kind = a.get(11).map(|s| s.trim().to_string()).unwrap_or_default();
+        if kind == "line" || kind == "column" {
+            let last_col = if conf > 0.0 { "E" } else { "C" };
+            let anchor = if want_stats { "J2" } else { "G2" };
+            reply.push_str(&format!("\t{kind}|A1:{last_col}{}|Forecast of {label}|Timeline|{label}||{anchor}", row.max(n_hist as u32 + 1)));
+        }
+        Ok(reply)
     }
 
     pub(super) fn describe(&mut self, a: &[String], fx: &mut Effect) -> Reply {
         let src = self.sheet_of(&a[0])?;
         let (sh, ar) = self.resolve(&a[1], src)?;
-        let dst = self.dst_of(&a[2])?;
+        let dst = if a[2].trim() == "=" { usize::MAX } else { self.dst_of(&a[2])? };
         let origin = parse_a1(&a[3]).map_err(|_| "Choose a cell for the output.".to_string())?;
         let by_row = a[4] == "r";
         let labels = a[5] == "1";
@@ -253,6 +260,9 @@ impl Workbook {
             }
             c += 3;
         }
+        if a[2].trim() == "=" {
+            return Ok(super::toolpak::dump_reply(&out, origin));
+        }
         self.put_all(dst, &out, fx)?;
         Ok(format!("ok\t{}", groups.len()))
     }
@@ -261,12 +271,18 @@ impl Workbook {
         let src = self.sheet_of(&a[0])?;
         let (ysh, yar) = self.resolve(&a[1], src)?;
         let (xsh, xar) = self.resolve(&a[2], src)?;
-        let dst = self.dst_of(&a[3])?;
+        let dump = a[3].trim() == "=";
+        let dst = if dump { usize::MAX } else { self.dst_of(&a[3])? };
         let origin = parse_a1(&a[4]).map_err(|_| "Choose a cell for the output.".to_string())?;
         let labels = a[5] == "1";
         let konst = a[6] != "0";
         let conf = pnum(&a[7])?;
-        let resid = a[8] == "1";
+        let flag = |i: usize| a.get(i).is_some_and(|s| s.trim() == "1");
+        let (std_res, res_plot, fit_plot, prob_plot) = (flag(9), flag(10), flag(11), flag(12));
+        let resid = a[8] == "1" || std_res || res_plot || fit_plot;
+        if !(conf > 0.0 && conf < 100.0) {
+            return Err("The confidence level must be above 0 and below 100.".to_string());
+        }
         let yb = self.block(ysh, yar);
         let xb = self.block(xsh, xar);
         if yar.c1 != yar.c0 {
@@ -355,25 +371,87 @@ impl Workbook {
             put(&mut out, r, c0 + 6, fnum(cf + tcrit * se));
             r += 1;
         }
+        let mut charts: Vec<String> = Vec::new();
+        let mut plot_end = c0 + 8;
         if resid {
             r += 1;
             put(&mut out, r, c0, "RESIDUAL OUTPUT");
             r += 2;
+            let head = r;
             put(&mut out, r, c0, "Observation");
             put(&mut out, r, c0 + 1, format!("Predicted {yname}"));
             put(&mut out, r, c0 + 2, "Residuals");
+            if std_res {
+                put(&mut out, r, c0 + 3, "Standard Residuals");
+            }
             r += 1;
+            let preds: Vec<f64> = (0..ys.len()).map(|i| fit.predict(&xs.iter().map(|x| x[i]).collect::<Vec<f64>>())).collect();
+            let res: Vec<f64> = ys.iter().zip(&preds).map(|(y, p)| y - p).collect();
+            let sd = if res.len() > 1 { stats::var_s(&res).sqrt() } else { f64::NAN };
             for i in 0..ys.len() {
-                let row: Vec<f64> = xs.iter().map(|x| x[i]).collect();
-                let p = fit.predict(&row);
                 put(&mut out, r, c0, (i + 1).to_string());
-                put(&mut out, r, c0 + 1, fnum(p));
-                put(&mut out, r, c0 + 2, fnum(ys[i] - p));
+                put(&mut out, r, c0 + 1, fnum(preds[i]));
+                put(&mut out, r, c0 + 2, fnum(res[i]));
+                if std_res {
+                    put(&mut out, r, c0 + 3, fnum(res[i] / sd));
+                }
                 r += 1;
             }
+            let rows = ys.len() as u32;
+            let at = |row: u32, col: u32| format!("{}{}", col_label(col), row + 1);
+            let span = |r0: u32, k0: u32, r1: u32, k1: u32| format!("{}:{}", at(r0, k0), at(r1, k1));
+            if res_plot || fit_plot {
+                for (j, nm) in names.iter().enumerate() {
+                    let base = c0 + 9 + 6 * j as u32;
+                    put(&mut out, head, base, nm.clone());
+                    put(&mut out, head, base + 1, yname.clone());
+                    put(&mut out, head, base + 2, format!("Predicted {yname}"));
+                    put(&mut out, head, base + 3, nm.clone());
+                    put(&mut out, head, base + 4, "Residuals");
+                    for i in 0..ys.len() {
+                        let rr = head + 1 + i as u32;
+                        put(&mut out, rr, base, fnum(xs[j][i]));
+                        put(&mut out, rr, base + 1, fnum(ys[i]));
+                        put(&mut out, rr, base + 2, fnum(preds[i]));
+                        put(&mut out, rr, base + 3, fnum(xs[j][i]));
+                        put(&mut out, rr, base + 4, fnum(res[i]));
+                    }
+                    plot_end = base + 6;
+                    if fit_plot {
+                        charts.push(format!("scatter|{}|{} Line Fit Plot|{}|{}||", span(head, base, head + rows, base + 2), nm, nm, yname));
+                    }
+                    if res_plot {
+                        charts.push(format!("scatter|{}|{} Residual Plot|{}|Residuals||", span(head, base + 3, head + rows, base + 4), nm, nm));
+                    }
+                }
+            }
+        }
+        if prob_plot {
+            r += 1;
+            put(&mut out, r, c0, "PROBABILITY OUTPUT");
+            r += 2;
+            let top = r;
+            put(&mut out, r, c0, "Percentile");
+            put(&mut out, r, c0 + 1, yname.clone());
+            r += 1;
+            let mut sorted = ys.clone();
+            sorted.sort_by(|p, q| p.partial_cmp(q).unwrap_or(std::cmp::Ordering::Equal));
+            for (i, y) in sorted.iter().enumerate() {
+                put(&mut out, r, c0, fnum(100.0 / ys.len() as f64 * (i as f64 + 0.5)));
+                put(&mut out, r, c0 + 1, fnum(*y));
+                r += 1;
+            }
+            charts.push(format!("scatter|{}{}:{}{}|Normal Probability Plot|Sample Percentile|{}||", col_label(c0), top + 1, col_label(c0 + 1), top + 1 + ys.len() as u32, yname));
+        }
+        if dump {
+            return Ok(super::toolpak::dump_reply(&out, origin));
         }
         self.put_all(dst, &out, fx)?;
-        Ok(format!("ok\t{}", fnum(fit.r2)))
+        let mut reply = format!("ok\t{}", fnum(fit.r2));
+        for (i, ch) in charts.iter().enumerate() {
+            reply.push_str(&format!("\t{ch}{}{}", col_label(plot_end + 1 + (i as u32 % 2) * 9), origin.row + 1 + (i as u32 / 2) * 17));
+        }
+        Ok(reply)
     }
 
     pub(super) fn explore(&mut self, a: &[String]) -> Reply {
@@ -433,6 +511,14 @@ impl Workbook {
             let date = body.iter().enumerate().any(|(i, r)| matches!(r[c], Value::Number(_)) && self.fmt(sh, Addr { row: ar.r0 + (i + usize::from(header)) as u32, col: ar.c0 + c as u32 }).is_some_and(|f| f.is_date()));
             kinds.push(if vals.is_empty() { Kind::Empty } else if date && nums * 10 >= vals.len() * 8 { Kind::Date } else if nums * 10 >= vals.len() * 8 { Kind::Num } else { Kind::Text });
         }
+        if let Some(f) = a.get(2).filter(|s| !s.trim().is_empty()) {
+            let keep: Vec<&str> = f.split('\u{1f}').collect();
+            for c in 0..cols {
+                if !keep.contains(&names[c].as_str()) {
+                    kinds[c] = Kind::Empty;
+                }
+            }
+        }
         let label_col = (0..cols).find(|c| kinds[*c] == Kind::Text && {
             let mut d: Vec<String> = body.iter().filter_map(|r| text_of(&r[*c])).collect();
             d.sort();
@@ -441,7 +527,16 @@ impl Workbook {
         });
         let label_of = |i: usize| -> String { label_col.and_then(|c| text_of(&body[i][c])).unwrap_or_else(|| format!("row {}", ar.r0 as usize + i + usize::from(header) + 1)) };
         let mut out: Vec<[String; 4]> = Vec::new();
-        let mut add = |kind: &str, title: String, detail: String, range: String| out.push([kind.to_string(), title, detail, range]);
+        let count = std::cell::Cell::new(0usize);
+        let marks: std::cell::RefCell<Vec<(usize, String)>> = std::cell::RefCell::new(Vec::new());
+        let mut add = |kind: &str, title: String, detail: String, range: String| {
+            out.push([kind.to_string(), title, detail, range]);
+            count.set(count.get() + 1);
+        };
+        let mark = |v: String| marks.borrow_mut().push((count.get().saturating_sub(1), v));
+        let table = format!("{}{}:{}{}", col_label(ar.c0), ar.r0 + 1, col_label(ar.c1), ar.r1 + 1);
+        let colspan = |c: usize, c2: usize| format!("{}{}:{}{}", col_label(ar.c0 + c as u32), ar.r0 + 1, col_label(ar.c0 + c2 as u32), ar.r1 + 1);
+        let clean = |s: &str| s.replace('|', " ");
         let ncount = kinds.iter().filter(|k| **k == Kind::Num).count();
         let tcount = kinds.iter().filter(|k| **k == Kind::Text).count();
         add("overview", format!("{n} rows by {cols} columns"), format!("{ncount} number columns and {tcount} text columns{}.", if header { ", with a header row" } else { "" }), format!("{}:{}", to_a1(Addr { row: ar.r0, col: ar.c0 }), to_a1(Addr { row: ar.r1, col: ar.c1 })));
@@ -461,12 +556,14 @@ impl Workbook {
             let (imax, vmax) = pts.iter().fold((0, f64::MIN), |b, p| if p.1 > b.1 { *p } else { b });
             let (imin, vmin) = pts.iter().fold((0, f64::MAX), |b, p| if p.1 < b.1 { *p } else { b });
             add("total", format!("{}: total {}, average {}", names[c], money(total), money(mean)), format!("Highest is {} at {}; lowest is {} at {}.", money(vmax), label_of(imax), money(vmin), label_of(imin)), at(c, 0, n - 1));
+            mark(format!("chart|column|{}|{}", colspan(c, c), clean(&names[c])));
             if vals.len() >= 5 {
                 let sd = stats::var_s(&vals).sqrt();
                 if sd > 0.0 {
                     let outl: Vec<&(usize, f64)> = pts.iter().filter(|p| ((p.1 - mean) / sd).abs() > 3.0).collect();
                     if !outl.is_empty() {
                         add("outlier", format!("{} has {} unusual value{}", names[c], outl.len(), if outl.len() == 1 { "" } else { "s" }), format!("{} at {} is more than 3 standard deviations from the average.", money(outl[0].1), label_of(outl[0].0)), at(c, outl[0].0, outl[0].0));
+                        mark(format!("chart|column|{}|{}", colspan(c, c), clean(&names[c])));
                     }
                 }
             }
@@ -482,6 +579,7 @@ impl Workbook {
                     } else {
                         add("trend", format!("{} shows no clear trend", names[c]), format!("A straight line explains {:.0}% of the movement.", f.r2 * 100.0), at(c, 0, n - 1));
                     }
+                    mark(format!("chart|line|{}|{}", colspan(c, c), clean(&names[c])));
                 }
             }
             series.push((c, pts));
@@ -506,6 +604,9 @@ impl Workbook {
             counts.sort_by(|x, y| y.1.cmp(&x.1).then(x.0.cmp(&y.0)));
             let top: Vec<String> = counts.iter().take(3).map(|(t, k)| format!("{t} ({k}, {:.0}%)", *k as f64 * 100.0 / filled as f64)).collect();
             add("top", format!("Most common in {}: {}", names[c], counts[0].0), format!("Top values: {}. {} different values.", top.join(", "), counts.len()), at(c, 0, n - 1));
+            if header {
+                mark(format!("pivot|{}|{}||count", table, clean(&names[c])));
+            }
         }
         if let Some(lc) = label_col {
             let mut cats: Vec<String> = body.iter().filter_map(|r| text_of(&r[lc])).collect();
@@ -521,6 +622,9 @@ impl Workbook {
                     sums.sort_by(|x, y| y.1.partial_cmp(&x.1).unwrap_or(std::cmp::Ordering::Equal));
                     let (hi, lo) = (&sums[0], &sums[sums.len() - 1]);
                     add("group", format!("{} has the highest total {}", hi.0, names[*c]), format!("{} is {:.0}% of all; {} is lowest with {}.", money(hi.1), hi.1 * 100.0 / total, lo.0, money(lo.1)), at(*c, 0, n - 1));
+                    if header {
+                        mark(format!("pivot|{}|{}|{}|sum", table, clean(&names[lc]), clean(&names[*c])));
+                    }
                 }
             }
         }
@@ -536,6 +640,9 @@ impl Workbook {
                 if let Some(r) = stats::correl(&x, &y) {
                     if r.abs() >= 0.7 {
                         add("corr", format!("{} and {} {}", names[*ci], names[*cj], if r > 0.0 { "rise together" } else { "move in opposite directions" }), format!("Correlation {r:.2}."), at(*ci, 0, n - 1));
+                        if ci.abs_diff(*cj) == 1 {
+                            mark(format!("chart|scatter|{}|{} against {}", colspan(*ci.min(cj), *ci.max(cj)), clean(&names[*ci.max(cj)]), clean(&names[*ci.min(cj)])));
+                        }
                     }
                 }
             }
@@ -549,6 +656,10 @@ impl Workbook {
                 add("blank", format!("{} has {} blank cell{}", names[c], blanks, if blanks == 1 { "" } else { "s" }), format!("{:.0}% of the column is empty.", blanks as f64 * 100.0 / n as f64), at(c, 0, n - 1));
             }
         }
-        Ok(out.iter().map(|l| l.iter().map(|f| { let mut s = String::new(); escape(f, &mut s); s }).collect::<Vec<_>>().join("\t")).collect::<Vec<_>>().join("\n"))
+        let marks = marks.into_inner();
+        Ok(out.iter().enumerate().map(|(i, l)| {
+            let visual = marks.iter().find(|m| m.0 == i).map(|m| m.1.clone()).unwrap_or_default();
+            l.iter().map(String::as_str).chain(std::iter::once(visual.as_str())).map(|f| { let mut s = String::new(); escape(f, &mut s); s }).collect::<Vec<_>>().join("\t")
+        }).collect::<Vec<_>>().join("\n"))
     }
 }

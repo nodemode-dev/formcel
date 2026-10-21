@@ -41,6 +41,8 @@ pub struct Run {
     problem: Option<Problem>,
     lin: Option<LinModel>,
     x: Vec<f64>,
+    trace: Vec<String>,
+    iterations: usize,
 }
 
 #[derive(Clone, Debug)]
@@ -326,14 +328,14 @@ fn lp_solve(p: &Lp, n: usize) -> LpOut {
     LpOut::Optimal(x, obj)
 }
 
-fn milp(p: &Lp, n: usize, ints: &[usize]) -> LpOut {
+fn milp_with(p: &Lp, n: usize, ints: &[usize], gap: f64, max_nodes: usize) -> LpOut {
     let mut best: Option<(Vec<f64>, f64)> = None;
     let mut nodes = 0;
     let mut unbounded = false;
     let mut stack: Vec<Vec<(Vec<f64>, Rel, f64)>> = vec![Vec::new()];
     while let Some(extra) = stack.pop() {
         nodes += 1;
-        if nodes > 4000 {
+        if nodes > max_nodes {
             break;
         }
         let mut q = Lp { c: p.c.clone(), rows: p.rows.clone() };
@@ -345,7 +347,7 @@ fn milp(p: &Lp, n: usize, ints: &[usize]) -> LpOut {
                 break;
             }
             LpOut::Optimal(x, obj) => {
-                if best.as_ref().is_some_and(|b| obj >= b.1 - 1e-9) {
+                if best.as_ref().is_some_and(|b| obj >= b.1 - 1e-9 - gap * b.1.abs()) {
                     continue;
                 }
                 let frac = ints.iter().filter(|i| (x[**i] - x[**i].round()).abs() > 1e-6).max_by(|a, b| (x[**a] - x[**a].floor()).min(x[**a].ceil() - x[**a]).partial_cmp(&(x[**b] - x[**b].floor()).min(x[**b].ceil() - x[**b])).unwrap_or(std::cmp::Ordering::Equal));
@@ -393,6 +395,8 @@ struct Problem {
     cons: Vec<Con>,
     int: Vec<bool>,
     bin: Vec<bool>,
+    dif: Vec<Vec<usize>>,
+    opts: opts::Opts,
 }
 
 struct Sample {
@@ -627,6 +631,10 @@ impl Workbook {
                 need(7)?;
                 self.solve(a, fx)
             }
+            "solve.scen" => {
+                need(2)?;
+                self.solve_scenario(a)
+            }
             "solve.report" => {
                 need(1)?;
                 self.solve_report(a, fx)
@@ -670,6 +678,14 @@ impl Workbook {
             "ask" => {
                 need(3)?;
                 self.ask(a, fx)
+            }
+            "ask.fields" => {
+                need(2)?;
+                self.ask_fields(a)
+            }
+            "ask.pivot" => {
+                need(6)?;
+                self.ask_pivot(a, fx)
             }
             _ => Err("The engine does not know that request.".to_string()),
         }
@@ -996,3 +1012,5 @@ mod toolpak;
 mod ask;
 #[path = "whatif_report.rs"]
 mod report;
+#[path = "whatif_opts.rs"]
+mod opts;

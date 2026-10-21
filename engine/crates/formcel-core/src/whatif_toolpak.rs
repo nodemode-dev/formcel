@@ -10,9 +10,22 @@ struct W {
     o: Addr,
     cells: Vec<(Addr, String)>,
     fmts: Vec<(Addr, Addr, String)>,
+    charts: Vec<String>,
 }
 
 impl W {
+    fn at(&self, r: u32, c: u32) -> String {
+        format!("{}{}", crate::col_name(self.o.col + c), self.o.row + r + 1)
+    }
+
+    fn span(&self, r0: u32, c0: u32, r1: u32, c1: u32) -> String {
+        format!("{}:{}", self.at(r0, c0), self.at(r1, c1))
+    }
+
+    fn chart(&mut self, kind: &str, range: String, title: &str, xt: &str, yt: &str, secondary: &str) {
+        self.charts.push(format!("{kind}|{range}|{title}|{xt}|{yt}|{secondary}"));
+    }
+
     fn put(&mut self, r: u32, c: u32, s: impl Into<String>) {
         self.cells.push((Addr { row: self.o.row + r, col: self.o.col + c }, s.into()));
     }
@@ -24,6 +37,18 @@ impl W {
     fn fmt(&mut self, r0: u32, c0: u32, r1: u32, c1: u32, code: &str) {
         self.fmts.push((Addr { row: self.o.row + r0, col: self.o.col + c0 }, Addr { row: self.o.row + r1, col: self.o.col + c1 }, code.to_string()));
     }
+}
+
+pub(super) fn dump_reply(cells: &[(Addr, String)], o: Addr) -> String {
+    let top = cells.iter().map(|c| c.0.row).max().unwrap_or(o.row) - o.row + 1;
+    let wide = cells.iter().map(|c| c.0.col).max().unwrap_or(o.col) - o.col + 1;
+    let mut l = format!("dump\t{top}\t{wide}");
+    for (ad, raw) in cells {
+        let mut e = String::new();
+        escape(raw, &mut e);
+        l.push_str(&format!("\t{}\t{}\t{}", ad.row - o.row, ad.col - o.col, e));
+    }
+    l
 }
 
 fn tidy(x: f64) -> f64 {
@@ -199,9 +224,10 @@ impl Workbook {
             return Err("The request was incomplete.".to_string());
         }
         let src = self.sheet_of(&a[0])?;
-        let dst = self.dst_of(&a[2])?;
+        let dump = a[2].trim() == "=";
+        let dst = if dump { usize::MAX } else { self.dst_of(&a[2])? };
         let origin = parse_a1(&a[3]).map_err(|_| "Choose a cell for the output.".to_string())?;
-        let mut w = W { o: origin, cells: Vec::new(), fmts: Vec::new() };
+        let mut w = W { o: origin, cells: Vec::new(), fmts: Vec::new(), charts: Vec::new() };
         let arg = |i: usize| a.get(i).map(|s| s.trim().to_string()).unwrap_or_default();
         let flag = |i: usize| a.get(i).is_some_and(|s| s.trim() == "1");
         let numarg = |i: usize, d: f64| -> Result<f64, String> {
@@ -407,6 +433,10 @@ impl Workbook {
                         }
                     }
                 }
+                if flag(7) {
+                    let range = w.span(0, 0, v.v.len() as u32, 1);
+                    w.chart("line", range, "Exponential Smoothing", "Data point", "Value", "");
+                }
             }
             "movavg" => {
                 let (blk, _, _) = self.tp_range(src, &a[1])?;
@@ -437,6 +467,10 @@ impl Workbook {
                             w.put(1 + t as u32, 2, "#N/A");
                         }
                     }
+                }
+                if flag(7) {
+                    let range = w.span(0, 0, v.v.len() as u32, 1);
+                    w.chart("line", range, "Moving Average", "Data point", "Value", "");
                 }
             }
             "ftest" => {
@@ -566,18 +600,33 @@ impl Workbook {
             }
             "fourier" => {
                 let (blk, _, _) = self.tp_range(src, &a[1])?;
-                let g = groups_of(&blk, false, flag(5));
-                let v = g.first().ok_or("The input range holds no numbers.")?;
-                let n = v.v.len();
+                let mut pts: Vec<(f64, f64)> = Vec::new();
+                for row in blk.iter().skip(usize::from(flag(5))) {
+                    for cell in row {
+                        match cell {
+                            Value::Number(x) => pts.push((*x, 0.0)),
+                            Value::Text(t) => {
+                                if let Some(p) = crate::eval::fx_eng::complex_parts(t) {
+                                    pts.push(p);
+                                }
+                            }
+                            _ => {}
+                        }
+                    }
+                }
+                if pts.is_empty() {
+                    return Err("The input range holds no numbers.".to_string());
+                }
+                let n = pts.len();
                 if !(2..=4096).contains(&n) || !n.is_power_of_two() {
                     return Err("Fourier Analysis needs a number of values that is a power of 2, from 2 to 4096.".to_string());
                 }
-                let (mut re, mut im) = (v.v.clone(), vec![0.0; n]);
+                let (mut re, mut im): (Vec<f64>, Vec<f64>) = pts.into_iter().unzip();
                 fft(&mut re, &mut im, arg(4) == "1");
                 w.put(0, 0, if arg(4) == "1" { "Inverse Fourier" } else { "Fourier" });
                 for k in 0..n {
                     let (x, y) = (tidy(re[k]), tidy(im[k]));
-                    w.put(1 + k as u32, 0, format!("{}{}{}i", fnum(x), if y < 0.0 { "-" } else { "+" }, fnum(y.abs())));
+                    w.put(1 + k as u32, 0, crate::eval::fx_eng::complex_text(x, y));
                 }
             }
             "hist" => {
@@ -601,30 +650,46 @@ impl Workbook {
                     let i = bins.iter().position(|b| x <= b).unwrap_or(bins.len());
                     freq[i] += 1;
                 }
+                let (pareto, cumul, chart) = (flag(6), flag(7), flag(8));
+                let label = |s: String| if chart { format!("'{s}") } else { s };
                 let mut rows: Vec<(String, usize)> = bins.iter().enumerate().map(|(i, b)| (fnum(*b), freq[i])).collect();
                 rows.push(("More".to_string(), freq[bins.len()]));
-                if flag(6) {
-                    rows.sort_by(|x, y| y.1.cmp(&x.1));
-                }
-                w.put(0, 0, "Bin");
-                w.put(0, 1, "Frequency");
-                if flag(7) {
-                    w.put(0, 2, "Cumulative %");
-                }
                 let total = data.len() as f64;
-                let mut cum = 0usize;
-                for (i, (b, f)) in rows.iter().enumerate() {
-                    w.put(1 + i as u32, 0, b.clone());
-                    w.num(1 + i as u32, 1, *f as f64);
-                    cum += f;
-                    if flag(7) {
-                        w.num(1 + i as u32, 2, cum as f64 / total);
+                let n = rows.len() as u32;
+                let table = |w: &mut W, c0: u32, list: &[(String, usize)]| {
+                    w.put(0, c0, "Bin");
+                    w.put(0, c0 + 1, "Frequency");
+                    if cumul {
+                        w.put(0, c0 + 2, "Cumulative %");
                     }
+                    let mut cum = 0usize;
+                    for (i, (b, f)) in list.iter().enumerate() {
+                        w.put(1 + i as u32, c0, label(b.clone()));
+                        w.num(1 + i as u32, c0 + 1, *f as f64);
+                        cum += f;
+                        if cumul {
+                            w.num(1 + i as u32, c0 + 2, cum as f64 / total);
+                        }
+                    }
+                    if cumul {
+                        w.fmt(1, c0 + 2, list.len() as u32, c0 + 2, "0.00%");
+                    }
+                };
+                table(&mut w, 0, &rows);
+                let mut at = 0u32;
+                if pareto {
+                    let mut sorted = rows.clone();
+                    sorted.sort_by(|x, y| y.1.cmp(&x.1));
+                    table(&mut w, 3, &sorted);
+                    at = 3;
                 }
-                if flag(7) {
-                    w.fmt(1, 2, rows.len() as u32, 2, "0.00%");
+                if chart {
+                    let last = at + if cumul { 2 } else { 1 };
+                    let range = w.span(0, at, n, last);
+                    let kind = if cumul { "combo" } else { "column" };
+                    let title = if pareto { format!("Pareto of {name}") } else { format!("Histogram of {name}") };
+                    w.chart(kind, range, &title, "Bin", "Frequency", "");
                 }
-                let _ = name;
             }
             "rank" => {
                 let (blk, _, _) = self.tp_range(src, &a[1])?;
@@ -778,6 +843,9 @@ impl Workbook {
             }
             _ => return Err("The engine does not know that analysis tool.".to_string()),
         }
+        if dump {
+            return Ok(dump_reply(&w.cells, w.o));
+        }
         self.put_all(dst, &w.cells, fx)?;
         if dst != usize::MAX {
             for (t, b, code) in &w.fmts {
@@ -786,6 +854,12 @@ impl Workbook {
                 }
             }
         }
-        Ok(format!("ok\t{}", w.cells.len()))
+        let wide = w.cells.iter().map(|c| c.0.col).max().unwrap_or(w.o.col) - w.o.col;
+        let mut reply = format!("ok\t{}", w.cells.len());
+        for (i, ch) in w.charts.iter().enumerate() {
+            let anchor = w.at((i as u32 / 2) * 17, wide + 2 + (i as u32 % 2) * 9);
+            reply.push_str(&format!("\t{ch}|{anchor}"));
+        }
+        Ok(reply)
     }
 }
