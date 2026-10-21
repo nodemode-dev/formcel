@@ -2,8 +2,8 @@
 
 Living log of comment content and rationale for the Rust engine. Source stays near comment-free; it lives here.
 
-Current build version: v0.3.0
-Last updated: 2026-10-21 · load, sheets
+Current build version: v0.11.0
+Last updated: 2026-10-21 · dynamic arrays
 
 ### Workbook::load, clear_history, rename_sheet (v0.3.0)
 - refers-to: crates/formcel-core/src/lib.rs :: load, clear_history, rename_sheet; formcel-wasm fc_load, fc_add_sheet, fc_sheet_names; formcel-py load, cells, rename_sheet
@@ -209,6 +209,17 @@ Every example table on Microsoft's page for each function (data pasted at A1 as 
 
 Measured (scratch harness and the window's engine, not shipped): one precedent in a sheet of 100,000 row formulas plus one SUM over them went from 47 ms to 1 to 2 ms native and 2.5 to 6 ms through the window's worker, against the Phase 2 target of 100 ms. A 100,000-step chain (each cell adds 1 to the one above) recalculates all 100,000 cells in 130 ms native and 306 ms through the worker, including sending every changed cell back; that worst case is over the target.
 
+### Dynamic arrays and spilling
+- refers-to: src/formula.rs :: Expr::Array, Expr::Range, Expr::Union, ErrKind::Spill, ErrKind::Calc; src/eval.rs :: Array, Out, Arg::A, Src, grid, lift, call_arg; src/lib.rs :: spills, spilled, touched, recalc_with, recalc_pass, spill, unspill, unspill_all
+- kind: explainer
+- logged: v0.11.0 · 2026-10-21
+
+The parser reads array constants (`{1,2;3,4}`), the range operator between any two references (`A2:INDEX(...)`, `A2:CHOOSE(...)`) and a parenthesised union (`(A1:C6, A8:C11)`, used by INDEX's area number). The evaluator passes one of three things: a value, a reference, or an array. Operators and unary minus or percent applied to a range or array work element by element, broadcasting a single row or column, with `#N/A` where the shapes do not cover each other. IF, CHOOSE and INDEX return references (so `SUM(A2:INDEX(A2:C6,5,2))` sums a range), INDEX takes row or column 0 for a whole column or row and four arguments with an area number, and SEQUENCE and TRANSPOSE build arrays. Lookups (VLOOKUP, HLOOKUP, MATCH, XMATCH, XLOOKUP) read either a range or an array through `Src`.
+
+A formula whose result has more than one cell spills: the anchor holds the top-left value and the rest go into the cells to the right and below. If any of those holds a value or a formula, or the block runs off the grid, the anchor shows `#SPILL!` and nothing spills; clearing the blocker spills it again, because each recalculation looks up the spill blocks that contain the changed cells and reseeds their anchors. Spilled cells are not inputs: `input` and `inputs` skip them (so they are not saved and undo does not record them), and `formula_text` gives them an empty formula so the window shows an empty formula bar and saves nothing. Spill cells are not in the dependency graph, so `recalc_with` repeats a pass seeded with the cells a spill wrote or cleared, up to 8 passes (a spill that feeds itself stops there). Shifting rows or columns and deleting or moving a sheet clear every spill first and the full recalculation that follows rebuilds them, so a shift never records spilled values as dropped input. Arrays over 2,000,000 cells give `#VALUE!`; SEQUENCE with zero rows or columns gives `#CALC!`.
+
+Known limits: the graph only knows a range-operator reference by its two ends, so `A1:INDEX(C5:D6,...)` is not recalculated when a cell between them (B2, say) changes; finding the anchors for a changed cell scans every spill block, which is fine for tens of spills and slow for thousands. Conformance after this slice: 159 pass, 0 fail (the 6 earlier failures were the cases this slice covers; the runner now strips the U+2060 word joiners Microsoft's INDEX page puts inside formulas).
+
 ### References under insert, delete and rename
 - refers-to: src/formula.rs :: shift_refs, rename_refs, offset; src/lib.rs :: do_shift, Tx::Shift
 - kind: explainer
@@ -221,4 +232,4 @@ Inserting rows or columns moves every reference at or after the insert point, on
 - kind: explainer
 - logged: v0.7.0 · 2026-10-21
 
-`Value` gains `Error`. Numbers display rounded to 15 significant digits (`0.1+0.2` shows 0.3). Arithmetic turns empty cells into 0, booleans into 1 and 0, and number-like text into numbers; anything else is `#VALUE!`. Unary minus binds tighter than `^`, so `-2^2` is 4. Aggregates (SUM, AVERAGE, MIN, MAX, PRODUCT, COUNT) count only numbers inside ranges and also coerce directly typed arguments. Comparison orders numbers before text before booleans and compares text without case. First tranche: IF, IFERROR, IFNA, SUM, PRODUCT, AVERAGE, MIN, MAX, COUNT, COUNTA, COUNTBLANK, AND, OR, XOR, NOT, TRUE, FALSE, ABS, INT, SQRT, POWER, MOD, PI, ROUND, ROUNDUP, ROUNDDOWN, LEN, UPPER, LOWER, TRIM, LEFT, RIGHT, MID, CONCAT, CONCATENATE, ISBLANK, ISNUMBER, ISTEXT, ISERROR, NA. Unknown functions and names give `#NAME?`. A range used where one value is expected gives `#VALUE!` unless it is a single cell; spilling arrays come with dynamic arrays later in Phase 2. None of these behaviours has been checked against a vendor function page yet: that is the conformance workbook in the Phase 2 exit criterion.
+`Value` gains `Error`. Numbers display rounded to 15 significant digits (`0.1+0.2` shows 0.3). Arithmetic turns empty cells into 0, booleans into 1 and 0, and number-like text into numbers; anything else is `#VALUE!`. Unary minus binds tighter than `^`, so `-2^2` is 4. Aggregates (SUM, AVERAGE, MIN, MAX, PRODUCT, COUNT) count only numbers inside ranges and also coerce directly typed arguments. Comparison orders numbers before text before booleans and compares text without case. First tranche: IF, IFERROR, IFNA, SUM, PRODUCT, AVERAGE, MIN, MAX, COUNT, COUNTA, COUNTBLANK, AND, OR, XOR, NOT, TRUE, FALSE, ABS, INT, SQRT, POWER, MOD, PI, ROUND, ROUNDUP, ROUNDDOWN, LEN, UPPER, LOWER, TRIM, LEFT, RIGHT, MID, CONCAT, CONCATENATE, ISBLANK, ISNUMBER, ISTEXT, ISERROR, NA. Unknown functions and names give `#NAME?`. A range used where one value is expected gives `#VALUE!` unless it is a single cell; since v0.11.0 a formula that is a range or array spills instead (see Dynamic arrays and spilling). None of these behaviours has been checked against a vendor function page yet: that is the conformance workbook in the Phase 2 exit criterion.

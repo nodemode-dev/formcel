@@ -10,6 +10,8 @@ pub enum ErrKind {
     Num,
     Null,
     Error,
+    Spill,
+    Calc,
 }
 
 impl ErrKind {
@@ -23,11 +25,13 @@ impl ErrKind {
             ErrKind::Num => "#NUM!",
             ErrKind::Null => "#NULL!",
             ErrKind::Error => "#ERROR!",
+            ErrKind::Spill => "#SPILL!",
+            ErrKind::Calc => "#CALC!",
         }
     }
 
     pub fn parse(s: &str) -> Option<ErrKind> {
-        [ErrKind::Div0, ErrKind::Value, ErrKind::Ref, ErrKind::Name, ErrKind::Na, ErrKind::Num, ErrKind::Null, ErrKind::Error]
+        [ErrKind::Div0, ErrKind::Value, ErrKind::Ref, ErrKind::Name, ErrKind::Na, ErrKind::Num, ErrKind::Null, ErrKind::Error, ErrKind::Spill, ErrKind::Calc]
             .into_iter()
             .find(|e| e.text().eq_ignore_ascii_case(s))
     }
@@ -134,6 +138,9 @@ pub enum Expr {
     Bin(Op, Box<Expr>, Box<Expr>),
     Call(String, Vec<Expr>),
     Paren(Box<Expr>),
+    Array(Vec<Vec<Expr>>),
+    Range(Box<Expr>, Box<Expr>),
+    Union(Vec<Expr>),
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -152,6 +159,9 @@ enum Tok {
     Plus,
     Minus,
     Pct,
+    LBrace,
+    RBrace,
+    Semi,
 }
 
 fn lex(src: &str) -> Option<Vec<Tok>> {
@@ -265,6 +275,9 @@ fn lex(src: &str) -> Option<Vec<Tok>> {
             '+' => Tok::Plus,
             '-' => Tok::Minus,
             '%' => Tok::Pct,
+            '{' => Tok::LBrace,
+            '}' => Tok::RBrace,
+            ';' => Tok::Semi,
             '*' => Tok::Op(Op::Mul),
             '/' => Tok::Op(Op::Div),
             '^' => Tok::Op(Op::Pow),
@@ -362,6 +375,11 @@ impl Parser {
             }
             _ => {
                 let mut e = self.primary()?;
+                while self.peek() == Some(&Tok::Colon) {
+                    self.i += 1;
+                    let right = self.primary()?;
+                    e = Expr::Range(Box::new(e), Box::new(right));
+                }
                 while self.peek() == Some(&Tok::Pct) {
                     self.i += 1;
                     e = Expr::Pct(Box::new(e));
@@ -416,7 +434,29 @@ impl Parser {
             Tok::Err(e) => Some(Expr::Err(e)),
             Tok::LParen => {
                 let e = self.expr(0)?;
+                if self.peek() == Some(&Tok::Comma) {
+                    let mut parts = vec![e];
+                    while self.peek() == Some(&Tok::Comma) {
+                        self.i += 1;
+                        parts.push(self.expr(0)?);
+                    }
+                    return (self.next()? == Tok::RParen).then_some(Expr::Union(parts));
+                }
                 (self.next()? == Tok::RParen).then(|| Expr::Paren(Box::new(e)))
+            }
+            Tok::LBrace => {
+                let mut rows = vec![Vec::new()];
+                loop {
+                    rows.last_mut()?.push(self.expr(0)?);
+                    match self.next()? {
+                        Tok::Comma => {}
+                        Tok::Semi => rows.push(Vec::new()),
+                        Tok::RBrace => break,
+                        _ => return None,
+                    }
+                }
+                let w = rows[0].len();
+                rows.iter().all(|r| r.len() == w).then_some(Expr::Array(rows))
             }
             Tok::Quoted(name) => {
                 if self.next()? != Tok::Bang {
@@ -585,6 +625,46 @@ pub fn print(e: &Expr, out: &mut String) {
             print(x, out);
             out.push(')');
         }
+        Expr::Array(rows) => {
+            out.push('{');
+            for (i, r) in rows.iter().enumerate() {
+                if i > 0 {
+                    out.push(';');
+                }
+                for (j, x) in r.iter().enumerate() {
+                    if j > 0 {
+                        out.push(',');
+                    }
+                    print(x, out);
+                }
+            }
+            out.push('}');
+        }
+        Expr::Range(a, b) => {
+            print(a, out);
+            out.push(':');
+            print(b, out);
+        }
+        Expr::Union(parts) => {
+            out.push('(');
+            for (i, x) in parts.iter().enumerate() {
+                if i > 0 {
+                    out.push(',');
+                }
+                print(x, out);
+            }
+            out.push(')');
+        }
+    }
+}
+
+fn children(e: &Expr) -> Vec<&Expr> {
+    match e {
+        Expr::Neg(x) | Expr::Pos(x) | Expr::Pct(x) | Expr::Paren(x) => vec![x],
+        Expr::Bin(_, a, b) | Expr::Range(a, b) => vec![a, b],
+        Expr::Call(_, args) | Expr::Union(args) => args.iter().collect(),
+        Expr::Array(rows) => rows.iter().flatten().collect(),
+        _ => Vec::new(),
     }
 }
 
@@ -597,13 +677,18 @@ pub fn to_text(e: &Expr) -> String {
 pub fn walk_mut(e: &mut Expr, f: &mut dyn FnMut(&mut Expr)) {
     match e {
         Expr::Neg(x) | Expr::Pos(x) | Expr::Pct(x) | Expr::Paren(x) => walk_mut(x, f),
-        Expr::Bin(_, a, b) => {
+        Expr::Bin(_, a, b) | Expr::Range(a, b) => {
             walk_mut(a, f);
             walk_mut(b, f);
         }
-        Expr::Call(_, args) => {
+        Expr::Call(_, args) | Expr::Union(args) => {
             for a in args {
                 walk_mut(a, f);
+            }
+        }
+        Expr::Array(rows) => {
+            for x in rows.iter_mut().flatten() {
+                walk_mut(x, f);
             }
         }
         _ => {}
@@ -613,27 +698,19 @@ pub fn walk_mut(e: &mut Expr, f: &mut dyn FnMut(&mut Expr)) {
 
 pub fn is_volatile(e: &Expr) -> bool {
     match e {
-        Expr::Call(n, args) => matches!(n.as_str(), "TODAY" | "NOW" | "RAND" | "RANDBETWEEN") || args.iter().any(is_volatile),
-        Expr::Neg(x) | Expr::Pos(x) | Expr::Pct(x) | Expr::Paren(x) => is_volatile(x),
-        Expr::Bin(_, a, b) => is_volatile(a) || is_volatile(b),
-        _ => false,
+        Expr::Call(n, _) if matches!(n.as_str(), "TODAY" | "NOW" | "RAND" | "RANDBETWEEN") => true,
+        o => children(o).into_iter().any(is_volatile),
     }
 }
 
 pub fn refs(e: &Expr, f: &mut dyn FnMut(Option<&str>, Area)) {
     match e {
         Expr::Ref(s, k) => f(s.as_deref(), k.area()),
-        Expr::Neg(x) | Expr::Pos(x) | Expr::Pct(x) | Expr::Paren(x) => refs(x, f),
-        Expr::Bin(_, a, b) => {
-            refs(a, f);
-            refs(b, f);
-        }
-        Expr::Call(_, args) => {
-            for a in args {
-                refs(a, f);
+        o => {
+            for c in children(o) {
+                refs(c, f);
             }
         }
-        _ => {}
     }
 }
 

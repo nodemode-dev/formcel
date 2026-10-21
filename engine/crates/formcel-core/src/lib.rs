@@ -264,7 +264,12 @@ pub struct Workbook {
     formulas: FastMap<Key, Formula>,
     graph: graph::Graph,
     fmts: FastMap<Key, Fmt>,
+    spills: FastMap<Key, (u32, u32)>,
+    spilled: FastMap<Key, Key>,
+    touched: Vec<Key>,
 }
+
+const SPILL_PASSES: usize = 8;
 
 impl eval::Ctx for Workbook {
     fn sheet_index(&self, name: &str) -> Option<usize> {
@@ -290,7 +295,17 @@ impl Default for Workbook {
 
 impl Workbook {
     pub fn new() -> Self {
-        Workbook { sheets: vec![Sheet::new("Sheet1")], undo: Vec::new(), redo: Vec::new(), formulas: FastMap::default(), graph: graph::Graph::default(), fmts: FastMap::default() }
+        Workbook {
+            sheets: vec![Sheet::new("Sheet1")],
+            undo: Vec::new(),
+            redo: Vec::new(),
+            formulas: FastMap::default(),
+            graph: graph::Graph::default(),
+            fmts: FastMap::default(),
+            spills: FastMap::default(),
+            spilled: FastMap::default(),
+            touched: Vec::new(),
+        }
     }
 
     pub fn sheet_count(&self) -> usize {
@@ -379,6 +394,9 @@ impl Workbook {
         if let Some(f) = self.formulas.get(&(sheet, a)) {
             return f.text();
         }
+        if self.spilled.contains_key(&(sheet, a)) {
+            return String::new();
+        }
         match self.sheets.get(sheet).and_then(|s| s.cells.get(a)) {
             Some(v) => self.shown(sheet, a, v.clone()).to_string(),
             None => String::new(),
@@ -386,6 +404,9 @@ impl Workbook {
     }
 
     pub fn formula_text(&self, sheet: usize, a: Addr) -> Option<String> {
+        if self.spilled.contains_key(&(sheet, a)) {
+            return Some(String::new());
+        }
         self.formulas.get(&(sheet, a)).map(Formula::text)
     }
 
@@ -394,6 +415,9 @@ impl Workbook {
         let mut out = Vec::with_capacity(s.len());
         if let Some(bottom) = s.cells.extent() {
             s.cells.for_each_in(Addr { row: 0, col: 0 }, bottom, |a, v| {
+                if self.spilled.contains_key(&(sheet, a)) {
+                    return;
+                }
                 let text = self.formulas.get(&(sheet, a)).map_or_else(|| self.shown(sheet, a, v.clone()).to_string(), Formula::text);
                 out.push((a, text));
             });
@@ -403,6 +427,7 @@ impl Workbook {
 
     fn set_raw(&mut self, sheet: usize, a: Addr, raw: &str) {
         let k = (sheet, a);
+        self.spilled.remove(&k);
         if is_formula(raw) {
             let f = Formula::new(raw);
             if self.graph.built {
@@ -492,19 +517,43 @@ impl Workbook {
     }
 
     fn recalc_with(&mut self, seeds: &[Key], everything: bool) -> Changed {
+        self.touched.clear();
+        let mut out = self.recalc_pass(seeds, everything, true);
+        for _ in 0..SPILL_PASSES {
+            let touched = std::mem::take(&mut self.touched);
+            if touched.is_empty() {
+                break;
+            }
+            out.extend(self.recalc_pass(&touched, false, false));
+        }
+        self.touched.clear();
+        out
+    }
+
+    fn recalc_pass(&mut self, seeds: &[Key], everything: bool, volatile: bool) -> Changed {
         self.ensure_graph();
         let mut dirty: FastSet<Key> = FastSet::default();
+        for k in seeds {
+            if !self.formulas.contains_key(k) {
+                self.unspill(*k);
+            }
+        }
+        let anchors: Vec<Key> = seeds
+            .iter()
+            .filter(|k| !self.spilled.contains_key(k))
+            .flat_map(|k| self.spills.iter().filter(move |(o, &(h, w))| o.0 == k.0 && *o != k && (o.1.row..o.1.row + h).contains(&k.1.row) && (o.1.col..o.1.col + w).contains(&k.1.col)).map(|(o, _)| *o))
+            .collect();
         if everything {
             dirty.extend(self.formulas.keys().copied());
         } else {
-            let mut queue: VecDeque<Key> = seeds.iter().copied().collect();
-            for k in seeds {
+            let mut queue: VecDeque<Key> = seeds.iter().chain(&anchors).copied().collect();
+            for k in seeds.iter().chain(&anchors) {
                 if self.formulas.contains_key(k) {
                     dirty.insert(*k);
                 }
             }
             for (k, f) in &self.formulas {
-                if f.volatile && dirty.insert(*k) {
+                if volatile && f.volatile && dirty.insert(*k) {
                     queue.push_back(*k);
                 }
             }
@@ -565,9 +614,16 @@ impl Workbook {
         while let Some(i) = ready.pop_front() {
             done[i] = true;
             let (s, a) = ids[i];
-            let (v, f) = match &self.formulas[&(s, a)].ast {
-                None => (Value::Error(ErrKind::Error), None),
+            let (o, f) = match &self.formulas[&(s, a)].ast {
+                None => (eval::Out::V(Value::Error(ErrKind::Error)), None),
                 Some(e) => (eval::Eval { ctx: &*self, sheet: s }.formula(e), self.infer(s, e)),
+            };
+            let v = match o {
+                eval::Out::V(v) => {
+                    self.unspill((s, a));
+                    v
+                }
+                eval::Out::A(x) => self.spill((s, a), x),
             };
             match f {
                 Some(f) if matches!(v, Value::Number(_)) => self.fmts.insert((s, a), f),
@@ -590,6 +646,71 @@ impl Workbook {
             }
         }
         out
+    }
+
+    fn spill(&mut self, k: Key, x: eval::Array) -> Value {
+        let (s, a) = k;
+        let (h, w) = (x.rows as u32, x.cols as u32);
+        let prev = self.spills.insert(k, (h, w));
+        let fits = a.row + h <= MAX_ROWS && a.col + w <= MAX_COLS;
+        let blocked = !fits
+            || (a.row..a.row + h).any(|r| {
+                (a.col..a.col + w).any(|c| {
+                    let p = (s, Addr { row: r, col: c });
+                    p != k && (self.formulas.contains_key(&p) || (self.spilled.get(&p) != Some(&k) && self.sheets[s].cells.get(p.1).is_some()))
+                })
+            });
+        if let Some((ph, pw)) = prev {
+            for r in a.row..a.row + ph {
+                for c in a.col..a.col + pw {
+                    let p = (s, Addr { row: r, col: c });
+                    if p != k && self.spilled.get(&p) == Some(&k) && (blocked || r >= a.row + h || c >= a.col + w) {
+                        self.spilled.remove(&p);
+                        self.sheets[s].cells.set(p.1, Value::Empty);
+                        self.touched.push(p);
+                    }
+                }
+            }
+        }
+        if blocked {
+            return Value::Error(ErrKind::Spill);
+        }
+        let mut first = Value::Empty;
+        for (i, v) in x.data.into_iter().enumerate() {
+            let p = (s, Addr { row: a.row + i as u32 / w, col: a.col + i as u32 % w });
+            if p == k {
+                first = v;
+                continue;
+            }
+            self.spilled.insert(p, k);
+            if self.sheets[s].cells.get(p.1) != Some(&v) {
+                self.sheets[s].cells.set(p.1, v);
+                self.touched.push(p);
+            }
+        }
+        first
+    }
+
+    fn unspill(&mut self, k: Key) {
+        let Some((h, w)) = self.spills.remove(&k) else { return };
+        for r in k.1.row..k.1.row + h {
+            for c in k.1.col..k.1.col + w {
+                let p = (k.0, Addr { row: r, col: c });
+                if self.spilled.get(&p) == Some(&k) {
+                    self.spilled.remove(&p);
+                    self.sheets[k.0].cells.set(p.1, Value::Empty);
+                    self.touched.push(p);
+                }
+            }
+        }
+    }
+
+    fn unspill_all(&mut self) {
+        for ((s, p), _) in self.spilled.drain() {
+            self.sheets[s].cells.set(p, Value::Empty);
+        }
+        self.spills.clear();
+        self.touched.clear();
     }
 
     fn recalc_all(&mut self) -> Changed {
@@ -624,6 +745,7 @@ impl Workbook {
             }
             Some(if s.rows { Addr { row: n as u32, ..a } } else { Addr { col: n as u32, ..a } })
         };
+        self.unspill_all();
         let lost: HashMap<Addr, String> = self.formulas.iter().filter(|((sh, a), _)| *sh == s.sheet && moved(*a).is_none()).map(|((_, a), f)| (*a, f.text())).collect();
         let target = self.sheets[s.sheet].name.clone();
         let names = self.sheet_names();
@@ -712,6 +834,7 @@ impl Workbook {
         if sheet >= self.sheets.len() || self.sheets.len() == 1 {
             return Err(EngineError::NoSheet(sheet));
         }
+        self.unspill_all();
         self.sheets.remove(sheet);
         self.graph.built = false;
         self.rekey(|s| match s.cmp(&sheet) {
@@ -728,6 +851,7 @@ impl Workbook {
         if from >= self.sheets.len() || to >= self.sheets.len() {
             return Err(EngineError::NoSheet(from.max(to)));
         }
+        self.unspill_all();
         let s = self.sheets.remove(from);
         self.sheets.insert(to, s);
         self.graph.built = false;
