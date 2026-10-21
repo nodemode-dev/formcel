@@ -96,8 +96,8 @@ fn hull(a: Area, b: Area) -> Area {
     Area { r0: a.r0.min(b.r0), c0: a.c0.min(b.c0), r1: a.r1.max(b.r1), c1: a.c1.max(b.c1) }
 }
 
-const ARRAY_FNS: [&str; 27] = [
-    "INDEX", "CHOOSE", "SEQUENCE", "TRANSPOSE", "IF", "FILTER", "SORT", "SORTBY", "UNIQUE", "MAP", "REDUCE", "SCAN", "BYROW", "BYCOL", "MAKEARRAY", "VSTACK", "HSTACK", "TOCOL", "TOROW", "TAKE",
+const ARRAY_FNS: [&str; 28] = [
+    "ARRAYFORMULA", "INDEX", "CHOOSE", "SEQUENCE", "TRANSPOSE", "IF", "FILTER", "SORT", "SORTBY", "UNIQUE", "MAP", "REDUCE", "SCAN", "BYROW", "BYCOL", "MAKEARRAY", "VSTACK", "HSTACK", "TOCOL", "TOROW", "TAKE",
     "DROP", "CHOOSECOLS", "CHOOSEROWS", "WRAPROWS", "WRAPCOLS", "EXPAND", "TEXTSPLIT",
 ];
 
@@ -1103,6 +1103,10 @@ impl Eval<'_> {
 
     fn call_arg(&self, name: &str, a: &[Expr]) -> Result<Arg, ErrKind> {
         match name {
+            "ARRAYFORMULA" => match a {
+                [x] => Ok(self.arg(x)),
+                _ => Err(ErrKind::Na),
+            },
             "IF" => {
                 if a.len() < 2 || a.len() > 3 {
                     return Err(ErrKind::Na);
