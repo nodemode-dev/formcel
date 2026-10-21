@@ -21,6 +21,9 @@ export interface AppHooks {
   title(): string;
   status(text: string, error?: boolean): void;
   addSheet(name: string): Promise<number>;
+  renameSheet?(index: number, name: string): Promise<void>;
+  deleteSheet?(index: number): Promise<void>;
+  showSheet?(index: number): void;
 }
 
 function compiled(s: Script): Script {
@@ -65,6 +68,9 @@ export class Automation {
       title: () => h.title(),
       grid: h.grid,
       addSheet: (n) => h.addSheet(n),
+      renameSheet: h.renameSheet,
+      deleteSheet: h.deleteSheet,
+      showSheet: h.showSheet,
       log: (l, t) => this.scripts.log(l, t),
     });
     this.calls = new HostCalls({
@@ -191,6 +197,18 @@ export class Automation {
     this.editTimer = window.setTimeout(() => {
       for (const sc of this.auto.scripts) if (sc.triggers?.edit) void this.runScript(sc.id, { type: 'edit', sheet: this.h.sheets()[s] ?? '', address: a1(r, c) });
     }, 700);
+  }
+
+  scriptList(): { id: string; name: string }[] {
+    return this.auto.scripts.map((s) => ({ id: s.id, name: s.name }));
+  }
+
+  runForObject(id: string, name: string): void {
+    this.h.status(`Running ${name}`);
+    void this.runScript(id, { type: 'button' }).then((r) => {
+      if (r.ok) this.h.status(`${name} finished`);
+      this.h.grid.focus();
+    });
   }
 
   private async runScript(id: string, event?: unknown): Promise<RunResult> {

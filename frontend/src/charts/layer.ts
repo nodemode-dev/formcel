@@ -46,6 +46,9 @@ export class ObjectLayer implements ObjectsHook {
   onEdit: (o: FloatObject) => void = () => undefined;
   onData: () => void = () => undefined;
   onAlt: (o: FloatObject) => void = () => undefined;
+  onFormat: (o: FloatObject) => void = () => undefined;
+  onScript: (o: FloatObject) => void = () => undefined;
+  onRun: (o: FloatObject) => void = () => undefined;
 
   constructor(private readonly grid: Grid, private readonly eng: EngineClient, private readonly io: LayerIo) {
     this.el = document.createElement('div');
@@ -54,13 +57,15 @@ export class ObjectLayer implements ObjectsHook {
     this.bar = document.createElement('div');
     this.bar.className = 'fc-obj-bar';
     this.bar.hidden = true;
-    this.bar.innerHTML = '<button type="button" class="fc-btn" data-a="edit">Edit</button><button type="button" class="fc-btn" data-a="alt">Alt text</button><button type="button" class="fc-btn" data-a="front">Bring to front</button><button type="button" class="fc-btn" data-a="back">Send to back</button><button type="button" class="fc-btn" data-a="delete">Delete</button>';
+    this.bar.innerHTML = '<button type="button" class="fc-btn" data-a="edit">Edit</button><button type="button" class="fc-btn" data-a="format" hidden>Format button</button><button type="button" class="fc-btn" data-a="script" hidden>Assign script</button><button type="button" class="fc-btn" data-a="alt">Alt text</button><button type="button" class="fc-btn" data-a="front">Bring to front</button><button type="button" class="fc-btn" data-a="back">Send to back</button><button type="button" class="fc-btn" data-a="delete">Delete</button>';
     this.bar.addEventListener('pointerdown', (e) => e.stopPropagation());
     this.bar.addEventListener('click', (e) => {
       const a = (e.target as HTMLElement).closest<HTMLElement>('[data-a]')?.dataset.a;
       const n = this.selected ? this.nodes.get(this.selected) : null;
       if (!a || !n) return;
       if (a === 'edit') this.onEdit(n.obj);
+      if (a === 'format') this.onFormat(n.obj);
+      if (a === 'script') this.onScript(n.obj);
       if (a === 'alt') this.onAlt(n.obj);
       if (a === 'delete') this.remove(n.obj.id);
       if (a === 'front' || a === 'back') this.reorder(n.obj.id, a === 'front');
@@ -246,7 +251,13 @@ export class ObjectLayer implements ObjectsHook {
     else n.el.removeAttribute('aria-hidden');
     if (label) n.el.setAttribute('aria-label', label);
     else n.el.removeAttribute('aria-label');
-    n.el.setAttribute('role', o.kind === 'chart' || o.kind === 'picture' ? 'img' : 'group');
+    n.el.setAttribute('role', o.script || o.scriptName ? 'button' : o.kind === 'chart' || o.kind === 'picture' ? 'img' : 'group');
+    n.el.classList.toggle('fc-obj-run', !!(o.script || o.scriptName));
+    n.el.title = o.script || o.scriptName ? `Runs ${o.scriptName ? `the script ${o.scriptName}` : 'its script'}. Ctrl+click selects it.` : '';
+    if (o.script || o.scriptName) n.el.tabIndex = 0;
+    else n.el.tabIndex = -1;
+    const text = o.shape?.text || o.text?.text || '';
+    if ((o.script || o.scriptName) && !label && text) n.el.setAttribute('aria-label', text);
     const img = n.body.querySelector('img');
     if (img) img.alt = o.decorative ? '' : label;
   }
@@ -289,12 +300,31 @@ export class ObjectLayer implements ObjectsHook {
     this.commit();
   }
 
+  deselect(): void {
+    this.select(null);
+  }
+
   private select(id: string | null): void {
     if (this.selected) this.nodes.get(this.selected)?.el.classList.remove('fc-obj-sel');
     this.selected = id;
     if (id) this.nodes.get(id)?.el.classList.add('fc-obj-sel');
     this.bar.hidden = !id;
+    this.barButtons();
     this.place();
+  }
+
+  private barButtons(): void {
+    const o = this.selected ? this.nodes.get(this.selected)?.obj : null;
+    const set = (a: string, on: boolean) => {
+      const b = this.bar.querySelector<HTMLButtonElement>(`[data-a="${a}"]`);
+      if (b && b.hidden === on) b.hidden = !on;
+    };
+    set('script', !!o && (o.kind === 'shape' || o.kind === 'picture' || o.kind === 'text'));
+    set('format', !!o && o.kind === 'shape' && o.shape?.shape === 'button');
+  }
+
+  refreshBar(): void {
+    this.barButtons();
   }
 
   private persist(): void {
@@ -326,6 +356,13 @@ export class ObjectLayer implements ObjectsHook {
     }
     const n: Node = { obj: o, el, body, html: '', moving: false, dw: o.w, dh: o.h, bar: null, barKey: '' };
     el.addEventListener('pointerdown', (e) => this.down(e, n));
+    el.addEventListener('keydown', (e) => {
+      if ((e.key === 'Enter' || e.key === ' ') && (n.obj.script || n.obj.scriptName) && e.target === el) {
+        e.preventDefault();
+        e.stopPropagation();
+        this.onRun(n.obj);
+      }
+    });
     el.addEventListener('dblclick', (e) => {
       e.stopPropagation();
       if (o.kind === 'chart') this.onEdit(n.obj);
@@ -357,9 +394,12 @@ export class ObjectLayer implements ObjectsHook {
         ? `<ellipse cx="${w / 2}" cy="${h / 2}" rx="${w / 2 - 1.5}" ry="${h / 2 - 1.5}"/>`
         : s.shape === 'arrow'
           ? `<polygon points="1.5,${h * 0.3} ${w * 0.62},${h * 0.3} ${w * 0.62},1.5 ${w - 1.5},${h / 2} ${w * 0.62},${h - 1.5} ${w * 0.62},${h * 0.7} 1.5,${h * 0.7}"/>`
-          : `<rect x="1.5" y="1.5" width="${w - 3}" height="${h - 3}" rx="3"/>`;
+          : `<rect x="1.5" y="1.5" width="${w - 3}" height="${h - 3}" rx="${s.shape === 'button' ? 8 : 3}"/>`;
       n.body.innerHTML = `<svg viewBox="0 0 ${w} ${h}" width="100%" height="100%" preserveAspectRatio="none"><g fill="${s.fill}" stroke="${s.stroke}" stroke-width="2" vector-effect="non-scaling-stroke">${g}</g></svg><div class="fc-obj-label"></div>`;
-      n.body.querySelector<HTMLElement>('.fc-obj-label')!.textContent = s.text;
+      const label = n.body.querySelector<HTMLElement>('.fc-obj-label')!;
+      label.textContent = s.text;
+      if (s.color) label.style.color = s.color;
+      if (s.size) label.style.fontSize = `${s.size}px`;
     } else if (o.kind === 'text' && o.text) {
       let label = n.body.querySelector<HTMLElement>('.fc-obj-text');
       if (!label) {
@@ -448,6 +488,17 @@ export class ObjectLayer implements ObjectsHook {
       return;
     }
     e.stopPropagation();
+    if ((n.obj.script || n.obj.scriptName) && this.selected !== n.obj.id && !e.ctrlKey && !e.metaKey && !e.shiftKey) {
+      const sx = e.clientX;
+      const sy = e.clientY;
+      n.el.setPointerCapture(e.pointerId);
+      const release = (u: PointerEvent) => {
+        n.el.removeEventListener('pointerup', release);
+        if (Math.abs(u.clientX - sx) + Math.abs(u.clientY - sy) < 6) this.onRun(n.obj);
+      };
+      n.el.addEventListener('pointerup', release);
+      return;
+    }
     this.select(n.obj.id);
     const h = (e.target as HTMLElement).dataset.h as Handle | undefined;
     const z = this.grid.objectFrame().z;

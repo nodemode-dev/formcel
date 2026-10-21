@@ -2,11 +2,11 @@ import type { EngineClient } from '../engine';
 import type { Range } from '../grid/a1';
 import type { Grid } from '../grid/grid';
 import { registerCommand } from '../ui/commands';
-import { Timeline } from '../ui/timeline';
+import { Timeline, type TimelineView } from '../ui/timeline';
 import type { PivotDef } from '../ui/pivot';
 import { Decor } from './decor';
 import { recommend, readMatrix, rangeLabel, parseRangeText } from './data';
-import { askAlt, askSparkline } from './dialogs';
+import { askAlt, askButton, askScript, askSparkline } from './dialogs';
 import { ChartEditor } from './editor';
 import { ObjectLayer } from './layer';
 import { pivotChartData } from './pivotchart';
@@ -23,9 +23,15 @@ export interface ChartsHost {
   pivotItems?(name: string, field: string): Promise<string[]>;
   pivotFilter?(name: string, field: string, items: string[]): Promise<void>;
   say?(text: string): void;
+  timeline?(sheet: number): TimelineView | null;
+  saveTimeline?(sheet: number, view: TimelineView | null): void;
+  scripts?(): { id: string; name: string }[];
+  runScript?(id: string, name: string): void;
 }
 
 const MAX_PICTURE = 6 * 1024 * 1024;
+
+const BUTTON = (text: string): NonNullable<FloatObject['shape']> => ({ shape: 'button', fill: '#4e79a7', stroke: '#2f4b6e', text, color: '#ffffff', size: 14 });
 
 export class Charts {
   readonly layer: ObjectLayer;
@@ -37,9 +43,20 @@ export class Charts {
 
   constructor(private readonly grid: Grid, private readonly eng: EngineClient, private readonly host: ChartsHost) {
     this.layer = new ObjectLayer(grid, eng, host);
-    this.timeline = new Timeline({ grid, eng, book: () => host.book() });
+    this.timeline = new Timeline({ grid, eng, book: () => host.book(), saved: (s) => host.timeline?.(s) ?? null, save: (s, v) => host.saveTimeline?.(s, v) });
     this.decor = new Decor(grid, eng, this.layer, () => host.book(), () => host.sheetNames());
     this.layer.onAlt = (o) => void this.alt(o);
+    this.layer.onScript = (o) => void this.assign(o);
+    this.layer.onFormat = (o) => void this.formatButton(o);
+    this.layer.onRun = (o) => this.run(o);
+    document.addEventListener('fc-insert-button', (e) => {
+      const d = (e as CustomEvent<{ label: string; script: string }>).detail;
+      if (!this.host.active()) return;
+      const found = this.host.scripts?.().find((s) => s.id === d.script);
+      const o = this.layer.viewOrigin();
+      this.layer.add({ kind: 'shape', x: o.x, y: o.y, w: 140, h: 44, shape: BUTTON(d.label), script: d.script, scriptName: found?.name });
+      this.layer.deselect();
+    });
     this.cellFile = document.createElement('input');
     this.cellFile.type = 'file';
     this.cellFile.accept = 'image/png,image/jpeg,image/gif,image/webp,image/svg+xml,image/bmp';
@@ -90,6 +107,7 @@ export class Charts {
     cmd('insert.shape-rect', 'Insert rectangle', 'Float a rectangle over the sheet. Double-click it to type text in it.', () => this.shape('rect'));
     cmd('insert.shape-ellipse', 'Insert ellipse', 'Float an ellipse over the sheet. Double-click it to type text in it.', () => this.shape('ellipse'));
     cmd('insert.shape-arrow', 'Insert arrow', 'Float an arrow over the sheet.', () => this.shape('arrow'));
+    cmd('insert.button', 'Insert button', 'Float a button over the sheet. Choose Assign script on its bar to run a script when it is clicked, and Format button to change its text, colours and size. Any shape, text box or picture can run a script the same way.', () => this.button());
     cmd('insert.textbox', 'Insert text box', 'Float a text box over the sheet. Double-click it to edit the text.', () => this.textbox());
     cmd('insert.cell-picture', 'Insert picture in cell', 'Choose an image file and place it inside the active cell. It stays in the cell, moves with it when rows and columns are inserted or deleted, and is saved with the workbook.', () => this.cellFile.click());
     cmd('insert.sparkline', 'Insert sparklines', 'Draw a line, column or win/loss sparkline in each cell of a location range from a data range, with markers for the high, low, first, last and negative points and axis options.', () => this.sparkline());
@@ -255,6 +273,7 @@ export class Charts {
     const got = await this.editor.open(spec, title);
     if (!got) return;
     const o = this.layer.viewOrigin();
+    this.grid.recorder?.({ k: 'chart', sheet: this.grid.sheetIndex, type: got.type, range: got.range, title: got.title, byRows: got.byRows });
     this.layer.add({ kind: 'chart', x: o.x, y: o.y, w: 480, h: 300, chart: got });
   }
 
@@ -268,6 +287,50 @@ export class Charts {
     if (!this.host.active()) return;
     const o = this.layer.viewOrigin();
     this.layer.add({ kind: 'shape', x: o.x, y: o.y, w: shape === 'arrow' ? 160 : 140, h: shape === 'arrow' ? 60 : 90, shape: { shape, fill: '#4e79a7', stroke: '#2f4b6e', text: '' } });
+  }
+
+  private button(): void {
+    if (!this.host.active()) return;
+    const o = this.layer.viewOrigin();
+    this.layer.add({ kind: 'shape', x: o.x, y: o.y, w: 140, h: 44, shape: BUTTON('Button') });
+  }
+
+  private async assign(o: FloatObject): Promise<void> {
+    const choices = this.host.scripts?.() ?? [];
+    const got = await askScript(choices, o.script ?? '');
+    if (got === null) {
+      this.grid.focus();
+      return;
+    }
+    const next: FloatObject = { ...o };
+    if (got) {
+      next.script = got;
+      next.scriptName = choices.find((c) => c.id === got)?.name;
+    } else {
+      delete next.script;
+      delete next.scriptName;
+    }
+    this.layer.update(next);
+    this.layer.refreshBar();
+    this.grid.focus();
+  }
+
+  private async formatButton(o: FloatObject): Promise<void> {
+    const s = o.shape;
+    if (!s) return;
+    const got = await askButton({ text: s.text, fill: s.fill, stroke: s.stroke, color: s.color ?? '#ffffff', size: s.size ?? 14 });
+    if (got) this.layer.update({ ...o, shape: { ...s, text: got.text, fill: got.fill, stroke: got.stroke, color: got.color, size: got.size } });
+    this.grid.focus();
+  }
+
+  private run(o: FloatObject): void {
+    const found = this.host.scripts?.() ?? [];
+    const hit = found.find((s) => s.id === o.script) ?? found.find((s) => o.scriptName && s.name.replace(/[^A-Za-z0-9_.]/g, '_') === o.scriptName.replace(/[^A-Za-z0-9_.]/g, '_'));
+    if (!hit) {
+      this.host.say?.(o.scriptName ? `The script ${o.scriptName} is not in this workbook.` : 'The script for this object is not in this workbook.');
+      return;
+    }
+    this.host.runScript?.(hit.id, hit.name);
   }
 
   private textbox(): void {

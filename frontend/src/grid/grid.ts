@@ -1,5 +1,7 @@
 import type { Area, Cell, Changed, Dir, Effect, EngineClient, FormatChange, FormatItem, LinkChange, MergeMode, Shift, SortKeySpec, StyleChange, StyleOp } from '../engine';
 import { light, parseStyle, PLAIN, themeOf, tint, type CellStyle, type Look } from './style';
+import type { TimelineView } from '../ui/timeline';
+import { decodeChips, encodeChips, paintChipLine, type ChipHit, type SmartChip } from './smartchips';
 
 interface Mark {
   style?: CellStyle;
@@ -52,6 +54,7 @@ export interface SheetView {
   fviews?: { name: string; text: string }[] | null;
   sviews?: { name: string; text: string; rows: AxisState; cols: AxisState }[] | null;
   slicers?: { id: string; col: number; title: string; x: number; y: number; multi?: boolean; cols?: number; style?: string; pivot?: string; field?: string }[] | null;
+  timeline?: TimelineView | null;
 }
 
 export type MenuKind = 'rows' | 'cols' | 'cells';
@@ -97,7 +100,15 @@ export type Recorded =
   | { k: 'edit'; sheet: number; r: number; c: number; raw: string }
   | { k: 'style'; sheet: number; ops: [number, number, number, number, string][] }
   | { k: 'format'; sheet: number; r0: number; c0: number; r1: number; c1: number; code: string }
-  | { k: 'sort'; sheet: number; r0: number; c0: number; r1: number; c1: number; keys: SortKeySpec[]; header: boolean; across?: boolean };
+  | { k: 'sort'; sheet: number; r0: number; c0: number; r1: number; c1: number; keys: SortKeySpec[]; header: boolean; across?: boolean }
+  | { k: 'shift'; sheet: number; rows: boolean; at: number; n: number; insert: boolean }
+  | { k: 'cells'; sheet: number; r0: number; c0: number; r1: number; c1: number; dir: string; insert: boolean }
+  | { k: 'merge'; sheet: number; r0: number; c0: number; r1: number; c1: number; mode: MergeMode }
+  | { k: 'sheetop'; op: 'add' | 'rename' | 'delete'; sheet: number; name: string; to?: string }
+  | { k: 'fill'; sheet: number; src: [number, number, number, number]; dest: [number, number, number, number] }
+  | { k: 'clear'; sheet: number; r0: number; c0: number; r1: number; c1: number }
+  | { k: 'filter'; sheet: number; text: string }
+  | { k: 'chart'; sheet: number; type: string; range: string; title: string; byRows: boolean };
 
 export interface GridEvents {
   onActive(text: string, ref: string, range: Range): void;
@@ -122,6 +133,8 @@ export interface GridEvents {
   onTables(lines: string[]): void;
   onTableKey(): void;
   onLinks(changes: LinkChange[]): void;
+  onChips(changes: LinkChange[]): void;
+  onChipOpen?(row: number, col: number, chip: SmartChip): void;
   onOpenLink(): void;
   onLinkBox(): void;
   onView(sheet: number, view: SheetView): void;
@@ -165,6 +178,9 @@ export class Grid {
   private readonly nums = new Set<number>();
   private readonly colors = new Map<number, string>();
   private readonly linked = new Set<number>();
+  private readonly smart = new Map<number, SmartChip[]>();
+  private smartHits: ChipHit[] = [];
+  private editChips: SmartChip[] = [];
   private readonly styles = new Map<number, CellStyle>();
   private merges: Area[] = [];
   private marks = new Map<number, string>();
@@ -459,6 +475,7 @@ export class Grid {
   private paintNow(): void {
     this.paintHook?.();
     const { ctx, pal, w, h } = this;
+    this.smartHits.length = 0;
     const [rowSets, colSets] = this.bands();
     for (const [ra, rb, , , pr] of rowSets) {
       for (const [ca, cb, , , pc] of colSets) this.ensureData({ r0: ra, r1: rb, c0: ca, c1: cb }, pr * 2 + pc);
@@ -1035,9 +1052,11 @@ export class Grid {
       let base = va === 'top' ? yy + lh - 4 : va === 'middle' ? yy + (rh - block) / 2 + lh - 4 : yy + rh - block + lh - 5;
       ctx.textAlign = ha;
       const tx = ha === 'right' ? right - pad : ha === 'center' ? (left + right) / 2 : left + pad;
+      const chips = !st.wrap ? this.smart.get(k) : undefined;
       for (const ln of lines) {
-        ctx.fillText(ln, tx, base);
-        if (st.u || st.s) {
+        if (chips) paintChipLine(ctx, ln, chips, tx, base, px, ha, this.smartHits);
+        else ctx.fillText(ln, tx, base);
+        if (!chips && (st.u || st.s)) {
           const w = ctx.measureText(ln).width;
           const x0 = ha === 'right' ? tx - w : ha === 'center' ? tx - w / 2 : tx;
           if (st.u) ctx.fillRect(x0, base + 2, w, Math.max(1, px / 13));
@@ -1144,6 +1163,7 @@ export class Grid {
   }
 
   async setFilter(text: string): Promise<void> {
+    this.recorder?.({ k: 'filter', sheet: this.sheet, text });
     await this.applyEffect(await this.engine.setFilter(this.book, this.sheet, text));
   }
 
@@ -1243,6 +1263,7 @@ export class Grid {
 
   async merge(mode: MergeMode): Promise<void> {
     const s = this.sel();
+    this.recorder?.({ k: 'merge', sheet: this.sheet, r0: s.r0, c0: s.c0, r1: s.r1, c1: s.c1, mode });
     await this.applyEffect(await this.engine.merge(this.book, this.sheet, s.r0, s.c0, s.r1, s.c1, mode));
   }
 
@@ -1681,7 +1702,11 @@ export class Grid {
   }
 
   async runTool(...fields: string[]): Promise<string> {
-    const e = await this.engine.tool(this.book, this.sheet, ...fields);
+    if (fields[0] === 'shiftcells' && this.recorder) {
+      const s = this.sel();
+      this.recorder({ k: 'cells', sheet: this.sheet, r0: s.r0, c0: s.c0, r1: s.r1, c1: s.c1, dir: fields[2], insert: fields[3] === '1' });
+    }
+    const e =await this.engine.tool(this.book, this.sheet, ...fields);
     await this.applyEffect(e);
     await this.refreshHistory();
     return e.message ?? '';
@@ -1956,6 +1981,7 @@ export class Grid {
     this.validLines = [];
     this.tableList = [];
     void this.loadTables();
+    void this.loadSmart();
     if (this.rule) this.events.onRule(null, null);
     this.rule = null;
     void this.loadValid();
@@ -2325,6 +2351,40 @@ export class Grid {
     return this.engine.formatAt(this.book, this.sheet, this.ar, this.ac);
   }
 
+  private async loadSmart(): Promise<void> {
+    const sheet = this.sheet;
+    const list = await this.engine.chipsOf(this.book, sheet);
+    if (sheet !== this.sheet) return;
+    this.smart.clear();
+    for (const [r, c, t] of list) this.smart.set(KEY(r, c), decodeChips(t));
+    this.paint();
+  }
+
+  smartAt(row: number, col: number): SmartChip[] {
+    return this.smart.get(KEY(row, col)) ?? [];
+  }
+
+  smartHit(px: number, py: number): { row: number; col: number; chip: SmartChip } | null {
+    const h = this.smartHits.find((x) => px >= x.x && px <= x.x + x.w && py >= x.y && py <= x.y + x.h);
+    if (!h) return null;
+    const { row, col } = this.hit(px, py);
+    return { row, col, chip: h.chip };
+  }
+
+  async setSmart(row: number, col: number, chips: SmartChip[]): Promise<void> {
+    const mark = await this.engine.undoMark(this.book);
+    await this.applyEffect(await this.engine.setChips(this.book, this.sheet, row, col, encodeChips(chips)));
+    await this.engine.undoGroup(this.book, mark);
+    await this.refreshHistory();
+  }
+
+  addEditChip(chip: Omit<SmartChip, 'start'>, at: number, replaced: number): void {
+    const len = [...chip.label].length;
+    for (const c of this.editChips) if (c.start >= at) c.start += len - replaced;
+    this.editChips.push({ ...chip, start: at });
+    this.editChips.sort((a, b) => a.start - b.start);
+  }
+
   async commitEdits(changed: Changed[]): Promise<void> {
     if (changed.length && changed.every(([s]) => s !== this.sheet)) {
       this.show(this.book, changed[0][0], this.events.onSheet(changed[0][0]));
@@ -2350,6 +2410,16 @@ export class Grid {
     if (changed.length && this.circles.size) void this.refreshCircles();
     const links = await this.engine.takeLinks(this.book);
     if (links.length) this.events.onLinks(links);
+    const chips = await this.engine.takeChips(this.book);
+    if (chips.length) {
+      for (const [s, r, c, t] of chips) {
+        if (s !== this.sheet) continue;
+        const list = decodeChips(t);
+        if (list.length) this.smart.set(KEY(r, c), list);
+        else this.smart.delete(KEY(r, c));
+      }
+      this.events.onChips(chips);
+    }
     const hst = await this.engine.history(this.book);
     this.events.onHistory(hst.undo, hst.redo);
     this.announce();
@@ -2397,8 +2467,17 @@ export class Grid {
       }
     }
     this.recorder?.({ k: 'edit', sheet: this.sheet, r: this.ar, c: this.ac, raw });
+    const pend = this.editChips;
+    this.editChips = [];
+    const [pr, pc] = [this.ar, this.ac];
     try {
-      await this.commitEdits(await this.engine.apply(this.book, [[this.ar, this.ac, raw]], this.sheet));
+      const mark = pend.length ? await this.engine.undoMark(this.book) : -1;
+      await this.commitEdits(await this.engine.apply(this.book, [[pr, pc, raw]], this.sheet));
+      if (pend.length && !raw.startsWith('=') && encodeChips(pend) !== encodeChips(this.smartAt(pr, pc))) {
+        await this.applyEffect(await this.engine.setChips(this.book, this.sheet, pr, pc, encodeChips(pend)));
+        await this.engine.undoGroup(this.book, mark);
+        await this.refreshHistory();
+      }
     } catch (err) {
       this.events.onError?.(err instanceof Error ? err.message : String(err));
       this.paint();
@@ -2419,7 +2498,7 @@ export class Grid {
       edits = (await this.engine.read(this.book, s.r0, s.c0, s.r1, s.c1, this.sheet)).map(([r, c]) => [r, c, '']);
     }
     if (edits.length) {
-      if (this.recorder) for (const [r, c, raw] of edits) this.recorder({ k: 'edit', sheet: this.sheet, r, c, raw });
+      this.recorder?.({ k: 'clear', sheet: this.sheet, r0: s.r0, c0: s.c0, r1: s.r1, c1: s.c1 });
       await this.commitEdits(await this.engine.apply(this.book, edits, this.sheet));
     }
   }
@@ -2527,11 +2606,16 @@ export class Grid {
     const n = rows ? s.r1 - s.r0 + 1 : s.c1 - s.c0 + 1;
     const at = rows ? (after ? s.r1 + 1 : s.r0) : (after ? s.c1 + 1 : s.c0);
     if (n > 10000) return;
+    this.recorder?.({ k: 'shift', sheet: this.sheet, rows, at: Math.min(at, rows ? MAX_ROWS - 1 : MAX_COLS - 1), n, insert: true });
+    await this.shiftLines(rows, Math.min(at, rows ? MAX_ROWS - 1 : MAX_COLS - 1), n, true);
+  }
+
+  async shiftLines(rows: boolean, at: number, n: number, insert: boolean, sheet = this.sheet): Promise<void> {
     const peers = this.peers();
     const mark = peers.length ? await this.engine.undoMark(this.book) : -1;
-    const sh = await this.engine.shift(this.book, this.sheet, rows, Math.min(at, rows ? MAX_ROWS - 1 : MAX_COLS - 1), n, true);
+    const sh = await this.engine.shift(this.book, sheet, rows, at, n, insert);
     this.afterShift(sh);
-    for (const p of peers) this.events.onShift(await this.engine.shift(this.book, p, rows, sh.at, n, true));
+    for (const p of peers) this.events.onShift(await this.engine.shift(this.book, p, rows, sh.at, n, insert));
     if (mark >= 0) await this.engine.undoGroup(this.book, mark);
     await this.refreshHistory();
   }
@@ -2539,6 +2623,7 @@ export class Grid {
   async remove(rows: boolean): Promise<void> {
     const s = this.sel();
     const n = rows ? s.r1 - s.r0 + 1 : s.c1 - s.c0 + 1;
+    this.recorder?.({ k: 'shift', sheet: this.sheet, rows, at: rows ? s.r0 : s.c0, n, insert: false });
     const peers = this.peers();
     const mark = peers.length ? await this.engine.undoMark(this.book) : -1;
     const sh = await this.engine.shift(this.book, this.sheet, rows, rows ? s.r0 : s.c0, n, false);
@@ -2649,6 +2734,7 @@ export class Grid {
     const up = target.r1 < s.r0;
     const right = target.c0 > s.c1;
     const vertical = down || up;
+    this.recorder?.({ k: 'fill', sheet: this.sheet, src: [s.r0, s.c0, s.r1, s.c1], dest: [Math.min(s.r0, target.r0), Math.min(s.c0, target.c0), Math.max(s.r1, target.r1), Math.max(s.c1, target.c1)] });
     const src = await this.engine.read(this.book, s.r0, s.c0, s.r1, s.c1, this.sheet);
     const map = new Map(src.map(([r, c, t, f]) => [KEY(r, c), f || t]));
     const edits: [number, number, string][] = [];
@@ -2827,6 +2913,7 @@ export class Grid {
     this.editing = true;
     const k = KEY(this.ar, this.ac);
     this.editor.value = initial ?? (this.masked.has(k) ? this.cache.get(k) : this.fx.get(k) ?? this.cache.get(k)) ?? '';
+    if (initial === undefined) this.editChips = this.smartAt(this.ar, this.ac).map((c) => ({ ...c }));
     this.reveal(this.ar, this.ac);
     this.placeEditor();
     this.editor.hidden = false;
@@ -2863,6 +2950,7 @@ export class Grid {
     this.editing = false;
     const value = this.editor.value;
     this.editor.hidden = true;
+    if (!commit) this.editChips = [];
     this.focus();
     const start = this.tabStart;
     if (commit && !(await this.setActive(value))) return;
@@ -3055,6 +3143,7 @@ export class Grid {
       } else {
         this.drag = { kind: 'cells' };
         const open = (e.ctrlKey || e.metaKey) && !shift && this.linked.has(KEY(row, col));
+        const chipOpen = (e.ctrlKey || e.metaKey) && !shift ? this.smartHit(p.x, p.y) : null;
         const box = !shift && !e.ctrlKey && !e.metaKey && this.isCheck(row, col) && Math.abs(p.x - (this.x(col) + this.cols.size(col) / 2)) <= 9 && Math.abs(p.y - (this.y(row) + this.rows.size(row) / 2)) <= 9;
         this.enqueue(async () => {
           pane(true, true);
@@ -3062,6 +3151,7 @@ export class Grid {
           else this.select(row, col);
           if (box) await this.toggleCheck(row, col);
           if (open) this.events.onOpenLink();
+          if (chipOpen) this.events.onChipOpen?.(chipOpen.row, chipOpen.col, chipOpen.chip);
         });
       }
     });

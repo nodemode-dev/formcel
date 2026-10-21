@@ -502,6 +502,10 @@ export class Collab {
     this.composer.addEventListener('input', () => this.paintMentions());
   }
 
+  knownPeople(): string[] {
+    return [...new Set([userName(), ...this.snap.people])].filter(Boolean);
+  }
+
   private paintMentions(): void {
     const names = this.snap.people.filter((p) => p && p !== userName());
     const sig = names.join('|');

@@ -91,6 +91,10 @@ interface Exports {
   fc_remove_links(book: number, sheet: number, r0: number, c0: number, r1: number, c1: number): number;
   fc_take_links(book: number): number;
   fc_load_links(book: number, sheet: number, lines: number, len: number): number;
+  fc_chips_of(book: number, sheet: number): number;
+  fc_set_chips(book: number, sheet: number, row: number, col: number, p: number, len: number): number;
+  fc_take_chips(book: number): number;
+  fc_load_chips(book: number, sheet: number, lines: number, len: number): number;
   fc_undo_mark(book: number): number;
   fc_undo_group(book: number, mark: number): number;
   fc_formats_in(book: number, sheet: number, r0: number, c0: number, r1: number, c1: number): number;
@@ -469,6 +473,16 @@ function run(x: Exports, req: Request): Value {
     case 'link.load': {
       const body = req.cells.map(([r, c, t]) => `${r}\t${c}\t${escape(t)}`).join('\n');
       return withStrings(x, [body], ([p, l]) => ok(x.fc_load_links(req.book, req.sheet, p, l), 'The engine refused those links.'));
+    }
+    case 'chip.list':
+      return lines(out(x, x.fc_chips_of(req.book, req.sheet))).map(([r, c, t]) => [Number(r), Number(c), unescape(t ?? '')] as [number, number, string]);
+    case 'chip.set':
+      return withStrings(x, [req.chips], ([p, l]) => effect(out(x, x.fc_set_chips(req.book, req.sheet, req.row, req.col, p, l))));
+    case 'chip.take':
+      return lines(out(x, x.fc_take_chips(req.book))).map(([sh, r, c, t]) => [Number(sh), Number(r), Number(c), unescape(t ?? '')] as LinkChange);
+    case 'chip.load': {
+      const body = req.cells.map(([r, c, t]) => `${r}\t${c}\t${escape(t)}`).join('\n');
+      return withStrings(x, [body], ([p, l]) => ok(x.fc_load_chips(req.book, req.sheet, p, l), 'The engine refused those chips.'));
     }
     case 'rules.get':
       return out(x, x.fc_rules(req.book, req.sheet)).split('\n').filter(Boolean);

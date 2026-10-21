@@ -262,6 +262,22 @@ export class EngineClient {
     if (cells.length) await this.call({ op: 'link.load', book, sheet, cells });
   }
 
+  async chipsOf(book: number, sheet: number): Promise<Edit[]> {
+    return (await this.call({ op: 'chip.list', book, sheet })) as Edit[];
+  }
+
+  async setChips(book: number, sheet: number, row: number, col: number, chips: string): Promise<Effect> {
+    return (await this.call({ op: 'chip.set', book, sheet, row, col, chips })) as Effect;
+  }
+
+  async takeChips(book: number): Promise<LinkChange[]> {
+    return (await this.call({ op: 'chip.take', book })) as LinkChange[];
+  }
+
+  async loadChips(book: number, sheet: number, cells: Edit[]): Promise<void> {
+    if (cells.length) await this.call({ op: 'chip.load', book, sheet, cells });
+  }
+
   async rules(book: number, sheet: number): Promise<string[]> {
     return (await this.call({ op: 'rules.get', book, sheet })) as string[];
   }

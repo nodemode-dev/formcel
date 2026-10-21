@@ -34,6 +34,9 @@
 .fc-ac-name { overflow: hidden; font-family: var(--font-mono); white-space: nowrap; text-overflow: ellipsis; }
 .fc-ac-sum { overflow: hidden; color: var(--text-muted); white-space: nowrap; text-overflow: ellipsis; }
 
+.fc-chip-pick .fc-ac-row { grid-template-columns: 48px minmax(0, 1fr) auto; }
+.fc-chip-pick .fc-ac-name { font-family: inherit; }
+
 .fc-ac-tip {
   max-width: 480px;
   height: 52px;
