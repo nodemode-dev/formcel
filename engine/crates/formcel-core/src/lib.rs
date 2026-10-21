@@ -2,6 +2,7 @@ use graph::{FastMap, FastSet};
 use std::collections::{HashMap, VecDeque};
 use std::fmt;
 
+pub mod cf;
 pub mod eval;
 pub mod formula;
 mod graph;
@@ -193,11 +194,12 @@ pub struct Sheet {
     pub name: String,
     cells: Store,
     merges: Vec<Area>,
+    rules: Vec<cf::Rule>,
 }
 
 impl Sheet {
     pub fn new(name: &str) -> Self {
-        Sheet { name: name.to_string(), cells: Store::default(), merges: Vec::new() }
+        Sheet { name: name.to_string(), cells: Store::default(), merges: Vec::new(), rules: Vec::new() }
     }
 
     pub fn len(&self) -> usize {
@@ -258,6 +260,10 @@ pub enum MergeMode {
 }
 
 fn shift_area(m: Area, s: Shift) -> Option<Area> {
+    shift_span(m, s).filter(|out| out.r0 < out.r1 || out.c0 < out.c1)
+}
+
+fn shift_span(m: Area, s: Shift) -> Option<Area> {
     let (a0, a1) = if s.rows { (m.r0, m.r1) } else { (m.c0, m.c1) };
     let (a0, a1, at) = (i64::from(a0), i64::from(a1), i64::from(s.at));
     let limit = i64::from(if s.rows { MAX_ROWS } else { MAX_COLS }) - 1;
@@ -277,8 +283,7 @@ fn shift_area(m: Area, s: Shift) -> Option<Area> {
         return None;
     }
     let n1 = n1.min(limit);
-    let out = if s.rows { Area { r0: n0 as u32, r1: n1 as u32, ..m } } else { Area { c0: n0 as u32, c1: n1 as u32, ..m } };
-    (out.r0 < out.r1 || out.c0 < out.c1).then_some(out)
+    Some(if s.rows { Area { r0: n0 as u32, r1: n1 as u32, ..m } } else { Area { c0: n0 as u32, c1: n1 as u32, ..m } })
 }
 
 #[derive(Clone, Debug, Default)]
@@ -286,6 +291,7 @@ struct Lost {
     codes: Vec<(Key, Option<String>, Option<String>)>,
     styles: Vec<(Key, Option<String>, Option<String>)>,
     merges: Vec<Area>,
+    rules: Vec<cf::Rule>,
 }
 
 pub type Changed = Vec<(usize, Addr, Value)>;
@@ -307,10 +313,12 @@ pub struct Effect {
     pub merges: Option<usize>,
     pub theme: bool,
     pub named: bool,
+    pub rules: Option<usize>,
 }
 
 impl Effect {
     fn join(mut self, o: Effect) -> Effect {
+        self.rules = o.rules.or(self.rules);
         self.theme |= o.theme;
         self.named |= o.named;
         self.cells.extend(o.cells);
@@ -337,6 +345,7 @@ enum Tx {
     Group(Vec<Tx>),
     Theme { before: Box<theme::Theme>, after: Box<theme::Theme> },
     Named { before: Vec<theme::NamedStyle>, after: Vec<theme::NamedStyle> },
+    Rules { sheet: usize, before: Vec<cf::Rule>, after: Vec<cf::Rule> },
 }
 
 #[derive(Debug)]
@@ -1298,9 +1307,11 @@ impl Workbook {
     }
 
     fn do_shift(&mut self, s: Shift) -> (Dropped, Rewritten, Lost) {
-        let mut lost_fmt = Lost { merges: self.sheets[s.sheet].merges.clone(), ..Lost::default() };
+        let mut lost_fmt = Lost { merges: self.sheets[s.sheet].merges.clone(), rules: self.sheets[s.sheet].rules.clone(), ..Lost::default() };
         let merges = std::mem::take(&mut self.sheets[s.sheet].merges);
         self.sheets[s.sheet].merges = merges.into_iter().filter_map(|m| shift_area(m, s)).collect();
+        let rules = std::mem::take(&mut self.sheets[s.sheet].rules);
+        self.sheets[s.sheet].rules = rules.into_iter().filter_map(|r| shift_span(r.area, s).map(|area| cf::Rule { area, ..r })).collect();
         let limit = i64::from(if s.rows { MAX_ROWS } else { MAX_COLS });
         let moved = |a: Addr| -> Option<Addr> {
             let c = i64::from(if s.rows { a.row } else { a.col });
@@ -1646,6 +1657,10 @@ impl Workbook {
                 self.sheets[*sheet].merges = if forward { after.clone() } else { before.clone() };
                 Effect { merges: Some(*sheet), ..Effect::default() }
             }
+            Tx::Rules { sheet, before, after } => {
+                self.sheets[*sheet].rules = if forward { after.clone() } else { before.clone() };
+                Effect { rules: Some(*sheet), ..Effect::default() }
+            }
             Tx::Theme { before, after } => {
                 self.theme = if forward { (**after).clone() } else { (**before).clone() };
                 Effect { theme: true, ..Effect::default() }
@@ -1678,6 +1693,7 @@ impl Workbook {
                 let back = Shift { delta: -shift.delta, ..*shift };
                 self.do_shift(back);
                 self.sheets[shift.sheet].merges = lost.merges.clone();
+                self.sheets[shift.sheet].rules = lost.rules.clone();
                 let restored = self.apply_formats(&lost.codes, false).join(self.apply_styles(&lost.styles, false));
                 for (s, a, raw) in rewritten {
                     self.set_raw(*s, *a, raw);
@@ -1687,7 +1703,7 @@ impl Workbook {
                 }
                 self.recalc_all();
                 let cells = dropped.iter().map(|(a, _)| (shift.sheet, *a, self.sheets[shift.sheet].cells.get(*a).cloned().unwrap_or(Value::Empty))).collect();
-                Effect { cells, shift: Some(back), merges: Some(shift.sheet), formats: restored.formats, styles: restored.styles, ..Effect::default() }
+                Effect { cells, shift: Some(back), merges: Some(shift.sheet), rules: Some(shift.sheet), formats: restored.formats, styles: restored.styles, ..Effect::default() }
             }
         }
     }

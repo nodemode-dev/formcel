@@ -477,6 +477,57 @@ pub extern "C" fn fc_values_in(id: u32, sheet: u32, r0: u32, c0: u32, r1: u32, c
     }
 }
 
+/// A sheet's conditional formatting rules, one line each, highest precedence first.
+#[no_mangle]
+pub extern "C" fn fc_rules(id: u32, sheet: u32) -> i32 {
+    match with_book(id, |wb| wb.rule_lines(sheet as usize).join("\n")) {
+        Some(s) => emit(&s) as i32,
+        None => -1,
+    }
+}
+
+/// Replaces a sheet's rules as one undo step; -3 when a line does not parse.
+///
+/// # Safety
+/// `lines` must point at `len` readable bytes.
+#[no_mangle]
+pub unsafe extern "C" fn fc_set_rules(id: u32, sheet: u32, lines: *const u8, len: u32) -> i32 {
+    let list: Vec<String> = text(lines, len).split('\n').filter(|l| !l.is_empty()).map(String::from).collect();
+    effect_or(with_book(id, |wb| wb.set_rules(sheet as usize, &list).map(|e| wb.encode(&e))))
+}
+
+/// Loads a sheet's rules without an undo step.
+///
+/// # Safety
+/// `lines` must point at `len` readable bytes.
+#[no_mangle]
+pub unsafe extern "C" fn fc_load_rules(id: u32, sheet: u32, lines: *const u8, len: u32) -> i32 {
+    let list: Vec<String> = text(lines, len).split('\n').filter(|l| !l.is_empty()).map(String::from).collect();
+    match with_book(id, |wb| wb.load_rules(sheet as usize, &list)) {
+        Some(Ok(n)) => n as i32,
+        _ => -1,
+    }
+}
+
+/// What conditional formatting paints inside a rectangle, as `row\tcol\tstyle\tbar\ticon` lines.
+#[no_mangle]
+pub extern "C" fn fc_cf_in(id: u32, sheet: u32, r0: u32, c0: u32, r1: u32, c1: u32) -> i32 {
+    match with_book(id, |wb| wb.cf_in(sheet as usize, Addr { row: r0, col: c0 }, Addr { row: r1, col: c1 })) {
+        Some(list) => {
+            let mut s = String::new();
+            for (a, p) in list {
+                let bar = p.bar.map(|(f, t, c)| format!("{f:.4},{t:.4},{c:06x}")).unwrap_or_default();
+                let icon = p.icon.map(|(set, i)| format!("{set}:{i}")).unwrap_or_default();
+                s.push_str(&format!("{}\t{}\t", a.row, a.col));
+                wire::escape(&p.style.map(|st| st.text()).unwrap_or_default(), &mut s);
+                s.push_str(&format!("\t{bar}\t{icon}\n"));
+            }
+            emit(&s) as i32
+        }
+        None => -1,
+    }
+}
+
 /// The current length of the undo history, to pass to `fc_undo_group` later.
 #[no_mangle]
 pub extern "C" fn fc_undo_mark(id: u32) -> i32 {

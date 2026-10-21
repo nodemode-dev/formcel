@@ -1792,7 +1792,7 @@ fn rank(v: &Value) -> u8 {
     }
 }
 
-fn compare(a: &Value, b: &Value) -> std::cmp::Ordering {
+pub fn compare(a: &Value, b: &Value) -> std::cmp::Ordering {
     use std::cmp::Ordering;
     let (a, b) = match (a, b) {
         (Value::Empty, Value::Text(_)) => (Value::Text(String::new()), b.clone()),

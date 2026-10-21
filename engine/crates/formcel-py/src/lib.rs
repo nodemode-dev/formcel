@@ -199,6 +199,37 @@ impl Workbook {
         Ok(self.inner.effective_style(sheet, a).text())
     }
 
+    #[pyo3(signature = (sheet = 0))]
+    fn rules(&self, sheet: usize) -> Vec<String> {
+        self.inner.rule_lines(sheet)
+    }
+
+    #[pyo3(signature = (lines, sheet = 0))]
+    fn load_rules(&mut self, lines: Vec<String>, sheet: usize) -> PyResult<usize> {
+        self.inner.load_rules(sheet, &lines).map_err(|e| PyValueError::new_err(e.to_string()))
+    }
+
+    #[pyo3(signature = (lines, sheet = 0))]
+    fn set_rules(&mut self, lines: Vec<String>, sheet: usize) -> PyResult<()> {
+        self.inner.set_rules(sheet, &lines).map(|_| ()).map_err(|e| PyValueError::new_err(e.to_string()))
+    }
+
+    #[pyo3(signature = (top, bottom, sheet = 0))]
+    fn cf_in(&self, top: &str, bottom: &str, sheet: usize) -> PyResult<Vec<(String, String, String, String)>> {
+        let t = parse_a1(top).map_err(|e| PyValueError::new_err(e.to_string()))?;
+        let b = parse_a1(bottom).map_err(|e| PyValueError::new_err(e.to_string()))?;
+        Ok(self
+            .inner
+            .cf_in(sheet, t, b)
+            .into_iter()
+            .map(|(a, p)| {
+                let bar = p.bar.map(|(f, t, c)| format!("{f:.2},{t:.2},{c:06x}")).unwrap_or_default();
+                let icon = p.icon.map(|(s, i)| format!("{s}:{i}")).unwrap_or_default();
+                (to_a1(a), p.style.map(|s| s.text()).unwrap_or_default(), bar, icon)
+            })
+            .collect())
+    }
+
     fn undo(&mut self) -> Option<Vec<(String, String)>> {
         self.inner.undo().map(|e| pairs(e.cells))
     }
