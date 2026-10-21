@@ -18,14 +18,14 @@ fn date_or_num(s: &str) -> Result<f64, String> {
     }
 }
 
-fn text_of(v: &Value) -> Option<String> {
+pub(super) fn text_of(v: &Value) -> Option<String> {
     match v {
         Value::Text(t) if !t.trim().is_empty() => Some(t.trim().to_string()),
         _ => None,
     }
 }
 
-fn nums_of(vals: &[Value]) -> Vec<f64> {
+pub(super) fn nums_of(vals: &[Value]) -> Vec<f64> {
     vals.iter().filter_map(|v| if let Value::Number(n) = v { Some(*n) } else { None }).collect()
 }
 

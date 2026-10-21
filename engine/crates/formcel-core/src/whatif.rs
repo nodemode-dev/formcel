@@ -38,6 +38,19 @@ pub struct Run {
     cons: Vec<ConRow>,
     method: String,
     message: String,
+    problem: Option<Problem>,
+    lin: Option<LinModel>,
+    x: Vec<f64>,
+}
+
+#[derive(Clone, Debug)]
+struct LinModel {
+    lp: Lp,
+    n: usize,
+    free: bool,
+    sign: f64,
+    ncons: usize,
+    exact: bool,
 }
 
 #[derive(Clone, Debug)]
@@ -166,13 +179,14 @@ impl State {
     }
 }
 
-#[derive(Clone, Copy, PartialEq)]
+#[derive(Clone, Copy, PartialEq, Debug)]
 enum Rel {
     Le,
     Ge,
     Eq,
 }
 
+#[derive(Clone, Debug)]
 struct Lp {
     c: Vec<f64>,
     rows: Vec<(Vec<f64>, Rel, f64)>,
@@ -360,6 +374,7 @@ fn milp(p: &Lp, n: usize, ints: &[usize]) -> LpOut {
     }
 }
 
+#[derive(Clone, Debug)]
 struct Con {
     lhs: Key,
     op: String,
@@ -368,6 +383,7 @@ struct Con {
     text: String,
 }
 
+#[derive(Clone, Debug)]
 struct Problem {
     obj: Key,
     mode: String,
@@ -576,6 +592,37 @@ impl Workbook {
                 need(3)?;
                 self.sc_summary(a, fx)
             }
+            "sc.merge" => {
+                need(2)?;
+                let (from, to) = (self.sheet_of(&a[0])?, self.sheet_of(&a[1])?);
+                let mut next = self.whatif.clone();
+                let mut added = 0;
+                for s in self.whatif.scenarios.iter().filter(|s| s.sheet == from) {
+                    let mut name = s.name.clone();
+                    let mut k = 2;
+                    while next.scenarios.iter().any(|o| o.sheet == to && o.name.eq_ignore_ascii_case(&name)) {
+                        name = format!("{} ({k})", s.name);
+                        k += 1;
+                    }
+                    next.scenarios.push(Scenario { name, sheet: to, ..s.clone() });
+                    added += 1;
+                }
+                if added == 0 {
+                    return Err("That sheet has no scenarios to merge.".to_string());
+                }
+                self.state_change(next);
+                Ok(format!("ok\t{added}"))
+            }
+            "sc.pivot" => {
+                need(3)?;
+                self.sc_pivot(a, fx)
+            }
+            "dt.at" => {
+                need(2)?;
+                let sheet = self.sheet_of(&a[0])?;
+                let at = parse_a1(&a[1]).map_err(|_| "That is not a cell reference.".to_string())?;
+                Ok(self.whatif.tables.iter().find(|t| t.sheet == sheet && at.row > t.area.r0 && at.row <= t.area.r1 && at.col > t.area.c0 && at.col <= t.area.c1).map_or(String::new(), |t| format!("{{=TABLE({},{})}}", t.row_in.map(to_a1).unwrap_or_default(), t.col_in.map(to_a1).unwrap_or_default())))
+            }
             "solve" => {
                 need(7)?;
                 self.solve(a, fx)
@@ -616,6 +663,14 @@ impl Workbook {
                 need(2)?;
                 self.explore(a)
             }
+            "tp" => {
+                need(5)?;
+                self.toolpak(&a[0], &a[1..], fx)
+            }
+            "ask" => {
+                need(3)?;
+                self.ask(a, fx)
+            }
             _ => Err("The engine does not know that request.".to_string()),
         }
     }
@@ -637,8 +692,14 @@ impl Workbook {
             Value::Empty => 0.0,
             _ => return Err(format!("Cell {} holds text; Goal Seek needs a number there.", to_a1(change.1))),
         };
+        let cap = a.get(4).and_then(|s| s.trim().parse::<u32>().ok()).filter(|n| *n > 0).unwrap_or(u32::MAX);
+        let tol = a.get(5).and_then(|s| s.trim().parse::<f64>().ok()).filter(|t| *t > 0.0);
+        let commit = a.get(6).is_none_or(|s| s != "preview");
         let mut iters = 0u32;
         let mut probe = |wb: &mut Workbook, x: f64| -> Option<f64> {
+            if iters >= cap {
+                return None;
+            }
             iters += 1;
             wb.temp(&[(change, num_raw(x))]);
             match wb.val(set) {
@@ -715,12 +776,23 @@ impl Workbook {
         }
         self.set_raw(change.0, change.1, &original);
         self.recalc(&[change]);
-        let ok = best.1 <= 1e-3 * target.abs().max(1.0).min(1e3) || best.1 <= 1e-3;
-        if !ok {
-            return Ok(format!("fail\t{}\t{}\t{}", fnum(best.0), fnum(target + best.1), iters));
+        let ok = match tol {
+            Some(t) => best.1 <= t,
+            None => best.1 <= 1e-3 * target.abs().max(1.0).min(1e3) || best.1 <= 1e-3,
+        };
+        let status = if ok { "ok" } else if iters >= cap { "stop" } else { "fail" };
+        let force = a.get(6).is_some_and(|s| s == "force");
+        if !ok && !force && !(status == "stop" && !commit) {
+            return Ok(format!("{status}\t{}\t{}\t{}", fnum(best.0), fnum(target + best.1), iters));
+        }
+        if !commit {
+            self.temp(&[(change, num_raw(best.0))]);
+            let at = self.numval(set).unwrap_or(f64::NAN);
+            self.temp(&[(change, original)]);
+            return Ok(format!("{status}\t{}\t{}\t{}", fnum(best.0), fnum(at), iters));
         }
         self.put_all(change.0, &[(change.1, num_raw(best.0))], fx)?;
-        Ok(format!("ok\t{}\t{}\t{}", fnum(best.0), fnum(self.numval(set).unwrap_or(f64::NAN)), iters))
+        Ok(format!("{status}\t{}\t{}\t{}", fnum(best.0), fnum(self.numval(set).unwrap_or(f64::NAN)), iters))
     }
 
     fn dt_compute(&mut self, t: &DataTable) -> Result<Vec<(Addr, String)>, String> {
@@ -914,5 +986,13 @@ impl Workbook {
 
 #[path = "whatif_solver.rs"]
 mod solver;
+#[path = "whatif_sens.rs"]
+mod sens;
+#[path = "whatif_scen.rs"]
+mod scen;
+#[path = "whatif_toolpak.rs"]
+mod toolpak;
+#[path = "whatif_ask.rs"]
+mod ask;
 #[path = "whatif_report.rs"]
 mod report;
