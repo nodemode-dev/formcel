@@ -122,7 +122,16 @@ def importrange(args: list, books) -> list[list]:
     wid, ref = text_arg(args[0]), text_arg(args[1])
     if looks_like_path(wid):
         return external(wid, ref, books)
-    return ranges.range_values(books, wid, ref)
+    try:
+        return ranges.range_values(books, wid, ref)
+    except (KeyError, FileNotFoundError):
+        from . import extbooks
+        from .store import store
+
+        found = extbooks.find(store(), wid)
+        if found is None:
+            raise ValueError(f"the workbook {wid} was not found")
+        return ranges.range_values(books, found, ref)
 
 
 _prepared: dict[str, tuple] = {}
@@ -219,7 +228,7 @@ def resolve(key: str, books, fresh: bool = False, auto: dict | None = None) -> t
             return aiclient.cell_answer(text_arg(args[0]), [text_arg(a) for a in args[1:] if a != ""]), ""
     except aiclient.NotConfigured as e:
         return error("#ERROR!"), str(e)
-    except (webdata.FetchError, ValueError, KeyError, IndexError, TypeError) as e:
+    except (webdata.FetchError, ValueError, KeyError, IndexError, TypeError, OSError) as e:
         code = "#VALUE!" if name in ("WEBSERVICE", "FILTERXML") else "#N/A"
         return error(code), f"{name}: {e}"
     return error("#NAME?"), f"{name} is not a connected function"

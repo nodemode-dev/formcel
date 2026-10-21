@@ -75,7 +75,7 @@ export class Names {
 
   private async load(): Promise<void> {
     if (this.book < 0) return;
-    const rows = (await this.host.engine.nameRows(this.book)).map((r): Row => ({ ...r, table: false }));
+    const rows = (await this.host.engine.nameRows(this.book)).map((r): Row => ({ ...r, table: false, value: /^=\s*LAMBDA\s*\(/i.test(r.refers) ? '' : r.value }));
     const sheets = this.host.sheets();
     for (const t of this.host.grid.tables()) {
       const area = { r0: t.area[0], c0: t.area[1], r1: t.area[2], c1: t.area[3] };

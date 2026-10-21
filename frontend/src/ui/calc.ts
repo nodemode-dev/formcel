@@ -27,7 +27,7 @@ export interface CalcHost {
   post(body: { cmd: string }): Promise<unknown>;
   evaluate(): void;
   arrows(row: number, col: number, list: Arrow[]): void;
-  drain(fresh?: boolean): Promise<void>;
+  drain(fresh?: boolean, all?: boolean): Promise<void>;
   goSheet(index: number): void;
 }
 
@@ -259,7 +259,7 @@ export class Calc {
   async calculate(scope: string): Promise<void> {
     this.tableDirty = false;
     await this.run(cmd('calculate', scope));
-    if (scope === 'full' || scope === 'rebuild') await this.host.drain(true);
+    if (scope === 'full' || scope === 'rebuild') await this.host.drain(true, true);
     this.paintStatus();
   }
 

@@ -490,7 +490,9 @@ impl<'a> Eval<'a> {
         if !multi(&a) {
             return Out::V(zero(self.deref(a)));
         }
+        let imported = matches!(e, Expr::Call(n, _) if self.ctx.host_fn(n));
         match self.grid(a) {
+            Ok(g) if imported => Out::A(g),
             Ok(g) => Out::A(Array { data: g.data.into_iter().map(zero).collect(), ..g }),
             Err(k) => Out::V(err(k)),
         }

@@ -575,6 +575,7 @@ export class App {
       engine: engine(),
       book: () => this.open?.book ?? null,
       say: (t, bad) => this.status(t, !!bad),
+      named: () => suggestions().filter((s) => s.kind === 'function' && !FUNCTIONS.includes(s)),
     });
     this.calc = new Calc({
       grid: this.grid,
@@ -590,7 +591,7 @@ export class App {
       post: (body) => api('POST', `/api/workbooks/${this.open?.id}/calc`, body),
       evaluate: () => void this.audit.evaluate(),
       arrows: (r, c, l) => this.audit.showArrows(r, c, l),
-      drain: (f) => this.auto.drain(f),
+      drain: (f, a) => this.auto.drain(f, a),
       goSheet: (s) => this.showSheet(s),
     });
     this.button('edit.undo').disabled = true;

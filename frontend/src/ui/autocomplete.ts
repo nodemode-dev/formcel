@@ -243,7 +243,7 @@ export class Autocomplete {
     const sc = scan(this.field.value, caret);
     const all = this.items();
     const w = sc.word;
-    const fn = sc.call && this.enabled ? all.find((it) => it.kind === 'function' && it.name === sc.call!.name) : undefined;
+    const fn = sc.call && this.enabled ? all.find((it) => it.kind === 'function' && it.name.toUpperCase() === sc.call!.name) : undefined;
     const text = this.field.value;
     const st = this.enabled && text.startsWith('=') ? structured(text.slice(0, caret)) : null;
     let found: Suggestion[] = [];

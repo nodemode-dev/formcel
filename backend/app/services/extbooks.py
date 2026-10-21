@@ -48,13 +48,82 @@ def values(books, store, book: str, sheet: str, area: tuple[int, int, int, int])
     return "\n".join("\t".join(token(v) for v in row) for row in grid)
 
 
+def a1(area: tuple[int, int, int, int]) -> str:
+    def col(c: int) -> str:
+        s, c = "", c + 1
+        while c:
+            c, r = divmod(c - 1, 26)
+            s = chr(65 + r) + s
+        return s
+
+    r0, c0, r1, c1 = area
+    return f"{col(c0)}{r0 + 1}:{col(c1)}{r1 + 1}"
+
+
+def disk_file(store, path: str, book: str):
+    from pathlib import Path
+
+    p = path.strip().replace("\\", "/")
+    names = [book.strip()]
+    folders = [Path(p).expanduser()] if p else []
+    folders += [store.dir, Path.cwd()]
+    for folder in folders:
+        for n in names:
+            f = folder / n
+            if f.is_file():
+                return f
+    return None
+
+
+def from_disk(store, path: str, book: str, sheet: str, area: tuple[int, int, int, int]) -> str:
+    from . import pqx
+
+    f = disk_file(store, path, book)
+    if f is None:
+        return "e:#REF!"
+    try:
+        t = pqx.file_table(str(f), sheet if f.suffix.lower() != ".csv" else "", a1(area))
+    except pqx.QueryError:
+        return "e:#REF!"
+    r0, c0, r1, c1 = area
+    rows = t.rows
+    if f.suffix.lower() in (".csv", ".tsv", ".txt"):
+        rows = [r[c0:c1 + 1] for r in rows[r0:r1 + 1]]
+    h, w = r1 - r0 + 1, c1 - c0 + 1
+    if h * w > EXACT_LIMIT:
+        h, w = min(h, len(rows)), min(w, max((len(r) for r in rows), default=0))
+        if h <= 0 or w <= 0:
+            return "z:"
+    grid = [[(r[c] if c < len(r) else None) for c in range(w)] for r in (rows[i] if i < len(rows) else [] for i in range(h))]
+    return "\n".join("\t".join(token(v) for v in row) for row in grid)
+
+
+_saved: dict[str, str] = {}
+
+
+def persist(b) -> None:
+    from .store import store
+
+    with b.lock:
+        text = b.engine.calc("extlines")
+        if _saved.get(b.id) == text:
+            return
+        _saved[b.id] = text
+        store()._write(b)
+
+
 def resolve(args: list, books) -> str:
     from .store import store
 
     if len(args) != 4:
         raise ValueError("wrong number of arguments")
-    _, book, sheet, spec = (hostcalls.text_arg(a) for a in args)
+    path, book, sheet, spec =(hostcalls.text_arg(a) for a in args)
     nums = [int(x) for x in spec.split(",")]
     if len(nums) != 4:
         raise ValueError("bad area")
-    return values(books, store(), book, sheet, (nums[0], nums[1], nums[2], nums[3]))
+    area = (nums[0], nums[1], nums[2], nums[3])
+    if find(store(), book) is None or path.strip():
+        got = from_disk(store(), path, book, sheet, area)
+        if got != "e:#REF!" or find(store(), book) is None:
+            return got
+    return values(books, store(), book, sheet, area)
