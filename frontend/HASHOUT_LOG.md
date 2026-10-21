@@ -397,3 +397,5 @@ Fixed: opening a workbook never renamed the window engine's first sheet, so it s
 A .csv, .tsv or .txt file opens a dialog first: the separator (sniffed, and changeable), the row count and encoding, and the first 12 rows under a header row where each column can be General or Text, with the engine process's guess of what the column holds. The dialog is built once in the overlay root; its table sits in a box of fixed height, and a new separator replaces only the table's head and body, so the dialog does not move or resize. Open sends the file again with the choices; nothing is kept on the server between the two calls. Escape and Cancel close it.
 
 The toolbar's download button opens a menu: the workbook as .xlsx, or the current sheet as .csv or .tsv. Each is also a command (`file.download-xlsx`, `file.download-csv`, `file.download-tsv`).
+
+v0.27.0: the menu adds .ods, and .xlsm when the workbook was opened from a file with macros (`macros` in the workbook's meta). Open a file accepts .xls and .ods. The save indicator now says "Opened, with N notes on what changed", since a note can also say what was kept.

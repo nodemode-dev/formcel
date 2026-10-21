@@ -35,6 +35,7 @@ interface Opened {
   sheets: string[];
   views: SheetView[];
   names: Name[];
+  macros: boolean;
 }
 
 function sheetPrefix(name: string): string {
@@ -227,6 +228,8 @@ export class App {
     cmd('file.new', 'New blank workbook', 'Create an empty workbook and open it.', true, () => this.create());
     cmd('file.download', 'Download', 'Choose a file format to download this workbook or sheet in.', false, () => this.downloadMenu());
     cmd('file.download-xlsx', 'Download as .xlsx', 'Save a copy of this workbook as an Excel workbook in your downloads.', false, () => this.download('xlsx'));
+    cmd('file.download-xlsm', 'Download as .xlsm', 'Save a copy as an Excel macro-enabled workbook with the macros the file was opened with. FormCel keeps macros but does not run them.', false, () => this.download('xlsm'));
+    cmd('file.download-ods', 'Download as .ods', 'Save a copy of this workbook as an OpenDocument spreadsheet.', false, () => this.download('ods'));
     cmd('file.download-csv', 'Download sheet as .csv', 'Save the values of this sheet, as shown, separated by commas.', false, () => this.download('csv'));
     cmd('file.download-tsv', 'Download sheet as .tsv', 'Save the values of this sheet, as shown, separated by tabs.', false, () => this.download('tsv'));
     cmd('sheet.add', 'Add a sheet', 'Add a sheet after the last one and show it.', true, () => this.addSheet());
@@ -420,18 +423,20 @@ export class App {
     const run = (id: string) => () => runCommand(id).then(() => this.grid.focus());
     this.menu.show(b.left, b.bottom + 4, [
       { label: 'Excel workbook (.xlsx)', run: run('file.download-xlsx') },
+      ...(this.open?.macros ? [{ label: 'Excel macro-enabled workbook (.xlsm), with the macros it was opened with', run: run('file.download-xlsm') }] : []),
+      { label: 'OpenDocument spreadsheet (.ods)', run: run('file.download-ods') },
       { label: 'This sheet as comma-separated values (.csv)', run: run('file.download-csv') },
       { label: 'This sheet as tab-separated values (.tsv)', run: run('file.download-tsv') },
     ], () => this.grid.focus());
   }
 
-  private async download(kind: 'xlsx' | 'csv' | 'tsv'): Promise<void> {
+  private async download(kind: 'xlsx' | 'xlsm' | 'ods' | 'csv' | 'tsv'): Promise<void> {
     const o = this.open;
     if (!o) return;
     this.flush();
     await this.saving;
     const a = document.createElement('a');
-    a.href = kind === 'xlsx' ? `/api/workbooks/${o.id}/export.xlsx` : `/api/workbooks/${o.id}/export.${kind}?sheet=${this.grid.sheetIndex}`;
+    a.href = kind === 'csv' || kind === 'tsv' ? `/api/workbooks/${o.id}/export.${kind}?sheet=${this.grid.sheetIndex}` : `/api/workbooks/${o.id}/export.${kind}`;
     a.download = '';
     document.body.appendChild(a);
     a.click();
@@ -562,7 +567,7 @@ export class App {
     }
     for (const [n, f] of doc.names ?? []) await e.defineName(book, n, f).catch(() => []);
     const names = doc.names?.length ? await e.names(book) : [];
-    this.open = { id, book, title: doc.title, sheets: doc.sheets, views: doc.sheets.map((_, i) => doc.views?.[i] ?? {}), names };
+    this.open = { id, book, title: doc.title, sheets: doc.sheets, views: doc.sheets.map((_, i) => doc.views?.[i] ?? {}), names, macros: !!doc.macros };
     const p = this.p;
     p.home.hidden = true;
     p.sheet.hidden = false;
@@ -570,7 +575,7 @@ export class App {
     p.title.hidden = false;
     p.title.value = doc.title;
     p.save.hidden = false;
-    this.status(this.importNotes.length ? `Opened, with ${this.importNotes.length} kind${this.importNotes.length === 1 ? '' : 's'} of content left out` : 'Saved');
+    this.status(this.importNotes.length ? `Opened, with ${this.importNotes.length} note${this.importNotes.length === 1 ? '' : 's'} on what changed` : 'Saved');
     p.save.title = this.importNotes.join('\n');
     this.importNotes = [];
     document.title = `${doc.title} · FormCel`;
