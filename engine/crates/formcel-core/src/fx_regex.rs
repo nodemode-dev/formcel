@@ -1,8 +1,9 @@
 use super::*;
-use regex::{Captures, Regex, RegexBuilder};
+use fancy_regex::{Captures, Regex, RegexBuilder};
 
 fn build(pattern: &str, insensitive: bool) -> Result<Regex, ErrKind> {
-    RegexBuilder::new(pattern).case_insensitive(insensitive).size_limit(1 << 22).build().map_err(|_| ErrKind::Value)
+    let p = if insensitive { format!("(?i){pattern}") } else { pattern.to_string() };
+    RegexBuilder::new(&p).backtrack_limit(1_000_000).delegate_size_limit(1 << 22).build().map_err(|_| ErrKind::Value)
 }
 
 fn expand(c: &Captures, repl: &str) -> String {
@@ -77,7 +78,7 @@ impl Eval<'_> {
                         return Err(ErrKind::Na);
                     }
                     let re = build(&self.t(a, 1)?, self.insensitive(a, 2)?)?;
-                    Value::Bool(re.is_match(&self.t(a, 0)?))
+                    Value::Bool(re.is_match(&self.t(a, 0)?).map_err(|_| ErrKind::Value)?)
                 }
                 _ => {
                     if a.len() < 3 || a.len() > 5 {
@@ -87,7 +88,7 @@ impl Eval<'_> {
                     let re = build(&self.t(a, 1)?, self.insensitive(a, 4)?)?;
                     let repl = self.t(a, 2)?;
                     let k = self.whole_opt(a, 3)? as i64;
-                    let all: Vec<Captures> = re.captures_iter(&text).collect();
+                    let all: Vec<Captures> = re.captures_iter(&text).collect::<Result<_, _>>().map_err(|_| ErrKind::Value)?;
                     let pick: Vec<usize> = if k == 0 {
                         (0..all.len()).collect()
                     } else if k > 0 {
@@ -120,19 +121,22 @@ impl Eval<'_> {
         let mode = if a.len() == 2 && groups { 2 } else { self.whole_opt(a, 2)? as i64 };
         let row = |data: Vec<Value>| Arg::A(Array { rows: 1, cols: data.len(), data });
         match mode {
-            0 => match re.find(&text) {
+            0 => match re.find(&text).map_err(|_| ErrKind::Value)? {
                 Some(m) => Ok(Arg::V(Value::Text(m.as_str().to_string()))),
                 None => Err(ErrKind::Na),
             },
             1 => {
-                let data: Vec<Value> = re.find_iter(&text).map(|m| Value::Text(m.as_str().to_string())).collect();
+                let mut data: Vec<Value> = Vec::new();
+                for m in re.find_iter(&text) {
+                    data.push(Value::Text(m.map_err(|_| ErrKind::Value)?.as_str().to_string()));
+                }
                 if data.is_empty() {
                     return Err(ErrKind::Na);
                 }
                 Ok(row(data))
             }
             2 => {
-                let c = re.captures(&text).ok_or(ErrKind::Na)?;
+                let c = re.captures(&text).map_err(|_| ErrKind::Value)?.ok_or(ErrKind::Na)?;
                 let data: Vec<Value> = (1..c.len()).map(|i| Value::Text(c.get(i).map_or(String::new(), |m| m.as_str().to_string()))).collect();
                 if data.is_empty() {
                     return Err(ErrKind::Value);
