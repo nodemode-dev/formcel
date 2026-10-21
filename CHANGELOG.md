@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.13.0 · 2026-10-21
+
+- FILTER, SORT, SORTBY and UNIQUE: results spill and can be nested, as in `=SORT(FILTER(A2:C99,B2:B99>3),2,-1)`. FILTER shows `#CALC!` when nothing matches, unless it is given a value for that case.
+- LAMBDA helpers: MAP, REDUCE, SCAN, BYROW, BYCOL and MAKEARRAY, as in `=MAKEARRAY(3,3,LAMBDA(r,c,r*c))`.
+- New: SUMSQ (92 functions in all).
+- `r` and `c` now work as LET and LAMBDA parameter names (0.12.0 refused them). They are still not allowed as workbook names.
+- Typing a table: after moving right with Tab, Enter goes to the next row in the column where you started.
+- Conformance with Microsoft's function pages: 176 pass, and the same 5 still need TEXT. The pages for the ten new functions show their results only as pictures, so 29 cases for them were worked by hand and all pass.
+
 ## 0.12.0 · 2026-10-21
 
 - Names: select cells, type a name in the Name Box and press Enter. Formulas can then use it (`=SUM(Sales)`), typing it in the Name Box jumps back to it, and the box shows the name whenever that range is selected. Names are saved with the workbook and follow inserted and deleted rows and renamed sheets. A name starts with a letter, underscore or backslash, has no spaces, and is not a cell address; the Name Box says why when one is refused.
