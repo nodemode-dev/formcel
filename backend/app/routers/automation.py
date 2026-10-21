@@ -1,12 +1,11 @@
-import json
 import secrets
 
 from fastapi import APIRouter, Depends, Header, HTTPException
 from pydantic import BaseModel, Field
 
-from .. import config
-from ..services import aiclient, hostcalls, pquery, ranges, webdata
+from ..services import aiclient, extpkg, hostcalls, offline_ai, pquery, ranges, webdata
 from ..services.store import store
+from . import automation_x
 
 router = APIRouter(prefix="/api")
 
@@ -51,12 +50,13 @@ def resolve(body: ResolveIn) -> dict:
 class QueryRunIn(BaseModel):
     query: dict
     fresh: bool = True
+    library: dict = Field(default_factory=dict)
 
 
 @router.post("/queries/run")
 def run_query(body: QueryRunIn) -> dict:
     try:
-        return pquery.run(body.query, books, body.fresh)
+        return pquery.run(body.query, books, body.fresh, body.library)
     except (pquery.QueryError, webdata.FetchError, ValueError, KeyError, FileNotFoundError) as e:
         raise HTTPException(422, f"The query could not run: {e}")
 
@@ -125,8 +125,11 @@ def assist(body: AssistIn) -> dict:
     ctx = {"sheets": sheets, "sheet": body.sheet, "selection": body.selection, "selected": body.selected}
     try:
         return aiclient.assist(body.prompt, ctx, read)
-    except aiclient.NotConfigured as e:
-        raise HTTPException(409, str(e))
+    except aiclient.NotConfigured:
+        try:
+            return {**offline_ai.plan(body.prompt, ctx, read), "offline": True}
+        except ValueError as e:
+            raise HTTPException(422, str(e))
     except aiclient.ModelError as e:
         raise HTTPException(502, str(e))
 
@@ -155,20 +158,7 @@ def put_api(body: TokenIn) -> dict:
 
 @router.get("/extensions")
 def list_extensions() -> list[dict]:
-    root = config.DATA_DIR / "Extensions"
-    out = []
-    for m in sorted(root.glob("*/manifest.json")) if root.is_dir() else []:
-        try:
-            doc = json.loads(m.read_text("utf-8"))
-            scripts = []
-            for s in doc.get("scripts", []):
-                f = (m.parent / s["file"]).resolve()
-                if m.parent.resolve() in f.parents and f.is_file():
-                    scripts.append({"name": s.get("name", f.stem), "code": f.read_text("utf-8"), "custom": bool(s.get("custom"))})
-            out.append({"id": m.parent.name, "name": doc.get("name", m.parent.name), "version": doc.get("version", ""), "description": doc.get("description", ""), "scripts": scripts})
-        except (OSError, ValueError, KeyError, TypeError):
-            continue
-    return out
+    return extpkg.listing()
 
 
 def guard(authorization: str | None = Header(default=None)) -> None:
@@ -181,13 +171,14 @@ v1 = APIRouter(prefix="/api/v1", tags=["rest"], dependencies=[Depends(guard)])
 
 
 def settle(b) -> None:
+    hostcalls.prepare(b)
     for _ in range(4):
         with b.lock:
             keys = b.engine.host_pending()
         if not keys:
             return
         for k in keys:
-            data, _ = hostcalls.resolve(k, books)
+            data, _ = hostcalls.resolve(k, books, auto=b.auto)
             with b.lock:
                 b.engine.host_set(k, data)
 
@@ -260,3 +251,7 @@ def v1_put_values(wid: str, sheet: str, body: ValuesIn, range: str = "A1") -> di
         raise HTTPException(422, f"Those cells could not be saved: {e}")
     w = max((len(r) for r in body.values), default=0)
     return {"updated": len(cells), "range": f"{ranges.col_name(c0)}{r0 + 1}:{ranges.col_name(c0 + max(w, 1) - 1)}{r0 + max(len(body.values), 1)}"}
+
+
+router.include_router(automation_x.router)
+v1.include_router(automation_x.v1)

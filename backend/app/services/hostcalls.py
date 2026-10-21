@@ -76,15 +76,109 @@ def need(args: list, n: int, opt: int = 0) -> None:
         raise ValueError("wrong number of arguments")
 
 
+def looks_like_path(s: str) -> bool:
+    t = s.strip()
+    return bool(re.search(r"[\\/]", t)) or t.lower().endswith((".fcel", ".xlsx", ".xlsm", ".xls", ".csv", ".ods"))
+
+
+def external(book: str, ref: str, books) -> list[list]:
+    from . import pqx
+
+    b = book.strip()
+    if b.startswith("[") and b.endswith("]"):
+        b = b[1:-1]
+    b = b.strip("'")
+    sheet, _, area = ref.rpartition("!")
+    sheet = sheet.strip().strip("'").replace("''", "'")
+    from pathlib import Path
+
+    p = Path(b).expanduser()
+    if not p.is_file():
+        from .store import store
+
+        cands = [store().dir / b, store().dir / f"{b}.fcel"]
+        p = next((c for c in cands if c.is_file()), p)
+    if p.is_file() and p.suffix.lower() == ".fcel":
+        from .store import store
+
+        if p.parent.resolve() == store().dir.resolve():
+            try:
+                return ranges.range_values(books, p.stem, f"{sheet}!{area}" if sheet else area)
+            except (KeyError, FileNotFoundError):
+                pass
+    if not p.is_file():
+        from .store import store
+
+        for w in store().listing():
+            if w["title"].lower() == b.lower() or w["id"] == b:
+                return ranges.range_values(books, w["id"], f"{sheet}!{area}" if sheet else area)
+        raise ValueError(f"the workbook {b} was not found")
+    t = pqx.file_table(str(p), sheet, area)
+    return t.rows
+
+
 def importrange(args: list, books) -> list[list]:
     need(args, 2)
     wid, ref = text_arg(args[0]), text_arg(args[1])
+    if looks_like_path(wid):
+        return external(wid, ref, books)
     return ranges.range_values(books, wid, ref)
 
 
-def resolve(key: str, books, fresh: bool = False) -> tuple[str, str]:
+_prepared: dict[str, tuple] = {}
+
+
+def prepare(b) -> None:
+    from . import jsfn
+
+    names = tuple(sorted({"PY", *jsfn.functions(b.auto or {}).keys()}))
+    if _prepared.get(b.id) != names:
+        with b.lock:
+            b.engine.host_custom(list(names))
+        _prepared[b.id] = names
+
+
+def python_cell(args: list):
+    from . import pysand
+
+    if not args:
+        raise ValueError("PY needs code as its first argument")
+    if not pysand.enabled():
+        return error("#N/A"), "Python cells are off. Turn them on under Data, Python cells."
+    code = text_arg(args[0])
+    data = [list(a) if isinstance(a, list) else a for a in args[1:]]
+    try:
+        return encode(norm(pysand.run(code, data))), ""
+    except pysand.PyError as e:
+        return error("#VALUE!"), f"PY: {e}"
+
+
+def norm(v):
+    if isinstance(v, list):
+        return v
+    return [[v]]
+
+
+def resolve(key: str, books, fresh: bool = False, auto: dict | None = None) -> tuple[str, str]:
     name, args = split_key(key)
     try:
+        if name == "PY":
+            r = python_cell(args)
+            return r if isinstance(r, tuple) else (r, "")
+        if name in ("EXTERNALREF", "EXTREF"):
+            need(args, 2)
+            return encode(external(text_arg(args[0]), text_arg(args[1]), books)), ""
+        if auto is not None:
+            from . import jsfn
+
+            fn = jsfn.functions(auto).get(name.upper())
+            if fn is not None:
+                try:
+                    return encode(norm(jsfn.call(fn[1], fn[0], args))), ""
+                except jsfn.JsUnavailable as e:
+                    return error("#NAME?"), str(e)
+                except jsfn.JsError as e:
+                    return error("#VALUE!"), f"{name}: {e}"
         if name == "WEBSERVICE":
             need(args, 1)
             url = text_arg(args[0])

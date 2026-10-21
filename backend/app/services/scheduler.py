@@ -1,11 +1,14 @@
 import asyncio
+import re
 import time
+from datetime import datetime
 
 from . import pquery, ranges
 from .store import store
 
 TICK = 15
 _last: dict[tuple[str, str], float] = {}
+_day: dict[tuple[str, str], str] = {}
 
 
 def target_cells(q: dict, rows: list[list[str]], names: list[str]) -> tuple[int, list[tuple[int, int, str]], dict]:
@@ -29,7 +32,9 @@ def refresh(wid: str, qid: str) -> dict:
         q = next((x for x in (b.auto.get("queries") or []) if x.get("id") == qid), None)
     if q is None:
         raise KeyError(qid)
-    result = pquery.run(q, store().book, True)
+    with b.lock:
+        library = {x["id"]: x for x in (b.auto.get("queries") or []) if x.get("id")}
+    result = pquery.run(q, store().book, True, library)
     with b.lock:
         sheet, cells, last = target_cells(q, result["rows"], b.sheet_names())
     store().edit(wid, sheet, cells)
@@ -49,6 +54,16 @@ def due() -> list[tuple[str, str]]:
         except Exception:
             continue
         for q in auto.get("queries") or []:
+            daily = str(q.get("daily") or "")
+            if q.get("id") and re.fullmatch(r"\d{1,2}:\d{2}", daily):
+                k = (p.stem, q["id"])
+                stamp = f"{datetime.now():%Y-%m-%d}"
+                if _day.get(k) != stamp and f"{datetime.now():%H:%M}" >= daily.zfill(5):
+                    first = k not in _day
+                    _day[k] = stamp
+                    if not first or (q.get("refreshed") or 0) < time.time() - 3600:
+                        out.append(k)
+                continue
             every = q.get("every") or 0
             if every and every > 0 and q.get("id"):
                 k = (p.stem, q["id"])
