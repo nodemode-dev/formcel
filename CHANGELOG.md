@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.17.0 · 2026-10-21
+
+- Phase 2 (formula engine) is closed; Phase 3 (formatting) begins.
+- Number format codes: the engine reads Excel's format codes. That covers sections for positive, negative, zero and text values, colours and conditions, digit placeholders, thousands separators and scaling, percent, scientific, fractions, dates, times and elapsed time, and quoted text.
+- TEXT shows a value in any of those codes, for example `=TEXT(1234.567,"$#,##0.00")` gives $1,234.57 and `=TEXT(4.34,"# ?/?")` gives 4 1/3. 107 functions in all.
+- The Function conformance template now matches Microsoft's pages in all 186 compared cases.
+- Not yet: giving a cell a format code from the window. That is the next step.
+
 ## 0.16.0 · 2026-10-21
 
 - New template, Function conformance: every example table on Microsoft's function pages for FormCel's functions. Each sheet holds the page's data, each formula, the page's result and a live TRUE/FALSE check, and a Summary sheet totals them. 181 of the 186 compared cases match. The 5 others need TEXT, and the cases not compared say why.
