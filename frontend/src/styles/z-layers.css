@@ -1,0 +1,24 @@
+:root {
+  --z-base: 0;
+  --z-raised: 100;
+  --z-sticky: 200;
+  --z-chrome: 300;
+  --z-dropdown: 400;
+  --z-scrim: 500;
+  --z-overlay: 600;
+  --z-popover: 700;
+  --z-toast: 800;
+  --z-tooltip: 900;
+}
+
+#overlay-root {
+  position: relative;
+  z-index: var(--z-overlay);
+}
+
+#toast-root {
+  position: fixed;
+  right: var(--space-4);
+  bottom: var(--space-4);
+  z-index: var(--z-toast);
+}
