@@ -13,6 +13,21 @@ pub enum Color {
     Red,
 }
 
+impl Color {
+    pub fn rgb(self) -> u32 {
+        match self {
+            Color::Black => 0x000000,
+            Color::Green => 0x00ff00,
+            Color::White => 0xffffff,
+            Color::Blue => 0x0000ff,
+            Color::Magenta => 0xff00ff,
+            Color::Yellow => 0xffff00,
+            Color::Cyan => 0x00ffff,
+            Color::Red => 0xff0000,
+        }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq)]
 enum Tok {
     Lit(String),

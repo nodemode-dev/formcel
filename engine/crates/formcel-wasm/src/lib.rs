@@ -247,6 +247,62 @@ pub unsafe extern "C" fn fc_load_formats(id: u32, sheet: u32, lines: *const u8, 
     }
 }
 
+/// Applies `r0\tc0\tr1\tc1\tpatch` lines as one undo step; the out buffer gets the effect.
+/// Returns -3 for a patch that does not parse.
+///
+/// # Safety
+/// `ops` must point at `len` readable bytes.
+#[no_mangle]
+pub unsafe extern "C" fn fc_set_styles(id: u32, sheet: u32, ops: *const u8, len: u32) -> i32 {
+    let mut list = Vec::new();
+    for l in text(ops, len).split('\n').filter(|l| !l.is_empty()) {
+        let p: Vec<&str> = l.splitn(5, '\t').collect();
+        let n = |i: usize| p.get(i).and_then(|s| s.parse::<u32>().ok());
+        let (Some(r0), Some(c0), Some(r1), Some(c1)) = (n(0), n(1), n(2), n(3)) else { return -1 };
+        list.push((Addr { row: r0, col: c0 }, Addr { row: r1, col: c1 }, wire::unescape(p.get(4).copied().unwrap_or(""))));
+    }
+    match with_book(id, |wb| wb.set_styles(sheet as usize, &list).map(|e| wire::encode_effect(&e, &|s, a| wb.meta(s, a)))) {
+        Some(Ok(s)) => emit(&s) as i32,
+        Some(Err(formcel_core::EngineError::BadStyle(_))) => -3,
+        _ => -1,
+    }
+}
+
+/// Styles inside a rectangle as `&\trow\tcol\tstyle` lines.
+#[no_mangle]
+pub extern "C" fn fc_styles_in(id: u32, sheet: u32, r0: u32, c0: u32, r1: u32, c1: u32) -> i32 {
+    let s = sheet as usize;
+    match with_book(id, |wb| wb.styles_in(s, Addr { row: r0, col: c0 }, Addr { row: r1, col: c1 })) {
+        Some(list) => {
+            let list: Vec<(usize, Addr, String)> = list.into_iter().map(|(a, t)| (s, a, t)).collect();
+            emit(&wire::encode_styles('&', Some(s), &list)) as i32
+        }
+        None => -1,
+    }
+}
+
+/// The style of one cell, empty when plain.
+#[no_mangle]
+pub extern "C" fn fc_style_at(id: u32, sheet: u32, row: u32, col: u32) -> i32 {
+    match with_book(id, |wb| wb.style_text(sheet as usize, Addr { row, col }).unwrap_or_default()) {
+        Some(s) => emit(&s) as i32,
+        None => -1,
+    }
+}
+
+/// Loads `row\tcol\tstyle` lines without an undo step; returns the count.
+///
+/// # Safety
+/// `lines` must point at `len` readable bytes.
+#[no_mangle]
+pub unsafe extern "C" fn fc_load_styles(id: u32, sheet: u32, lines: *const u8, len: u32) -> i32 {
+    let Some(cells) = wire::decode_edits(text(lines, len)) else { return -1 };
+    match with_book(id, |wb| wb.load_styles(sheet as usize, &cells)) {
+        Some(Ok(n)) => n as i32,
+        _ => -1,
+    }
+}
+
 /// Lists workbook names as `name\t=formula` lines.
 #[no_mangle]
 pub extern "C" fn fc_names(id: u32) -> i32 {

@@ -9,6 +9,7 @@ pub mod fmtcode;
 pub mod numfmt;
 pub use numfmt::Fmt;
 mod store;
+pub mod style;
 pub mod wire;
 pub use formula::ErrKind;
 use formula::{Area, Expr};
@@ -127,6 +128,7 @@ pub enum EngineError {
     BadName(String),
     BadFormula(String),
     BadFormat(String),
+    BadStyle(String),
 }
 
 impl fmt::Display for EngineError {
@@ -138,6 +140,7 @@ impl fmt::Display for EngineError {
             EngineError::BadName(n) => write!(f, "not a valid name: {n}"),
             EngineError::BadFormula(s) => write!(f, "not a valid formula: {s}"),
             EngineError::BadFormat(s) => write!(f, "not a valid number format: {s}"),
+            EngineError::BadStyle(s) => write!(f, "not a valid cell style: {s}"),
         }
     }
 }
@@ -256,9 +259,11 @@ pub struct Effect {
     pub cells: Changed,
     pub shift: Option<Shift>,
     pub formats: Vec<(usize, Addr, String)>,
+    pub styles: Vec<(usize, Addr, String)>,
 }
 
 type FormatChange = (Key, Option<String>, Option<String>);
+type StyleRef = std::sync::Arc<(String, style::Style)>;
 
 const FORMAT_LIMIT: u64 = 1_000_000;
 
@@ -267,6 +272,7 @@ enum Tx {
     Cells(Vec<Change>),
     Shift { shift: Shift, dropped: Vec<(Addr, String)>, rewritten: Vec<(usize, Addr, String)> },
     Formats(Vec<FormatChange>),
+    Styles(Vec<FormatChange>),
 }
 
 #[derive(Debug)]
@@ -282,6 +288,7 @@ pub struct Workbook {
     touched: Vec<Key>,
     names: FastMap<String, (String, Expr)>,
     codes: FastMap<Key, std::sync::Arc<(String, fmtcode::Code)>>,
+    styles: FastMap<Key, StyleRef>,
 }
 
 const SPILL_PASSES: usize = 8;
@@ -329,6 +336,7 @@ impl Workbook {
             touched: Vec::new(),
             names: FastMap::default(),
             codes: FastMap::default(),
+            styles: FastMap::default(),
         }
     }
 
@@ -435,10 +443,13 @@ impl Workbook {
         as_fmt.and_then(|f| numfmt::show(n, f)).unwrap_or_else(|| v.to_string())
     }
 
-    pub fn meta(&self, sheet: usize, a: Addr) -> (Option<String>, bool) {
-        let num = matches!(self.sheets.get(sheet).and_then(|s| s.cells.get(a)), Some(Value::Number(_)));
-        let raw = self.formula_text(sheet, a).or_else(|| (self.codes.contains_key(&(sheet, a)) && !self.spilled.contains_key(&(sheet, a))).then(|| self.input(sheet, a)).filter(|s| !s.is_empty()));
-        (raw, num)
+    pub fn meta(&self, sheet: usize, a: Addr) -> wire::Meta {
+        let v = self.sheets.get(sheet).and_then(|s| s.cells.get(a));
+        let num = matches!(v, Some(Value::Number(_)));
+        let code = self.codes.get(&(sheet, a));
+        let raw = self.formula_text(sheet, a).or_else(|| (code.is_some() && !self.spilled.contains_key(&(sheet, a))).then(|| self.input(sheet, a)).filter(|s| !s.is_empty()));
+        let color = code.zip(v).and_then(|(c, v)| c.1.render(v)).and_then(|(_, col)| col).map(fmtcode::Color::rgb);
+        (raw, num, color)
     }
 
     pub fn format_code(&self, sheet: usize, a: Addr) -> Option<String> {
@@ -531,7 +542,122 @@ impl Workbook {
                 cells.push((k.0, k.1, v.clone()));
             }
         }
-        Effect { cells, shift: None, formats }
+        Effect { cells, shift: None, formats, styles: Vec::new() }
+    }
+
+    pub fn style_text(&self, sheet: usize, a: Addr) -> Option<String> {
+        self.styles.get(&(sheet, a)).map(|s| s.0.clone())
+    }
+
+    pub fn styles(&self, sheet: usize) -> Vec<(Addr, String)> {
+        let mut out: Vec<(Addr, String)> = self.styles.iter().filter(|((s, _), _)| *s == sheet).map(|((_, a), st)| (*a, st.0.clone())).collect();
+        out.sort_by_key(|(a, _)| (a.row, a.col));
+        out
+    }
+
+    pub fn styles_in(&self, sheet: usize, top: Addr, bottom: Addr) -> Vec<(Addr, String)> {
+        let mut out: Vec<(Addr, String)> = self
+            .styles
+            .iter()
+            .filter(|((s, a), _)| *s == sheet && a.row >= top.row && a.row <= bottom.row && a.col >= top.col && a.col <= bottom.col)
+            .map(|((_, a), st)| (*a, st.0.clone()))
+            .collect();
+        out.sort_by_key(|(a, _)| (a.row, a.col));
+        out
+    }
+
+    pub fn load_styles(&mut self, sheet: usize, cells: &[(Addr, String)]) -> Result<usize, EngineError> {
+        if sheet >= self.sheets.len() {
+            return Err(EngineError::NoSheet(sheet));
+        }
+        let mut n = 0;
+        for (a, text) in cells {
+            match style::Style::parse(text).filter(|s| !s.is_plain()) {
+                Some(st) => {
+                    self.styles.insert((sheet, *a), std::sync::Arc::new((st.text(), st)));
+                    n += 1;
+                }
+                None => {
+                    self.styles.remove(&(sheet, *a));
+                }
+            }
+        }
+        Ok(n)
+    }
+
+    fn clip(&self, sheet: usize, top: Addr, bottom: Addr) -> (u32, u32, u32, u32) {
+        let (r0, mut r1, c0, mut c1) = (top.row.min(bottom.row), top.row.max(bottom.row), top.col.min(bottom.col), top.col.max(bottom.col));
+        if u64::from(r1 - r0 + 1) * u64::from(c1 - c0 + 1) > FORMAT_LIMIT {
+            let e = self.sheets[sheet].cells.extent().unwrap_or(Addr { row: 0, col: 0 });
+            r1 = r1.min(e.row.max(r0 + 999));
+            c1 = c1.min(e.col.max(c0 + 25));
+            let width = u64::from(c1 - c0 + 1);
+            if u64::from(r1 - r0 + 1) * width > FORMAT_LIMIT {
+                r1 = r0 + (FORMAT_LIMIT / width) as u32 - 1;
+            }
+        }
+        (r0, r1, c0, c1)
+    }
+
+    pub fn set_styles(&mut self, sheet: usize, ops: &[(Addr, Addr, String)]) -> Result<Effect, EngineError> {
+        let mut work: FastMap<Key, style::Style> = FastMap::default();
+        let mut order: Vec<Key> = Vec::new();
+        for (top, bottom, patch) in ops {
+            self.check(sheet, *top)?;
+            self.check(sheet, *bottom)?;
+            style::Style::parse(patch).ok_or_else(|| EngineError::BadStyle(patch.clone()))?;
+            let (r0, r1, c0, c1) = self.clip(sheet, *top, *bottom);
+            for r in r0..=r1 {
+                for c in c0..=c1 {
+                    let k = (sheet, Addr { row: r, col: c });
+                    let st = work.entry(k).or_insert_with(|| {
+                        order.push(k);
+                        self.styles.get(&k).map(|s| s.1.clone()).unwrap_or_default()
+                    });
+                    st.apply(patch);
+                }
+            }
+        }
+        let mut changes = Vec::new();
+        for k in order {
+            let before = self.styles.get(&k).map(|s| s.0.clone());
+            let st = &work[&k];
+            let after = (!st.is_plain()).then(|| st.text());
+            if before != after {
+                changes.push((k, before, after));
+            }
+        }
+        let eff = self.apply_styles(&changes, true);
+        if !changes.is_empty() {
+            self.record(Tx::Styles(changes));
+        }
+        Ok(eff)
+    }
+
+    fn apply_styles(&mut self, changes: &[FormatChange], forward: bool) -> Effect {
+        let mut styles = Vec::with_capacity(changes.len());
+        let mut parsed: Vec<StyleRef> = Vec::new();
+        for (k, before, after) in changes {
+            let to = if forward { after } else { before };
+            let entry = to.as_ref().and_then(|t| match parsed.iter().find(|p| &p.0 == t) {
+                Some(p) => Some(p.clone()),
+                None => style::Style::parse(t).map(|st| {
+                    let arc = std::sync::Arc::new((t.clone(), st));
+                    parsed.push(arc.clone());
+                    arc
+                }),
+            });
+            match entry {
+                Some(arc) => {
+                    self.styles.insert(*k, arc);
+                }
+                None => {
+                    self.styles.remove(k);
+                }
+            }
+            styles.push((k.0, k.1, to.clone().unwrap_or_default()));
+        }
+        Effect { styles, ..Effect::default() }
     }
 
     fn present(&self, changed: Changed) -> Changed {
@@ -991,6 +1117,15 @@ impl Workbook {
                 self.codes.insert((sh, b), c);
             }
         }
+        let styles: Vec<(Key, StyleRef)> = self.styles.iter().filter(|((sh, _), _)| *sh == s.sheet).map(|(k, st)| (*k, st.clone())).collect();
+        for (k, _) in &styles {
+            self.styles.remove(k);
+        }
+        for ((sh, a), st) in styles {
+            if let Some(b) = moved(a) {
+                self.styles.insert((sh, b), st);
+            }
+        }
         self.recalc_all();
         (dropped, rewritten)
     }
@@ -1012,6 +1147,12 @@ impl Workbook {
         for ((s, a), c) in old {
             if let Some(n) = map(s) {
                 self.codes.insert((n, a), c);
+            }
+        }
+        let old = std::mem::take(&mut self.styles);
+        for ((s, a), st) in old {
+            if let Some(n) = map(s) {
+                self.styles.insert((n, a), st);
             }
         }
     }
@@ -1105,13 +1246,14 @@ impl Workbook {
                     self.set_raw(c.sheet, c.addr, raw);
                     seeds.push((c.sheet, c.addr));
                 }
-                Effect { cells: self.recalc(&seeds), shift: None, formats: Vec::new() }
+                Effect { cells: self.recalc(&seeds), ..Effect::default() }
             }
             Tx::Formats(changes) => self.apply_formats(changes, forward),
+            Tx::Styles(changes) => self.apply_styles(changes, forward),
             Tx::Shift { shift, dropped, rewritten } => {
                 if forward {
                     self.do_shift(*shift);
-                    return Effect { cells: Vec::new(), shift: Some(*shift), formats: Vec::new() };
+                    return Effect { shift: Some(*shift), ..Effect::default() };
                 }
                 let back = Shift { delta: -shift.delta, ..*shift };
                 self.do_shift(back);
@@ -1123,7 +1265,7 @@ impl Workbook {
                 }
                 self.recalc_all();
                 let cells = dropped.iter().map(|(a, _)| (shift.sheet, *a, self.sheets[shift.sheet].cells.get(*a).cloned().unwrap_or(Value::Empty))).collect();
-                Effect { cells, shift: Some(back), formats: Vec::new() }
+                Effect { cells, shift: Some(back), ..Effect::default() }
             }
         }
     }

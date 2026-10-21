@@ -106,6 +106,30 @@ impl Workbook {
         self.inner.load_formats(sheet, &cells).map_err(|e| PyValueError::new_err(e.to_string()))
     }
 
+    #[pyo3(signature = (top, bottom, patch, sheet = 0))]
+    fn set_style(&mut self, top: &str, bottom: &str, patch: &str, sheet: usize) -> PyResult<usize> {
+        let t = parse_a1(top).map_err(|e| PyValueError::new_err(e.to_string()))?;
+        let b = parse_a1(bottom).map_err(|e| PyValueError::new_err(e.to_string()))?;
+        self.inner.set_styles(sheet, &[(t, b, patch.to_string())]).map(|e| e.styles.len()).map_err(|e| PyValueError::new_err(e.to_string()))
+    }
+
+    #[pyo3(signature = (a1, sheet = 0))]
+    fn style(&self, a1: &str, sheet: usize) -> PyResult<Option<String>> {
+        let a = parse_a1(a1).map_err(|e| PyValueError::new_err(e.to_string()))?;
+        Ok(self.inner.style_text(sheet, a))
+    }
+
+    #[pyo3(signature = (sheet = 0))]
+    fn styles(&self, sheet: usize) -> Vec<(u32, u32, String)> {
+        self.inner.styles(sheet).into_iter().map(|(a, s)| (a.row, a.col, s)).collect()
+    }
+
+    #[pyo3(signature = (cells, sheet = 0))]
+    fn load_styles(&mut self, cells: Vec<(u32, u32, String)>, sheet: usize) -> PyResult<usize> {
+        let cells: Vec<(Addr, String)> = cells.into_iter().map(|(row, col, s)| (Addr { row, col }, s)).collect();
+        self.inner.load_styles(sheet, &cells).map_err(|e| PyValueError::new_err(e.to_string()))
+    }
+
     fn undo(&mut self) -> Option<Vec<(String, String)>> {
         self.inner.undo().map(|e| pairs(e.cells))
     }
