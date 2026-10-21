@@ -1,7 +1,12 @@
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::fmt;
 
+pub mod eval;
+pub mod formula;
 mod store;
 pub mod wire;
+pub use formula::ErrKind;
+use formula::{Area, Expr};
 pub use store::{Dir, Store};
 
 pub const HISTORY_LIMIT: usize = 500;
@@ -16,6 +21,7 @@ pub enum Value {
     Number(f64),
     Text(String),
     Bool(bool),
+    Error(ErrKind),
 }
 
 impl Value {
@@ -41,14 +47,16 @@ impl fmt::Display for Value {
         match self {
             Value::Empty => Ok(()),
             Value::Number(n) => {
+                let n = eval::sig15(*n);
                 if n.fract() == 0.0 && n.abs() < 1e15 {
-                    write!(f, "{}", *n as i64)
+                    write!(f, "{}", n as i64)
                 } else {
                     write!(f, "{}", n)
                 }
             }
             Value::Text(s) => f.write_str(s),
             Value::Bool(b) => f.write_str(if *b { "TRUE" } else { "FALSE" }),
+            Value::Error(e) => f.write_str(e.text()),
         }
     }
 }
@@ -139,9 +147,38 @@ impl Sheet {
 struct Change {
     sheet: usize,
     addr: Addr,
-    before: Value,
-    after: Value,
+    before: String,
+    after: String,
 }
+
+#[derive(Clone, Debug)]
+struct Formula {
+    ast: Option<Expr>,
+    src: String,
+}
+
+impl Formula {
+    fn new(raw: &str) -> Formula {
+        let body = raw.trim_start().strip_prefix('=').unwrap_or(raw);
+        Formula { ast: formula::parse(body), src: body.to_string() }
+    }
+
+    fn text(&self) -> String {
+        match &self.ast {
+            Some(e) => format!("={}", formula::to_text(e)),
+            None => format!("={}", self.src),
+        }
+    }
+}
+
+fn is_formula(raw: &str) -> bool {
+    let t = raw.trim_start();
+    t.starts_with('=') && t.len() > 1
+}
+
+type Key = (usize, Addr);
+type Dropped = Vec<(Addr, String)>;
+type Rewritten = Vec<(usize, Addr, String)>;
 
 pub type Changed = Vec<(usize, Addr, Value)>;
 
@@ -162,7 +199,7 @@ pub struct Effect {
 #[derive(Clone, Debug)]
 enum Tx {
     Cells(Vec<Change>),
-    Shift { shift: Shift, dropped: Vec<(Addr, Value)> },
+    Shift { shift: Shift, dropped: Vec<(Addr, String)>, rewritten: Vec<(usize, Addr, String)> },
 }
 
 #[derive(Debug)]
@@ -170,6 +207,23 @@ pub struct Workbook {
     sheets: Vec<Sheet>,
     undo: Vec<Tx>,
     redo: Vec<Tx>,
+    formulas: HashMap<Key, Formula>,
+}
+
+impl eval::Ctx for Workbook {
+    fn sheet_index(&self, name: &str) -> Option<usize> {
+        self.sheet_by_name(name)
+    }
+
+    fn cell(&self, sheet: usize, a: Addr) -> Value {
+        self.sheets.get(sheet).and_then(|s| s.cells.get(a)).cloned().unwrap_or(Value::Empty)
+    }
+
+    fn each(&self, sheet: usize, area: Area, f: &mut dyn FnMut(Addr, &Value)) {
+        if let Some(s) = self.sheets.get(sheet) {
+            s.cells.for_each_in(Addr { row: area.r0, col: area.c0 }, Addr { row: area.r1, col: area.c1 }, |a, v| f(a, v));
+        }
+    }
 }
 
 impl Default for Workbook {
@@ -180,7 +234,7 @@ impl Default for Workbook {
 
 impl Workbook {
     pub fn new() -> Self {
-        Workbook { sheets: vec![Sheet::new("Sheet1")], undo: Vec::new(), redo: Vec::new() }
+        Workbook { sheets: vec![Sheet::new("Sheet1")], undo: Vec::new(), redo: Vec::new(), formulas: HashMap::new() }
     }
 
     pub fn sheet_count(&self) -> usize {
@@ -198,7 +252,13 @@ impl Workbook {
 
     pub fn rename_sheet(&mut self, sheet: usize, name: &str) -> Result<(), EngineError> {
         let s = self.sheets.get_mut(sheet).ok_or(EngineError::NoSheet(sheet))?;
-        s.name = name.to_string();
+        let old = std::mem::replace(&mut s.name, name.to_string());
+        for f in self.formulas.values_mut() {
+            if let Some(e) = f.ast.as_mut() {
+                formula::rename_refs(e, &old, name);
+            }
+        }
+        self.recalc_all();
         Ok(())
     }
 
@@ -222,19 +282,200 @@ impl Workbook {
             self.check(sheet, *a)?;
         }
         let mut tx = Vec::with_capacity(edits.len());
-        let mut out = Vec::with_capacity(edits.len());
+        let mut seeds = Vec::with_capacity(edits.len());
         for (a, raw) in edits {
-            let after = Value::parse_input(raw);
-            let before = self.sheets[sheet].cells.set(*a, after.clone());
+            let before = self.input(sheet, *a);
+            self.set_raw(sheet, *a, raw);
+            let after = self.input(sheet, *a);
             if before != after {
-                tx.push(Change { sheet, addr: *a, before, after: after.clone() });
+                tx.push(Change { sheet, addr: *a, before, after });
             }
-            out.push((sheet, *a, after));
+            seeds.push((sheet, *a));
         }
         if !tx.is_empty() {
             self.record(Tx::Cells(tx));
         }
+        Ok(self.recalc(&seeds))
+    }
+
+    pub fn input(&self, sheet: usize, a: Addr) -> String {
+        if let Some(f) = self.formulas.get(&(sheet, a)) {
+            return f.text();
+        }
+        self.sheets.get(sheet).and_then(|s| s.cells.get(a)).map(Value::to_string).unwrap_or_default()
+    }
+
+    pub fn formula_text(&self, sheet: usize, a: Addr) -> Option<String> {
+        self.formulas.get(&(sheet, a)).map(Formula::text)
+    }
+
+    pub fn inputs(&self, sheet: usize) -> Result<Vec<(Addr, String)>, EngineError> {
+        let s = self.sheets.get(sheet).ok_or(EngineError::NoSheet(sheet))?;
+        let mut out = Vec::with_capacity(s.len());
+        if let Some(bottom) = s.cells.extent() {
+            s.cells.for_each_in(Addr { row: 0, col: 0 }, bottom, |a, v| {
+                let text = self.formulas.get(&(sheet, a)).map_or_else(|| v.to_string(), Formula::text);
+                out.push((a, text));
+            });
+        }
         Ok(out)
+    }
+
+    fn set_raw(&mut self, sheet: usize, a: Addr, raw: &str) {
+        if is_formula(raw) {
+            self.formulas.insert((sheet, a), Formula::new(raw));
+            self.sheets[sheet].cells.set(a, Value::Number(0.0));
+        } else {
+            self.formulas.remove(&(sheet, a));
+            self.sheets[sheet].cells.set(a, Value::parse_input(raw));
+        }
+    }
+
+    fn sheet_by_name(&self, name: &str) -> Option<usize> {
+        self.sheets.iter().position(|s| s.name.eq_ignore_ascii_case(name))
+    }
+
+    fn areas_of(&self, k: &Key, f: &Formula) -> Vec<(usize, Area)> {
+        let mut out = Vec::new();
+        if let Some(e) = &f.ast {
+            formula::refs(e, &mut |s, area| {
+                let idx = match s {
+                    None => Some(k.0),
+                    Some(n) => self.sheet_by_name(n),
+                };
+                if let Some(i) = idx {
+                    out.push((i, area));
+                }
+            });
+        }
+        out
+    }
+
+    fn recalc(&mut self, seeds: &[Key]) -> Changed {
+        self.recalc_with(seeds, false)
+    }
+
+    fn recalc_with(&mut self, seeds: &[Key], everything: bool) -> Changed {
+        let deps: Vec<(Key, Vec<(usize, Area)>)> = self.formulas.iter().map(|(k, f)| (*k, self.areas_of(k, f))).collect();
+        let mut by_cell: HashMap<Key, Vec<usize>> = HashMap::new();
+        let mut by_range: Vec<usize> = Vec::new();
+        for (i, (_, areas)) in deps.iter().enumerate() {
+            let mut ranged = false;
+            for (s, ar) in areas {
+                if ar.r0 == ar.r1 && ar.c0 == ar.c1 {
+                    by_cell.entry((*s, Addr { row: ar.r0, col: ar.c0 })).or_default().push(i);
+                } else {
+                    ranged = true;
+                }
+            }
+            if ranged {
+                by_range.push(i);
+            }
+        }
+        let index: HashMap<Key, usize> = deps.iter().enumerate().map(|(i, (k, _))| (*k, i)).collect();
+        let mut dirty: HashSet<usize> = HashSet::new();
+        let mut queue: VecDeque<Key> = if everything { VecDeque::new() } else { seeds.iter().copied().collect() };
+        for k in seeds {
+            if let Some(&i) = index.get(k) {
+                dirty.insert(i);
+            }
+        }
+        while let Some(k) = queue.pop_front() {
+            let hit = |i: usize, dirty: &mut HashSet<usize>, queue: &mut VecDeque<Key>| {
+                if dirty.insert(i) {
+                    queue.push_back(deps[i].0);
+                }
+            };
+            if let Some(list) = by_cell.get(&k) {
+                for &i in list {
+                    hit(i, &mut dirty, &mut queue);
+                }
+            }
+            for &i in &by_range {
+                if deps[i].1.iter().any(|(s, ar)| *s == k.0 && ar.contains(k.1.row, k.1.col)) {
+                    hit(i, &mut dirty, &mut queue);
+                }
+            }
+        }
+        let mut out: Changed = seeds.iter().filter(|k| !index.contains_key(k)).map(|k| (k.0, k.1, self.sheets[k.0].cells.get(k.1).cloned().unwrap_or(Value::Empty))).collect();
+        out.extend(self.evaluate(&deps, &index, &dirty));
+        out
+    }
+
+    fn evaluate(&mut self, deps: &[(Key, Vec<(usize, Area)>)], index: &HashMap<Key, usize>, dirty: &HashSet<usize>) -> Changed {
+        let mut indeg: HashMap<usize, usize> = dirty.iter().map(|&i| (i, 0)).collect();
+        let mut users: HashMap<usize, Vec<usize>> = HashMap::new();
+        let mut by_sheet: HashMap<usize, Vec<usize>> = HashMap::new();
+        for &j in dirty {
+            by_sheet.entry(deps[j].0 .0).or_default().push(j);
+        }
+        for &i in dirty {
+            let mut pre: HashSet<usize> = HashSet::new();
+            for (s, ar) in &deps[i].1 {
+                let cells = u64::from(ar.r1 - ar.r0 + 1) * u64::from(ar.c1 - ar.c0 + 1);
+                let on_sheet = by_sheet.get(s).map(Vec::as_slice).unwrap_or(&[]);
+                if cells <= on_sheet.len() as u64 {
+                    for r in ar.r0..=ar.r1 {
+                        for c in ar.c0..=ar.c1 {
+                            if let Some(&j) = index.get(&(*s, Addr { row: r, col: c })) {
+                                if dirty.contains(&j) {
+                                    pre.insert(j);
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    for &j in on_sheet {
+                        let a = deps[j].0 .1;
+                        if ar.contains(a.row, a.col) {
+                            pre.insert(j);
+                        }
+                    }
+                }
+            }
+            for j in pre {
+                if j == i {
+                    continue;
+                }
+                *indeg.get_mut(&i).expect("dirty formula") += 1;
+                users.entry(j).or_default().push(i);
+            }
+        }
+        let mut ready: VecDeque<usize> = indeg.iter().filter(|(_, d)| **d == 0).map(|(i, _)| *i).collect();
+        let mut order = Vec::with_capacity(dirty.len());
+        while let Some(i) = ready.pop_front() {
+            order.push(i);
+            for &u in users.get(&i).map(Vec::as_slice).unwrap_or(&[]) {
+                let d = indeg.get_mut(&u).expect("dirty formula");
+                *d -= 1;
+                if *d == 0 {
+                    ready.push_back(u);
+                }
+            }
+        }
+        let mut out = Vec::with_capacity(dirty.len());
+        let done: HashSet<usize> = order.iter().copied().collect();
+        for &i in &order {
+            let (s, a) = deps[i].0;
+            let v = match &self.formulas[&(s, a)].ast {
+                None => Value::Error(ErrKind::Error),
+                Some(e) => eval::Eval { ctx: &*self, sheet: s }.formula(e),
+            };
+            self.sheets[s].cells.set(a, v.clone());
+            out.push((s, a, v));
+        }
+        for &i in dirty.iter().filter(|i| !done.contains(i)) {
+            let (s, a) = deps[i].0;
+            let v = Value::Error(ErrKind::Ref);
+            self.sheets[s].cells.set(a, v.clone());
+            out.push((s, a, v));
+        }
+        out
+    }
+
+    fn recalc_all(&mut self) -> Changed {
+        let seeds: Vec<Key> = self.formulas.keys().copied().collect();
+        self.recalc_with(&seeds, true)
     }
 
     fn record(&mut self, tx: Tx) {
@@ -245,8 +486,62 @@ impl Workbook {
         self.redo.clear();
     }
 
-    fn do_shift(&mut self, s: Shift) -> Vec<(Addr, Value)> {
-        self.sheets[s.sheet].cells.shift(s.rows, s.at, s.delta)
+    fn do_shift(&mut self, s: Shift) -> (Dropped, Rewritten) {
+        let limit = i64::from(if s.rows { MAX_ROWS } else { MAX_COLS });
+        let moved = |a: Addr| -> Option<Addr> {
+            let c = i64::from(if s.rows { a.row } else { a.col });
+            let at = i64::from(s.at);
+            let n = if s.delta >= 0 {
+                if c >= at { c + s.delta } else { c }
+            } else if c >= at && c < at - s.delta {
+                return None;
+            } else if c >= at - s.delta {
+                c + s.delta
+            } else {
+                c
+            };
+            if n >= limit {
+                return None;
+            }
+            Some(if s.rows { Addr { row: n as u32, ..a } } else { Addr { col: n as u32, ..a } })
+        };
+        let lost: HashMap<Addr, String> = self.formulas.iter().filter(|((sh, a), _)| *sh == s.sheet && moved(*a).is_none()).map(|((_, a), f)| (*a, f.text())).collect();
+        let target = self.sheets[s.sheet].name.clone();
+        let names = self.sheet_names();
+        let mut rewritten = Vec::new();
+        for ((sh, a), f) in self.formulas.iter_mut() {
+            if let Some(e) = f.ast.as_mut() {
+                let before = format!("={}", formula::to_text(e));
+                if formula::shift_refs(e, &names[*sh], &target, s.rows, s.at, s.delta) {
+                    rewritten.push((*sh, *a, before));
+                }
+            }
+        }
+        let values = self.sheets[s.sheet].cells.shift(s.rows, s.at, s.delta);
+        let on_sheet: Vec<Key> = self.formulas.keys().filter(|(sh, _)| *sh == s.sheet).copied().collect();
+        let mut moving = Vec::with_capacity(on_sheet.len());
+        for k in on_sheet {
+            if let Some(f) = self.formulas.remove(&k) {
+                moving.push((k.1, f));
+            }
+        }
+        for (a, f) in moving {
+            if let Some(b) = moved(a) {
+                self.formulas.insert((s.sheet, b), f);
+            }
+        }
+        let dropped = values.into_iter().map(|(a, v)| (a, lost.get(&a).cloned().unwrap_or_else(|| v.to_string()))).collect();
+        self.recalc_all();
+        (dropped, rewritten)
+    }
+
+    fn rekey(&mut self, map: impl Fn(usize) -> Option<usize>) {
+        let old = std::mem::take(&mut self.formulas);
+        for ((s, a), f) in old {
+            if let Some(n) = map(s) {
+                self.formulas.insert((n, a), f);
+            }
+        }
     }
 
     pub fn insert(&mut self, sheet: usize, rows: bool, at: u32, n: u32) -> Result<Shift, EngineError> {
@@ -258,8 +553,8 @@ impl Workbook {
             return Err(EngineError::OutOfRange { row: at, col: n });
         }
         let shift = Shift { sheet, rows, at, delta: i64::from(n) };
-        let dropped = self.do_shift(shift);
-        self.record(Tx::Shift { shift, dropped });
+        let (dropped, rewritten) = self.do_shift(shift);
+        self.record(Tx::Shift { shift, dropped, rewritten });
         Ok(shift)
     }
 
@@ -273,8 +568,8 @@ impl Workbook {
         }
         let n = n.min(limit - at);
         let shift = Shift { sheet, rows, at, delta: -i64::from(n) };
-        let dropped = self.do_shift(shift);
-        self.record(Tx::Shift { shift, dropped });
+        let (dropped, rewritten) = self.do_shift(shift);
+        self.record(Tx::Shift { shift, dropped, rewritten });
         Ok(shift)
     }
 
@@ -283,7 +578,13 @@ impl Workbook {
             return Err(EngineError::NoSheet(sheet));
         }
         self.sheets.remove(sheet);
+        self.rekey(|s| match s.cmp(&sheet) {
+            std::cmp::Ordering::Less => Some(s),
+            std::cmp::Ordering::Equal => None,
+            std::cmp::Ordering::Greater => Some(s - 1),
+        });
         self.clear_history();
+        self.recalc_all();
         Ok(())
     }
 
@@ -293,7 +594,12 @@ impl Workbook {
         }
         let s = self.sheets.remove(from);
         self.sheets.insert(to, s);
+        let mut order: Vec<usize> = (0..self.sheets.len()).collect();
+        let m = order.remove(from);
+        order.insert(to, m);
+        self.rekey(|s| order.iter().position(|&o| o == s));
         self.clear_history();
+        self.recalc_all();
         Ok(())
     }
 
@@ -302,8 +608,9 @@ impl Workbook {
             self.check(sheet, *a)?;
         }
         for (a, raw) in edits {
-            self.sheets[sheet].cells.set(*a, Value::parse_input(raw));
+            self.set_raw(sheet, *a, raw);
         }
+        self.recalc_all();
         Ok(edits.len())
     }
 
@@ -315,27 +622,30 @@ impl Workbook {
     fn replay(&mut self, tx: &Tx, forward: bool) -> Effect {
         match tx {
             Tx::Cells(changes) => {
-                let mut cells = Vec::with_capacity(changes.len());
                 let steps: Box<dyn Iterator<Item = &Change>> = if forward { Box::new(changes.iter()) } else { Box::new(changes.iter().rev()) };
+                let mut seeds = Vec::with_capacity(changes.len());
                 for c in steps {
-                    let v = if forward { c.after.clone() } else { c.before.clone() };
-                    self.sheets[c.sheet].cells.set(c.addr, v.clone());
-                    cells.push((c.sheet, c.addr, v));
+                    let raw = if forward { &c.after } else { &c.before };
+                    self.set_raw(c.sheet, c.addr, raw);
+                    seeds.push((c.sheet, c.addr));
                 }
-                Effect { cells, shift: None }
+                Effect { cells: self.recalc(&seeds), shift: None }
             }
-            Tx::Shift { shift, dropped } => {
+            Tx::Shift { shift, dropped, rewritten } => {
                 if forward {
                     self.do_shift(*shift);
                     return Effect { cells: Vec::new(), shift: Some(*shift) };
                 }
                 let back = Shift { delta: -shift.delta, ..*shift };
                 self.do_shift(back);
-                let mut cells = Vec::with_capacity(dropped.len());
-                for (a, v) in dropped {
-                    self.sheets[shift.sheet].cells.set(*a, v.clone());
-                    cells.push((shift.sheet, *a, v.clone()));
+                for (s, a, raw) in rewritten {
+                    self.set_raw(*s, *a, raw);
                 }
+                for (a, raw) in dropped {
+                    self.set_raw(shift.sheet, *a, raw);
+                }
+                self.recalc_all();
+                let cells = dropped.iter().map(|(a, _)| (shift.sheet, *a, self.sheets[shift.sheet].cells.get(*a).cloned().unwrap_or(Value::Empty))).collect();
                 Effect { cells, shift: Some(back) }
             }
         }

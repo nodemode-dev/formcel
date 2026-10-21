@@ -4,9 +4,11 @@ pub fn encode_shift(s: &Shift) -> String {
     format!("#\t{}\t{}\t{}\t{}\n", s.sheet, if s.rows { 'r' } else { 'c' }, s.at, s.delta)
 }
 
-pub fn encode_effect(e: &Effect) -> String {
+pub type FxOf<'a> = &'a dyn Fn(usize, Addr) -> Option<String>;
+
+pub fn encode_effect(e: &Effect, fx: FxOf) -> String {
     let mut out = e.shift.as_ref().map(encode_shift).unwrap_or_default();
-    out.push_str(&encode_changed(&e.cells));
+    out.push_str(&encode_changed(&e.cells, fx));
     out
 }
 
@@ -41,29 +43,33 @@ pub fn unescape(s: &str) -> String {
     out
 }
 
-fn line(out: &mut String, a: Addr, v: &Value) {
+fn line(out: &mut String, a: Addr, v: &Value, fx: Option<String>) {
     out.push_str(&a.row.to_string());
     out.push('\t');
     out.push_str(&a.col.to_string());
     out.push('\t');
     escape(&v.to_string(), out);
+    if let Some(f) = fx {
+        out.push('\t');
+        escape(&f, out);
+    }
     out.push('\n');
 }
 
-pub fn encode_cells(cells: &[(Addr, Value)]) -> String {
+pub fn encode_cells(sheet: usize, cells: &[(Addr, Value)], fx: FxOf) -> String {
     let mut out = String::new();
     for (a, v) in cells {
-        line(&mut out, *a, v);
+        line(&mut out, *a, v, fx(sheet, *a));
     }
     out
 }
 
-pub fn encode_changed(changed: &Changed) -> String {
+pub fn encode_changed(changed: &Changed, fx: FxOf) -> String {
     let mut out = String::new();
     for (sheet, a, v) in changed {
         out.push_str(&sheet.to_string());
         out.push('\t');
-        line(&mut out, *a, v);
+        line(&mut out, *a, v, fx(*sheet, *a));
     }
     out
 }
