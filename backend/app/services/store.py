@@ -365,6 +365,10 @@ class Store:
             kept = eng.load_tables(book["tables"])
             if kept < len(book["tables"]):
                 notes.append(f"{len(book['tables']) - kept} tables FormCel could not read brought in as plain ranges")
+        if book.get("pivots"):
+            kept = eng.load_pivots(book["pivots"])
+            if kept < len(book["pivots"]):
+                notes.append(f"{len(book['pivots']) - kept} pivot tables FormCel could not read left out")
         stamp = now()
         b = Book(uuid.uuid4().hex[:12], (title or "Imported workbook")[:120], stamp, stamp, eng, None, [s["view"] for s in book["sheets"]])
         b.objects = [list(s.get("objects") or []) for s in book["sheets"]]

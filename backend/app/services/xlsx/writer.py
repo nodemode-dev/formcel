@@ -12,6 +12,8 @@ from .autofilter import filter_out
 from .cf import rules_out
 from .drawings import objects_out
 from .formulas import to_file
+from .pivots import finish as pivots_finish
+from .pivots import pivots_out
 from .protect import book_out, notes_out, sheet_out
 from .styles import apply_out
 from .tables import ref_of, tables_out
@@ -139,6 +141,7 @@ def write(eng, views: list[dict], vba: dict[str, bytes] | None = None, objects: 
                     tb.autoFilter.filterColumn = list(ws.auto_filter.filterColumn)
                 ws.auto_filter.ref = None
                 ws.auto_filter.filterColumn = []
+    shows = pivots_out(wb, eng)
     for i, items in enumerate(objects or []):
         if items and i < len(wb.worksheets):
             objects_out(wb, wb.worksheets[i], items, views[i] if i < len(views) else {})
@@ -151,4 +154,4 @@ def write(eng, views: list[dict], vba: dict[str, bytes] | None = None, objects: 
         wb.vba_archive = zipfile.ZipFile(io.BytesIO(buf.getvalue()))
     out = io.BytesIO()
     wb.save(out)
-    return out.getvalue()
+    return pivots_finish(out.getvalue(), shows)

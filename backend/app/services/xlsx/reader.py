@@ -15,6 +15,7 @@ from .drawings import objects_in
 from .formulas import from_file
 from .protect import book_in, flags_in, notes_in, sheet_in
 from .styles import tokens_in
+from .pivots import pivots_in
 from .tables import tables_in
 from .theme import theme_in
 from .validation import validations_in
@@ -183,8 +184,6 @@ def read(data: bytes) -> dict:
         autofilter = filter_in(ws, wb, view, notes)
         valid = validations_in(ws, notes)
         objects = objects_in(ws, view, notes)
-        if getattr(ws, "_pivots", None):
-            notes["pivot tables left out"] += len(ws._pivots)
         if not autofilter:
             for t in ws.tables.values():
                 if t.autoFilter is not None and t.autoFilter.filterColumn:
@@ -203,4 +202,5 @@ def read(data: bytes) -> dict:
         text = dn.attr_text or ""
         names.append((name, "=" + from_file(text.lstrip("="))))
     tables = tables_in(wb, {ws.title: i for i, ws in enumerate(wb.worksheets)}, notes)
-    return {"sheets": sheets, "names": names, "tables": tables, "theme": theme_in(wb.loaded_theme), "cellStyles": custom, "vba": vba, "protection": book_in(wb), "notes": [f"{n} {what}" for what, n in sorted(notes.items())]}
+    pivots = pivots_in(wb, data, {ws.title: i for i, ws in enumerate(wb.worksheets)}, notes)
+    return {"sheets": sheets, "names": names, "tables": tables, "pivots": pivots, "theme": theme_in(wb.loaded_theme), "cellStyles": custom, "vba": vba, "protection": book_in(wb), "notes": [f"{n} {what}" for what, n in sorted(notes.items())]}
