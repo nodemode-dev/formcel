@@ -99,10 +99,19 @@ pub unsafe extern "C" fn fc_get(id: u32, sheet: u32, a1: *const u8, a1_len: u32)
 #[no_mangle]
 pub unsafe extern "C" fn fc_apply(id: u32, sheet: u32, edits: *const u8, len: u32) -> i32 {
     let Some(edits) = wire::decode_edits(text(edits, len)) else { return -1 };
-    match with_book(id, |wb| wb.apply(sheet as usize, &edits)) {
-        Some(Ok(c)) => emit(&wire::encode_changed(&c)) as i32,
+    match with_book(id, |wb| wb.apply(sheet as usize, &edits).map(|c| wire::encode_changed(&c, &|s, a| wb.formula_text(s, a)))) {
+        Some(Ok(s)) => emit(&s) as i32,
         _ => -1,
     }
+}
+
+/// Moves the relative references of a formula by `dr` rows and `dc` columns, as filling or pasting does.
+///
+/// # Safety
+/// `src` must point at `len` readable bytes.
+#[no_mangle]
+pub unsafe extern "C" fn fc_offset(src: *const u8, len: u32, dr: i32, dc: i32) -> i32 {
+    emit(&formcel_core::formula::offset_text(text(src, len), i64::from(dr), i64::from(dc))) as i32
 }
 
 /// Loads `row\tcol\traw` lines without recording an undo step; returns the count.
@@ -142,8 +151,12 @@ pub extern "C" fn fc_sheet_names(id: u32) -> i32 {
 }
 
 fn history(id: u32, forward: bool) -> i32 {
-    match with_book(id, |wb| if forward { wb.redo() } else { wb.undo() }) {
-        Some(Some(e)) => emit(&wire::encode_effect(&e)) as i32,
+    let r = with_book(id, |wb| {
+        let e = if forward { wb.redo() } else { wb.undo() };
+        e.map(|e| wire::encode_effect(&e, &|s, a| wb.formula_text(s, a)))
+    });
+    match r {
+        Some(Some(s)) => emit(&s) as i32,
         Some(None) => -2,
         None => -1,
     }
@@ -203,8 +216,8 @@ pub extern "C" fn fc_history(id: u32) -> i32 {
 #[no_mangle]
 pub extern "C" fn fc_read(id: u32, sheet: u32, r0: u32, c0: u32, r1: u32, c1: u32) -> i32 {
     let (top, bottom) = (Addr { row: r0, col: c0 }, Addr { row: r1, col: c1 });
-    match with_book(id, |wb| wb.read(sheet as usize, top, bottom)) {
-        Some(Ok(cells)) => emit(&wire::encode_cells(&cells)) as i32,
+    match with_book(id, |wb| wb.read(sheet as usize, top, bottom).map(|cells| wire::encode_cells(sheet as usize, &cells, &|s, a| wb.formula_text(s, a)))) {
+        Some(Ok(s)) => emit(&s) as i32,
         _ => -1,
     }
 }

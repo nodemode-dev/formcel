@@ -51,6 +51,18 @@ impl Workbook {
 
     #[pyo3(signature = (sheet = 0))]
     fn cells(&self, sheet: usize) -> PyResult<Vec<(u32, u32, String)>> {
+        let cells = self.inner.inputs(sheet).map_err(|e| PyValueError::new_err(e.to_string()))?;
+        Ok(cells.into_iter().map(|(a, t)| (a.row, a.col, t)).collect())
+    }
+
+    #[pyo3(signature = (a1, sheet = 0))]
+    fn input(&self, a1: &str, sheet: usize) -> PyResult<String> {
+        let addr = parse_a1(a1).map_err(|e| PyValueError::new_err(e.to_string()))?;
+        Ok(self.inner.input(sheet, addr))
+    }
+
+    #[pyo3(signature = (sheet = 0))]
+    fn values(&self, sheet: usize) -> PyResult<Vec<(u32, u32, String)>> {
         let Some(bottom) = self.inner.extent(sheet).map_err(|e| PyValueError::new_err(e.to_string()))? else {
             return Ok(Vec::new());
         };
@@ -114,9 +126,15 @@ fn version() -> &'static str {
     VERSION
 }
 
+#[pyfunction]
+fn offset(src: &str, dr: i64, dc: i64) -> String {
+    formcel_core::formula::offset_text(src, dr, dc)
+}
+
 #[pymodule]
 fn formcel_engine(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(version, m)?)?;
+    m.add_function(wrap_pyfunction!(offset, m)?)?;
     m.add_class::<Workbook>()?;
     m.add("MAX_ROWS", MAX_ROWS)?;
     m.add("MAX_COLS", MAX_COLS)?;
