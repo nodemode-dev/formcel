@@ -1,6 +1,6 @@
 import re
 
-from ..xlsx.formulas import FUTURE
+from ..xlsx.formulas import FUTURE, unwrap_arrayformula
 
 STRING = re.compile(r'"(?:[^"]|"")*"')
 ODF_NATIVE = {"DAYS", "IFNA", "XOR"}
@@ -93,6 +93,7 @@ def _ref_out(m: re.Match) -> str:
 
 
 def to_file(f: str) -> str:
+    f = unwrap_arrayformula(f)
     body = f[1:] if f.startswith("=") else f
 
     def fix(s: str) -> str:

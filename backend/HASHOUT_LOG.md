@@ -294,3 +294,21 @@ Fonts: the PDF needs a font file to show text beyond Latin-1. FormCel does not s
 - logged: v0.28.0 · 2026-10-21
 
 msoffcrypto-tool 5.4.2 (MIT, with cryptography and olefile) opens and makes password-protected Office files. An opened file that is an encrypted package and has no `x-formcel-password` header gets 401; a wrong password gets 403. The password travels in a header on the local connection, never in the address, and is not stored. `POST /api/workbooks/{id}/export.xlsx` with `{"password": ...}` answers the workbook encrypted with that password (Agile encryption, as msoffcrypto writes it). Encrypted .xls files open through the same path.
+
+### Conditional formatting in .ods, ARRAYFORMULA in files
+- refers-to: app/services/ods/cf.py :: rules_in, rules_out; ods/__init__.py :: read (cf_styles), write (cf_style, named_styles); xlsx/formulas.py :: unwrap_arrayformula
+- kind: explainer
+- logged: v0.29.0 · 2026-10-21
+
+ODF 1.3 has no conditional formatting of this kind; LibreOffice keeps it in its `calcext:conditional-formats` extension, and FormCel reads and writes the same elements, as LibreOffice 24.2 writes them when it converts an .xlsx: `calcext:condition` with values such as `>5`, `between(a,b)`, `contains-text("t")`, `duplicate`, `top-percent(10)`, `above-average`, `is-error` and `formula-is(...)`; `calcext:date-is`; `calcext:color-scale`; `calcext:data-bar`; `calcext:icon-set`. A condition's format is a named cell style in styles.xml; FormCel writes one `FormCel_Rule_N` style per distinct format. Blank and not-blank rules are written as `formula-is(LEN(TRIM(A1))=0)` and the like, as LibreOffice writes them. The extension has no Stop If True and no reversed icons, and ODF has no theme, so those come back off and theme colours come back as fixed colours.
+
+Checked (`tools/checks/odscf.py`): of 19 rule forms, 16 come back unchanged through FormCel's own .ods, 15 after LibreOffice reads FormCel's .ods and saves .xlsx, and 15 when FormCel reads a LibreOffice-made .ods.
+
+ARRAYFORMULA is a FormCel function now (GS-ARRAYFORMULA); Excel and LibreOffice do not have it, so .xlsx and .ods files get the formula inside it, in parentheses, which dynamic-array spreadsheets compute the same way.
+
+### The exit check tool
+- refers-to: planning sidecar `tools/checks/corpus.py`
+- kind: explainer
+- logged: v0.29.0 · 2026-10-21
+
+`python corpus.py FOLDER REPORT.md` (from backend/, venv active) opens every .xlsx and .xlsm in a folder as FormCel does, saves each again, reads the copy back and writes a report of import notes and every difference per file. Opening the copies in Excel and noting any repair prompt is the half of the Phase 4 exit it cannot do. Rehearsed on 36 .xlsx files written by LibreOffice 24.2 from the templates: 35 came back with no differences; the other has a LAMBDA name LibreOffice had already garbled, which FormCel leaves out with a note. LibreOffice reopens all 36 copies.

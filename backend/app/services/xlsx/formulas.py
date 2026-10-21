@@ -83,6 +83,20 @@ def _singles_out(s: str) -> str:
     return "".join(out)
 
 
+def unwrap_arrayformula(s: str) -> str:
+    at = 0
+    while True:
+        m = re.compile(r"(?<![A-Za-z0-9_.])ARRAYFORMULA\(", re.I).search(s, at)
+        if not m:
+            return s
+        if s[:m.start()].count('"') % 2:
+            at = m.end()
+            continue
+        end = _close(s, m.end() - 1)
+        s = s[:m.start()] + "(" + s[m.end():end] + ")" + s[end + 1:]
+        at = m.start()
+
+
 def from_file(formula: str) -> str:
     plain = _outside(formula, lambda s: PREFIX.sub("", s))
     return _singles_in(_outside(plain, lambda s: ANCHOR_IN.sub(lambda m: m.group(1) + "#", s)))
@@ -123,6 +137,7 @@ def _params(formula: str) -> set[str]:
 
 
 def to_file(formula: str) -> str:
+    formula = unwrap_arrayformula(formula)
     params = _params(formula)
 
     def fix(s: str) -> str:

@@ -9,7 +9,7 @@ from xml.sax.saxutils import escape, quoteattr
 from formcel_engine import reads_as_text
 from openpyxl.utils import get_column_letter
 
-from . import numfmt
+from . import cf, numfmt
 from .formulas import from_file, range_in, to_file
 
 NS = {
@@ -192,6 +192,14 @@ def read(data: bytes) -> dict:
                 if h:
                     row_px[name] = h
     sheets = []
+    cf_styles: dict[str, str] = {}
+    if styles_root is not None:
+        for st in styles_root.iter(f"{S}style"):
+            if st.get(f"{S}family") == "table-cell":
+                toks = _cell_style(st, data_codes)[0]
+                for key in (st.get(f"{S}name"), st.get(f"{S}display-name")):
+                    if key:
+                        cf_styles[key] = toks
     for tb in root.iter(f"{T}table"):
         cells, formats, styles, merges, links = [], [], [], [], []
         sizes, hidden_cols = [], []
@@ -250,14 +258,12 @@ def read(data: bytes) -> dict:
                 break
         view = {"cols": {"sizes": sizes, "hidden": hidden_cols}, "rows": {"sizes": rsizes, "hidden": hidden_rows}}
         sheets.append({"name": (tb.get(f"{T}name") or f"Sheet{len(sheets) + 1}")[:31], "cells": cells, "formats": formats, "styles": styles,
-                       "merges": merges, "links": links, "rules": [], "view": view})
+                       "merges": merges, "links": links, "rules": cf.rules_in(tb, cf_styles, notes), "view": view})
     names = []
     for nr in root.iter(f"{T}named-range"):
         names.append((nr.get(f"{T}name"), range_in(nr.get(f"{T}cell-range-address") or "")))
     for ne in root.iter(f"{T}named-expression"):
         names.append((ne.get(f"{T}name"), from_file(ne.get(f"{T}expression") or "")))
-    if any(True for _ in root.iter(f"{{{CALCEXT}}}conditional-formats")):
-        notes["conditional formatting in .ods left out"] += 1
     if any(True for _ in root.iter(f"{O}annotation")):
         notes["comments left out"] += sum(1 for _ in root.iter(f"{O}annotation"))
     return {"sheets": sheets, "names": names, "theme": None, "cellStyles": [], "vba": None, "notes": [f"{n} {what}" for what, n in sorted(notes.items())]}
@@ -309,7 +315,7 @@ MANIFEST = """<?xml version="1.0" encoding="UTF-8"?>
 CALCEXT = "urn:org:documentfoundation:names:experimental:calc:xmlns:calcext:1.0"
 ROOT_NS = " ".join(f'xmlns:{k}="{v}"' for k, v in NS.items()) + f' xmlns:of="urn:oasis:names:tc:opendocument:xmlns:of:1.2" xmlns:calcext="{CALCEXT}"'
 STYLES = f"""<?xml version="1.0" encoding="UTF-8"?>
-<office:document-styles {ROOT_NS} office:version="1.3"><office:styles><style:default-style style:family="table-cell"><style:text-properties style:font-name="{{font}}" fo:font-size="10pt"/></style:default-style><style:style style:name="Default" style:family="table-cell"/></office:styles></office:document-styles>
+<office:document-styles {ROOT_NS} office:version="1.3"><office:styles><style:default-style style:family="table-cell"><style:text-properties style:font-name="{{font}}" fo:font-size="10pt"/></style:default-style><style:style style:name="Default" style:family="table-cell"/>{{named}}</office:styles></office:document-styles>
 """
 META = f"""<?xml version="1.0" encoding="UTF-8"?>
 <office:document-meta {ROOT_NS} xmlns:meta="urn:oasis:names:tc:opendocument:xmlns:meta:1.0" office:version="1.3"><office:meta><meta:generator>FormCel</meta:generator></office:meta></office:document-meta>
@@ -409,6 +415,15 @@ def write(eng, views: list[dict]) -> tuple[bytes, list[str]]:
             cell_styles[key] = name
         return cell_styles[key]
 
+    named_styles: list[str] = []
+    cf_names: dict[str, str] = {}
+
+    def cf_style(tokens: str) -> str:
+        if tokens not in cf_names:
+            cf_names[tokens] = f"FormCel_Rule_{len(cf_names) + 1}"
+            named_styles.append(f'<style:style style:name="{cf_names[tokens]}" style:family="table-cell" style:parent-style-name="Default">{_style_props(tokens, look)}</style:style>')
+        return cf_names[tokens]
+
     tables = []
     col_styles: dict[int, str] = {}
     row_styles: dict[int, str] = {}
@@ -464,6 +479,7 @@ def write(eng, views: list[dict]) -> tuple[bytes, list[str]]:
                 parts.append(_cell_xml(r, c, vals, res, codes, sts, merges, covered, links, cell_style, data_style))
                 at = c + 1
             parts.append("</table:table-row>")
+        parts.append(cf.rules_out(eng.rules(i), name, cf_style))
         parts.append("</table:table>")
         tables.append("".join(parts))
     named = []
@@ -480,10 +496,8 @@ def write(eng, views: list[dict]) -> tuple[bytes, list[str]]:
         z.writestr(zipfile.ZipInfo("mimetype"), "application/vnd.oasis.opendocument.spreadsheet", compress_type=zipfile.ZIP_STORED)
         z.writestr("META-INF/manifest.xml", MANIFEST)
         z.writestr("content.xml", content)
-        z.writestr("styles.xml", STYLES.replace("{font}", body_font))
+        z.writestr("styles.xml", STYLES.replace("{font}", body_font).replace("{named}", "".join(named_styles)))
         z.writestr("meta.xml", META)
-    if eng.rules and any(eng.rules(i) for i in range(len(eng.sheet_names()))):
-        notes["conditional formatting rules not written to .ods"] += sum(len(eng.rules(i)) for i in range(len(eng.sheet_names())))
     return out.getvalue(), [f"{n} {what}" for what, n in sorted(notes.items())]
 
 
