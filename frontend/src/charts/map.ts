@@ -14,7 +14,7 @@ const ALIASES: Record<string, string> = {
   'hong kong': 'CHN', 'republic of ireland': 'IRL', 'russian federation': 'RUS', 'slovak republic': 'SVK',
 };
 
-function plain(s: string): string {
+export function plain(s: string): string {
   return s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
 }
 

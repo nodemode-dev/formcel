@@ -1,6 +1,10 @@
 import type { EngineClient } from '../engine';
+import { annotatedTimeline, isAnnotated } from './annotated';
 import { FORMATS, errAmount, fitTrend } from './chartfx';
+import type { Kit } from './kit';
 import { countryFor, ramp } from './map';
+import { bounds, planMap, regionsIn, type MapPlan } from './regionmap';
+import type { Region } from './regions';
 import { PALETTE, type ChartData, type ChartSpec, type Series } from './types';
 import { WORLD, WORLD_H, WORLD_W } from './world';
 
@@ -842,7 +846,10 @@ function radar(_spec: ChartSpec, d: ChartData, b: Box): string {
   return out.join('');
 }
 
-function timeline(_spec: ChartSpec, d: ChartData, b: Box): string {
+const KIT: Kit = { text, line, nice, serial, fmt, color, esc, r1 };
+
+function timeline(spec: ChartSpec, d: ChartData, b: Box): string {
+  if (isAnnotated(spec, d)) return annotatedTimeline(d, b, KIT);
   const labeled = d.series.length >= 3 && !d.series[0].vals.some(num);
   const start = d.series[labeled ? 1 : 0]?.vals ?? [];
   const second = d.series[labeled ? 2 : 1]?.vals ?? [];
@@ -878,13 +885,18 @@ function timeline(_spec: ChartSpec, d: ChartData, b: Box): string {
   return out.join('');
 }
 
-function org(_spec: ChartSpec, d: ChartData, b: Box): string {
+function org(spec: ChartSpec, d: ChartData, b: Box): string {
   const parent = d.series[0]?.txt ?? [];
   const names = d.cats;
-  const index = new Map(names.map((n, i) => [n, i]));
+  const index = new Map<string, number>();
+  names.forEach((n, i) => {
+    if (n !== '' && !index.has(n)) index.set(n, i);
+  });
+  const folded = new Set(spec.collapsed ?? []);
   const kids = new Map<number, number[]>();
   const roots: number[] = [];
-  names.forEach((_, i) => {
+  names.forEach((n, i) => {
+    if (n === '') return;
     const p = index.get(parent[i] ?? '');
     if (p === undefined || p === i) roots.push(i);
     else kids.set(p, [...(kids.get(p) ?? []), i]);
@@ -899,7 +911,7 @@ function org(_spec: ChartSpec, d: ChartData, b: Box): string {
     seen.add(i);
     depth.set(i, dp);
     maxDepth = Math.max(maxDepth, dp);
-    const cs = (kids.get(i) ?? []).filter((c) => !seen.has(c));
+    const cs = folded.has(names[i]) ? [] : (kids.get(i) ?? []).filter((c) => !seen.has(c));
     if (!cs.length) {
       xpos.set(i, leaf++);
       return leaf - 1;
@@ -930,14 +942,58 @@ function org(_spec: ChartSpec, d: ChartData, b: Box): string {
   for (const i of depth.keys()) {
     const [x, y] = pos(i);
     const two = !!sub[i] && bh >= 34;
-    out.push(`<rect x="${r1(x - bw / 2)}" y="${r1(y)}" width="${r1(bw)}" height="${r1(bh)}" rx="4" fill="${color(depth.get(i) ?? 0)}"><title>${esc(names[i])}${sub[i] ? `, ${esc(sub[i])}` : ''}</title></rect>${text(x, y + (two ? bh * 0.35 : bh / 2), ellipsis(names[i], Math.max(3, Math.floor(bw / 6.5))), { fill: '#fff', base: 'central', size: 11, bold: true })}${two ? text(x, y + bh * 0.72, ellipsis(sub[i], Math.max(3, Math.floor(bw / 5.5))), { fill: '#fff', base: 'central', size: 9, op: 0.9 }) : ''}`);
+    const below = (kids.get(i) ?? []).length;
+    const toggle = below ? `<g class="fc-org-toggle" data-toggle="${i}" style="cursor:pointer"><circle cx="${r1(x)}" cy="${r1(y + bh)}" r="7" fill="var(--cell-bg, #fff)" stroke="currentColor" stroke-opacity="0.6"/>${text(x, y + bh + 0.5, folded.has(names[i]) ? '+' : '−', { base: 'central', size: 11, bold: true })}</g>` : '';
+    out.push(`<g class="fc-org-node" data-i="${i}"><rect x="${r1(x - bw / 2)}" y="${r1(y)}" width="${r1(bw)}" height="${r1(bh)}" rx="4" fill="${color(depth.get(i) ?? 0)}"><title>${esc(names[i])}${sub[i] ? `, ${esc(sub[i])}` : ''}</title></rect>${text(x, y + (two ? bh * 0.35 : bh / 2), ellipsis(names[i], Math.max(3, Math.floor(bw / 6.5))), { fill: '#fff', base: 'central', size: 11, bold: true })}${two ? text(x, y + bh * 0.72, ellipsis(sub[i], Math.max(3, Math.floor(bw / 5.5))), { fill: '#fff', base: 'central', size: 9, op: 0.9 }) : ''}</g>${toggle}`);
   }
   return out.join('');
 }
 
 let mapSeq = 0;
 
+function regionMap(spec: ChartSpec, d: ChartData, b: Box, plan: MapPlan): string {
+  const vals = d.series[0]?.vals ?? [];
+  const by = new Map<Region, number>();
+  let missed = 0;
+  d.cats.forEach((_, i) => {
+    if (!num(vals[i])) return;
+    if (![...plan.rows.values()].some((rows) => rows.includes(i))) missed++;
+  });
+  for (const [r, rows] of plan.rows) {
+    const got = rows.map((i) => vals[i]).filter(num);
+    if (got.length) by.set(r, got.reduce((s, v) => s + v, 0));
+  }
+  const nums = [...by.values()];
+  const lo = nums.length ? Math.min(...nums) : 0;
+  const hi = nums.length ? Math.max(...nums) : 1;
+  const barH = 26;
+  const all = regionsIn(plan.countries);
+  const [x0, y0, x1, y1] = bounds(all);
+  const k = Math.min((b.w - 8) / (x1 - x0 || 1), (b.h - barH - 8) / (y1 - y0 || 1));
+  const tx = b.x + (b.w - (x1 - x0) * k) / 2 - x0 * k;
+  const ty = b.y + (b.h - barH - (y1 - y0) * k) / 2 - y0 * k;
+  const id = `fcmap${mapSeq++}`;
+  const base = color(0);
+  const out: string[] = [`<defs><linearGradient id="${id}"><stop offset="0" stop-color="${ramp(0, base)}"/><stop offset="1" stop-color="${ramp(1, base)}"/></linearGradient></defs>`];
+  out.push(`<g transform="translate(${r1(tx)} ${r1(ty)}) scale(${Math.round(k * 1000) / 1000})">`);
+  for (const r of all) {
+    const v = by.get(r);
+    const fill = v === undefined ? 'currentColor' : ramp((v - lo) / (hi - lo || 1), base);
+    out.push(`<path d="${r[3]}" fill="${fill}"${v === undefined ? ' fill-opacity="0.08"' : ''} stroke="var(--cell-bg, #fff)" stroke-width="${r1(0.8 / Math.max(k, 0.05))}" stroke-linejoin="round"><title>${esc(r[0])}${v === undefined ? '' : `: ${shown(spec.labelFmt, v)}`}</title></path>`);
+  }
+  out.push('</g>');
+  const bw = Math.min(160, b.w * 0.5);
+  const by0 = b.y + b.h - barH + 6;
+  const bx = b.x + (b.w - bw) / 2;
+  out.push(`<rect x="${r1(bx)}" y="${r1(by0)}" width="${r1(bw)}" height="8" rx="2" fill="url(#${id})"/>`);
+  out.push(text(bx - 4, by0 + 4, shown(spec.labelFmt, lo), { anchor: 'end', base: 'central', size: 10 }), text(bx + bw + 4, by0 + 4, shown(spec.labelFmt, hi), { anchor: 'start', base: 'central', size: 10 }));
+  if (missed) out.push(text(b.x + b.w - 2, b.y + b.h - 4, `${missed} not on the map`, { anchor: 'end', size: 9, op: 0.6 }));
+  return out.join('');
+}
+
 function mapChart(spec: ChartSpec, d: ChartData, b: Box): string {
+  const plan = planMap(d.cats, spec.level);
+  if (plan.level === 'region' && plan.rows.size) return regionMap(spec, d, b, plan);
   const vals = d.series[0]?.vals ?? [];
   const by = new Map<string, number>();
   let missed = 0;

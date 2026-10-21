@@ -55,6 +55,8 @@ export class ChartEditor {
 <label class="fc-fmt-label">Data label number format (for example 0.0% or $#,##0)<input class="fc-fmt-input" data-k="labelFmt" spellcheck="false" autocomplete="off"></label>
 <label class="fc-fmt-label" data-k="binsRow">Histogram bins (blank for automatic)<input class="fc-fmt-input" data-k="bins" inputmode="numeric" autocomplete="off"></label>
 <label class="fc-fmt-label" data-k="totalsRow">Waterfall totals, row numbers (blank for automatic)<input class="fc-fmt-input" data-k="totals" autocomplete="off" placeholder="5,9"></label>
+<label class="fc-fmt-label" data-k="tlRow">Timeline mode<select class="fc-fmt-input" data-k="tlMode"><option value="auto">Automatic</option><option value="gantt">Task bars (task, start, end)</option><option value="annotated">Annotated date axis (date, values, titles, notes)</option></select></label>
+<label class="fc-fmt-label" data-k="levelRow">Map level<select class="fc-fmt-input" data-k="level"><option value="auto">Automatic from the data</option><option value="country">Countries</option><option value="region">States and provinces</option></select></label>
 <details class="fc-chart-sec"><summary>Axes and gridlines</summary>
 <div class="fc-chart-row">
 <label class="fc-fmt-label">Value axis number format<input class="fc-fmt-input" data-k="yFmt" spellcheck="false" autocomplete="off" placeholder="General"></label>
@@ -165,6 +167,8 @@ export class ChartEditor {
     s.bins = bins && bins > 0 ? Math.round(bins) : undefined;
     const totals = v('totals').split(/[,\s]+/).map((x) => Number(x) - 1).filter((x) => Number.isInteger(x) && x >= 0);
     s.totals = totals.length ? totals : undefined;
+    s.tlMode = v('tlMode') === 'auto' ? undefined : (v('tlMode') as ChartSpec['tlMode']);
+    s.level = v('level') === 'auto' ? undefined : (v('level') as ChartSpec['level']);
     const colors = Array.from(this.form.querySelectorAll<HTMLInputElement>('[data-k="colors"] input')).map((el, i) => (el.dataset.custom === '1' ? el.value : this.preset[i] ?? ''));
     while (colors.length && !colors[colors.length - 1]) colors.pop();
     s.colors = colors.length ? colors : undefined;
@@ -195,6 +199,8 @@ export class ChartEditor {
     set('plotFill', spec.plotFill ?? '');
     set('bins', spec.bins === undefined ? '' : String(spec.bins));
     set('totals', (spec.totals ?? []).map((i) => i + 1).join(','));
+    set('tlMode', spec.tlMode ?? 'auto');
+    set('level', spec.level ?? 'auto');
     this.q<HTMLInputElement>('logY').checked = !!spec.logY;
     this.q<HTMLInputElement>('grid').checked = spec.grid !== false;
     this.q<HTMLInputElement>('xGrid').checked = !!spec.xGrid;
@@ -277,6 +283,8 @@ export class ChartEditor {
     this.syncSeries(data, s.type);
     this.q<HTMLElement>('binsRow').hidden = s.type !== 'histogram';
     this.q<HTMLElement>('totalsRow').hidden = s.type !== 'waterfall';
+    this.q<HTMLElement>('tlRow').hidden = s.type !== 'timeline';
+    this.q<HTMLElement>('levelRow').hidden = s.type !== 'map';
   }
 
   private recs(ranked: { type: ChartType; why: string; svg: string }[], current: ChartType): void {

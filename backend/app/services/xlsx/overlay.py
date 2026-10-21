@@ -1,3 +1,4 @@
+import base64
 import io
 import posixpath
 import re
@@ -6,6 +7,8 @@ from xml.etree import ElementTree as ET
 from xml.sax.saxutils import escape, quoteattr
 
 from openpyxl.utils import get_column_letter, range_boundaries
+
+from . import richdata, shapexml
 
 EMU = 9525
 COL_PX = 100
@@ -20,8 +23,6 @@ NS_XM = "http://schemas.microsoft.com/office/excel/2006/main"
 SPARK_URI = "{05C60535-1F16-4fd2-B633-F4F43ED7C7EB}"
 DRAWING_REL = NS_REL + "/drawing"
 DRAWING_TYPE = "application/vnd.openxmlformats-officedocument.drawing+xml"
-GEOMETRY = {"button": "roundRect", "rect": "roundRect", "ellipse": "ellipse", "arrow": "rightArrow", "line": "line", "triangle": "triangle", "diamond": "diamond"}
-GEOMETRY_IN = {"roundRect": "rect", "rect": "rect", "ellipse": "ellipse", "rightArrow": "arrow", "triangle": "triangle", "diamond": "diamond", "line": "line", "straightConnector1": "line"}
 SPARK_TYPE = {"line": "", "column": "column", "winloss": "stacked"}
 SPARK_TYPE_IN = {"column": "column", "stacked": "winloss"}
 FLAGS = (("markers", "markers"), ("high", "high"), ("low", "low"), ("first", "first"), ("last", "last"), ("negative", "negative"), ("axis", "displayXAxis"))
@@ -104,31 +105,22 @@ def _shape_xml(obj: dict, ident: int, view: dict) -> str:
     f, t = markers(obj, view)
     w, h = int(obj.get("w", 140) * EMU), int(obj.get("h", 90) * EMU)
     alt = f" descr={quoteattr(str(obj['alt']))}" if obj.get("alt") else ""
-    if obj.get("kind") == "text":
-        spec = obj.get("text") or {}
-        body = str(spec.get("text", ""))
-        size = int(spec.get("size", 14) * 75)
-        fill = ""
-        line = "<a:ln><a:noFill/></a:ln>"
-        geom = "rect"
-        text_color = _hex(spec.get("color"), "000000")
-        name = f"Text Box {ident}"
-        nv = '<cNvSpPr txBox="1"/>'
-        align = "l"
-        anchor = "t"
-    else:
-        spec = obj.get("shape") or {}
-        body = str(spec.get("text", ""))
-        size = 1100
-        fill = f'<a:solidFill><a:srgbClr val="{_hex(spec.get("fill"), "4E79A7")}"/></a:solidFill>'
-        line = f'<a:ln w="12700"><a:solidFill><a:srgbClr val="{_hex(spec.get("stroke"), "2F4B6E")}"/></a:solidFill></a:ln>'
-        geom = GEOMETRY.get(spec.get("shape", "rect"), "rect")
-        text_color = _hex(spec.get("color"), "FFFFFF")
-        size = int(float(spec["size"]) * 75) if spec.get("size") else size
-        name = f"Button {ident}" if spec.get("shape") == "button" else f"Shape {ident}"
-        nv = "<cNvSpPr/>"
-        align = "ctr"
-        anchor = "ctr"
+    if obj.get("kind") == "shape":
+        return (
+            f'<twoCellAnchor editAs="twoCell" xmlns:a="{NS_A}">{_marker_xml("from", f)}{_marker_xml("to", t)}'
+            f'{shapexml.element(obj, ident, w, h, str(obj.get("alt") or ""), macro_of(obj))}<clientData/></twoCellAnchor>'
+        )
+    spec = obj.get("text") or {}
+    body = str(spec.get("text", ""))
+    size = int(spec.get("size", 14) * 75)
+    fill = ""
+    line = "<a:ln><a:noFill/></a:ln>"
+    geom = "rect"
+    text_color = _hex(spec.get("color"), "000000")
+    name = f"Text Box {ident}"
+    nv = '<cNvSpPr txBox="1"/>'
+    align = "l"
+    anchor = "t"
     paragraphs = body.split("\n") or [""]
     runs = "".join(
         f'<a:p><a:pPr algn="{align}"/>' + (f'<a:r><a:rPr lang="en-US" sz="{size}"><a:solidFill><a:srgbClr val="{text_color}"/></a:solidFill></a:rPr><a:t>{escape(p)}</a:t></a:r>' if p else f'<a:endParaRPr lang="en-US" sz="{size}"/>') + "</a:p>"
@@ -301,12 +293,13 @@ def _apply(files: dict[str, bytes], index: int, plan: dict, name: str, view: dic
 
 
 def finish(data: bytes, plans: dict[int, dict], names: list[str], views: list[dict]) -> bytes:
-    if not any(plans.get(i) and (plans[i].get("shapes") or plans[i].get("sparks") or any((plans[i].get("alts") or {}).values()) or any((plans[i].get("macros") or {}).get("pics") or [])) for i in plans):
+    if not any(plans.get(i) and (plans[i].get("shapes") or plans[i].get("sparks") or plans[i].get("cellpics") or any((plans[i].get("alts") or {}).values()) or any((plans[i].get("macros") or {}).get("pics") or [])) for i in plans):
         return data
     with zipfile.ZipFile(io.BytesIO(data)) as z:
         files = {n: z.read(n) for n in z.namelist()}
     for i, plan in plans.items():
         _apply(files, i, plan, names[i] if i < len(names) else "Sheet", views[i] if i < len(views) else {})
+    richdata.write(files, [(f"xl/worksheets/sheet{i + 1}.xml", plan["cellpics"]) for i, plan in plans.items() if plan.get("cellpics") and f"xl/worksheets/sheet{i + 1}.xml" in files])
     out = io.BytesIO()
     with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as z:
         for n, blob in files.items():
@@ -365,6 +358,8 @@ def _shape_in(anchor: ET.Element, sp: ET.Element, view: dict, tag: str) -> dict 
     geom = _child(sp_pr, "prstGeom") if sp_pr is not None else None
     prst = geom.get("prst", "rect") if geom is not None else "rect"
     nv = _child(sp, "nvSpPr")
+    if nv is None:
+        nv = _child(sp, "nvCxnSpPr")
     c_nv = _child(nv, "cNvPr") if nv is not None else None
     c_sp = _child(nv, "cNvSpPr") if nv is not None else None
     text_box = c_sp is not None and c_sp.get("txBox") in ("1", "true")
@@ -408,13 +403,11 @@ def _shape_in(anchor: ET.Element, sp: ET.Element, view: dict, tag: str) -> dict 
     is_button = c_nv is not None and (c_nv.get("name") or "").startswith("Button")
     if text_box and not (sp_pr is not None and _color_in(sp_pr)):
         return {**base, "kind": "text", "text": {"text": text, "size": round(size), "color": color if color and color != "#000000" else ""}}
-    if prst == "line" or prst == "straightConnector1" or prst not in GEOMETRY_IN:
+    shape = shapexml.parse(sp)
+    if shape is None:
         return None
-    line_el = _child(sp_pr, "ln") if sp_pr is not None else None
-    shape = {"shape": "button" if is_button else GEOMETRY_IN[prst], "fill": _color_in(sp_pr) or "#4e79a7", "stroke": _color_in(line_el) or "#2f4b6e", "text": text or (c_nv.get("name") if is_button else "")}
     if is_button:
-        shape["color"] = color or "#ffffff"
-        shape["size"] = round(size)
+        shape["button"] = True
     return {**base, "kind": "shape", "shape": shape}
 
 
@@ -524,12 +517,41 @@ def _sparks_in(root: ET.Element, sheet_name: str, view: dict, sid: str) -> list[
 
 class Package:
     def __init__(self, data: bytes):
+        self._pics: dict[int, dict] = {}
         try:
             with zipfile.ZipFile(io.BytesIO(data)) as z:
-                self.files = {n: z.read(n) for n in z.namelist() if n.endswith((".xml", ".rels"))}
+                names = z.namelist()
+                rich = "xl/richData/rdrichvalue.xml" in names
+                self.files = {n: z.read(n) for n in names if n.endswith((".xml", ".rels")) or (rich and n.startswith("xl/media/"))}
         except zipfile.BadZipFile:
             self.files = {}
         self.sheets = _sheet_parts(self.files) if self.files else []
+
+    def _raw_pics(self, i: int) -> dict[tuple[int, int], dict]:
+        if i >= len(self.sheets):
+            return {}
+        if i not in self._pics:
+            self._pics[i] = richdata.images(self.files, self.sheets[i])
+        return self._pics[i]
+
+    def cellkeys(self, i: int) -> set[tuple[int, int]]:
+        return {k for k, got in self._raw_pics(i).items() if not got["formula"]}
+
+    def cellpics(self, i: int, view: dict) -> list[dict]:
+        out: list[dict] = []
+        for (r, c), got in sorted(self._raw_pics(i).items()):
+            blob = self.files.get(got["path"])
+            if blob is None or got["formula"]:
+                continue
+            ext = posixpath.splitext(got["path"])[1][1:].lower()
+            kind = "jpeg" if ext in ("jpg", "jpeg") else ext if ext in ("png", "gif", "bmp", "webp") else "png"
+            cs, rs = _sizes(view, "cols"), _sizes(view, "rows")
+            item = {"id": f"x{i}i{r}_{c}", "kind": "picture", "inCell": True, "x": int(_offset(cs, COL_PX, c)), "y": int(_offset(rs, ROW_PX, r)), "w": cs.get(c, COL_PX), "h": rs.get(r, ROW_PX),
+                    "picture": {"src": f"data:image/{kind};base64,{base64.b64encode(blob).decode()}", "name": posixpath.basename(got["path"])}}
+            if got["alt"]:
+                item["alt"] = got["alt"]
+            out.append(item)
+        return out
 
     def sheet(self, i: int, name: str, view: dict) -> dict:
         entry: dict = {"shapes": [], "alts": {"charts": [], "pics": []}, "macros": {"pics": []}, "sparks": []}
@@ -551,7 +573,7 @@ class Package:
                             inner = _child(choice, "sp") if choice is not None else None
                             if inner is not None:
                                 el, kind = inner, "sp"
-                        if kind == "sp":
+                        if kind in ("sp", "cxnSp"):
                             item = _shape_in(anchor, el, view, kind)
                             if item:
                                 item["id"] = f"x{i}h{k}"
@@ -567,4 +589,5 @@ class Package:
                 entry["sparks"] = _sparks_in(ET.fromstring(self.files[sheet]), name, view, f"x{i}")
             except ET.ParseError:
                 pass
+        entry["cellpics"] = self.cellpics(i, view)
         return entry

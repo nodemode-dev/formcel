@@ -31,7 +31,7 @@ export const CHART_TYPES: { id: ChartType; label: string; group: string }[] = [
   { id: 'radar', label: 'Radar', group: 'Other' },
   { id: 'timeline', label: 'Timeline', group: 'Other' },
   { id: 'org', label: 'Org chart', group: 'Hierarchy' },
-  { id: 'map', label: 'Filled map (countries)', group: 'Other' },
+  { id: 'map', label: 'Filled map (countries and regions)', group: 'Other' },
 ];
 
 export type TrendKind = 'linear' | 'exp' | 'log' | 'poly' | 'power' | 'mavg';
@@ -88,6 +88,10 @@ export interface ChartSpec {
   trends?: Trend[];
   errBars?: ErrBars[];
   pivot?: string;
+  pivotButtons?: boolean;
+  tlMode?: 'auto' | 'gantt' | 'annotated';
+  level?: 'auto' | 'country' | 'region';
+  collapsed?: string[];
   bins?: number;
   totals?: number[];
   bands?: [number, number];
@@ -110,6 +114,35 @@ export interface Anchor {
   dx1: number;
 }
 
+export type Dash = 'solid' | 'dot' | 'dash' | 'lgDash' | 'dashDot' | 'lgDashDot' | 'lgDashDotDot' | 'sysDash' | 'sysDot' | 'sysDashDot' | 'sysDashDotDot';
+
+export interface ShapeSpec {
+  shape: string;
+  fill: string;
+  stroke: string;
+  text: string;
+  button?: boolean;
+  noFill?: boolean;
+  noLine?: boolean;
+  lw?: number;
+  dash?: Dash;
+  opacity?: number;
+  rot?: number;
+  flipH?: boolean;
+  flipV?: boolean;
+  head?: boolean;
+  tail?: boolean;
+  size?: number;
+  color?: string;
+  bold?: boolean;
+  italic?: boolean;
+  underline?: boolean;
+  strike?: boolean;
+  font?: string;
+  align?: 'l' | 'ctr' | 'r' | 'j';
+  valign?: 't' | 'ctr' | 'b';
+}
+
 export interface FloatObject {
   id: string;
   kind: ObjectKind;
@@ -125,7 +158,7 @@ export interface FloatObject {
   inCell?: boolean;
   decorative?: boolean;
   spark?: SparkSpec;
-  shape?: { shape: 'rect' | 'ellipse' | 'arrow' | 'button'; fill: string; stroke: string; text: string; color?: string; size?: number };
+  shape?: ShapeSpec;
   text?: { text: string; size: number; color: string };
   script?: string;
   scriptName?: string;

@@ -23,6 +23,7 @@ from .prints import extra_areas, skip_name
 from .protect import book_in, flags_in, notes_in, sheet_in
 from .review import ranges_in, threads_in
 from .styles import tokens_in
+from .pivotchart import unbind as unbind_pivot_charts
 from .pivots import pivots_in
 from .whatif import whatif_in
 from .tables import tables_in
@@ -153,6 +154,7 @@ def read(data: bytes) -> dict:
         flagged: dict[tuple[int, int], int] = {}
         max_c = 0
         found, skip = members(ws)
+        skip = skip | {(r + 1, c + 1) for r, c in package.cellkeys(si)}
         dynamic = scanned[si]["dynamic"] if si < len(scanned) else set()
         for (r, c), cell in list(ws._cells.items()):
             r0, c0 = r - 1, c - 1
@@ -243,6 +245,7 @@ def read(data: bytes) -> dict:
                 name_notes.append((scoped, dn.comment))
     tables = tables_in(wb, order, notes)
     pivots = pivots_in(wb, data, order, notes)
+    unbind_pivot_charts(sheets, pivots)
     slicers_in(wb, data, order, pivots, dict(enumerate(sheets)), notes)
     what, filled = whatif_in(wb, data, order, notes)
     for i, r, c, v in filled:

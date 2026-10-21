@@ -10,7 +10,8 @@ import { askAlt, askButton, askScript, askSparkline } from './dialogs';
 import { ChartEditor } from './editor';
 import { ObjectLayer } from './layer';
 import { pivotChartData } from './pivotchart';
-import { blankChart, CHART_TYPES, newId, type ChartSpec, type ChartType, type FloatObject } from './types';
+import { formatShape, showGallery } from './shapeui';
+import { blankChart, CHART_TYPES, newId, type ChartSpec, type ChartType, type FloatObject, type ShapeSpec } from './types';
 
 export interface ChartsHost {
   book(): number;
@@ -31,7 +32,7 @@ export interface ChartsHost {
 
 const MAX_PICTURE = 6 * 1024 * 1024;
 
-const BUTTON = (text: string): NonNullable<FloatObject['shape']> => ({ shape: 'button', fill: '#4e79a7', stroke: '#2f4b6e', text, color: '#ffffff', size: 14 });
+const BUTTON = (text: string): NonNullable<FloatObject['shape']> => ({ shape: 'roundRect', button: true, fill: '#4e79a7', stroke: '#2f4b6e', text, color: '#ffffff', size: 11 });
 
 export class Charts {
   readonly layer: ObjectLayer;
@@ -103,11 +104,24 @@ export class Charts {
     cmd('insert.chart', 'Insert chart', 'Make a chart from the selected cells, or the data around the active cell, and float it over the sheet. Pick the type, titles, axes, legend and labels in the editor. Drag it to move it, drag its handles to resize it, press Delete to remove it.', () => this.insertChart());
     cmd('insert.chart-recommended', 'Recommended charts', 'Rank chart types for the selected cells, or the data around the active cell, with a small preview of each, as Excel does. Click a preview to see it large, then press OK to float it over the sheet.', () => this.insertChart('Recommended charts'));
     cmd('insert.pivot-chart', 'PivotChart', 'Make a chart from the PivotTable under the active cell, or the only PivotTable in the workbook. It redraws whenever the PivotTable changes, and the PivotTable filters appear as buttons on the chart.', () => this.insertPivotChart());
+    cmd('pivotchart.field-buttons', 'PivotChart field buttons', 'Show or hide the field buttons on the selected PivotChart: the filter, axis (categories), legend (series) and values buttons. The filter, axis and legend buttons open a list of items to show.', () => {
+      const o = this.layer.selectedObject();
+      if (!o?.chart?.pivot) {
+        this.host.say?.('Select a PivotChart first.');
+        return;
+      }
+      this.layer.update({ ...o, chart: { ...o.chart, pivotButtons: o.chart.pivotButtons === false ? undefined : false } });
+    });
     cmd('insert.picture', 'Insert picture', 'Choose an image file and float it over the sheet. Drag it to move it, drag its handles to resize it.', () => this.file.click());
-    cmd('insert.shape-rect', 'Insert rectangle', 'Float a rectangle over the sheet. Double-click it to type text in it.', () => this.shape('rect'));
-    cmd('insert.shape-ellipse', 'Insert ellipse', 'Float an ellipse over the sheet. Double-click it to type text in it.', () => this.shape('ellipse'));
-    cmd('insert.shape-arrow', 'Insert arrow', 'Float an arrow over the sheet.', () => this.shape('arrow'));
     cmd('insert.button', 'Insert button', 'Float a button over the sheet. Choose Assign script on its bar to run a script when it is clicked, and Format button to change its text, colours and size. Any shape, text box or picture can run a script the same way.', () => this.button());
+    cmd('insert.shapes', 'Insert shape', 'Open the shape gallery: lines, rectangles, basic shapes, block arrows, stars and banners, callouts and flowchart shapes. Pick one to float it over the sheet, double-click it to type text, and use Format shape for fill, line, rotation and text.', () => this.gallery());
+    cmd('insert.shape-rect', 'Insert rectangle', 'Float a rectangle over the sheet. Double-click it to type text in it.', () => this.shape({ shape: 'rect' }, 140, 90));
+    cmd('insert.shape-ellipse', 'Insert ellipse', 'Float an ellipse over the sheet. Double-click it to type text in it.', () => this.shape({ shape: 'ellipse' }, 140, 90));
+    cmd('insert.shape-arrow', 'Insert arrow', 'Float an arrow over the sheet.', () => this.shape({ shape: 'rightArrow' }, 160, 80));
+    cmd('format.shape', 'Format shape', 'Change the selected shape: its type, fill colour and opacity, line colour, width, dash and arrowheads, rotation, flips, and the font, size, style, colour and alignment of its text.', () => {
+      const o = this.layer.selectedObject();
+      if (o?.shape) void this.formatShape(o);
+    });
     cmd('insert.textbox', 'Insert text box', 'Float a text box over the sheet. Double-click it to edit the text.', () => this.textbox());
     cmd('insert.cell-picture', 'Insert picture in cell', 'Choose an image file and place it inside the active cell. It stays in the cell, moves with it when rows and columns are inserted or deleted, and is saved with the workbook.', () => this.cellFile.click());
     cmd('insert.sparkline', 'Insert sparklines', 'Draw a line, column or win/loss sparkline in each cell of a location range from a data range, with markers for the high, low, first, last and negative points and axis options.', () => this.sparkline());
@@ -278,15 +292,34 @@ export class Charts {
   }
 
   private async edit(o: FloatObject): Promise<void> {
+    if (o.shape) {
+      await this.formatShape(o);
+      return;
+    }
     if (!o.chart) return;
     const got = await this.editor.open(o.chart, 'Chart editor');
     if (got) this.layer.update({ ...o, chart: got as ChartSpec });
   }
 
-  private shape(shape: 'rect' | 'ellipse' | 'arrow'): void {
+  private async formatShape(o: FloatObject): Promise<void> {
+    if (!o.shape) return;
+    const before = o.shape;
+    const got = await formatShape(before, (s) => this.layer.preview({ ...o, shape: s }));
+    if (got) this.layer.update({ ...o, shape: got });
+    this.grid.focus();
+  }
+
+  private gallery(): void {
+    if (!this.host.active()) return;
+    const btn = document.querySelector<HTMLElement>('[data-cmd="insert.shapes"]');
+    const r = btn?.getBoundingClientRect();
+    showGallery({ x: r?.left ?? 80, y: (r?.bottom ?? 80) + 4 }, (v) => this.shape(v.spec, v.w, v.h));
+  }
+
+  private shape(spec: Partial<ShapeSpec>, w: number, h: number): void {
     if (!this.host.active()) return;
     const o = this.layer.viewOrigin();
-    this.layer.add({ kind: 'shape', x: o.x, y: o.y, w: shape === 'arrow' ? 160 : 140, h: shape === 'arrow' ? 60 : 90, shape: { shape, fill: '#4e79a7', stroke: '#2f4b6e', text: '' } });
+    this.layer.add({ kind: 'shape', x: o.x, y: o.y, w, h, shape: { shape: 'rect', fill: '#4e79a7', stroke: '#2f4b6e', text: '', ...spec } });
   }
 
   private button(): void {
