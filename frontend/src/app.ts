@@ -832,6 +832,7 @@ export class App {
       else if (e.key === 'F3' && mod) id = 'names.manager';
       else if (e.key === 'F3' && e.shiftKey) id = 'formula.insert-function';
       else if (e.key === 'F3' && !e.altKey) id = 'names.paste';
+      else if (mod && e.shiftKey && !e.altKey && e.code === 'KeyU') id = 'view.formula-bar';
       else if (mod && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'a' && (e.target === p.formulaBar || e.target === this.grid.editor) && String((e.target as HTMLInputElement).value).startsWith('=')) id = 'formula.arguments';
       if (!id) return;
       e.preventDefault();
