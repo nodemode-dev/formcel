@@ -1,4 +1,5 @@
 import io
+import zipfile
 
 from openpyxl import Workbook
 from openpyxl.styles import Font, NamedStyle
@@ -24,7 +25,7 @@ def _number(text: str) -> int | float:
     return int(n) if n.is_integer() and abs(n) < 2**53 else n
 
 
-def write(eng, views: list[dict]) -> bytes:
+def write(eng, views: list[dict], vba: dict[str, bytes] | None = None) -> bytes:
     wb = Workbook()
     xml, body, heading = theme_out(eng.theme())
     wb.loaded_theme = xml
@@ -116,6 +117,12 @@ def write(eng, views: list[dict]) -> bytes:
     for name, refers in eng.names():
         wb.defined_names[name] = DefinedName(name, attr_text=to_file(refers).lstrip("="))
     wb.calculation.fullCalcOnLoad = True
+    if vba:
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as arc:
+            for name, blob in vba.items():
+                arc.writestr(name, blob)
+        wb.vba_archive = zipfile.ZipFile(io.BytesIO(buf.getvalue()))
     out = io.BytesIO()
     wb.save(out)
     return out.getvalue()

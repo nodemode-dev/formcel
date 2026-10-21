@@ -1,6 +1,8 @@
 import zipfile
 from urllib.parse import quote
 
+import xlrd
+
 from fastapi import APIRouter, HTTPException, Request, Response
 from pydantic import BaseModel, Field
 
@@ -95,11 +97,11 @@ async def import_file(request: Request, name: str = "Imported workbook.xlsx", de
     if ext in TEXT_FILES:
         cols = {int(x) for x in text.split(",") if x.strip().isdigit()}
         return store().import_csv(data, name, delimiter, cols)
-    if ext not in ("xlsx", "xlsm"):
-        raise HTTPException(415, "FormCel opens .xlsx, .xlsm, .csv, .tsv and .txt files so far.")
+    if ext not in ("xlsx", "xlsm", "xls", "ods"):
+        raise HTTPException(415, "FormCel opens .xlsx, .xlsm, .xls, .ods, .csv, .tsv and .txt files.")
     try:
-        return store().import_xlsx(data, stem or name)
-    except (KeyError, ValueError, OSError, zipfile.BadZipFile) as e:
+        return store().import_xlsx(data, stem or name, "xlsx" if ext == "xlsm" else ext)
+    except (KeyError, ValueError, OSError, zipfile.BadZipFile, xlrd.XLRDError) as e:
         raise HTTPException(422, f"FormCel could not read {name}: {e}")
 
 
@@ -116,6 +118,16 @@ def export_xlsx(wid: str) -> Response:
 
 @router.get("/workbooks/{wid}/export.{kind}")
 def export_text(wid: str, kind: str, sheet: int = 0) -> Response:
+    if kind in ("xlsm", "ods"):
+        try:
+            title, data = store().export_xlsx(wid, macros=True) if kind == "xlsm" else store().export_ods(wid)
+        except (KeyError, FileNotFoundError):
+            raise missing(wid)
+        except LookupError:
+            raise HTTPException(404, "This workbook has no macros to save as .xlsm.")
+        fname = "".join(ch for ch in title if ch not in '\\/:*?"<>|').strip() or "Workbook"
+        media = "application/vnd.ms-excel.sheet.macroEnabled.12" if kind == "xlsm" else "application/vnd.oasis.opendocument.spreadsheet"
+        return Response(data, media_type=media, headers={"Content-Disposition": f"attachment; filename*=UTF-8''{quote(fname)}.{kind}"})
     if kind not in ("csv", "tsv"):
         raise HTTPException(404, f"FormCel does not export .{kind}.")
     try:

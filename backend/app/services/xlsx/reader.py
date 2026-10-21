@@ -1,5 +1,6 @@
 import datetime as dt
 import io
+import re
 from collections import Counter
 
 from formcel_engine import Workbook, reads_as_text
@@ -75,6 +76,19 @@ def _axis(dims, px_of, default_px: int | None, upto: int, notes: Counter) -> dic
     return out
 
 
+MACRO_PARTS = re.compile(r"xl/vba|xl/drawings/.*vmlDrawing\d\.vml|xl/ctrlProps|customUI|xl/activeX|xl/media/.*\.emf")
+KEEP_WITH_MACROS = ("[Content_Types].xml", "_rels/.rels")
+
+
+def macro_parts(archive) -> dict[str, bytes] | None:
+    if archive is None:
+        return None
+    names = archive.namelist()
+    if "xl/vbaProject.bin" not in names:
+        return None
+    return {n: archive.read(n) for n in names if MACRO_PARTS.match(n) or n in KEEP_WITH_MACROS}
+
+
 def style_name_in(name: str) -> str:
     return f"Accent {name[-1]}" if len(name) == 7 and name.startswith("Accent") and name[-1].isdigit() else name
 
@@ -97,7 +111,8 @@ def _named(wb, default_font) -> tuple[dict[str, tuple[set[str], str]], list[str]
 
 
 def read(data: bytes) -> dict:
-    wb = load_workbook(io.BytesIO(data), data_only=False, rich_text=False, keep_links=False)
+    wb = load_workbook(io.BytesIO(data), data_only=False, rich_text=False, keep_links=False, keep_vba=True)
+    vba = macro_parts(wb.vba_archive)
     notes: Counter = Counter()
     default_font = ("Calibri", 11.0)
     try:
@@ -172,4 +187,4 @@ def read(data: bytes) -> dict:
             continue
         text = dn.attr_text or ""
         names.append((name, "=" + from_file(text.lstrip("="))))
-    return {"sheets": sheets, "names": names, "theme": theme_in(wb.loaded_theme), "cellStyles": custom, "notes": [f"{n} {what}" for what, n in sorted(notes.items())]}
+    return {"sheets": sheets, "names": names, "theme": theme_in(wb.loaded_theme), "cellStyles": custom, "vba": vba, "notes": [f"{n} {what}" for what, n in sorted(notes.items())]}

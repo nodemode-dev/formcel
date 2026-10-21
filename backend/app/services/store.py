@@ -33,6 +33,7 @@ class Book:
     template: str | None = None
     views: list[dict] = field(default_factory=list)
     lock: threading.Lock = field(default_factory=threading.Lock)
+    vba: dict[str, bytes] | None = None
 
     def fit_views(self) -> None:
         n = len(self.sheet_names())
@@ -51,7 +52,7 @@ class Book:
     def meta(self) -> dict:
         self.fit_views()
         return {"id": self.id, "title": self.title, "created": self.created, "modified": self.modified,
-                "sheets": self.sheet_names(), "views": self.views, "template": self.template, "preview": self.preview()}
+                "sheets": self.sheet_names(), "views": self.views, "template": self.template, "preview": self.preview(), "macros": bool(self.vba)}
 
 
 class Store:
@@ -77,6 +78,8 @@ class Store:
         with zipfile.ZipFile(tmp, "w", zipfile.ZIP_DEFLATED) as z:
             z.writestr("mimetype", "application/vnd.formcel+zip")
             z.writestr("workbook.json", json.dumps(doc, ensure_ascii=False, separators=(",", ":")))
+            for name, blob in (b.vba or {}).items():
+                z.writestr(f"macros/{name}", blob)
         os.replace(tmp, target)
 
     @staticmethod
@@ -86,6 +89,12 @@ class Store:
         if doc.get("format") != FORMAT:
             raise ValueError(f"{p.name} is not a FormCel workbook")
         return doc
+
+    @staticmethod
+    def _macros(p: Path) -> dict[str, bytes] | None:
+        with zipfile.ZipFile(p) as z:
+            parts = {n[len("macros/"):]: z.read(n) for n in z.namelist() if n.startswith("macros/")}
+        return parts or None
 
     def _load(self, wid: str) -> Book:
         with self.guard:
@@ -114,6 +123,7 @@ class Store:
                 except ValueError:
                     continue
             b = Book(wid, doc["title"], doc["created"], doc["modified"], eng, doc.get("template"), [s.get("view") or {} for s in doc["sheets"]])
+            b.vba = self._macros(self.path(wid))
             self.open[wid] = b
             return b
 
@@ -160,10 +170,10 @@ class Store:
         self._write(b)
         return b.meta()
 
-    def import_xlsx(self, data: bytes, title: str) -> dict:
-        from . import xlsx
+    def import_xlsx(self, data: bytes, title: str, kind: str = "xlsx") -> dict:
+        from . import ods, xls, xlsx
 
-        book = xlsx.read(data)
+        book = xls.read(data) if kind == "xls" else ods.read(data) if kind == "ods" else xlsx.read(data)
         notes = list(book["notes"])
         eng = formcel_engine.Workbook()
         if book["theme"] and not eng.load_theme(book["theme"]):
@@ -194,6 +204,9 @@ class Store:
             notes.append(f"{dropped} names FormCel could not read left out")
         stamp = now()
         b = Book(uuid.uuid4().hex[:12], (title or "Imported workbook")[:120], stamp, stamp, eng, None, [s["view"] for s in book["sheets"]])
+        b.vba = book.get("vba")
+        if b.vba:
+            notes.append("1 macro project kept for saving as .xlsm (FormCel does not run macros)")
         with self.guard:
             self.open[b.id] = b
         self._write(b)
@@ -228,13 +241,23 @@ class Store:
                 raise IndexError(sheet)
             return b.title, names[sheet], csvio.write(b.engine.values(sheet), delimiter)
 
-    def export_xlsx(self, wid: str) -> tuple[str, bytes]:
+    def export_ods(self, wid: str) -> tuple[str, bytes]:
+        from . import ods
+
+        b = self._load(wid)
+        with b.lock:
+            b.fit_views()
+            return b.title, ods.write(b.engine, b.views)[0]
+
+    def export_xlsx(self, wid: str, macros: bool = False) -> tuple[str, bytes]:
         from . import xlsx
 
         b = self._load(wid)
         with b.lock:
             b.fit_views()
-            return b.title, xlsx.write(b.engine, b.views)
+            if macros and not b.vba:
+                raise LookupError(wid)
+            return b.title, xlsx.write(b.engine, b.views, b.vba if macros else None)
 
     def get(self, wid: str) -> dict:
         b = self._load(wid)

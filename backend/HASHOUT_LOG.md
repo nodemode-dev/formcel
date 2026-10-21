@@ -251,3 +251,30 @@ Checked: all 19 rule forms in `tools/checks/xlsxcheck.py` come back unchanged af
 Values are read as if typed, so numbers, dates, percents and TRUE or FALSE become values. A column is suggested as Text when any value is a digit string with a leading zero or more than 15 digits, the values a General column would change. A value starting with `=` stays text and is counted in the notes: opening a file should not run what it contains.
 
 Export writes the sheet's values as shown, UTF-8 with a byte order mark, CRLF line ends, comma or tab. One sheet per file; the file is named after the workbook, and the sheet when its name differs.
+
+### OpenDocument spreadsheets (.ods)
+- refers-to: app/services/ods/__init__.py :: read, write, _cell, _cell_style, _cell_xml; ods/formulas.py :: from_file, to_file, range_in; ods/numfmt.py :: to_style, from_style; store.py :: import_xlsx (kind ods), export_ods
+- kind: explainer
+- logged: v0.27.0 · 2026-10-21
+
+FormCel reads and writes .ods itself, with the standard library's zipfile and ElementTree; no ODF library is added. Read: sheets, values by `office:value-type` (float, percentage, currency, date, time, boolean, string), formulas, number formats from the data styles in content.xml and styles.xml, cell formatting from automatic cell styles (bold, italic, underline, strike, size, font, colours, borders, alignment, wrap, indent, rotation), merges, links in text, column widths and custom row heights, hidden rows and columns, named ranges and named expressions. Repeated rows and cells are expanded up to 1,000 copies. Left out with notes: conditional formatting, comments; frozen panes (in settings.xml) are not read.
+
+Write: one automatic cell style per distinct style and format, data styles converted from Excel codes (numbers, percent, currency, scientific, dates and times, elapsed hours, text). Codes with sections, colours, conditions, fractions, scaling or quoted text are written in a simpler form. Formula cells carry their current result, so a reader that does not recalculate shows the right value. Errors are written as text with `calcext:value-type="error"`, as LibreOffice writes them, and read back as errors. Conditional formatting is not written to .ods yet.
+
+Formulas: OpenFormula writes references in brackets (`[.A1:.B2]`, `[$Sheet2.A1]`, `[$'My Sheet'.$A$1]`), separates arguments with `;`, writes inline arrays as `{1;2|3;4}`, and TRUE and FALSE as `TRUE()` and `FALSE()`. The `of:` prefix needs its namespace declared; without it LibreOffice reads every formula as Err:510. Newer functions: LibreOffice 24.2, converting an .xlsx, writes CONCAT, IFS and SWITCH as `COM.MICROSOFT.` names, DAYS, IFNA and XOR as they are, and the functions it lacks with their `_xlfn.` prefix. FormCel writes every function from the MS-XLSX list as `COM.MICROSOFT.` except those three, and reads all three spellings.
+
+Checked (`tools/checks/odscheck.py`): every template written as .ods and read back shows 23,420 of 23,438 values the same (the rest are fraction and scaled formats written in the simpler form); LibreOffice 24.2 opens the same files and, saved as .xlsx, shows 23,360 of 23,438 the same; a LibreOffice-made .ods reads back with its formulas, sheet references, array constant, name, merge, link and formats.
+
+### Legacy .xls
+- refers-to: app/services/xls.py :: read
+- kind: explainer
+- logged: v0.27.0 · 2026-10-21
+
+xlrd 2.0.1 (BSD) reads .xls files: values as last saved, number formats, merges, column widths, row heights, hidden columns and rows, and frozen panes. xlrd does not give formulas as text, so formula cells come in as their values, and cell formatting and names are not read; the notes say so.
+
+### Macros in .xlsm
+- refers-to: app/services/xlsx/reader.py :: macro_parts; writer.py :: write (vba); store.py :: _write, _macros, import_xlsx, export_xlsx; app/routers/workbooks.py :: export_text (xlsm)
+- kind: explainer
+- logged: v0.27.0 · 2026-10-21
+
+When an opened file has `xl/vbaProject.bin`, the macro parts openpyxl knows to keep (`xl/vba`, VML drawings, form controls, `customUI`, ActiveX, EMF media) plus `[Content_Types].xml` and `_rels/.rels` are stored in the .fcel file under `macros/`. Download as .xlsm writes them back through openpyxl's own macro path, which adds the vbaProject relationship and the macro-enabled content type. FormCel never runs, reads or changes the macro code; a project whose sheets were renamed or removed may not match its code any more.
