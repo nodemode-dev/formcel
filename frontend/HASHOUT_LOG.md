@@ -399,3 +399,10 @@ A .csv, .tsv or .txt file opens a dialog first: the separator (sniffed, and chan
 The toolbar's download button opens a menu: the workbook as .xlsx, or the current sheet as .csv or .tsv. Each is also a command (`file.download-xlsx`, `file.download-csv`, `file.download-tsv`).
 
 v0.27.0: the menu adds .ods, and .xlsm when the workbook was opened from a file with macros (`macros` in the workbook's meta). Open a file accepts .xls and .ods. The save indicator now says "Opened, with N notes on what changed", since a note can also say what was kept.
+
+### Passwords and PDF in the window
+- refers-to: src/app.ts :: passwordBox, makePasswordForm, importFile, downloadLocked, download
+- kind: explainer
+- logged: v0.28.0 · 2026-10-21
+
+One password dialog, built once in the overlay root, serves both ways: opening a protected file (one field; a wrong password keeps the dialog open with the message) and Download with a password (two fields that must match). The password is sent once and the fields are cleared when the dialog closes. A locked download is fetched with POST, so the password is not in an address, and saved through an object URL. The Download menu adds This sheet as PDF and Every sheet as one PDF.

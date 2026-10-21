@@ -18,6 +18,16 @@ interface CsvPreview {
   sample: string[][];
 }
 
+interface PasswordForm {
+  form: HTMLFormElement;
+  title: HTMLElement;
+  hint: HTMLElement;
+  input: HTMLInputElement;
+  again: HTMLInputElement;
+  againLabel: HTMLElement;
+  submit: ((password: string) => Promise<string | null>) | null;
+}
+
 interface CsvForm {
   form: HTMLFormElement;
   file: File | null;
@@ -229,6 +239,9 @@ export class App {
     cmd('file.download', 'Download', 'Choose a file format to download this workbook or sheet in.', false, () => this.downloadMenu());
     cmd('file.download-xlsx', 'Download as .xlsx', 'Save a copy of this workbook as an Excel workbook in your downloads.', false, () => this.download('xlsx'));
     cmd('file.download-xlsm', 'Download as .xlsm', 'Save a copy as an Excel macro-enabled workbook with the macros the file was opened with. FormCel keeps macros but does not run them.', false, () => this.download('xlsm'));
+    cmd('file.download-xlsx-password', 'Download as .xlsx with a password', 'Save a copy as an Excel workbook that asks for a password to open.', false, () => this.downloadLocked());
+    cmd('file.download-pdf', 'Download sheet as PDF', 'Save this sheet as a PDF, laid out on Letter pages.', false, () => this.download('pdf'));
+    cmd('file.download-pdf-all', 'Download workbook as PDF', 'Save every sheet in one PDF, laid out on Letter pages.', false, () => this.download('pdf-all'));
     cmd('file.download-ods', 'Download as .ods', 'Save a copy of this workbook as an OpenDocument spreadsheet.', false, () => this.download('ods'));
     cmd('file.download-csv', 'Download sheet as .csv', 'Save the values of this sheet, as shown, separated by commas.', false, () => this.download('csv'));
     cmd('file.download-tsv', 'Download sheet as .tsv', 'Save the values of this sheet, as shown, separated by tabs.', false, () => this.download('tsv'));
@@ -424,19 +437,44 @@ export class App {
     this.menu.show(b.left, b.bottom + 4, [
       { label: 'Excel workbook (.xlsx)', run: run('file.download-xlsx') },
       ...(this.open?.macros ? [{ label: 'Excel macro-enabled workbook (.xlsm), with the macros it was opened with', run: run('file.download-xlsm') }] : []),
+      { label: 'Excel workbook with a password (.xlsx)', run: run('file.download-xlsx-password') },
       { label: 'OpenDocument spreadsheet (.ods)', run: run('file.download-ods') },
+      { label: 'This sheet as PDF (.pdf)', run: run('file.download-pdf') },
+      { label: 'Every sheet as one PDF (.pdf)', run: run('file.download-pdf-all') },
       { label: 'This sheet as comma-separated values (.csv)', run: run('file.download-csv') },
       { label: 'This sheet as tab-separated values (.tsv)', run: run('file.download-tsv') },
     ], () => this.grid.focus());
   }
 
-  private async download(kind: 'xlsx' | 'xlsm' | 'ods' | 'csv' | 'tsv'): Promise<void> {
+  private downloadLocked(): void {
+    const o = this.open;
+    if (!o) return;
+    this.passwordBox('Download with a password', 'Anyone who opens the file needs this password. FormCel does not keep it, and a lost password cannot be recovered.', true, async (password) => {
+      this.flush();
+      await this.saving;
+      const r = await fetch(`/api/workbooks/${o.id}/export.xlsx`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ password }) }).catch(() => null);
+      if (!r || !r.ok) return 'The file could not be made.';
+      const url = URL.createObjectURL(await r.blob());
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${o.title || 'Workbook'}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.setTimeout(() => URL.revokeObjectURL(url), 10000);
+      this.grid.focus();
+      return null;
+    });
+  }
+
+  private async download(kind: 'xlsx' | 'xlsm' | 'ods' | 'csv' | 'tsv' | 'pdf' | 'pdf-all'): Promise<void> {
     const o = this.open;
     if (!o) return;
     this.flush();
     await this.saving;
     const a = document.createElement('a');
-    a.href = kind === 'csv' || kind === 'tsv' ? `/api/workbooks/${o.id}/export.${kind}?sheet=${this.grid.sheetIndex}` : `/api/workbooks/${o.id}/export.${kind}`;
+    const sheet = this.grid.sheetIndex;
+    a.href = kind === 'csv' || kind === 'tsv' || kind === 'pdf' ? `/api/workbooks/${o.id}/export.${kind}?sheet=${sheet}` : kind === 'pdf-all' ? `/api/workbooks/${o.id}/export.pdf?scope=all` : `/api/workbooks/${o.id}/export.${kind}`;
     a.download = '';
     document.body.appendChild(a);
     a.click();
@@ -526,19 +564,81 @@ export class App {
     return f;
   }
 
-  private async importFile(file: File, options?: string): Promise<void> {
-    if (options === undefined && /\.(csv|tsv|txt)$/i.test(file.name)) return this.csvBox(file);
+  private passwordBox(title: string, hint: string, confirm: boolean, submit: (password: string) => Promise<string | null>): void {
+    const f = this.pwForm ??= this.makePasswordForm();
+    f.title.textContent = title;
+    f.hint.textContent = hint;
+    f.form.dataset.state = '';
+    f.input.value = '';
+    f.again.value = '';
+    f.againLabel.hidden = !confirm;
+    f.submit = submit;
+    f.form.hidden = false;
+    f.input.focus();
+  }
+
+  private makePasswordForm(): PasswordForm {
+    const form = document.createElement('form');
+    form.className = 'fc-fmt-custom fc-pw';
+    form.hidden = true;
+    form.setAttribute('role', 'dialog');
+    form.innerHTML = '<span class="fc-fmt-title"></span><label class="fc-fmt-label">Password<input type="password" class="fc-fmt-input fc-pw-input" autocomplete="off"></label><label class="fc-fmt-label fc-pw-again-label">Type it again<input type="password" class="fc-fmt-input fc-pw-again" autocomplete="off"></label><span class="fc-fmt-hint" aria-live="polite"></span><div class="fc-csv-actions"><button type="button" class="fc-btn" data-a="cancel">Cancel</button><button type="submit" class="fc-btn fc-btn-primary">OK</button></div>';
+    document.getElementById('overlay-root')!.appendChild(form);
+    const f: PasswordForm = {
+      form,
+      title: form.querySelector<HTMLElement>('.fc-fmt-title')!,
+      hint: form.querySelector<HTMLElement>('.fc-fmt-hint')!,
+      input: form.querySelector<HTMLInputElement>('.fc-pw-input')!,
+      again: form.querySelector<HTMLInputElement>('.fc-pw-again')!,
+      againLabel: form.querySelector<HTMLElement>('.fc-pw-again-label')!,
+      submit: null,
+    };
+    const close = () => { form.hidden = true; f.input.value = ''; f.again.value = ''; f.submit = null; };
+    form.querySelector('[data-a="cancel"]')!.addEventListener('click', close);
+    form.addEventListener('keydown', (e) => { if (e.key === 'Escape') close(); });
+    form.addEventListener('submit', (e) => {
+      e.preventDefault();
+      if (!f.submit || !f.input.value) return;
+      if (!f.againLabel.hidden && f.input.value !== f.again.value) {
+        form.dataset.state = 'error';
+        f.hint.textContent = 'The two passwords are not the same.';
+        return;
+      }
+      void f.submit(f.input.value).then((err) => {
+        if (err === null) return close();
+        form.dataset.state = 'error';
+        f.hint.textContent = err;
+        f.input.select();
+      });
+    });
+    return f;
+  }
+
+  private async importFile(file: File, options?: string, password?: string): Promise<string | null> {
+    if (options === undefined && /\.(csv|tsv|txt)$/i.test(file.name)) {
+      void this.csvBox(file);
+      return null;
+    }
     this.home.say(`Opening ${file.name}`);
-    const r = await fetch(`/api/import?name=${encodeURIComponent(file.name)}${options ?? ''}`, { method: 'POST', headers: { 'content-type': 'application/octet-stream' }, body: file }).catch(() => null);
+    const headers: Record<string, string> = { 'content-type': 'application/octet-stream' };
+    if (password) headers['x-formcel-password'] = password;
+    const r = await fetch(`/api/import?name=${encodeURIComponent(file.name)}${options ?? ''}`, { method: 'POST', headers, body: file }).catch(() => null);
+    if (r && (r.status === 401 || r.status === 403)) {
+      this.home.say('');
+      if (r.status === 403) return 'That password does not open the file.';
+      this.passwordBox(`Open ${file.name}`, 'This file is protected with a password. FormCel uses it once to open the file and does not keep it.', false, (pw) => this.importFile(file, options, pw));
+      return null;
+    }
     if (!r || !r.ok) {
       const detail = r ? await r.json().then((j: { detail?: string }) => j.detail).catch(() => undefined) : undefined;
       this.home.say(detail ?? `${file.name} could not be opened.`, true);
-      return;
+      return null;
     }
     this.home.say('');
     const meta = (await r.json()) as WorkbookMeta & { notes?: string[] };
     this.importNotes = meta.notes ?? [];
     location.hash = `w-${meta.id}`;
+    return null;
   }
 
   private async openWorkbook(id: string, setHash = true): Promise<void> {
@@ -811,6 +911,7 @@ export class App {
 
   private linkForm: { form: HTMLFormElement; text: HTMLInputElement; url: HTMLInputElement; hint: HTMLElement } | null = null;
   private csvForm: CsvForm | null = null;
+  private pwForm: PasswordForm | null = null;
 
   private linkBox(): void {
     const g = this.grid;

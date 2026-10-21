@@ -339,6 +339,8 @@
   background: var(--bg-secondary);
   box-shadow: var(--shadow-md);
 }
+.fc-pw { z-index: var(--z-overlay); top: 20vh; left: 50%; translate: -50% 0; }
+.fc-pw .fc-csv-actions .fc-btn { justify-self: auto; }
 .fc-csv-head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-3); }
 .fc-csv-meta { font-size: var(--text-sm); color: var(--text-muted); }
 .fc-csv-delim-label { width: 200px; }
