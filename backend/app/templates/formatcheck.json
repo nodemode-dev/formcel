@@ -1,0 +1,1586 @@
+[
+ {
+  "id": "formcel-format-check",
+  "name": "Formatting check",
+  "description": "Every number format case from Microsoft's format pages with its expected result, every cell style setting, the built-in cell styles, a conditional formatting rule of each kind and the link examples, to check FormCel's formatting by eye and by formula.",
+  "category": "Example projects",
+  "tags": [
+   "formatting",
+   "conditional formatting",
+   "check"
+  ],
+  "featured": false,
+  "sheets": [
+   {
+    "name": "Summary",
+    "columns": [],
+    "types": [],
+    "rows": [
+     [
+      "Formatting check",
+      ""
+     ],
+     [
+      "Number format cases",
+      "51"
+     ],
+     [
+      "TEXT results matching the page",
+      "=COUNTIF('Number formats'!E2:E52,TRUE)"
+     ],
+     [
+      "Checked by eye",
+      "Cells, Conditional and Links: each row says what it should look like"
+     ]
+    ],
+    "styles": [
+     [
+      0,
+      0,
+      "cs:Title"
+     ]
+    ]
+   },
+   {
+    "name": "Number formats",
+    "columns": [],
+    "types": [],
+    "rows": [
+     [
+      "Value",
+      "Format code",
+      "Page result",
+      "TEXT result",
+      "Match",
+      "Source"
+     ],
+     [
+      "1234.59",
+      "'####.#",
+      "'1234.6",
+      "=TRIM(TEXT(A2,B2))",
+      "=EXACT(D2,C2)",
+      "MS-NUMGUIDE and MS-TEXT examples"
+     ],
+     [
+      "8.9",
+      "'#.000",
+      "'8.900",
+      "=TRIM(TEXT(A3,B3))",
+      "=EXACT(D3,C3)",
+      "MS-NUMGUIDE and MS-TEXT examples"
+     ],
+     [
+      ".631",
+      "'0.#",
+      "'0.6",
+      "=TRIM(TEXT(A4,B4))",
+      "=EXACT(D4,C4)",
+      "MS-NUMGUIDE and MS-TEXT examples"
+     ],
+     [
+      "12",
+      "'#.0#",
+      "'12.0",
+      "=TRIM(TEXT(A5,B5))",
+      "=EXACT(D5,C5)",
+      "MS-NUMGUIDE and MS-TEXT examples"
+     ],
+     [
+      "1234.568",
+      "'#.0#",
+      "'1234.57",
+      "=TRIM(TEXT(A6,B6))",
+      "=EXACT(D6,C6)",
+      "MS-NUMGUIDE and MS-TEXT examples"
+     ],
+     [
+      "44.398",
+      "'???.???",
+      "'44.398",
+      "=TRIM(TEXT(A7,B7))",
+      "=EXACT(D7,C7)",
+      "MS-NUMGUIDE and MS-TEXT examples"
+     ],
+     [
+      "102.65",
+      "'???.???",
+      "'102.65",
+      "=TRIM(TEXT(A8,B8))",
+      "=EXACT(D8,C8)",
+      "MS-NUMGUIDE and MS-TEXT examples"
+     ],
+     [
+      "2.8",
+      "'???.???",
+      "'2.8",
+      "=TRIM(TEXT(A9,B9))",
+      "=EXACT(D9,C9)",
+      "MS-NUMGUIDE and MS-TEXT examples"
+     ],
+     [
+      "5.25",
+      "'# ???/???",
+      "'5 1/4",
+      "=TRIM(TEXT(A10,B10))",
+      "=EXACT(D10,C10)",
+      "MS-NUMGUIDE and MS-TEXT examples"
+     ],
+     [
+      "5.3",
+      "'# ???/???",
+      "'5 3/10",
+      "=TRIM(TEXT(A11,B11))",
+      "=EXACT(D11,C11)",
+      "MS-NUMGUIDE and MS-TEXT examples"
+     ],
+     [
+      "12000",
+      "'#,###",
+      "'12,000",
+      "=TRIM(TEXT(A12,B12))",
+      "=EXACT(D12,C12)",
+      "MS-NUMGUIDE and MS-TEXT examples"
+     ],
+     [
+      "12000",
+      "'#,",
+      "'12",
+      "=TRIM(TEXT(A13,B13))",
+      "=EXACT(D13,C13)",
+      "MS-NUMGUIDE and MS-TEXT examples"
+     ],
+     [
+      "12200000",
+      "'0.0,,\"M\"",
+      "'12.2M",
+      "=TRIM(TEXT(A14,B14))",
+      "=EXACT(D14,C14)",
+      "MS-NUMGUIDE and MS-TEXT examples"
+     ],
+     [
+      "12200000",
+      "'#.0,",
+      "'12200.0",
+      "=TRIM(TEXT(A15,B15))",
+      "=EXACT(D15,C15)",
+      "MS-NUMGUIDE and MS-TEXT examples"
+     ],
+     [
+      "12200000",
+      "'0.00E+00",
+      "'1.22E+07",
+      "=TRIM(TEXT(A16,B16))",
+      "=EXACT(D16,C16)",
+      "MS-NUMGUIDE and MS-TEXT examples"
+     ],
+     [
+      "12200000",
+      "'#0.0E+0",
+      "'12.2E+6",
+      "=TRIM(TEXT(A17,B17))",
+      "=EXACT(D17,C17)",
+      "MS-NUMGUIDE and MS-TEXT examples"
+     ],
+     [
+      "8.9",
+      "'#.00",
+      "'8.90",
+      "=TRIM(TEXT(A18,B18))",
+      "=EXACT(D18,C18)",
+      "MS-NUMGUIDE and MS-TEXT examples"
+     ],
+     [
+      "8.9",
+      "'#.##",
+      "'8.9",
+      "=TRIM(TEXT(A19,B19))",
+      "=EXACT(D19,C19)",
+      "MS-NUMGUIDE and MS-TEXT examples"
+     ],
+     [
+      "125.74",
+      "'$0.00\" Surplus\";$-0.00\" Shortage\"",
+      "'$125.74 Surplus",
+      "=TRIM(TEXT(A20,B20))",
+      "=EXACT(D20,C20)",
+      "MS-NUMGUIDE and MS-TEXT examples"
+     ],
+     [
+      "-125.74",
+      "'$0.00\" Surplus\";$-0.00\" Shortage\"",
+      "'$-125.74 Shortage",
+      "=TRIM(TEXT(A21,B21))",
+      "=EXACT(D21,C21)",
+      "MS-NUMGUIDE and MS-TEXT examples"
+     ],
+     [
+      "32",
+      "'#\\\"",
+      "'32\"",
+      "=TRIM(TEXT(A22,B22))",
+      "=EXACT(D22,C22)",
+      "MS-NUMGUIDE and MS-TEXT examples"
+     ],
+     [
+      "x",
+      "'\"gross receipts for \"@",
+      "'gross receipts for x",
+      "=TRIM(TEXT(A23,B23))",
+      "=EXACT(D23,C23)",
+      "MS-NUMGUIDE and MS-TEXT examples"
+     ],
+     [
+      "1234.567",
+      "'$#,##0.00",
+      "'$1,234.57",
+      "=TRIM(TEXT(A24,B24))",
+      "=EXACT(D24,C24)",
+      "MS-NUMGUIDE and MS-TEXT examples"
+     ],
+     [
+      "0.285",
+      "'0.0%",
+      "'28.5%",
+      "=TRIM(TEXT(A25,B25))",
+      "=EXACT(D25,C25)",
+      "MS-NUMGUIDE and MS-TEXT examples"
+     ],
+     [
+      "4.34",
+      "'# ?/?",
+      "'4 1/3",
+      "=TRIM(TEXT(A26,B26))",
+      "=EXACT(D26,C26)",
+      "MS-NUMGUIDE and MS-TEXT examples"
+     ],
+     [
+      "1234567898",
+      "'[<=9999999]###-####;(###) ###-####",
+      "'(123) 456-7898",
+      "=TRIM(TEXT(A27,B27))",
+      "=EXACT(D27,C27)",
+      "MS-NUMGUIDE and MS-TEXT examples"
+     ],
+     [
+      "1234",
+      "'0000000",
+      "'0001234",
+      "=TRIM(TEXT(A28,B28))",
+      "=EXACT(D28,C28)",
+      "MS-NUMGUIDE and MS-TEXT examples"
+     ],
+     [
+      ".08",
+      "'0%",
+      "'8%",
+      "=TRIM(TEXT(A29,B29))",
+      "=EXACT(D29,C29)",
+      "MS-NUMGUIDE and MS-TEXT examples"
+     ],
+     [
+      "2.8",
+      "'0%",
+      "'280%",
+      "=TRIM(TEXT(A30,B30))",
+      "=EXACT(D30,C30)",
+      "MS-NUMGUIDE and MS-TEXT examples"
+     ],
+     [
+      "0.043055555555555555",
+      "'[h]:mm",
+      "'1:02",
+      "=TRIM(TEXT(A31,B31))",
+      "=EXACT(D31,C31)",
+      "MS-NUMGUIDE and MS-TEXT examples"
+     ],
+     [
+      "0.04324074074074074",
+      "'[mm]:ss",
+      "'62:16",
+      "=TRIM(TEXT(A32,B32))",
+      "=EXACT(D32,C32)",
+      "MS-NUMGUIDE and MS-TEXT examples"
+     ],
+     [
+      "0.04323842592592593",
+      "'[ss].00",
+      "'3735.80",
+      "=TRIM(TEXT(A33,B33))",
+      "=EXACT(D33,C33)",
+      "MS-NUMGUIDE and MS-TEXT examples"
+     ],
+     [
+      "=DATE(2026,3,4)+TIME(16,36,3)+0.75/86400",
+      "'m",
+      "'3",
+      "=TEXT(A34,B34)",
+      "=EXACT(D34,C34)",
+      "MS-NUMGUIDE codes; value 4 Mar 2026 16:36:03.75 chosen by FormCel, results worked by hand"
+     ],
+     [
+      "=DATE(2026,3,4)+TIME(16,36,3)+0.75/86400",
+      "'mm",
+      "'03",
+      "=TEXT(A35,B35)",
+      "=EXACT(D35,C35)",
+      "MS-NUMGUIDE codes; value 4 Mar 2026 16:36:03.75 chosen by FormCel, results worked by hand"
+     ],
+     [
+      "=DATE(2026,3,4)+TIME(16,36,3)+0.75/86400",
+      "'mmm",
+      "'Mar",
+      "=TEXT(A36,B36)",
+      "=EXACT(D36,C36)",
+      "MS-NUMGUIDE codes; value 4 Mar 2026 16:36:03.75 chosen by FormCel, results worked by hand"
+     ],
+     [
+      "=DATE(2026,3,4)+TIME(16,36,3)+0.75/86400",
+      "'mmmm",
+      "'March",
+      "=TEXT(A37,B37)",
+      "=EXACT(D37,C37)",
+      "MS-NUMGUIDE codes; value 4 Mar 2026 16:36:03.75 chosen by FormCel, results worked by hand"
+     ],
+     [
+      "=DATE(2026,3,4)+TIME(16,36,3)+0.75/86400",
+      "'mmmmm",
+      "'M",
+      "=TEXT(A38,B38)",
+      "=EXACT(D38,C38)",
+      "MS-NUMGUIDE codes; value 4 Mar 2026 16:36:03.75 chosen by FormCel, results worked by hand"
+     ],
+     [
+      "=DATE(2026,3,4)+TIME(16,36,3)+0.75/86400",
+      "'d",
+      "'4",
+      "=TEXT(A39,B39)",
+      "=EXACT(D39,C39)",
+      "MS-NUMGUIDE codes; value 4 Mar 2026 16:36:03.75 chosen by FormCel, results worked by hand"
+     ],
+     [
+      "=DATE(2026,3,4)+TIME(16,36,3)+0.75/86400",
+      "'dd",
+      "'04",
+      "=TEXT(A40,B40)",
+      "=EXACT(D40,C40)",
+      "MS-NUMGUIDE codes; value 4 Mar 2026 16:36:03.75 chosen by FormCel, results worked by hand"
+     ],
+     [
+      "=DATE(2026,3,4)+TIME(16,36,3)+0.75/86400",
+      "'ddd",
+      "'Wed",
+      "=TEXT(A41,B41)",
+      "=EXACT(D41,C41)",
+      "MS-NUMGUIDE codes; value 4 Mar 2026 16:36:03.75 chosen by FormCel, results worked by hand"
+     ],
+     [
+      "=DATE(2026,3,4)+TIME(16,36,3)+0.75/86400",
+      "'dddd",
+      "'Wednesday",
+      "=TEXT(A42,B42)",
+      "=EXACT(D42,C42)",
+      "MS-NUMGUIDE codes; value 4 Mar 2026 16:36:03.75 chosen by FormCel, results worked by hand"
+     ],
+     [
+      "=DATE(2026,3,4)+TIME(16,36,3)+0.75/86400",
+      "'yy",
+      "'26",
+      "=TEXT(A43,B43)",
+      "=EXACT(D43,C43)",
+      "MS-NUMGUIDE codes; value 4 Mar 2026 16:36:03.75 chosen by FormCel, results worked by hand"
+     ],
+     [
+      "=DATE(2026,3,4)+TIME(16,36,3)+0.75/86400",
+      "'yyyy",
+      "'2026",
+      "=TEXT(A44,B44)",
+      "=EXACT(D44,C44)",
+      "MS-NUMGUIDE codes; value 4 Mar 2026 16:36:03.75 chosen by FormCel, results worked by hand"
+     ],
+     [
+      "=DATE(2026,3,4)+TIME(16,36,3)+0.75/86400",
+      "'h",
+      "'16",
+      "=TEXT(A45,B45)",
+      "=EXACT(D45,C45)",
+      "MS-NUMGUIDE codes; value 4 Mar 2026 16:36:03.75 chosen by FormCel, results worked by hand"
+     ],
+     [
+      "=DATE(2026,3,4)+TIME(16,36,3)+0.75/86400",
+      "'hh",
+      "'16",
+      "=TEXT(A46,B46)",
+      "=EXACT(D46,C46)",
+      "MS-NUMGUIDE codes; value 4 Mar 2026 16:36:03.75 chosen by FormCel, results worked by hand"
+     ],
+     [
+      "=DATE(2026,3,4)+TIME(16,36,3)+0.75/86400",
+      "'h AM/PM",
+      "'4 PM",
+      "=TEXT(A47,B47)",
+      "=EXACT(D47,C47)",
+      "MS-NUMGUIDE codes; value 4 Mar 2026 16:36:03.75 chosen by FormCel, results worked by hand"
+     ],
+     [
+      "=DATE(2026,3,4)+TIME(16,36,3)+0.75/86400",
+      "'h:mm AM/PM",
+      "'4:36 PM",
+      "=TEXT(A48,B48)",
+      "=EXACT(D48,C48)",
+      "MS-NUMGUIDE codes; value 4 Mar 2026 16:36:03.75 chosen by FormCel, results worked by hand"
+     ],
+     [
+      "=DATE(2026,3,4)+TIME(16,36,3)+0.75/86400",
+      "'h:mm:ss A/P",
+      "'4:36:04 P",
+      "=TEXT(A49,B49)",
+      "=EXACT(D49,C49)",
+      "MS-NUMGUIDE codes; value 4 Mar 2026 16:36:03.75 chosen by FormCel, results worked by hand"
+     ],
+     [
+      "=DATE(2026,3,4)+TIME(16,36,3)+0.75/86400",
+      "'h:mm:ss.00",
+      "'16:36:03.75",
+      "=TEXT(A50,B50)",
+      "=EXACT(D50,C50)",
+      "MS-NUMGUIDE codes; value 4 Mar 2026 16:36:03.75 chosen by FormCel, results worked by hand"
+     ],
+     [
+      "=DATE(2026,3,4)+TIME(16,36,3)+0.75/86400",
+      "'MM/DD/YY",
+      "'03/04/26",
+      "=TEXT(A51,B51)",
+      "=EXACT(D51,C51)",
+      "MS-NUMGUIDE codes; value 4 Mar 2026 16:36:03.75 chosen by FormCel, results worked by hand"
+     ],
+     [
+      "=DATE(2026,3,4)+TIME(16,36,3)+0.75/86400",
+      "'mm/dd/yyyy",
+      "'03/04/2026",
+      "=TEXT(A52,B52)",
+      "=EXACT(D52,C52)",
+      "MS-NUMGUIDE codes; value 4 Mar 2026 16:36:03.75 chosen by FormCel, results worked by hand"
+     ]
+    ],
+    "formats": [
+     [
+      1,
+      0,
+      "####.#"
+     ],
+     [
+      2,
+      0,
+      "#.000"
+     ],
+     [
+      3,
+      0,
+      "0.#"
+     ],
+     [
+      4,
+      0,
+      "#.0#"
+     ],
+     [
+      5,
+      0,
+      "#.0#"
+     ],
+     [
+      6,
+      0,
+      "???.???"
+     ],
+     [
+      7,
+      0,
+      "???.???"
+     ],
+     [
+      8,
+      0,
+      "???.???"
+     ],
+     [
+      9,
+      0,
+      "# ???/???"
+     ],
+     [
+      10,
+      0,
+      "# ???/???"
+     ],
+     [
+      11,
+      0,
+      "#,###"
+     ],
+     [
+      12,
+      0,
+      "#,"
+     ],
+     [
+      13,
+      0,
+      "0.0,,\"M\""
+     ],
+     [
+      14,
+      0,
+      "#.0,"
+     ],
+     [
+      15,
+      0,
+      "0.00E+00"
+     ],
+     [
+      16,
+      0,
+      "#0.0E+0"
+     ],
+     [
+      17,
+      0,
+      "#.00"
+     ],
+     [
+      18,
+      0,
+      "#.##"
+     ],
+     [
+      19,
+      0,
+      "$0.00\" Surplus\";$-0.00\" Shortage\""
+     ],
+     [
+      20,
+      0,
+      "$0.00\" Surplus\";$-0.00\" Shortage\""
+     ],
+     [
+      21,
+      0,
+      "#\\\""
+     ],
+     [
+      22,
+      0,
+      "\"gross receipts for \"@"
+     ],
+     [
+      23,
+      0,
+      "$#,##0.00"
+     ],
+     [
+      24,
+      0,
+      "0.0%"
+     ],
+     [
+      25,
+      0,
+      "# ?/?"
+     ],
+     [
+      26,
+      0,
+      "[<=9999999]###-####;(###) ###-####"
+     ],
+     [
+      27,
+      0,
+      "0000000"
+     ],
+     [
+      28,
+      0,
+      "0%"
+     ],
+     [
+      29,
+      0,
+      "0%"
+     ],
+     [
+      30,
+      0,
+      "[h]:mm"
+     ],
+     [
+      31,
+      0,
+      "[mm]:ss"
+     ],
+     [
+      32,
+      0,
+      "[ss].00"
+     ],
+     [
+      33,
+      0,
+      "m"
+     ],
+     [
+      34,
+      0,
+      "mm"
+     ],
+     [
+      35,
+      0,
+      "mmm"
+     ],
+     [
+      36,
+      0,
+      "mmmm"
+     ],
+     [
+      37,
+      0,
+      "mmmmm"
+     ],
+     [
+      38,
+      0,
+      "d"
+     ],
+     [
+      39,
+      0,
+      "dd"
+     ],
+     [
+      40,
+      0,
+      "ddd"
+     ],
+     [
+      41,
+      0,
+      "dddd"
+     ],
+     [
+      42,
+      0,
+      "yy"
+     ],
+     [
+      43,
+      0,
+      "yyyy"
+     ],
+     [
+      44,
+      0,
+      "h"
+     ],
+     [
+      45,
+      0,
+      "hh"
+     ],
+     [
+      46,
+      0,
+      "h AM/PM"
+     ],
+     [
+      47,
+      0,
+      "h:mm AM/PM"
+     ],
+     [
+      48,
+      0,
+      "h:mm:ss A/P"
+     ],
+     [
+      49,
+      0,
+      "h:mm:ss.00"
+     ],
+     [
+      50,
+      0,
+      "MM/DD/YY"
+     ],
+     [
+      51,
+      0,
+      "mm/dd/yyyy"
+     ]
+    ],
+    "styles": [
+     [
+      0,
+      0,
+      "cs:Heading 4"
+     ],
+     [
+      0,
+      1,
+      "cs:Heading 4"
+     ],
+     [
+      0,
+      2,
+      "cs:Heading 4"
+     ],
+     [
+      0,
+      3,
+      "cs:Heading 4"
+     ],
+     [
+      0,
+      4,
+      "cs:Heading 4"
+     ],
+     [
+      0,
+      5,
+      "cs:Heading 4"
+     ]
+    ]
+   },
+   {
+    "name": "Cells",
+    "columns": [],
+    "types": [],
+    "rows": [
+     [
+      "Setting",
+      "Sample",
+      "Style text"
+     ],
+     [
+      "Bold",
+      "Sample 123",
+      "b"
+     ],
+     [
+      "Italic",
+      "Sample 123",
+      "i"
+     ],
+     [
+      "Underline",
+      "Sample 123",
+      "u"
+     ],
+     [
+      "Strikethrough",
+      "Sample 123",
+      "s"
+     ],
+     [
+      "Size 8",
+      "Sample 123",
+      "sz:8"
+     ],
+     [
+      "Size 14",
+      "Sample 123",
+      "sz:14"
+     ],
+     [
+      "Size 24",
+      "Sample 123",
+      "sz:24"
+     ],
+     [
+      "Georgia",
+      "Sample 123",
+      "ff:Georgia"
+     ],
+     [
+      "Courier New",
+      "Sample 123",
+      "ff:Courier New"
+     ],
+     [
+      "Red text",
+      "Sample 123",
+      "fc:ff0000"
+     ],
+     [
+      "Yellow fill",
+      "Sample 123",
+      "bg:ffeb9c"
+     ],
+     [
+      "Theme accent 1 fill",
+      "Sample 123",
+      "bg:t:accent1"
+     ],
+     [
+      "Accent 1, 60% lighter",
+      "Sample 123",
+      "bg:t:accent1:60"
+     ],
+     [
+      "Thin border",
+      "Sample 123",
+      "bt:thin:000000;br:thin:000000;bb:thin:000000;bl:thin:000000"
+     ],
+     [
+      "Medium border",
+      "Sample 123",
+      "bt:medium:000000;br:medium:000000;bb:medium:000000;bl:medium:000000"
+     ],
+     [
+      "Thick bottom",
+      "Sample 123",
+      "bb:thick:000000"
+     ],
+     [
+      "Dashed border",
+      "Sample 123",
+      "bt:dashed:000000;br:dashed:000000;bb:dashed:000000;bl:dashed:000000"
+     ],
+     [
+      "Dotted border",
+      "Sample 123",
+      "bt:dotted:000000;br:dotted:000000;bb:dotted:000000;bl:dotted:000000"
+     ],
+     [
+      "Double bottom",
+      "Sample 123",
+      "bb:double:000000"
+     ],
+     [
+      "Align left",
+      "Sample 123",
+      "ha:left"
+     ],
+     [
+      "Center",
+      "Sample 123",
+      "ha:center"
+     ],
+     [
+      "Align right",
+      "Sample 123",
+      "ha:right"
+     ],
+     [
+      "Top",
+      "Sample 123",
+      "va:top"
+     ],
+     [
+      "Middle",
+      "Sample 123",
+      "va:middle"
+     ],
+     [
+      "Bottom",
+      "Sample 123",
+      "va:bottom"
+     ],
+     [
+      "Indent 2",
+      "Sample 123",
+      "in:2"
+     ],
+     [
+      "Wrapped text in a narrow cell",
+      "Wrapped text in a narrow cell",
+      "wrap"
+     ],
+     [
+      "Angle up",
+      "Sample 123",
+      "rot:45"
+     ],
+     [
+      "Angle down",
+      "Sample 123",
+      "rot:-45"
+     ],
+     [
+      "Rotate up",
+      "Sample 123",
+      "rot:90"
+     ],
+     [
+      "Vertical",
+      "Sample 123",
+      "rot:v"
+     ],
+     [
+      "Merge and center (B to D)",
+      "Merged across three cells",
+      "merge"
+     ],
+     [
+      "",
+      "",
+      ""
+     ],
+     [
+      "Cell style",
+      "Sample",
+      "Style"
+     ],
+     [
+      "Normal",
+      "Sample",
+      "cs:Normal"
+     ],
+     [
+      "Good",
+      "Sample",
+      "cs:Good"
+     ],
+     [
+      "Bad",
+      "Sample",
+      "cs:Bad"
+     ],
+     [
+      "Neutral",
+      "Sample",
+      "cs:Neutral"
+     ],
+     [
+      "Title",
+      "Sample",
+      "cs:Title"
+     ],
+     [
+      "Heading 1",
+      "Sample",
+      "cs:Heading 1"
+     ],
+     [
+      "Heading 2",
+      "Sample",
+      "cs:Heading 2"
+     ],
+     [
+      "Heading 3",
+      "Sample",
+      "cs:Heading 3"
+     ],
+     [
+      "Heading 4",
+      "Sample",
+      "cs:Heading 4"
+     ],
+     [
+      "Total",
+      "Sample",
+      "cs:Total"
+     ],
+     [
+      "Input",
+      "Sample",
+      "cs:Input"
+     ],
+     [
+      "Output",
+      "Sample",
+      "cs:Output"
+     ],
+     [
+      "Calculation",
+      "Sample",
+      "cs:Calculation"
+     ],
+     [
+      "Note",
+      "Sample",
+      "cs:Note"
+     ],
+     [
+      "Warning Text",
+      "Sample",
+      "cs:Warning Text"
+     ],
+     [
+      "Accent 1",
+      "Sample",
+      "cs:Accent 1"
+     ],
+     [
+      "Accent 2",
+      "Sample",
+      "cs:Accent 2"
+     ],
+     [
+      "Accent 3",
+      "Sample",
+      "cs:Accent 3"
+     ],
+     [
+      "Accent 4",
+      "Sample",
+      "cs:Accent 4"
+     ],
+     [
+      "Accent 5",
+      "Sample",
+      "cs:Accent 5"
+     ],
+     [
+      "Accent 6",
+      "Sample",
+      "cs:Accent 6"
+     ],
+     [
+      "Comma",
+      "1234.5",
+      "cs:Comma"
+     ],
+     [
+      "Currency",
+      "1234.5",
+      "cs:Currency"
+     ],
+     [
+      "Percent",
+      "1234.5",
+      "cs:Percent"
+     ]
+    ],
+    "styles": [
+     [
+      0,
+      0,
+      "cs:Heading 4"
+     ],
+     [
+      0,
+      1,
+      "cs:Heading 4"
+     ],
+     [
+      0,
+      2,
+      "cs:Heading 4"
+     ],
+     [
+      1,
+      1,
+      "b"
+     ],
+     [
+      2,
+      1,
+      "i"
+     ],
+     [
+      3,
+      1,
+      "u"
+     ],
+     [
+      4,
+      1,
+      "s"
+     ],
+     [
+      5,
+      1,
+      "sz:8"
+     ],
+     [
+      6,
+      1,
+      "sz:14"
+     ],
+     [
+      7,
+      1,
+      "sz:24"
+     ],
+     [
+      8,
+      1,
+      "ff:Georgia"
+     ],
+     [
+      9,
+      1,
+      "ff:Courier New"
+     ],
+     [
+      10,
+      1,
+      "fc:ff0000"
+     ],
+     [
+      11,
+      1,
+      "bg:ffeb9c"
+     ],
+     [
+      12,
+      1,
+      "bg:t:accent1"
+     ],
+     [
+      13,
+      1,
+      "bg:t:accent1:60"
+     ],
+     [
+      14,
+      1,
+      "bt:thin:000000;br:thin:000000;bb:thin:000000;bl:thin:000000"
+     ],
+     [
+      15,
+      1,
+      "bt:medium:000000;br:medium:000000;bb:medium:000000;bl:medium:000000"
+     ],
+     [
+      16,
+      1,
+      "bb:thick:000000"
+     ],
+     [
+      17,
+      1,
+      "bt:dashed:000000;br:dashed:000000;bb:dashed:000000;bl:dashed:000000"
+     ],
+     [
+      18,
+      1,
+      "bt:dotted:000000;br:dotted:000000;bb:dotted:000000;bl:dotted:000000"
+     ],
+     [
+      19,
+      1,
+      "bb:double:000000"
+     ],
+     [
+      20,
+      1,
+      "ha:left"
+     ],
+     [
+      21,
+      1,
+      "ha:center"
+     ],
+     [
+      22,
+      1,
+      "ha:right"
+     ],
+     [
+      23,
+      1,
+      "va:top"
+     ],
+     [
+      24,
+      1,
+      "va:middle"
+     ],
+     [
+      25,
+      1,
+      "va:bottom"
+     ],
+     [
+      26,
+      1,
+      "in:2"
+     ],
+     [
+      27,
+      1,
+      "wrap"
+     ],
+     [
+      28,
+      1,
+      "rot:45"
+     ],
+     [
+      29,
+      1,
+      "rot:-45"
+     ],
+     [
+      30,
+      1,
+      "rot:90"
+     ],
+     [
+      31,
+      1,
+      "rot:v"
+     ],
+     [
+      32,
+      1,
+      "ha:center"
+     ],
+     [
+      34,
+      0,
+      "cs:Heading 4"
+     ],
+     [
+      34,
+      1,
+      "cs:Heading 4"
+     ],
+     [
+      34,
+      2,
+      "cs:Heading 4"
+     ],
+     [
+      36,
+      1,
+      "cs:Good"
+     ],
+     [
+      37,
+      1,
+      "cs:Bad"
+     ],
+     [
+      38,
+      1,
+      "cs:Neutral"
+     ],
+     [
+      39,
+      1,
+      "cs:Title"
+     ],
+     [
+      40,
+      1,
+      "cs:Heading 1"
+     ],
+     [
+      41,
+      1,
+      "cs:Heading 2"
+     ],
+     [
+      42,
+      1,
+      "cs:Heading 3"
+     ],
+     [
+      43,
+      1,
+      "cs:Heading 4"
+     ],
+     [
+      44,
+      1,
+      "cs:Total"
+     ],
+     [
+      45,
+      1,
+      "cs:Input"
+     ],
+     [
+      46,
+      1,
+      "cs:Output"
+     ],
+     [
+      47,
+      1,
+      "cs:Calculation"
+     ],
+     [
+      48,
+      1,
+      "cs:Note"
+     ],
+     [
+      49,
+      1,
+      "cs:Warning Text"
+     ],
+     [
+      50,
+      1,
+      "cs:Accent 1"
+     ],
+     [
+      51,
+      1,
+      "cs:Accent 2"
+     ],
+     [
+      52,
+      1,
+      "cs:Accent 3"
+     ],
+     [
+      53,
+      1,
+      "cs:Accent 4"
+     ],
+     [
+      54,
+      1,
+      "cs:Accent 5"
+     ],
+     [
+      55,
+      1,
+      "cs:Accent 6"
+     ],
+     [
+      56,
+      1,
+      "cs:Comma"
+     ],
+     [
+      57,
+      1,
+      "cs:Currency"
+     ],
+     [
+      58,
+      1,
+      "cs:Percent"
+     ]
+    ],
+    "merges": [
+     [
+      32,
+      1,
+      32,
+      3
+     ]
+    ]
+   },
+   {
+    "name": "Conditional",
+    "columns": [],
+    "types": [],
+    "rows": [
+     [
+      "Name",
+      "Score",
+      "Amount",
+      "Rank",
+      "Level"
+     ],
+     [
+      "Ada",
+      "0.95",
+      "120",
+      "5",
+      "10"
+     ],
+     [
+      "Bob",
+      "0.72",
+      "-40",
+      "1",
+      "20"
+     ],
+     [
+      "Cy",
+      "0.81",
+      "75",
+      "9",
+      "30"
+     ],
+     [
+      "Ada",
+      "0.64",
+      "10",
+      "3",
+      "40"
+     ],
+     [
+      "Di",
+      "0.88",
+      "200",
+      "7",
+      "50"
+     ],
+     [
+      "",
+      "",
+      "",
+      "",
+      ""
+     ],
+     [
+      "Column",
+      "Rule",
+      "Cells it should format",
+      "",
+      ""
+     ],
+     [
+      "A",
+      "Duplicate values, yellow fill",
+      "A2 and A5 (Ada twice)",
+      "",
+      ""
+     ],
+     [
+      "B",
+      "Less than 0.8, light red fill (GS-CF example)",
+      "B3 and B5",
+      "",
+      ""
+     ],
+     [
+      "C",
+      "Data bar, from an axis for the negative",
+      "every cell; C3 left of the axis",
+      "",
+      ""
+     ],
+     [
+      "D",
+      "3 arrows icon set",
+      "up: D4, D6; down: D3, D5; across: D2",
+      "",
+      ""
+     ],
+     [
+      "E",
+      "Colour scale red low to green high",
+      "E2 red to E6 green",
+      "",
+      ""
+     ],
+     [
+      "A:E",
+      "Formula =$A2=\"Di\", bold (GS-CF example 2)",
+      "row 6 bold",
+      "",
+      ""
+     ]
+    ],
+    "rules": [
+     "1,0,5,4\t0\tformula\t=$A2=\"Di\"\t\t\tb",
+     "1,0,5,0\t0\tdup\tdup\t\t\tfc:9c5700;bg:ffeb9c",
+     "1,1,5,1\t0\tcell\tlt\t0.8\t\tfc:9c0006;bg:ffc7ce",
+     "1,2,5,2\t0\tbar\t638ec6\tlow\thigh\t",
+     "1,3,5,3\t0\ticons\t3arrows\t\t\t",
+     "1,4,5,4\t0\tscale\tlow,pctl:50,high\tf8696b,ffeb84,63be7b\t\t"
+    ],
+    "styles": [
+     [
+      0,
+      0,
+      "cs:Heading 4"
+     ],
+     [
+      0,
+      1,
+      "cs:Heading 4"
+     ],
+     [
+      0,
+      2,
+      "cs:Heading 4"
+     ],
+     [
+      0,
+      3,
+      "cs:Heading 4"
+     ],
+     [
+      0,
+      4,
+      "cs:Heading 4"
+     ],
+     [
+      7,
+      0,
+      "cs:Heading 4"
+     ],
+     [
+      7,
+      1,
+      "cs:Heading 4"
+     ],
+     [
+      7,
+      2,
+      "cs:Heading 4"
+     ]
+    ]
+   },
+   {
+    "name": "Links",
+    "columns": [],
+    "types": [],
+    "rows": [
+     [
+      "Formula or text",
+      "Shows",
+      "Goes to"
+     ],
+     [
+      "=HYPERLINK(\"http://www.google.com/\",\"Google\")",
+      "Google",
+      "http://www.google.com/ (GS-HYPERLINK sample)"
+     ],
+     [
+      "=HYPERLINK(\"https://www.example.com\")",
+      "https://www.example.com",
+      "the link itself (MS-HYPERLINK)"
+     ],
+     [
+      "=HYPERLINK(\"#Cells!A1\",\"Go to Cells\")",
+      "Go to Cells",
+      "cell A1 on the Cells sheet"
+     ],
+     [
+      "someone@example.com",
+      "someone@example.com",
+      "mailto:someone@example.com (typed address, MS-LINKS)"
+     ]
+    ],
+    "links": [
+     [
+      4,
+      0,
+      "mailto:someone@example.com"
+     ]
+    ],
+    "styles": [
+     [
+      0,
+      0,
+      "cs:Heading 4"
+     ],
+     [
+      0,
+      1,
+      "cs:Heading 4"
+     ],
+     [
+      0,
+      2,
+      "cs:Heading 4"
+     ]
+    ]
+   }
+  ]
+ }
+]
