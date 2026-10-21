@@ -2141,6 +2141,7 @@ export class App {
           this.pivotPanel?.hide();
         },
         items: (name, field) => engine().pivotItems(this.open?.book ?? -1, name, field),
+        fields: async (name) => parseFields(await engine().pivotFields(this.open?.book ?? -1, name)).fields,
         close: () => {
           this.pivotPanel?.hide();
           this.grid.focus();
