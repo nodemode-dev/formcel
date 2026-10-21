@@ -1,5 +1,5 @@
 {
- "about": "Functions FormCel computes. args come from the syntax on each Microsoft function page; excel.listed and excel.since from Microsoft's alphabetical function list; sheets.listed and sheets.category from Google's function list; both lists fetched 2026-10-21. summary is FormCel's own wording.",
+ "about": "Functions FormCel computes. args come from the syntax on each Microsoft function page, or the Google page for functions only Sheets has; excel.listed and excel.since from Microsoft's alphabetical function list; sheets.listed and sheets.category from Google's function list; both lists fetched 2026-10-21. summary is FormCel's own wording.",
  "functions": [
   {
    "name": "ABS",
@@ -37,6 +37,24 @@
     "listed": true,
     "category": "Logical",
     "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "ARRAYFORMULA",
+   "args": [
+    "array_formula"
+   ],
+   "summary": "Shows the results of a formula over ranges or arrays in the cells beside it. In FormCel every formula already does this, so it returns its argument.",
+   "category": "Google",
+   "excel": {
+    "listed": false,
+    "since": null,
+    "source": null
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Google",
+    "source": "https://support.google.com/docs/answer/3093275?hl=en"
    }
   },
   {
