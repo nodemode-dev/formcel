@@ -2,8 +2,8 @@
 
 Living log of comment content and rationale for the Rust engine. Source stays near comment-free; it lives here.
 
-Current build version: v0.12.0
-Last updated: 2026-10-21 · names, LET, LAMBDA
+Current build version: v0.13.0
+Last updated: 2026-10-21 · FILTER, SORT, UNIQUE, LAMBDA helpers
 
 ### Workbook::load, clear_history, rename_sheet (v0.3.0)
 - refers-to: crates/formcel-core/src/lib.rs :: load, clear_history, rename_sheet; formcel-wasm fc_load, fc_add_sheet, fc_sheet_names; formcel-py load, cells, rename_sheet
@@ -208,6 +208,26 @@ Every example table on Microsoft's page for each function (data pasted at A1 as 
 `Graph` holds each formula's resolved areas, an index from single cells to the formulas that read them, and 64-row by 16-column buckets for ranges; a range spanning more than 256 buckets (a whole column, say) goes in a short list checked on every change. `set_raw` updates it in place. Anything that can change what a reference points at (adding, renaming, deleting or moving a sheet, a shift) marks it stale and the next recalculation rebuilds it. Maps on this path use `Fx`, a small multiply-rotate hasher, because the standard hasher dominated the profile.
 
 Measured (scratch harness and the window's engine, not shipped): one precedent in a sheet of 100,000 row formulas plus one SUM over them went from 47 ms to 1 to 2 ms native and 2.5 to 6 ms through the window's worker, against the Phase 2 target of 100 ms. A 100,000-step chain (each cell adds 1 to the one above) recalculates all 100,000 cells in 130 ms native and 306 ms through the worker, including sending every changed cell back; that worst case is over the target.
+
+### FILTER, SORT, SORTBY, UNIQUE and the LAMBDA helpers
+- refers-to: src/eval.rs :: call_arg (FILTER, SORT, SORTBY, UNIQUE, MAP, REDUCE, SCAN, BYROW, BYCOL, MAKEARRAY), lambda, apply, transposed, pick_rows, sort_key; SUMSQ in call
+- kind: explainer
+- logged: v0.13.0 · 2026-10-21
+
+All ten return arrays through `call_arg`, so they spill, and they nest (`SUM(SORT(FILTER(...)))`). The arguments and the error cases come from each function's Microsoft page:
+- FILTER gives `#CALC!` when nothing is included and there is no if_empty. An error in include is returned, and include must match the array's height (it keeps rows) or width (it keeps columns), otherwise `#VALUE!`.
+- SORT takes sort_index, sort_order (1 or -1, anything else `#VALUE!`) and by_col. SORTBY takes pairs of by_array and order; every by_array must be one column of the array's height, or one row of its width, all the same way.
+- UNIQUE takes by_col and exactly_once.
+- MAP needs one LAMBDA parameter per array and takes its shape from the first array. REDUCE and SCAN take an optional initial value.
+- BYROW and BYCOL give `#CALC!` when the second argument is not a LAMBDA or a row's result is more than one value, and `#VALUE!` for a LAMBDA with the wrong number of parameters. MAKEARRAY gives `#VALUE!` for a size below 1 or not a number.
+
+Choices that are FormCel's own, not checked against Excel:
+- Sorting is stable and uses the comparison operators' order (numbers, then text without case, then TRUE and FALSE), with blanks and then errors last.
+- UNIQUE compares cells as `=` does, case-insensitively.
+- `REDUCE(, A1:C2, ...)` (a blank first argument) starts from an empty value, which counts as 0, while `REDUCE(A1:C2, ...)` (two arguments) starts from the first element, as the page's note says. The page's own "sum the squared values" example needs the blank to count as 0.
+- SORT with an array of sort indexes is not built.
+
+None of the ten pages has a Formula and Result table (their results are pictures), so the conformance run gains only SUMSQ's case. Instead, 29 cases were worked by hand and checked in a scratch harness (`arraycheck.py` in the sidecar's tools): filters by row and by column, empty results with and without if_empty, wrong-size include, sorts by index and direction, SORTBY on two keys, UNIQUE by rows, columns and exactly once, MAP over one and two arrays, REDUCE with a value, a blank and no initial value, SCAN on numbers and text, BYROW and BYCOL with each error case, MAKEARRAY and its size error, and a FILTER inside SUM.
 
 ### Names, LET and LAMBDA
 - refers-to: src/formula.rs :: Expr::Invoke, FUNCTIONS, names, valid_name, is_r1c1; src/eval.rs :: Ctx::name, Lambda, Arg::F, Eval::new, local, user, routed, deeper, named, invoke, scoped; src/lib.rs :: names, define_name, names(), expr_areas; formcel-wasm fc_define_name, fc_names; formcel-py define_name, names
