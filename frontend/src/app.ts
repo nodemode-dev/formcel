@@ -378,6 +378,17 @@ export class App {
         if (s !== this.grid.sheetIndex) this.showSheet(s);
         this.grid.goTo(`${colName(c)}${r + 1}`);
       },
+      pivots: () => this.pivotDefs().map((d) => ({ name: d.name, filters: d.filters })),
+      pivotFields: async (name) => parseFields(await engine().pivotFields(this.open?.book ?? -1, name)).fields.map((f) => f.name),
+      pivotItems: (name, field) => engine().pivotItems(this.open?.book ?? -1, name, field),
+      pivotFilter: async (name, field, items) => {
+        const d = this.pivotDefs().find((x) => x.name === name);
+        if (!d) return;
+        const had = d.filters.some((f) => f.field === field);
+        if (!had && !items.length) return;
+        const next: PivotDef = { ...d, filters: had ? d.filters.map((f) => (f.field === field ? { field, items } : f)) : [...d.filters, { field, items }] };
+        await this.pivotApply((book) => engine().setPivot(book, name, formatPivot(next)));
+      },
       tableAt: () => {
         const t = this.grid.activeTable();
         if (!t) return null;
@@ -2354,6 +2365,7 @@ export class App {
       this.pivotBusy = false;
     }
     await this.pivotSync();
+    void this.tools.refreshSlicers();
   }
 
   private pivotAuto(changes: Changed[]): void {

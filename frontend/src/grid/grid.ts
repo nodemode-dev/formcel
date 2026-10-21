@@ -43,7 +43,7 @@ export interface SheetView {
   hidden?: boolean | null;
   fviews?: { name: string; text: string }[] | null;
   sviews?: { name: string; text: string; rows: AxisState; cols: AxisState }[] | null;
-  slicers?: { id: string; col: number; title: string; x: number; y: number }[] | null;
+  slicers?: { id: string; col: number; title: string; x: number; y: number; multi?: boolean; cols?: number; style?: string; pivot?: string; field?: string }[] | null;
 }
 
 export type MenuKind = 'rows' | 'cols' | 'cells';
