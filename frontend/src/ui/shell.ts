@@ -13,6 +13,7 @@ export interface ShellParts {
   grid: HTMLElement;
   homeBtn: HTMLButtonElement;
   title: HTMLInputElement;
+  groupBadge: HTMLElement;
   save: HTMLElement;
   saveText: Text;
   home: HTMLElement;
@@ -32,6 +33,7 @@ export function mountShell(root: HTMLElement): ShellParts {
       <div class="fc-brand">${icon('sheet')}<span>FormCel</span><span class="fc-version">v${VERSION}</span></div>
       <button type="button" class="fc-tool fc-home-btn" title="Home" aria-label="Home" hidden>${icon('home')}</button>
       <input class="fc-title" aria-label="Workbook name" spellcheck="false" autocomplete="off" hidden>
+      <span class="fc-group-badge" aria-live="polite" hidden>[Group]</span>
       <span class="fc-save" role="status" aria-live="polite" hidden></span>
       <div class="fc-bar-spacer"></div>
       <span class="fc-status" data-state="pending" role="status" aria-live="polite"><span class="fc-status-dot"></span><span class="fc-status-text"></span></span>
@@ -86,6 +88,7 @@ export function mountShell(root: HTMLElement): ShellParts {
     grid: root.querySelector<HTMLElement>('.fc-grid')!,
     homeBtn: root.querySelector<HTMLButtonElement>('.fc-home-btn')!,
     title: root.querySelector<HTMLInputElement>('.fc-title')!,
+    groupBadge: root.querySelector<HTMLElement>('.fc-group-badge')!,
     save: root.querySelector<HTMLElement>('.fc-save')!,
     saveText: root.querySelector<HTMLElement>('.fc-save')!.appendChild(document.createTextNode('Saved')),
     home: root.querySelector<HTMLElement>('.fc-home')!,

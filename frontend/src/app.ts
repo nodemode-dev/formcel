@@ -335,6 +335,7 @@ export class App {
       onMenu: (kind, x, y) => this.cellMenu(kind, x, y),
       onGoto: () => this.tools.goToDialog(),
     });
+    this.grid.peers = () => (this.grouped.size > 1 && this.grouped.has(this.grid.sheetIndex) ? [...this.grouped].filter((s) => s !== this.grid.sheetIndex) : []);
     this.whatIf = new WhatIf({
       grid: this.grid,
       book: () => this.open?.book ?? -1,
@@ -778,6 +779,7 @@ export class App {
     p.home.hidden = false;
     p.homeBtn.hidden = true;
     p.title.hidden = true;
+    p.groupBadge.hidden = true;
     p.save.hidden = true;
     document.title = 'FormCel';
     void this.refresh();
@@ -1841,6 +1843,11 @@ export class App {
       else t.style.removeProperty('--tab');
     });
     for (const t of have.slice(o.sheets.length)) t.remove();
+    const group = this.grouped.size > 1;
+    const title = `${o.title}${group ? ' [Group]' : ''} · FormCel`;
+    if (document.title !== title) document.title = title;
+    this.p.groupBadge.hidden = false;
+    this.p.groupBadge.dataset.on = String(group);
   }
 
   private showSheet(i: number): void {

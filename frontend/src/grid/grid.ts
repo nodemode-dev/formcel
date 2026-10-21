@@ -1882,8 +1882,17 @@ export class Grid {
   async setStyles(ops: StyleOp[]): Promise<void> {
     if (this.book < 0 || !ops.length) return;
     this.recorder?.({ k: 'style', sheet: this.sheet, ops });
+    const peers = this.peers();
+    const mark = peers.length ? await this.engine.undoMark(this.book) : -1;
     await this.applyEffect(await this.engine.setStyles(this.book, this.sheet, ops));
+    for (const p of peers) {
+      const e = await this.engine.setStyles(this.book, p, ops);
+      if (e.styles.length) this.events.onStyles(e.styles.map(([s, r, c, raw]) => [s, r, c, raw]));
+    }
+    if (mark >= 0) await this.engine.undoGroup(this.book, mark);
   }
+
+  peers: () => number[] = () => [];
 
   async toggle(flag: 'b' | 'i' | 'u' | 's' | 'wrap'): Promise<void> {
     await this.styleSelection(this.activeStyle()[flag] ? `!${flag}` : flag);
@@ -2015,8 +2024,15 @@ export class Grid {
   async setFormat(code: string): Promise<void> {
     const s = this.sel();
     this.recorder?.({ k: 'format', sheet: this.sheet, r0: s.r0, c0: s.c0, r1: s.r1, c1: s.c1, code });
+    const peers = this.peers();
+    const mark = peers.length ? await this.engine.undoMark(this.book) : -1;
     const e = await this.engine.setFormat(this.book, this.sheet, s.r0, s.c0, s.r1, s.c1, code);
     await this.applyEffect(e);
+    for (const p of peers) {
+      const f = await this.engine.setFormat(this.book, p, s.r0, s.c0, s.r1, s.c1, code);
+      if (f.formats.length) this.events.onFormats(f.formats);
+    }
+    if (mark >= 0) await this.engine.undoGroup(this.book, mark);
   }
 
   async formatAtActive(): Promise<string> {
@@ -2206,16 +2222,24 @@ export class Grid {
     const n = rows ? s.r1 - s.r0 + 1 : s.c1 - s.c0 + 1;
     const at = rows ? (after ? s.r1 + 1 : s.r0) : (after ? s.c1 + 1 : s.c0);
     if (n > 10000) return;
+    const peers = this.peers();
+    const mark = peers.length ? await this.engine.undoMark(this.book) : -1;
     const sh = await this.engine.shift(this.book, this.sheet, rows, Math.min(at, rows ? MAX_ROWS - 1 : MAX_COLS - 1), n, true);
     this.afterShift(sh);
+    for (const p of peers) this.events.onShift(await this.engine.shift(this.book, p, rows, sh.at, n, true));
+    if (mark >= 0) await this.engine.undoGroup(this.book, mark);
     await this.refreshHistory();
   }
 
   async remove(rows: boolean): Promise<void> {
     const s = this.sel();
     const n = rows ? s.r1 - s.r0 + 1 : s.c1 - s.c0 + 1;
+    const peers = this.peers();
+    const mark = peers.length ? await this.engine.undoMark(this.book) : -1;
     const sh = await this.engine.shift(this.book, this.sheet, rows, rows ? s.r0 : s.c0, n, false);
     this.afterShift(sh);
+    for (const p of peers) this.events.onShift(await this.engine.shift(this.book, p, rows, sh.at, n, false));
+    if (mark >= 0) await this.engine.undoGroup(this.book, mark);
     await this.refreshHistory();
   }
 
