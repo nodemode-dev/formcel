@@ -33,6 +33,11 @@ export type Request =
   | { id: number; op: 'rules.get'; book: number; sheet: number }
   | { id: number; op: 'rules.set' | 'rules.load'; book: number; sheet: number; lines: string[] }
   | { id: number; op: 'cf.read'; book: number; sheet: number; r0: number; c0: number; r1: number; c1: number }
+  | { id: number; op: 'link.at'; book: number; sheet: number; row: number; col: number }
+  | { id: number; op: 'link.set'; book: number; sheet: number; row: number; col: number; target: string; display?: string }
+  | { id: number; op: 'link.remove'; book: number; sheet: number; r0: number; c0: number; r1: number; c1: number }
+  | { id: number; op: 'link.take'; book: number }
+  | { id: number; op: 'link.load'; book: number; sheet: number; cells: Edit[] }
   | { id: number; op: 'undo.mark'; book: number }
   | { id: number; op: 'undo.group'; book: number; mark: number }
   | { id: number; op: 'format.read'; book: number; sheet: number; r0: number; c0: number; r1: number; c1: number }
@@ -46,8 +51,9 @@ export type Request =
 
 export type Dir = 'up' | 'down' | 'left' | 'right';
 export type Edit = [row: number, col: number, raw: string];
-export type Cell = [row: number, col: number, text: string, formula?: string, numeric?: boolean, color?: string];
-export type Changed = [sheet: number, row: number, col: number, text: string, formula?: string, numeric?: boolean, color?: string];
+export type Cell = [row: number, col: number, text: string, formula?: string, numeric?: boolean, color?: string, link?: boolean];
+export type Changed = [sheet: number, row: number, col: number, text: string, formula?: string, numeric?: boolean, color?: string, link?: boolean];
+export type LinkChange = [sheet: number, row: number, col: number, target: string];
 export type FormatChange = [sheet: number, row: number, col: number, code: string];
 export type StyleOp = [r0: number, c0: number, r1: number, c1: number, patch: string];
 export type Area = [r0: number, c0: number, r1: number, c1: number];
@@ -72,7 +78,7 @@ export interface Effect {
 export type CfCell = [row: number, col: number, style: string, bar: string, icon: string];
 export type StyleChange = [sheet: number, row: number, col: number, raw: string, shown: string];
 export type Name = [name: string, refers: string];
-export type Value = string | number | string[] | Cell[] | Changed[] | Name[] | Edit[] | Area[] | CfCell[] | [number, number] | Shift | Effect | null;
+export type Value = string | number | string[] | Cell[] | Changed[] | Name[] | Edit[] | Area[] | CfCell[] | LinkChange[] | [number, number] | Shift | Effect | null;
 
 export type Response =
   | { id: number; ok: true; value: Value }

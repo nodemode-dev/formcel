@@ -1,4 +1,4 @@
-import type { Area, Cell, Changed, Dir, Effect, EngineClient, FormatChange, FormatItem, MergeMode, Shift, StyleChange, StyleOp } from '../engine';
+import type { Area, Cell, Changed, Dir, Effect, EngineClient, FormatChange, FormatItem, LinkChange, MergeMode, Shift, StyleChange, StyleOp } from '../engine';
 import { light, parseStyle, PLAIN, themeOf, type CellStyle, type Look } from './style';
 
 interface Mark {
@@ -49,6 +49,7 @@ interface Palette {
   sel: string;
   edge: string;
   frozen: string;
+  link: string;
 }
 
 export interface GridEvents {
@@ -64,6 +65,9 @@ export interface GridEvents {
   onLook(): void;
   onPasteMenu(x: number, y: number): void;
   onRules(sheet: number, lines: string[]): void;
+  onLinks(changes: LinkChange[]): void;
+  onOpenLink(): void;
+  onLinkBox(): void;
   onView(sheet: number, view: SheetView): void;
   onMenu(kind: MenuKind, x: number, y: number): void;
   onGoto(): void;
@@ -85,6 +89,7 @@ export class Grid {
   private readonly fx = new Map<number, string>();
   private readonly nums = new Set<number>();
   private readonly colors = new Map<number, string>();
+  private readonly linked = new Set<number>();
   private readonly styles = new Map<number, CellStyle>();
   private merges: Area[] = [];
   private readonly cfs = new Map<number, Mark>();
@@ -174,6 +179,7 @@ export class Grid {
       sel: v('--cell-select') || v('--accent-color-dim'),
       edge: v('--cell-select-edge') || v('--accent-color'),
       frozen: v('--border-light'),
+      link: v('--cell-link') || '#60a5fa',
     };
   }
 
@@ -286,6 +292,7 @@ export class Grid {
     this.fx.clear();
     this.nums.clear();
     this.colors.clear();
+    this.linked.clear();
     this.styles.clear();
     this.cfs.clear();
     this.wins = [null, null, null, null];
@@ -336,7 +343,7 @@ export class Grid {
         const c = k % MAX_COLS;
         if (r >= want.r0 && r <= want.r1 && c >= want.c0 && c <= want.c1) this.styles.delete(k);
       }
-      for (const [r, c, t, f, n, col] of cells) this.store(KEY(r, c), t, f, n, col);
+      for (const [r, c, t, f, n, col, l] of cells) this.store(KEY(r, c), t, f, n, col, l);
       for (const [r, c, st] of sts) this.styles.set(KEY(r, c), parseStyle(st, this.look));
       if (this.ruleLines.length) void this.refreshCf(want);
       if (!this.editing && this.ar >= want.r0 && this.ar <= want.r1 && this.ac >= want.c0 && this.ac <= want.c1) this.announce();
@@ -693,7 +700,8 @@ export class Grid {
 
   private cellText(k: number, t: string, left: number, right: number, yy: number, rh: number): void {
     const { ctx, pal } = this;
-    const st = this.styleOf(k) ?? PLAIN;
+    const own = this.styleOf(k) ?? PLAIN;
+    const st = this.linked.has(k) ? { ...own, u: true, fc: own.fc ?? pal.link } : own;
     const px = this.font(st);
     const ha = this.align(k, t, st);
     const mark = this.cfs.get(k);
@@ -1175,19 +1183,21 @@ export class Grid {
 
   patch(changed: Changed[]): void {
     let hit = false;
-    for (const [s, r, c, t, f, n, col] of changed) {
+    for (const [s, r, c, t, f, n, col, l] of changed) {
       if (s !== this.sheet) continue;
       const k = KEY(r, c);
-      if (this.cache.get(k) === t && this.fx.get(k) === f && this.nums.has(k) === !!n && this.colors.get(k) === col) continue;
+      if (this.cache.get(k) === t && this.fx.get(k) === f && this.nums.has(k) === !!n && this.colors.get(k) === col && this.linked.has(k) === !!l) continue;
       hit = true;
-      this.store(k, t, f, n, col);
+      this.store(k, t, f, n, col, l);
     }
     if (!hit) return;
     this.announce();
     this.paint();
   }
 
-  private store(k: number, t: string, f: string | undefined, n: boolean | undefined, color?: string): void {
+  private store(k: number, t: string, f: string | undefined, n: boolean | undefined, color?: string, link?: boolean): void {
+    if (link) this.linked.add(k);
+    else this.linked.delete(k);
     if (t || f !== undefined) this.cache.set(k, t);
     else this.cache.delete(k);
     if (f !== undefined) this.fx.set(k, f);
@@ -1203,6 +1213,34 @@ export class Grid {
     this.fx.delete(k);
     this.nums.delete(k);
     this.colors.delete(k);
+    this.linked.delete(k);
+  }
+
+  activeLinked(): boolean {
+    return this.linked.has(KEY(this.ar, this.ac));
+  }
+
+  activeCell(): [number, number] {
+    return [this.ar, this.ac];
+  }
+
+  async linkTarget(): Promise<string> {
+    return this.book < 0 ? '' : this.engine.linkAt(this.book, this.sheet, this.ar, this.ac);
+  }
+
+  async setLink(target: string, display?: string): Promise<void> {
+    await this.applyEffect(await this.engine.setLink(this.book, this.sheet, this.ar, this.ac, target, display));
+  }
+
+  async removeLinks(): Promise<void> {
+    const s = this.sel();
+    await this.applyEffect(await this.engine.removeLinks(this.book, this.sheet, s.r0, s.c0, s.r1, s.c1));
+  }
+
+  activeRect(): DOMRect {
+    const [x, y, w, h] = this.activeArea();
+    const r = this.canvas.getBoundingClientRect();
+    return new DOMRect(r.left + x * this.z, r.top + y * this.z, w * this.z, h * this.z);
   }
 
   activeStyle(): CellStyle {
@@ -1361,15 +1399,17 @@ export class Grid {
       this.show(this.book, changed[0][0], this.events.onSheet(changed[0][0]));
     }
     const fit = new Set<number>();
-    for (const [s, r, c, t, f, n, col] of changed) {
+    for (const [s, r, c, t, f, n, col, l] of changed) {
       if (s !== this.sheet) continue;
-      this.store(KEY(r, c), t, f, n, col);
+      this.store(KEY(r, c), t, f, n, col, l);
       const st = this.styles.get(KEY(r, c));
       if (st && (st.wrap || st.size || st.rot || st.vertical)) fit.add(r);
     }
     this.fitRows(fit);
     if (changed.length) this.events.onChanged(changed);
     if (changed.length && this.ruleLines.length) void this.refreshCf();
+    const links = await this.engine.takeLinks(this.book);
+    if (links.length) this.events.onLinks(links);
     const hst = await this.engine.history(this.book);
     this.events.onHistory(hst.undo, hst.redo);
     this.announce();
@@ -1890,7 +1930,13 @@ export class Grid {
         this.enqueue(() => (pane(true, false), shift ? this.extendTo(row, MAX_COLS - 1) : this.select(row, 0, row, MAX_COLS - 1, false)));
       } else {
         this.drag = { kind: 'cells' };
-        this.enqueue(() => (pane(true, true), shift ? this.extendTo(row, col) : this.select(row, col)));
+        const open = (e.ctrlKey || e.metaKey) && !shift && this.linked.has(KEY(row, col));
+        this.enqueue(() => {
+          pane(true, true);
+          if (shift) this.extendTo(row, col);
+          else this.select(row, col);
+          if (open) this.events.onOpenLink();
+        });
       }
     });
 
@@ -2153,6 +2199,7 @@ export class Grid {
       if (e.code === 'Digit0') return this.hide(false, !e.shiftKey);
       if (e.shiftKey && e.code in SHORT_FORMATS) return this.setFormat(SHORT_FORMATS[e.code]);
       if (k === 'g') return this.events.onGoto();
+      if (k === 'k' && !e.shiftKey) return this.events.onLinkBox();
       if (k === 'z' && !e.shiftKey) return this.undo();
       if (k === 'y' || k === 'z') return this.redo();
       if (k === 'a') return this.select(0, 0, MAX_ROWS - 1, MAX_COLS - 1, false);
@@ -2295,7 +2342,7 @@ function wants(e: KeyboardEvent): boolean {
   if (ARROWS[e.key]) return true;
   const mod = e.ctrlKey || e.metaKey;
   if (mod && e.altKey && e.code === 'KeyV') return true;
-  if (mod) return !e.altKey && (['z', 'y', 'a', 'home', 'end', '+', '=', '-', '_', 'g'].includes(e.key.toLowerCase()) || e.code === 'Digit9' || e.code === 'Digit0' || (e.shiftKey && (e.code in SHORT_FORMATS || e.code === 'Digit7')) || (!e.shiftKey && e.code in TOGGLE_KEYS));
+  if (mod) return !e.altKey && (['z', 'y', 'a', 'home', 'end', '+', '=', '-', '_', 'g', 'k'].includes(e.key.toLowerCase()) || e.code === 'Digit9' || e.code === 'Digit0' || (e.shiftKey && (e.code in SHORT_FORMATS || e.code === 'Digit7')) || (!e.shiftKey && e.code in TOGGLE_KEYS));
   if (['Enter', 'Tab', 'Escape', 'Home', 'PageDown', 'PageUp', 'F2', 'F5', 'Delete', 'Backspace'].includes(e.key)) return true;
   return e.key.length === 1 && !e.altKey;
 }

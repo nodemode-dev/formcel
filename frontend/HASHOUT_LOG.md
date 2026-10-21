@@ -365,3 +365,10 @@ The grid paints the effective style the engine sends and resolves theme colour s
 - logged: v0.22.0 · 2026-10-21
 
 The grid asks the engine what rules paint in each data window it reads and again after every change on a sheet with rules, and lays the result over the cell's own style: a rule's colours replace the cell's, its bold and other flags add to them. Data bars paint under the text at a little over half opacity; icons sit at the left of the cell and push left-aligned text right. The menu follows MS-CF's Highlight Cells, Top/Bottom, Data Bars, Color Scales and Icon Sets groups. A new rule goes to the top of the list, as MS-CF says. The seven preset formats are named after Excel's quick formats but their colours are FormCel's. The Manage rules panel is built once and its rows are updated in place: text and checkboxes are written only when they differ, rows are added or removed at the end, never rebuilt. Colour scale names say which end is low and which high, since Excel's names list colours without saying which end is which.
+
+### Links in the window
+- refers-to: src/app.ts :: linkChip, linkBox, followLink, sendLinks; src/grid/grid.ts :: linked, activeLinked, linkTarget, setLink, removeLinks, activeRect, onOpenLink
+- kind: explainer
+- logged: v0.23.0 · 2026-10-21
+
+Linked cells paint in the `--cell-link` colour and underlined, unless the cell has its own text colour (MS-HYPERLINK: the friendly name is shown blue and underlined). A plain click selects a linked cell; Ctrl+click (Cmd+click) opens it, and selecting one shows a small chip under the cell with the target and Open, Edit and Remove. This is FormCel's choice between Excel desktop's click-to-open and Excel for the web's pointer rule (MS-HYPERLINK remarks), so selecting never navigates by accident. The chip and the link box are built once in the overlay root and only shown, moved and hidden; the chip hides on scroll. Ctrl+K opens the link box (MS-LINKS, GS-LINKS); on a HYPERLINK cell it says to edit the formula instead, as MS-LINKS does. Web links open in a new tab without an opener; `#` links switch sheet if needed and select the cell or name.

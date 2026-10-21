@@ -1,4 +1,4 @@
-import { engine, type Area, type Changed, type FormatChange, type Name, type Shift } from './engine';
+import { engine, type Area, type Changed, type FormatChange, type LinkChange, type Name, type Shift } from './engine';
 import { colName, type Range } from './grid/a1';
 import { Autocomplete, FUNCTIONS, type Suggestion } from './ui/autocomplete';
 import { Grid, type BorderKind, type MenuKind, type PasteKind, type SheetView } from './grid/grid';
@@ -143,6 +143,7 @@ export class App {
         if (document.activeElement !== p.nameBox) p.nameBox.value = this.currentRef;
         if (document.activeElement !== p.formulaBar) p.formulaBar.value = text;
         this.formatBar();
+        this.linkChip();
       },
       onHistory: (undo, redo) => {
         this.button('edit.undo').disabled = !undo;
@@ -161,6 +162,9 @@ export class App {
       onLook: () => this.sendLook(),
       onPasteMenu: (x, y) => this.pasteMenu(x, y),
       onRules: (sheet, lines) => this.sendRules(sheet, lines),
+      onLinks: (changes) => this.sendLinks(changes),
+      onOpenLink: () => void this.grid.linkTarget().then((t) => this.followLink(t)),
+      onLinkBox: () => this.linkBox(),
       onPainter: (state) => this.button('format.painter').setAttribute('aria-pressed', String(state !== 'off')),
       onView: (sheet, view) => this.saveView(sheet, view),
       onMenu: (kind, x, y) => this.cellMenu(kind, x, y),
@@ -245,6 +249,9 @@ export class App {
       await g.setFormat('');
       if (this.open) await e.undoGroup(this.open.book, mark);
     });
+    cmd('edit.link', 'Insert link', 'Link the active cell to a web page, an email address or a place in the workbook, or change its link.', true, () => this.linkBox(), 'Mod+K');
+    cmd('edit.link-open', 'Open link', 'Open the link in the active cell. Ctrl+click a linked cell does the same.', false, () => this.grid.linkTarget().then((t) => this.followLink(t)));
+    cmd('edit.link-remove', 'Remove link', 'Remove the links from the selected cells and keep their text.', true, () => this.grid.removeLinks());
     cmd('format.cf', 'Conditional formatting', 'Format cells by rules on their values: highlights, top and bottom, data bars, colour scales, icons and formulas.', true, () => this.cfMenu());
     cmd('format.cf-manage', 'Manage conditional formatting rules', 'See, reorder, stop and delete the rules on this sheet.', false, () => this.openPanel());
     cmd('format.styles', 'Cell styles', 'Apply a named cell style, or make one from the selection.', true, () => this.stylesMenu());
@@ -386,7 +393,7 @@ export class App {
   private async openWorkbook(id: string, setHash = true): Promise<void> {
     this.flush();
     await this.saving;
-    let doc: WorkbookMeta & { cells: [number, number, string][][]; formats?: [number, number, string][][]; styles?: [number, number, string][][]; merges?: Area[][]; rules?: string[][]; theme?: string; cellStyles?: string[]; views?: SheetView[]; names?: Name[] };
+    let doc: WorkbookMeta & { cells: [number, number, string][][]; formats?: [number, number, string][][]; styles?: [number, number, string][][]; merges?: Area[][]; rules?: string[][]; links?: [number, number, string][][]; theme?: string; cellStyles?: string[]; views?: SheetView[]; names?: Name[] };
     try {
       doc = await api('GET', `/api/workbooks/${id}`);
     } catch {
@@ -403,6 +410,7 @@ export class App {
       await e.loadStyles(book, i, doc.styles?.[i] ?? []);
       await e.loadMerges(book, i, doc.merges?.[i] ?? []);
       await e.loadRules(book, i, doc.rules?.[i] ?? []);
+      await e.loadLinks(book, i, doc.links?.[i] ?? []);
       if (doc.cells[i]?.length) await e.load(book, doc.cells[i], i);
     }
     for (const [n, f] of doc.names ?? []) await e.defineName(book, n, f).catch(() => []);
@@ -556,6 +564,153 @@ export class App {
         this.p.save.title = err instanceof Error ? err.message : '';
       }
     });
+  }
+
+  private sendLinks(changes: LinkChange[]): void {
+    const o = this.open;
+    if (!o) return;
+    const bySheet = new Map<number, [number, number, string][]>();
+    for (const [s, r, c, t] of changes) {
+      let list = bySheet.get(s);
+      if (!list) bySheet.set(s, (list = []));
+      list.push([r, c, t]);
+    }
+    this.flush();
+    this.status('Saving');
+    this.saving = this.saving.then(async () => {
+      try {
+        for (const [sheet, cells] of bySheet) await api('POST', `/api/workbooks/${o.id}/links`, { sheet, cells });
+        if (!this.pending.size) this.status('Saved');
+      } catch (err) {
+        this.status('Not saved', true);
+        this.p.save.title = err instanceof Error ? err.message : '';
+      }
+    });
+    this.linkChip();
+  }
+
+  private followLink(target: string): void {
+    const o = this.open;
+    if (!target || !o) return;
+    if (!target.startsWith('#')) {
+      window.open(target, '_blank', 'noopener,noreferrer');
+      return;
+    }
+    const ref = target.slice(1);
+    const m = /^(?:'((?:[^']|'')+)'|([^!']+))!(.+)$/.exec(ref);
+    if (m) {
+      const name = (m[1] ?? m[2]).replace(/''/g, "'").toLowerCase();
+      const sheet = o.sheets.findIndex((s) => s.toLowerCase() === name);
+      if (sheet < 0) return this.status(`There is no sheet ${m[1] ?? m[2]} to go to.`, true);
+      if (sheet !== this.grid.sheetIndex) this.showSheet(sheet);
+      this.grid.goTo(m[3].replace(/\$/g, ''));
+      return;
+    }
+    if (this.grid.goTo(ref.replace(/\$/g, ''))) return;
+    const hit = o.names.find(([n]) => n.toLowerCase() === ref.toLowerCase());
+    if (hit) void this.nameBoxEnter(hit[0]);
+  }
+
+  private chip: { el: HTMLElement; text: Text } | null = null;
+  private chipSeq = 0;
+
+  private linkChip(): void {
+    const g = this.grid as Grid | undefined;
+    if (!g) return;
+    const seq = ++this.chipSeq;
+    if (!g.activeLinked()) {
+      if (this.chip && !this.chip.el.hidden) this.chip.el.hidden = true;
+      return;
+    }
+    void g.linkTarget().then((t) => {
+      if (seq !== this.chipSeq) return;
+      if (!this.chip) {
+        const el = document.createElement('div');
+        el.className = 'fc-link-chip';
+        el.hidden = true;
+        el.innerHTML = '<span class="fc-link-url"></span><button type="button" class="fc-btn" data-act="open">Open</button><button type="button" class="fc-btn" data-act="edit">Edit</button><button type="button" class="fc-btn" data-act="remove">Remove</button>';
+        document.getElementById('overlay-root')!.appendChild(el);
+        const text = el.querySelector('.fc-link-url')!.appendChild(document.createTextNode(''));
+        el.addEventListener('click', (e) => {
+          const act = (e.target as HTMLElement).closest<HTMLElement>('[data-act]')?.dataset.act;
+          if (act === 'open') void this.grid.linkTarget().then((u) => this.followLink(u));
+          if (act === 'edit') this.linkBox();
+          if (act === 'remove') void this.grid.removeLinks().then(() => this.grid.focus());
+        });
+        this.p.grid.addEventListener('wheel', () => {
+          if (this.chip) this.chip.el.hidden = true;
+        }, { passive: true });
+        this.chip = { el, text };
+      }
+      const c = this.chip;
+      if (!t) {
+        c.el.hidden = true;
+        return;
+      }
+      if (c.text.nodeValue !== t) c.text.nodeValue = t;
+      const r = g.activeRect();
+      c.el.style.left = `${Math.round(r.left)}px`;
+      c.el.style.top = `${Math.round(r.bottom + 4)}px`;
+      c.el.hidden = false;
+    });
+  }
+
+  private linkForm: { form: HTMLFormElement; text: HTMLInputElement; url: HTMLInputElement; hint: HTMLElement } | null = null;
+
+  private linkBox(): void {
+    const g = this.grid;
+    const f = this.linkForm ??= this.makeLinkForm();
+    const r = g.activeRect();
+    f.form.style.left = `${Math.round(r.left)}px`;
+    f.form.style.top = `${Math.round(r.bottom + 4)}px`;
+    f.form.dataset.state = '';
+    f.hint.textContent = 'A web address, an email address, or a place in this workbook such as #Sheet2!A1.';
+    const formula = this.current.trim().toUpperCase().startsWith('=HYPERLINK(');
+    f.text.value = formula ? '' : this.current;
+    f.url.value = '';
+    f.form.hidden = false;
+    if (formula) {
+      f.form.dataset.state = 'error';
+      f.hint.textContent = 'This link comes from a HYPERLINK formula. Edit the formula in the formula bar to change where it goes.';
+    }
+    void g.linkTarget().then((t) => {
+      if (!formula) f.url.value = t;
+      (f.text.value ? f.url : f.text).focus();
+    });
+  }
+
+  private makeLinkForm(): { form: HTMLFormElement; text: HTMLInputElement; url: HTMLInputElement; hint: HTMLElement } {
+    const form = document.createElement('form');
+    form.className = 'fc-fmt-custom';
+    form.hidden = true;
+    form.innerHTML = '<label class="fc-fmt-label">Text to display<input class="fc-fmt-input fc-link-text" spellcheck="false" autocomplete="off"></label><label class="fc-fmt-label">Link<input class="fc-fmt-input fc-link-url-input" spellcheck="false" autocomplete="off" placeholder="https://"></label><span class="fc-fmt-hint" aria-live="polite"></span><button type="submit" class="fc-btn fc-btn-primary">Apply</button>';
+    document.getElementById('overlay-root')!.appendChild(form);
+    const text = form.querySelector<HTMLInputElement>('.fc-link-text')!;
+    const url = form.querySelector<HTMLInputElement>('.fc-link-url-input')!;
+    const hint = form.querySelector<HTMLElement>('.fc-fmt-hint')!;
+    const close = () => {
+      form.hidden = true;
+      this.grid.focus();
+    };
+    form.addEventListener('submit', (e) => {
+      e.preventDefault();
+      if (this.current.trim().toUpperCase().startsWith('=HYPERLINK(')) return close();
+      const display = text.value === this.current ? undefined : text.value;
+      void this.grid.setLink(url.value, display).then(close, (err: unknown) => {
+        form.dataset.state = 'error';
+        hint.textContent = err instanceof Error ? err.message : String(err);
+      });
+    });
+    form.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        close();
+      }
+    });
+    document.addEventListener('pointerdown', (e) => {
+      if (!form.hidden && !form.contains(e.target as Node)) form.hidden = true;
+    }, true);
+    return { form, text, url, hint };
   }
 
   private sendRules(sheet: number, lines: string[]): void {
@@ -1075,6 +1230,11 @@ export class App {
     items.push({ sep: true });
     if (kind !== 'cols') items.push({ label: 'Delete rows', keys: 'Ctrl+-', run: run('rows.delete'), danger: true });
     if (kind !== 'rows') items.push({ label: 'Delete columns', run: run('cols.delete'), danger: true });
+    if (kind === 'cells') {
+      const linked = g.activeLinked();
+      items.push({ label: linked ? 'Edit link' : 'Insert link', keys: 'Ctrl+K', run: run('edit.link') });
+      if (linked) items.push({ label: 'Open link', run: run('edit.link-open') }, { label: 'Remove link', run: run('edit.link-remove') });
+    }
     items.push({ label: 'Clear contents', keys: 'Delete', run: run('edit.clear') }, { label: 'Paste special', keys: 'Ctrl+Alt+V', disabled: !g.canPasteSpecial(), run: () => this.pasteMenu(x, y) }, { sep: true });
     if (kind === 'rows' || kind === 'cells') items.push({ label: 'Hide rows', keys: 'Ctrl+9', run: run('rows.hide') }, { label: 'Unhide rows', keys: 'Ctrl+Shift+9', run: run('rows.unhide') });
     if (kind === 'cols' || kind === 'cells') items.push({ label: 'Hide columns', keys: 'Ctrl+0', run: run('cols.hide') }, { label: 'Unhide columns', keys: 'Ctrl+Shift+0', run: run('cols.unhide') });

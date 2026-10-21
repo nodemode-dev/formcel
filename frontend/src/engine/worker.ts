@@ -1,4 +1,4 @@
-import type { Cell, CfCell, Changed, Effect, FormatChange, Request, Response, Shift, StyleChange, Value } from './protocol';
+import type { Cell, CfCell, Changed, Effect, FormatChange, LinkChange, Request, Response, Shift, StyleChange, Value } from './protocol';
 
 interface Exports {
   memory: WebAssembly.Memory;
@@ -43,6 +43,11 @@ interface Exports {
   fc_set_rules(book: number, sheet: number, lines: number, len: number): number;
   fc_load_rules(book: number, sheet: number, lines: number, len: number): number;
   fc_cf_in(book: number, sheet: number, r0: number, c0: number, r1: number, c1: number): number;
+  fc_link_at(book: number, sheet: number, row: number, col: number): number;
+  fc_set_link(book: number, sheet: number, row: number, col: number, t: number, tl: number, d: number, dl: number, has: number): number;
+  fc_remove_links(book: number, sheet: number, r0: number, c0: number, r1: number, c1: number): number;
+  fc_take_links(book: number): number;
+  fc_load_links(book: number, sheet: number, lines: number, len: number): number;
   fc_undo_mark(book: number): number;
   fc_undo_group(book: number, mark: number): number;
   fc_formats_in(book: number, sheet: number, r0: number, c0: number, r1: number, c1: number): number;
@@ -81,11 +86,11 @@ function colorOf(fl: string): string | undefined {
 }
 
 function cells(s: string): Cell[] {
-  return lines(s).map(([r, c, fl, t, f]) => [Number(r), Number(c), unescape(t ?? ''), f === undefined ? undefined : unescape(f), fl.startsWith('n'), colorOf(fl)]);
+  return lines(s).map(([r, c, fl, t, f]) => [Number(r), Number(c), unescape(t ?? ''), f === undefined ? undefined : unescape(f), fl.startsWith('n'), colorOf(fl), fl.includes('l')]);
 }
 
 function changed(s: string): Changed[] {
-  return lines(s).filter((l) => !'%#&=^@!'.includes(l[0])).map(([sh, r, c, fl, t, f]) => [Number(sh), Number(r), Number(c), unescape(t ?? ''), f === undefined ? undefined : unescape(f), fl.startsWith('n'), colorOf(fl)]);
+  return lines(s).filter((l) => !'%#&=^@!'.includes(l[0])).map(([sh, r, c, fl, t, f]) => [Number(sh), Number(r), Number(c), unescape(t ?? ''), f === undefined ? undefined : unescape(f), fl.startsWith('n'), colorOf(fl), fl.includes('l')]);
 }
 
 function formatsOf(s: string, tag = '%'): FormatChange[] {
@@ -251,6 +256,22 @@ function run(x: Exports, req: Request): Value {
       return withStrings(x, [req.name], ([p, l]) => effect(styled(x, x.fc_apply_style(req.book, req.sheet, req.r0, req.c0, req.r1, req.c1, p, l))));
     case 'values.read':
       return lines(out(x, x.fc_values_in(req.book, req.sheet, req.r0, req.c0, req.r1, req.c1))).map(([r, c, v]) => [Number(r), Number(c), unescape(v ?? '')] as [number, number, string]);
+    case 'link.at':
+      return out(x, x.fc_link_at(req.book, req.sheet, req.row, req.col));
+    case 'link.set':
+      return withStrings(x, [req.target, req.display ?? ''], ([t, tl, d, dl]) => {
+        const n = x.fc_set_link(req.book, req.sheet, req.row, req.col, t, tl, d, dl, req.display === undefined ? 0 : 1);
+        if (n === -3) throw new Error('FormCel links web pages (http, https), email (mailto), ftp and places in the workbook (#Sheet1!A1).');
+        return effect(out(x, n));
+      });
+    case 'link.remove':
+      return effect(out(x, x.fc_remove_links(req.book, req.sheet, req.r0, req.c0, req.r1, req.c1)));
+    case 'link.take':
+      return lines(out(x, x.fc_take_links(req.book))).map(([sh, r, c, t]) => [Number(sh), Number(r), Number(c), unescape(t ?? '')] as LinkChange);
+    case 'link.load': {
+      const body = req.cells.map(([r, c, t]) => `${r}\t${c}\t${escape(t)}`).join('\n');
+      return withStrings(x, [body], ([p, l]) => ok(x.fc_load_links(req.book, req.sheet, p, l), 'The engine refused those links.'));
+    }
     case 'rules.get':
       return out(x, x.fc_rules(req.book, req.sheet)).split('\n').filter(Boolean);
     case 'rules.set':

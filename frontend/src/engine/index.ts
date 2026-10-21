@@ -1,6 +1,6 @@
-import type { Area, Cell, CfCell, Changed, Dir, Edit, Effect, FormatItem, MergeMode, Name, RequestBody, Response, Shift, StyleOp, Value } from './protocol';
+import type { Area, Cell, CfCell, Changed, Dir, Edit, Effect, FormatItem, LinkChange, MergeMode, Name, RequestBody, Response, Shift, StyleOp, Value } from './protocol';
 
-export type { Area, Cell, CfCell, Changed, Dir, Edit, Effect, FormatChange, FormatItem, MergeMode, Name, Shift, StyleChange, StyleOp } from './protocol';
+export type { Area, Cell, CfCell, Changed, Dir, Edit, Effect, FormatChange, FormatItem, LinkChange, MergeMode, Name, Shift, StyleChange, StyleOp } from './protocol';
 
 type Pending = { resolve: (v: Value) => void; reject: (e: Error) => void };
 
@@ -163,6 +163,26 @@ export class EngineClient {
 
   async readValues(book: number, sheet: number, r0: number, c0: number, r1: number, c1: number): Promise<Edit[]> {
     return (await this.call({ op: 'values.read', book, sheet, r0, c0, r1, c1 })) as Edit[];
+  }
+
+  async linkAt(book: number, sheet: number, row: number, col: number): Promise<string> {
+    return (await this.call({ op: 'link.at', book, sheet, row, col })) as string;
+  }
+
+  async setLink(book: number, sheet: number, row: number, col: number, target: string, display?: string): Promise<Effect> {
+    return (await this.call({ op: 'link.set', book, sheet, row, col, target, display })) as Effect;
+  }
+
+  async removeLinks(book: number, sheet: number, r0: number, c0: number, r1: number, c1: number): Promise<Effect> {
+    return (await this.call({ op: 'link.remove', book, sheet, r0, c0, r1, c1 })) as Effect;
+  }
+
+  async takeLinks(book: number): Promise<LinkChange[]> {
+    return (await this.call({ op: 'link.take', book })) as LinkChange[];
+  }
+
+  async loadLinks(book: number, sheet: number, cells: Edit[]): Promise<void> {
+    if (cells.length) await this.call({ op: 'link.load', book, sheet, cells });
   }
 
   async rules(book: number, sheet: number): Promise<string[]> {
