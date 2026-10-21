@@ -77,6 +77,7 @@ const SPECS: Spec[] = [
       { k: 'by', label: 'Combine by', kind: 'select', options: [['pos', 'Position'], ['labels', 'Labels']] },
       { k: 'top', label: 'Top row labels', kind: 'check' },
       { k: 'left', label: 'Left column labels', kind: 'check' },
+      { k: 'link', label: 'Create links to source data', kind: 'check' },
       { k: 'dest', label: 'Destination (first cell)', kind: 'text' },
     ],
   },
@@ -101,7 +102,7 @@ const SPECS: Spec[] = [
     fields: [
       { k: 'action', label: 'Action', kind: 'select', options: [['inplace', 'Filter the list, in place'], ['copy', 'Copy to another location']] },
       { k: 'list', label: 'List range (with headers)', kind: 'text' },
-      { k: 'crit', label: 'Criteria range (headers and rows)', kind: 'text' },
+      { k: 'crit', label: 'Criteria range (headers and rows; a formula under a blank header is a formula criterion)', kind: 'text' },
       { k: 'dest', label: 'Copy to (first cell)', kind: 'text' },
       { k: 'unique', label: 'Unique records only', kind: 'check' },
     ],
@@ -366,6 +367,7 @@ export class DataTools {
     this.put('consolidate', 'by', 'pos');
     this.put('consolidate', 'top', false);
     this.put('consolidate', 'left', false);
+    this.put('consolidate', 'link', false);
     this.put('consolidate', 'dest', `${colName(sel.c0)}${sel.r0 + 1}`);
     this.show('consolidate', async (v) => {
       const lines = (v.refs as string).split('\n').map((l) => l.trim()).filter(Boolean);
@@ -376,7 +378,7 @@ export class DataTools {
       });
       const dest = this.cellOf(v.dest as string);
       if (!dest) throw new Error('Type the destination cell, such as H1.');
-      return this.line(await this.c.grid.runTool('consolidate', v.func as string, v.by as string, v.top ? '1' : '0', v.left ? '1' : '0', String(dest[0]), String(dest[1]), refs.join(';')));
+      return this.line(await this.c.grid.runTool('consolidate', v.func as string, v.by as string, v.top ? '1' : '0', v.left ? '1' : '0', String(dest[0]), String(dest[1]), refs.join(';'), v.link ? '1' : '0'));
     });
   }
 
