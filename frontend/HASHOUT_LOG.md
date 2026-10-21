@@ -7,13 +7,20 @@ Last updated: 2026-10-21 · home, saving, sheets
 
 ---
 
+## App icon · v0.5.0 (2026-10-21)
+
+- refers-to: public/favicon.svg
+- kind: rationale
+- The outlined grid with an orange cell becomes the form family icon: the dark tile with bloom, rim and drop shadow; a dark glass sheet with a formula bar groove and a 4 x 4 grid; filled cells raised in one diagonal spectrum gradient (#3A7BFF, #9A5CFF, #FF4F7A, #FFAE2B) with gloss, a soft blurred highlight and a light inset rim, empty cells sunk into the sheet; the selected cell raised highest with a white selection frame and fill handle. favicon.svg is the vector source. There is no desktop shell yet; 1024 px full bleed and macOS-margin PNGs for one live in the owner's icon set.
+- Landed from the owner's branch `feat/app-icon-redesign` (979b629, cut from v0.3.0). The bundle was read, not applied: the SVG is the owner's artwork and was copied in byte for byte (checked identical to the bundle's and to `formcel_icon_files.zip`), and this entry was retyped against the v0.4.0 log. The SVG has no scripts and no outside references. The top bar keeps the single-colour `sheet` icon from `src/ui/icons.ts`, which follows the theme accent.
+
 ## Org-navi-map
 
 ```
 frontend/
 ├── index.html                  pre-paint theme boot (family profiles), overlay and toast roots
 ├── vite.config.ts              port 5199, host false, /api and /mcp proxied to 8199
-├── public/favicon.svg          grid mark
+├── public/favicon.svg          the app icon, 1024 by 1024 vector (owner's artwork)
 ├── public/engine/formcel.wasm  built by engine/build_wasm, not committed
 └── src/
     ├── main.ts                 mounts the shell, checks both engines, starts App
