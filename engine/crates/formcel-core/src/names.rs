@@ -219,7 +219,8 @@ impl Workbook {
             "apply" => {
                 let region = (arg(1) == "1").then(|| Ok::<_, String>((num(0)? as usize, Area { r0: num(2)?, c0: num(3)?, r1: num(4)?, c1: num(5)? }))).transpose()?;
                 let names: Vec<String> = args.iter().skip(7).cloned().collect();
-                out = self.apply_names(region, &names, arg(6) != "0").map_err(e)?.to_string();
+                let (n, c) = self.apply_names(region, &names, arg(6) != "0").map_err(e)?;
+                out = format!("{n}\n{}", crate::wire::encode_changed(&c, &|s, a| self.meta(s, a)));
             }
             "file" => self.set_file_name(&arg(0), &arg(1)),
             "eval" => {
@@ -368,7 +369,7 @@ impl Workbook {
         Ok((made, skipped))
     }
 
-    pub fn apply_names(&mut self, region: Option<(usize, Area)>, names: &[String], ignore_abs: bool) -> Result<usize, EngineError> {
+    pub fn apply_names(&mut self, region: Option<(usize, Area)>, names: &[String], ignore_abs: bool) -> Result<(usize, Changed), EngineError> {
         struct Cand {
             sheet: usize,
             area: Area,
@@ -420,11 +421,12 @@ impl Workbook {
                 count += 1;
             }
         }
+        let mut changed = Vec::new();
         for (sh, edits) in by_sheet.iter().enumerate() {
             if !edits.is_empty() {
-                self.apply(sh, edits)?;
+                changed.extend(self.apply(sh, edits)?);
             }
         }
-        Ok(count)
+        Ok((count, changed))
     }
 }

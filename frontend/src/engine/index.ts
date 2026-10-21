@@ -421,9 +421,9 @@ export class EngineClient {
     return { made: rows.filter((r) => r[0] === '+').map((r) => r[1]), skipped: rows.filter((r) => r[0] === '-').map((r) => r[1]) };
   }
 
-  async applyNames(book: number, region: { sheet: number; area: [number, number, number, number] } | null, names: string[], ignoreAbsolute: boolean): Promise<number> {
+  async applyNames(book: number, region: { sheet: number; area: [number, number, number, number] } | null, names: string[], ignoreAbsolute: boolean): Promise<{ count: number; changed: Changed[] }> {
     const r = region ? [String(region.sheet), '1', ...region.area.map(String)] : ['0', '0', '0', '0', '0', '0'];
-    return Number(await this.call({ op: 'name.tool', book, tool: 'apply', args: [...r, ignoreAbsolute ? '1' : '0', ...names] }));
+    return JSON.parse((await this.call({ op: 'name.tool', book, tool: 'apply', args: [...r, ignoreAbsolute ? '1' : '0', ...names] })) as string) as { count: number; changed: Changed[] };
   }
 
   async nameNotes(book: number): Promise<[string, string][]> {

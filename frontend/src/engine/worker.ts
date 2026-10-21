@@ -560,6 +560,7 @@ function run(x: Exports, req: Request): Value {
         if (text.startsWith('e')) throw new Error(text.slice(1));
         const body = text.slice(1);
         if (req.tool === 'rename') return changed(body);
+        if (req.tool === 'apply') return JSON.stringify({ count: Number(body.split('\n')[0]), changed: changed(body.slice(body.indexOf('\n') + 1)) });
         if (req.tool === 'rows') return JSON.stringify(lines(body).map(([name, scope, refers, comment, value]) => ({ name: unescape(name ?? ''), scope: unescape(scope ?? ''), refers: unescape(refers ?? ''), comment: unescape(comment ?? ''), value: unescape(value ?? '') })));
         if (req.tool === 'notes') return JSON.stringify(lines(body).map(([n, c]) => [unescape(n ?? ''), unescape(c ?? '')]));
         if (req.tool === 'select') return JSON.stringify(lines(body).map(([k, v]) => [k, unescape(v ?? '')]));
