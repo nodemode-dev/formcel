@@ -122,7 +122,11 @@ fn valid(y: i64, m: i64, d: i64) -> Option<f64> {
 
 fn parse_date(s: &str) -> Option<f64> {
     let s = s.trim();
-    for sep in ['-', '/'] {
+    let loc = crate::locale::current();
+    for sep in ['-', '/', '.'] {
+        if sep == '.' && loc != crate::locale::Locale::DeDe {
+            continue;
+        }
         let p: Vec<&str> = s.split(sep).collect();
         if p.len() == 2 && sep == '-' {
             if let (Some(d), Some(m)) = (num(p[0]), month_of(p[1])) {
@@ -134,8 +138,11 @@ fn parse_date(s: &str) -> Option<f64> {
             if p[0].len() == 4 && p[0].chars().all(|c| c.is_ascii_digit()) {
                 return valid(p[0].parse().ok()?, num(p[1])?, num(p[2])?);
             }
-            if sep == '/' {
-                return valid(year_of(p[2])?, num(p[0])?, num(p[1])?);
+            if sep == '/' || sep == '.' {
+                return match loc.order() {
+                    crate::locale::Order::Mdy => valid(year_of(p[2])?, num(p[0])?, num(p[1])?),
+                    _ => valid(year_of(p[2])?, num(p[1])?, num(p[0])?),
+                };
             }
             if let Some(m) = month_of(p[1]) {
                 return valid(year_of(p[2])?, m, num(p[0])?);
@@ -218,26 +225,29 @@ fn grouped(n: f64, dec: u8) -> String {
     let s = format!("{:.*}", dec as usize, n.abs());
     let (int, frac) = s.split_once('.').map_or((s.as_str(), ""), |(a, b)| (a, b));
     let mut out = String::new();
+    let loc = crate::locale::current();
     for (i, c) in int.chars().enumerate() {
         if i > 0 && (int.len() - i) % 3 == 0 {
-            out.push(',');
+            out.push(loc.group());
         }
         out.push(c);
     }
     if !frac.is_empty() {
-        out.push('.');
+        out.push(loc.decimal());
         out.push_str(frac);
     }
     out
 }
 
 pub fn show(n: f64, f: Fmt) -> Option<String> {
+    let loc = crate::locale::current();
     Some(match f {
-        Fmt::Currency(d) => format!("{}${}", if n < 0.0 { "-" } else { "" }, grouped(n, d)),
-        Fmt::Percent(d) => format!("{:.*}%", d as usize, n * 100.0),
+        Fmt::Currency(d) if loc.currency_after() => format!("{}{} {}", if n < 0.0 { "-" } else { "" }, grouped(n, d), loc.symbol()),
+        Fmt::Currency(d) => format!("{}{}{}", if n < 0.0 { "-" } else { "" }, loc.symbol(), grouped(n, d)),
+        Fmt::Percent(d) => crate::locale::localize_number(&format!("{:.*}%", d as usize, n * 100.0)),
         Fmt::Date => {
             let (y, m, d) = ymd(n)?;
-            format!("{m}/{d}/{y}")
+            date_text(loc, y, m, d)
         }
         Fmt::Time { secs, ampm } => {
             if n < 0.0 {
@@ -247,9 +257,19 @@ pub fn show(n: f64, f: Fmt) -> Option<String> {
         }
         Fmt::DateTime { secs, ampm } => {
             let (y, m, d) = ymd(n)?;
-            format!("{m}/{d}/{y} {}", time_text(n, secs, ampm))
+            format!("{} {}", date_text(loc, y, m, d), time_text(n, secs, ampm))
         }
     })
+}
+
+fn date_text(loc: crate::locale::Locale, y: i64, m: i64, d: i64) -> String {
+    use crate::locale::Order;
+    let s = loc.date_sep();
+    match loc.order() {
+        Order::Mdy => format!("{m}{s}{d}{s}{y}"),
+        Order::Dmy => format!("{d}{s}{m}{s}{y}"),
+        Order::Ymd => format!("{y}{s}{m}{s}{d}"),
+    }
 }
 
 static CLOCK: AtomicU64 = AtomicU64::new(0);

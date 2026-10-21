@@ -25,6 +25,7 @@ export type Request =
   | { id: number; op: 'merge.list'; book: number; sheet: number }
   | { id: number; op: 'merge.load'; book: number; sheet: number; areas: Area[] }
   | { id: number; op: 'format.put'; book: number; sheet: number; items: FormatItem[] }
+  | { id: number; op: 'locale.set'; tag: string }
   | { id: number; op: 'theme.get'; book: number }
   | { id: number; op: 'theme.set' | 'theme.load'; book: number; text: string }
   | { id: number; op: 'named.list'; book: number }

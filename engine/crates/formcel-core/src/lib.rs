@@ -9,6 +9,7 @@ pub mod filter;
 pub mod formula;
 mod graph;
 pub mod fmtcode;
+pub mod locale;
 pub mod numfmt;
 pub mod sort;
 pub use numfmt::Fmt;
@@ -73,6 +74,14 @@ impl Value {
         if t.starts_with('#') {
             if let Some(e) = ErrKind::parse(t) {
                 return Value::Error(e);
+            }
+        }
+        if let Some(local) = locale::normalize_input(t) {
+            let (body, pct) = local.strip_suffix('%').map_or((local.as_str(), false), |b| (b, true));
+            if let Ok(n) = body.trim().parse::<f64>() {
+                if n.is_finite() && !body.contains(['e', 'E', 'i', 'n', 'N']) {
+                    return Value::Number(if pct { n / 100.0 } else { n });
+                }
             }
         }
         let plain = t.replace(',', "");
@@ -730,6 +739,7 @@ impl Workbook {
         }
         match (&v, self.fmts.get(&(sheet, a))) {
             (Value::Number(n), Some(f)) => numfmt::show(*n, *f).map_or(v, Value::Text),
+            (Value::Number(_), None) if !locale::is_default() => Value::Text(locale::localize_number(&v.to_string())),
             _ => v,
         }
     }

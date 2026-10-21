@@ -111,6 +111,21 @@ pub extern "C" fn fc_set_clock(serial: f64) {
     formcel_core::numfmt::set_clock(serial);
 }
 
+/// Sets the spreadsheet locale (en-US, en-GB, de-DE, fr-FR, ja-JP) that decides date order and separators; -1 when unknown.
+///
+/// # Safety
+/// `t` must point at `len` readable bytes.
+#[no_mangle]
+pub unsafe extern "C" fn fc_set_locale(t: *const u8, len: u32) -> i32 {
+    match formcel_core::locale::Locale::parse(text(t, len)) {
+        Some(l) => {
+            formcel_core::locale::set(l);
+            0
+        }
+        None => -1,
+    }
+}
+
 /// Moves the relative references of a formula by `dr` rows and `dc` columns, as filling or pasting does.
 ///
 /// # Safety

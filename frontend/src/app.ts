@@ -10,6 +10,10 @@ import { Menu, type MenuItem } from './ui/menu';
 import type { ShellParts } from './ui/shell';
 import { icon } from './ui/icons';
 import { DATE_PERIODS, describe, parseRule, PRESETS, rangeText, ruleLine, withStop } from './ui/rules';
+import { bindShortcuts, Checker, initPrefs, liveRegion, setTextSize, setTheme, Shortcuts, textSize, theme, type TextSize, type ThemeName } from './ui/a11y';
+import { cleanPage, layoutOf, PageSetupDialog, type PageSetup } from './ui/pagesetup';
+
+const LOCALES: [string, string][] = [['en-US', 'English (United States)'], ['en-GB', 'English (United Kingdom)'], ['de-DE', 'Deutsch (Deutschland)'], ['fr-FR', 'Francais (France)'], ['ja-JP', 'Japanese (Japan)']];
 
 interface CsvPreview {
   name: string;
@@ -110,6 +114,8 @@ interface Opened {
   views: SheetView[];
   names: Name[];
   macros: boolean;
+  pages: PageSetup[];
+  locale: string;
 }
 
 function sheetPrefix(name: string): string {
@@ -221,8 +227,21 @@ export class App {
   private readonly menu = new Menu();
   private viewTimers = new Map<number, number>();
   private importNotes: string[] = [];
+  private preview = false;
+  private readonly pageDialog = new PageSetupDialog();
+  private readonly shortcuts = new Shortcuts();
+  private readonly say = liveRegion();
+  private readonly checker = new Checker({
+    fetch: () => api('GET', `/api/workbooks/${this.open?.id}/accessibility`),
+    go: (sheet, where) => {
+      this.showSheet(sheet);
+      this.grid.goTo(where);
+    },
+    alt: (sheet, name, text) => void this.setAlt(sheet, name, text),
+  });
 
   constructor(private readonly p: ShellParts) {
+    initPrefs();
     this.home = new Home(p.home, {
       open: (id) => void this.openWorkbook(id),
       create: (template) => void this.create(template),
@@ -238,6 +257,11 @@ export class App {
         this.currentRef = this.nameOf(range) ?? ref;
         if (document.activeElement !== p.nameBox) p.nameBox.value = this.currentRef;
         if (document.activeElement !== p.formulaBar) p.formulaBar.value = text;
+        if (this.grid) {
+          const [ar, ac] = this.grid.activeCell();
+          const shown = this.grid.shownAt(ar, ac);
+          this.say(`${this.currentRef}, ${shown ? `value ${shown}` : 'empty'}${text.startsWith('=') ? `, formula ${text}` : ''}`);
+        }
         this.formatBar();
         this.linkChip();
       },
@@ -285,6 +309,7 @@ export class App {
     this.button('edit.undo').disabled = true;
     this.button('edit.redo').disabled = true;
     this.commands();
+    bindShortcuts(this.shortcuts, () => !!this.open);
     this.bindChrome();
     window.addEventListener('hashchange', () => void this.route());
     window.addEventListener('beforeunload', () => this.flush());
@@ -313,11 +338,24 @@ export class App {
     cmd('file.download-xlsx', 'Download as .xlsx', 'Save a copy of this workbook as an Excel workbook in your downloads.', false, () => this.download('xlsx'));
     cmd('file.download-xlsm', 'Download as .xlsm', 'Save a copy as an Excel macro-enabled workbook with the macros the file was opened with. FormCel keeps macros but does not run them.', false, () => this.download('xlsm'));
     cmd('file.download-xlsx-password', 'Download as .xlsx with a password', 'Save a copy as an Excel workbook that asks for a password to open.', false, () => this.downloadLocked());
-    cmd('file.download-pdf', 'Download sheet as PDF', 'Save this sheet as a PDF, laid out on Letter pages.', false, () => this.download('pdf'));
-    cmd('file.download-pdf-all', 'Download workbook as PDF', 'Save every sheet in one PDF, laid out on Letter pages.', false, () => this.download('pdf-all'));
+    cmd('file.download-pdf', 'Download sheet as PDF', 'Save this sheet as a PDF, laid out with its Page Setup (Letter portrait unless you changed it).', false, () => this.download('pdf'));
+    cmd('file.download-pdf-all', 'Download workbook as PDF', 'Save every sheet in one PDF, each laid out with its own Page Setup.', false, () => this.download('pdf-all'));
     cmd('file.download-ods', 'Download as .ods', 'Save a copy of this workbook as an OpenDocument spreadsheet.', false, () => this.download('ods'));
     cmd('file.download-csv', 'Download sheet as .csv', 'Save the values of this sheet, as shown, separated by commas.', false, () => this.download('csv'));
     cmd('file.download-tsv', 'Download sheet as .tsv', 'Save the values of this sheet, as shown, separated by tabs.', false, () => this.download('tsv'));
+    cmd('file.download-html', 'Download sheet as web page', 'Save this sheet as a web page (.html) with its values, basic formatting and merged cells.', false, () => this.download('html'));
+    cmd('file.download-html-all', 'Download workbook as web page', 'Save every sheet in one web page (.html).', false, () => this.download('html-all'));
+    cmd('page.menu', 'Page layout', 'Page setup, print area, page breaks and page break preview.', false, () => this.pageMenu());
+    cmd('page.setup', 'Page Setup', 'Set orientation, paper size, margins, scaling, print area, print titles, gridlines, headings, headers and footers for this sheet.', false, () => this.pageSetup());
+    cmd('page.preview', 'Page Break Preview', 'Show where each printed page starts, with blue lines and page numbers over the sheet.', false, () => this.togglePreview());
+    cmd('page.break-insert', 'Insert page break', 'Start a new printed page above and to the left of the active cell.', false, () => this.pageBreak('insert'));
+    cmd('page.break-remove', 'Remove page break', 'Remove the manual page break above or to the left of the active cell.', false, () => this.pageBreak('remove'));
+    cmd('page.break-reset', 'Reset all page breaks', 'Remove every manual page break on this sheet.', false, () => this.pageBreak('reset'));
+    cmd('page.area-set', 'Set print area', 'Print only the selected cells.', false, () => this.printArea(true));
+    cmd('page.area-clear', 'Clear print area', 'Print the whole sheet again.', false, () => this.printArea(false));
+    cmd('view.access', 'Accessibility and language', 'Accessibility checker, keyboard shortcuts, theme, text size and spreadsheet locale.', false, () => this.accessMenu());
+    cmd('a11y.check', 'Check accessibility', 'Look for merged cells, default sheet names, hard-to-read colours, missing alternative text and unnamed table headers.', false, () => this.checker.show());
+    cmd('a11y.shortcuts', 'Keyboard shortcuts', 'List the keyboard shortcuts and set your own for a command.', false, () => this.shortcuts.show(), 'Mod+/');
     cmd('sheet.add', 'Add a sheet', 'Add a sheet after the last one and show it.', true, () => this.addSheet());
     cmd('rows.insert-above', 'Insert rows above', 'Insert as many rows as are selected, above the selection.', true, () => g.insert(true), 'Mod++');
     cmd('rows.insert-below', 'Insert rows below', 'Insert as many rows as are selected, below the selection.', true, () => g.insert(true, true));
@@ -1074,9 +1112,145 @@ export class App {
       { label: 'OpenDocument spreadsheet (.ods)', run: run('file.download-ods') },
       { label: 'This sheet as PDF (.pdf)', run: run('file.download-pdf') },
       { label: 'Every sheet as one PDF (.pdf)', run: run('file.download-pdf-all') },
+      { label: 'This sheet as a web page (.html)', run: run('file.download-html') },
+      { label: 'Every sheet as one web page (.html)', run: run('file.download-html-all') },
       { label: 'This sheet as comma-separated values (.csv)', run: run('file.download-csv') },
       { label: 'This sheet as tab-separated values (.tsv)', run: run('file.download-tsv') },
     ], () => this.grid.focus());
+  }
+
+  private pageOf(sheet = this.grid.sheetIndex): PageSetup {
+    const o = this.open!;
+    return (o.pages[sheet] ??= cleanPage(null));
+  }
+
+  private sendPage(sheet: number): void {
+    const o = this.open;
+    if (!o) return;
+    void api('PATCH', `/api/workbooks/${o.id}/sheets/${sheet}`, { view: { page: o.pages[sheet] } }).catch(() => this.status('Page setup not saved', true));
+    void this.refreshBreaks();
+  }
+
+  private async refreshBreaks(): Promise<void> {
+    const o = this.open;
+    if (!o || !this.preview) return this.grid.setBreakView(null);
+    const sheet = this.grid.sheetIndex;
+    const ext = await engine().extent(o.book, sheet);
+    if (sheet !== this.grid.sheetIndex || !this.preview) return;
+    const l = layoutOf(this.pageOf(sheet), { row: (i) => this.grid.rows.size(i), col: (i) => this.grid.cols.size(i) }, ext ? [ext[0] + 1, ext[1] + 1] : [1, 1]);
+    this.grid.setBreakView(l);
+  }
+
+  private pageSetup(): void {
+    const o = this.open;
+    if (!o) return;
+    const sheet = this.grid.sheetIndex;
+    this.pageDialog.show(this.pageOf(sheet), (p) => {
+      o.pages[sheet] = p;
+      this.sendPage(sheet);
+      this.grid.focus();
+    });
+  }
+
+  private togglePreview(): void {
+    this.preview = !this.preview;
+    this.status(this.preview ? 'Page Break Preview on' : 'Page Break Preview off');
+    void this.refreshBreaks();
+    this.grid.focus();
+  }
+
+  private pageBreak(kind: 'insert' | 'remove' | 'reset'): void {
+    if (!this.open) return;
+    const sheet = this.grid.sheetIndex;
+    const p = this.pageOf(sheet);
+    const [r, c] = this.grid.activeCell();
+    if (kind === 'reset') {
+      p.rowBreaks = [];
+      p.colBreaks = [];
+    } else if (kind === 'insert') {
+      if (r > 0) p.rowBreaks = [...new Set([...p.rowBreaks, r])].sort((a, b) => a - b);
+      if (c > 0) p.colBreaks = [...new Set([...p.colBreaks, c])].sort((a, b) => a - b);
+    } else {
+      p.rowBreaks = p.rowBreaks.filter((x) => x !== r);
+      p.colBreaks = p.colBreaks.filter((x) => x !== c);
+    }
+    this.sendPage(sheet);
+    this.grid.focus();
+  }
+
+  private printArea(set: boolean): void {
+    if (!this.open) return;
+    const sheet = this.grid.sheetIndex;
+    const r = this.currentRange;
+    this.pageOf(sheet).area = set ? `${colName(r.c0)}${r.r0 + 1}:${colName(r.c1)}${r.r1 + 1}` : '';
+    this.sendPage(sheet);
+    this.grid.focus();
+  }
+
+  private pageMenu(): void {
+    const b = this.button('page.menu').getBoundingClientRect();
+    const run = (id: string) => () => runCommand(id).then(() => { if (!this.pageDialogOpen()) this.grid.focus(); });
+    this.menu.show(b.left, b.bottom + 4, [
+      { label: 'Page Setup', run: run('page.setup') },
+      { label: this.preview ? 'Leave Page Break Preview' : 'Page Break Preview', run: run('page.preview') },
+      { sep: true },
+      { label: 'Insert page break above and left of the active cell', run: run('page.break-insert') },
+      { label: 'Remove page break at the active cell', run: run('page.break-remove') },
+      { label: 'Reset all page breaks', run: run('page.break-reset') },
+      { sep: true },
+      { label: 'Set print area to the selection', run: run('page.area-set') },
+      { label: 'Clear print area', run: run('page.area-clear') },
+      { sep: true },
+      { label: 'Download this sheet as PDF', run: run('file.download-pdf') },
+    ], () => this.grid.focus());
+  }
+
+  private pageDialogOpen(): boolean {
+    return !!document.querySelector('.fc-modal:not([hidden])');
+  }
+
+  private accessMenu(): void {
+    const b = this.button('view.access').getBoundingClientRect();
+    const o = this.open;
+    const run = (id: string) => () => void runCommand(id);
+    const mark = (on: boolean, text: string) => (on ? `${text} (current)` : text);
+    const themes: [ThemeName, string][] = [['dark', 'Dark theme'], ['light', 'Light theme'], ['contrast', 'High contrast theme']];
+    const sizes: [TextSize, string][] = [['normal', 'Normal text size'], ['large', 'Large text size'], ['xlarge', 'Extra large text size']];
+    this.menu.show(b.left, b.bottom + 4, [
+      { label: 'Check accessibility', run: run('a11y.check') },
+      { label: 'Keyboard shortcuts', keys: 'Ctrl+/', run: run('a11y.shortcuts') },
+      { sep: true },
+      ...themes.map(([id, label]): MenuItem => ({ label: mark(theme() === id, label), run: () => setTheme(id) })),
+      { sep: true },
+      ...sizes.map(([id, label]): MenuItem => ({ label: mark(textSize() === id, label), run: () => setTextSize(id) })),
+      { sep: true },
+      ...LOCALES.map(([id, label]): MenuItem => ({ label: mark(o?.locale === id, `Locale: ${label}`), run: () => this.setLocale(id), disabled: !o })),
+      { sep: true },
+      { label: 'Spelling is underlined by your browser while you type in a cell', run: () => undefined, disabled: true },
+    ], () => this.grid.focus());
+  }
+
+  private async setLocale(tag: string): Promise<void> {
+    const o = this.open;
+    if (!o || tag === o.locale) return;
+    this.flush();
+    await this.saving;
+    try {
+      await api('PUT', `/api/workbooks/${o.id}/locale`, { locale: tag });
+    } catch (err) {
+      this.status(err instanceof Error ? err.message : 'Locale not changed', true);
+      return;
+    }
+    await this.openWorkbook(o.id, false);
+    this.status(`Locale ${tag}`);
+  }
+
+  private async setAlt(sheet: number, name: string, text: string): Promise<void> {
+    const o = this.open;
+    if (!o) return;
+    const doc = await api<{ views: { objects?: { id?: string; name?: string; alt?: string }[] }[] }>('GET', `/api/workbooks/${o.id}`);
+    const objects = (doc.views[sheet]?.objects ?? []).map((x) => (x.name === name || x.id === name ? { ...x, alt: text } : x));
+    await api('PATCH', `/api/workbooks/${o.id}/sheets/${sheet}`, { view: { objects } }).catch(() => this.status('Alt text not saved', true));
   }
 
   private downloadLocked(): void {
@@ -1100,14 +1274,14 @@ export class App {
     });
   }
 
-  private async download(kind: 'xlsx' | 'xlsm' | 'ods' | 'csv' | 'tsv' | 'pdf' | 'pdf-all'): Promise<void> {
+  private async download(kind: 'xlsx' | 'xlsm' | 'ods' | 'csv' | 'tsv' | 'pdf' | 'pdf-all' | 'html' | 'html-all'): Promise<void> {
     const o = this.open;
     if (!o) return;
     this.flush();
     await this.saving;
     const a = document.createElement('a');
     const sheet = this.grid.sheetIndex;
-    a.href = kind === 'csv' || kind === 'tsv' || kind === 'pdf' ? `/api/workbooks/${o.id}/export.${kind}?sheet=${sheet}` : kind === 'pdf-all' ? `/api/workbooks/${o.id}/export.pdf?scope=all` : `/api/workbooks/${o.id}/export.${kind}`;
+    a.href = kind === 'csv' || kind === 'tsv' || kind === 'pdf' || kind === 'html' ? `/api/workbooks/${o.id}/export.${kind}?sheet=${sheet}` : kind === 'pdf-all' || kind === 'html-all' ? `/api/workbooks/${o.id}/export.${kind.slice(0, -4)}?scope=all` : `/api/workbooks/${o.id}/export.${kind}`;
     a.download = '';
     document.body.appendChild(a);
     a.click();
@@ -1285,6 +1459,7 @@ export class App {
       return;
     }
     const e = engine();
+    await e.setLocale((doc as { locale?: string }).locale ?? 'en-US');
     const book = await e.newWorkbook();
     await e.loadTheme(book, doc.theme ?? '');
     await e.loadNamed(book, doc.cellStyles ?? []);
@@ -1303,7 +1478,9 @@ export class App {
     for (const [n, f] of doc.names ?? []) await e.defineName(book, n, f).catch(() => []);
     await e.loadTables(book, doc.tables ?? []);
     const names = doc.names?.length ? await e.names(book) : [];
-    this.open = { id, book, title: doc.title, sheets: doc.sheets, views: doc.sheets.map((_, i) => doc.views?.[i] ?? {}), names, macros: !!doc.macros };
+    this.open = { id, book, title: doc.title, sheets: doc.sheets, views: doc.sheets.map((_, i) => doc.views?.[i] ?? {}), names, macros: !!doc.macros, pages: doc.sheets.map((_, i) => cleanPage((doc.views?.[i] as { page?: unknown } | undefined)?.page)), locale: (doc as { locale?: string }).locale ?? 'en-US' };
+    this.preview = false;
+    this.grid.setBreakView(null);
     const p = this.p;
     p.home.hidden = true;
     p.sheet.hidden = false;
@@ -1391,6 +1568,7 @@ export class App {
     const o = this.open;
     if (!o) return;
     this.grid.show(o.book, i, o.views[i] ?? {});
+    void this.refreshBreaks();
     this.markTab(i);
     this.zoomLabel();
     this.grid.focus();
@@ -1406,6 +1584,7 @@ export class App {
     if (!o) return;
     o.views[sheet] = view;
     this.zoomLabel();
+    if (this.preview) void this.refreshBreaks();
     window.clearTimeout(this.viewTimers.get(sheet));
     this.viewTimers.set(sheet, window.setTimeout(() => {
       void api('PATCH', `/api/workbooks/${o.id}/sheets/${sheet}`, { view }).catch(() => this.status('View not saved', true));

@@ -602,7 +602,7 @@ impl Code {
                     }
                     date(sec, x)?
                 } else if sec.has_number() {
-                    number(sec, if abs { x.abs() } else { x })
+                    crate::locale::localize_number(&number(sec, if abs { x.abs() } else { x }))
                 } else {
                     literal(sec, None)
                 };

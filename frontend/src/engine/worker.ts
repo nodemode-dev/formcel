@@ -78,6 +78,7 @@ interface Exports {
   fc_edge(book: number, sheet: number, row: number, col: number, dir: number): number;
   fc_offset(src: number, len: number, dr: number, dc: number): number;
   fc_set_clock(serial: number): void;
+  fc_set_locale(t: number, len: number): number;
 }
 
 function localSerial(): number {
@@ -271,6 +272,8 @@ function run(x: Exports, req: Request): Value {
       const body = req.items.map(([r, c, st, code]) => `${r}\t${c}\t${escape(st)}\t${escape(code)}`).join('\n');
       return withStrings(x, [body], ([p, l]) => effect(out(x, x.fc_put_formats(req.book, req.sheet, p, l))));
     }
+    case 'locale.set':
+      return withStrings(x, [req.tag], ([p, l]) => ok(x.fc_set_locale(p, l), 'FormCel has no such locale.'));
     case 'theme.get':
       return out(x, x.fc_theme(req.book)).split('\n').filter(Boolean);
     case 'theme.set':

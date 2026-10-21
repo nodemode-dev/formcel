@@ -150,6 +150,10 @@ export class EngineClient {
     return (await this.call({ op: 'theme.set', book, text })) as Effect;
   }
 
+  async setLocale(tag: string): Promise<void> {
+    await this.call({ op: 'locale.set', tag });
+  }
+
   async loadTheme(book: number, text: string): Promise<void> {
     if (text) await this.call({ op: 'theme.load', book, text });
   }

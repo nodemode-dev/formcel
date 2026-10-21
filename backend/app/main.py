@@ -45,3 +45,9 @@ def health() -> dict:
 @app.get("/api/version")
 def version() -> dict:
     return {"app": "formcel", "version": VERSION}
+
+
+if config.WINDOW_DIR is not None and config.WINDOW_DIR.is_dir():
+    from fastapi.staticfiles import StaticFiles
+
+    app.mount("/", StaticFiles(directory=config.WINDOW_DIR, html=True), name="window")

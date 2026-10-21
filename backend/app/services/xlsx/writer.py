@@ -7,6 +7,7 @@ from openpyxl.utils import get_column_letter
 from openpyxl.workbook.defined_name import DefinedName
 from openpyxl.worksheet.hyperlink import Hyperlink
 
+from .. import page
 from .autofilter import filter_out
 from .cf import rules_out
 from .formulas import to_file
@@ -118,6 +119,7 @@ def write(eng, views: list[dict], vba: dict[str, bytes] | None = None) -> bytes:
             ws.freeze_panes = f"{get_column_letter(fc + 1)}{fr + 1}"
         if view.get("zoom") and view["zoom"] != 1:
             ws.sheet_view.zoomScale = round(view["zoom"] * 100)
+        page.to_xlsx(ws, view.get("page"))
         if view.get("color"):
             ws.sheet_properties.tabColor = "FF" + view["color"].lstrip("#").upper()
     for name, refers in eng.names():

@@ -455,11 +455,17 @@ fn reads_as_text(raw: &str) -> bool {
     !raw.starts_with(['=', '\'']) && matches!(formcel_core::Value::parse_input(raw), formcel_core::Value::Text(_))
 }
 
+#[pyfunction]
+fn set_locale(tag: &str) -> bool {
+    formcel_core::locale::Locale::parse(tag).map(formcel_core::locale::set).is_some()
+}
+
 #[pymodule]
 fn formcel_engine(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(version, m)?)?;
     m.add_function(wrap_pyfunction!(offset, m)?)?;
     m.add_function(wrap_pyfunction!(reads_as_text, m)?)?;
+    m.add_function(wrap_pyfunction!(set_locale, m)?)?;
     m.add_class::<Workbook>()?;
     m.add("MAX_ROWS", MAX_ROWS)?;
     m.add("MAX_COLS", MAX_COLS)?;

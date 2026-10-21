@@ -1,3 +1,4 @@
+import datetime
 import io
 import os
 from pathlib import Path
@@ -8,6 +9,7 @@ from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.pdfgen import canvas
 
+from . import page as pg
 from .xlsx.autofilter import filtered_rows
 
 PAGE_W, PAGE_H = 612.0, 792.0
@@ -92,18 +94,18 @@ def _style(text: str) -> dict:
     return st
 
 
-def _pages(sizes: list[float], room: float) -> list[tuple[int, int]]:
-    out, start, used = [], 0, 0.0
+def _pages(sizes: list[float], room: float, breaks: set[int] = frozenset(), lead: float = 0.0) -> list[tuple[int, int]]:
+    out, start, used, cap = [], 0, 0.0, room
     for i, s in enumerate(sizes):
-        if used + s > room and i > start:
+        if i > start and (i in breaks or used + s > cap):
             out.append((start, i))
-            start, used = i, 0.0
+            start, used, cap = i, 0.0, room - lead
         used += s
     out.append((start, len(sizes)))
     return out
 
 
-def _sheet(c: canvas.Canvas, eng, i: int, view: dict, slots: dict[str, str], fonts: dict[str, str]) -> int:
+def _sheet(c: canvas.Canvas, eng, i: int, view: dict, slots: dict[str, str], fonts: dict[str, str], name: str = "", file: str = "") -> int:
     values = {(r, col): v for r, col, v in eng.values(i) if v != ""}
     kinds = {(r, col): k for r, col, k, _ in eng.typed(i)}
     kinds.update({(r, col): k for r, col, k, _ in eng.results(i)})
@@ -114,17 +116,36 @@ def _sheet(c: canvas.Canvas, eng, i: int, view: dict, slots: dict[str, str], fon
         keys.add((r1, c1))
     if not keys:
         return 0
+    pgs = pg.clean(view.get("page"))
+    pw, ph, _code = pg.PAPERS[pgs["paper"]]
+    if pgs["orient"] == "landscape":
+        pw, ph = ph, pw
+    mt, mr, mb, ml, mh, mf = (x * 72 for x in pgs["m"])
+    area = pg.area_of(pgs["area"])
+    hw, hh = (24.0, 14.0) if pgs["heads"] else (0.0, 0.0)
     nrows = max(r for r, _ in keys) + 1
     ncols = max(col for _, col in keys) + 1
+    if area:
+        nrows, ncols = max(nrows, area[2] + 1), max(ncols, area[3] + 1)
     covered = {(r, col) for (r0, c0), (r1, c1) in merges.items() for r in range(r0, r1 + 1) for col in range(c0, c1 + 1) if (r, col) != (r0, c0)}
     colpx = dict((view.get("cols") or {}).get("sizes", []))
     rowpx = dict((view.get("rows") or {}).get("sizes", []))
     hidden_c = set((view.get("cols") or {}).get("hidden", []))
     hidden_r = set((view.get("rows") or {}).get("hidden", [])) | filtered_rows(eng.filter(i))
+    if area:
+        hidden_c |= set(range(0, area[1])) | set(range(area[3] + 1, ncols))
+        hidden_r |= set(range(0, area[0])) | set(range(area[2] + 1, nrows))
     cw =[0.0 if col in hidden_c else colpx.get(col, COL_PX) * PT for col in range(ncols)]
     rh = [0.0 if r in hidden_r else rowpx.get(r, ROW_PX) * PT for r in range(nrows)]
-    room_w, room_h = PAGE_W - 2 * MARGIN_X, PAGE_H - 2 * MARGIN_Y
-    scale = min(1.0, max(0.5, room_w / sum(cw))) if sum(cw) else 1.0
+    room_w, room_h = pw - ml - mr - hw, ph - mt - mb - hh
+    if pgs["scale"] == "custom":
+        scale = pgs["pct"] / 100
+    elif pgs["scale"] == "fit-cols":
+        scale = min(1.0, room_w / sum(cw)) if sum(cw) else 1.0
+    elif pgs["scale"] == "fit-sheet":
+        scale = min(1.0, room_w / sum(cw) if sum(cw) else 1.0, room_h / sum(rh) if sum(rh) else 1.0)
+    else:
+        scale = min(1.0, max(0.5, room_w / sum(cw))) if sum(cw) else 1.0
     cw = [w * scale for w in cw]
     rh = [h * scale for h in rh]
     styles = {}
@@ -150,25 +171,56 @@ def _sheet(c: canvas.Canvas, eng, i: int, view: dict, slots: dict[str, str], fon
             k += 1
         paint[(int(a1[k:]) - 1, col - 1)] = (_style(s) if s else None, bar)
     pages = 0
-    for c0, c1 in _pages(cw, room_w):
-        for r0, r1 in _pages(rh, room_h):
+    tr, tc = pg.rows_of(pgs["titleRows"]), pg.cols_of(pgs["titleCols"])
+    trows = [r for r in range(tr[0], min(tr[1], nrows - 1) + 1) if rh[r]] if tr else []
+    tcols = [k for k in range(tc[0], min(tc[1], ncols - 1) + 1) if cw[k]] if tc else []
+    col_pages = _pages(cw, room_w, set(pgs["colBreaks"]), sum(cw[k] for k in tcols))
+    row_pages = _pages(rh, room_h, set(pgs["rowBreaks"]), sum(rh[k] for k in trows))
+    total = len(col_pages) * len(row_pages)
+    today = datetime.date.today().isoformat()
+    for c0, c1 in col_pages:
+        for r0, r1 in row_pages:
             pages += 1
-            xs = [MARGIN_X]
-            for col in range(c0, c1):
+            c.setPageSize((pw, ph))
+            cl = [k for k in tcols if k < c0] + list(range(c0, c1))
+            rl = [k for k in trows if k < r0] + list(range(r0, r1))
+            pos_c = {k: n for n, k in enumerate(cl)}
+            pos_r = {k: n for n, k in enumerate(rl)}
+            xs = [ml + hw]
+            for col in cl:
                 xs.append(xs[-1] + cw[col])
-            ys = [PAGE_H - MARGIN_Y]
-            for r in range(r0, r1):
+            ys = [ph - mt - hh]
+            for r in rl:
                 ys.append(ys[-1] - rh[r])
             lines = []
-            for r in range(r0, r1):
-                for col in range(c0, c1):
+            if pgs["grid"]:
+                for r in rl:
+                    for col in cl:
+                        if cw[col] and rh[r]:
+                            lines.append(((xs[pos_c[col]], ys[pos_r[r]], xs[pos_c[col] + 1], ys[pos_r[r]]), "grid", (0.78, 0.78, 0.78)))
+                            lines.append(((xs[pos_c[col]], ys[pos_r[r] + 1], xs[pos_c[col] + 1], ys[pos_r[r] + 1]), "grid", (0.78, 0.78, 0.78)))
+                            lines.append(((xs[pos_c[col]], ys[pos_r[r]], xs[pos_c[col]], ys[pos_r[r] + 1]), "grid", (0.78, 0.78, 0.78)))
+                            lines.append(((xs[pos_c[col] + 1], ys[pos_r[r]], xs[pos_c[col] + 1], ys[pos_r[r] + 1]), "grid", (0.78, 0.78, 0.78)))
+            if pgs["heads"]:
+                c.setFont(fonts["r"], 7)
+                c.setFillColorRGB(0.35, 0.35, 0.35)
+                for col in cl:
+                    if cw[col]:
+                        c.drawCentredString((xs[pos_c[col]] + xs[pos_c[col] + 1]) / 2, ph - mt - hh + 4, get_column_letter(col + 1))
+                for r in rl:
+                    if rh[r]:
+                        c.drawRightString(ml + hw - 4, (ys[pos_r[r]] + ys[pos_r[r] + 1]) / 2 - 2.5, str(r + 1))
+            for r in rl:
+                for col in cl:
                     if (r, col) in covered or not cw[col] or not rh[r]:
                         continue
                     re_, ce = merges.get((r, col), (r, col))
-                    x0 = xs[col - c0]
-                    x1 = xs[min(ce, c1 - 1) - c0 + 1]
-                    y0 = ys[r - r0]
-                    y1 = ys[min(re_, r1 - 1) - r0 + 1]
+                    ce = col if ce == col else max(k for k in cl if k <= ce)
+                    re_ = r if re_ == r else max(k for k in rl if k <= re_)
+                    x0 = xs[pos_c[col]]
+                    x1 = xs[pos_c[ce] + 1]
+                    y0 = ys[pos_r[r]]
+                    y1 = ys[pos_r[re_] + 1]
                     st = dict(styles.get((r, col), {"borders": {}}))
                     cf = paint.get((r, col))
                     if cf and cf[0]:
@@ -211,8 +263,8 @@ def _sheet(c: canvas.Canvas, eng, i: int, view: dict, slots: dict[str, str], fon
                     clip_x1 = x1
                     if not st.get("wrap") and ha == "left" and not num:
                         n = col + 1
-                        while n < c1 and (r, n) not in values and (r, n) not in covered and c.stringWidth(text, face, size) > clip_x1 - x0 - pad:
-                            clip_x1 = xs[n - c0 + 1]
+                        while n < c1 and n in pos_c and (r, n) not in values and (r, n) not in covered and c.stringWidth(text, face, size) > clip_x1 - x0 - pad:
+                            clip_x1 = xs[pos_c[n] + 1]
                             n += 1
                     p = c.beginPath()
                     p.rect(x0, y1, clip_x1 - x0, y0 - y1)
@@ -253,6 +305,16 @@ def _sheet(c: canvas.Canvas, eng, i: int, view: dict, slots: dict[str, str], fon
                 else:
                     c.line(xa, ya, xb, yb)
             c.setDash()
+            c.setFillColorRGB(0, 0, 0)
+            c.setFont(fonts["r"], 9)
+            for band, y in (("h", ph - mh - 9), ("f", mf)):
+                for slot, side in (("l", 0), ("c", 1), ("r", 2)):
+                    text = pgs["hf"][band + slot]
+                    if not text:
+                        continue
+                    text = pg.code_text(text, pages, total, name, file, today)
+                    x = (ml, (ml + pw - mr) / 2, pw - mr)[side]
+                    (c.drawString, c.drawCentredString, c.drawRightString)[side](x, y, text)
             c.showPage()
     return pages
 
@@ -267,7 +329,7 @@ def write(eng, views: list[dict], sheets: list[int], title: str) -> bytes:
     c.setCreator("FormCel")
     total = 0
     for i in sheets:
-        total += _sheet(c, eng, i, views[i] if i < len(views) else {}, slots, fonts)
+        total += _sheet(c, eng, i, views[i] if i < len(views) else {}, slots, fonts, eng.sheet_names()[i], title)
     if not total:
         c.setFont(fonts["r"], 10)
         c.drawString(MARGIN_X, PAGE_H - MARGIN_Y - 10, "This sheet is empty.")
