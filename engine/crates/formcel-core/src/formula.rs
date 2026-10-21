@@ -140,6 +140,7 @@ pub enum Expr {
     Paren(Box<Expr>),
     Array(Vec<Vec<Expr>>),
     Range(Box<Expr>, Box<Expr>),
+    Intersect(Box<Expr>, Box<Expr>),
     Union(Vec<Expr>),
     Invoke(Box<Expr>, Vec<Expr>),
     Spill(Box<Expr>),
@@ -152,7 +153,7 @@ pub const ITEM_DATA: u8 = 2;
 pub const ITEM_HEADERS: u8 = 4;
 pub const ITEM_TOTALS: u8 = 8;
 pub const ITEM_THIS: u8 = 16;
-const ITEMS: [(&str, u8); 5] = [("#All", ITEM_ALL), ("#Data", ITEM_DATA), ("#Headers", ITEM_HEADERS), ("#Totals", ITEM_TOTALS), ("#This Row", ITEM_THIS)];
+const ITEMS: [(&str, u8); 5] = [("#All", ITEM_ALL), ("#Headers", ITEM_HEADERS), ("#Data", ITEM_DATA), ("#Totals", ITEM_TOTALS), ("#This Row", ITEM_THIS)];
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct TableSpec {
@@ -389,6 +390,7 @@ pub const FUNCTIONS: [&str; 421] = [
 
 #[derive(Clone, Debug, PartialEq)]
 enum Tok {
+    Space,
     Num(f64),
     Str(String),
     Ident(String),
@@ -418,7 +420,24 @@ fn lex(src: &str) -> Option<Vec<Tok>> {
     while i < s.len() {
         let c = s[i];
         if c.is_whitespace() {
-            i += 1;
+            let mut j = i;
+            while j < s.len() && s[j].is_whitespace() {
+                j += 1;
+            }
+            let ends = match out.last() {
+                Some(Tok::Ident(_) | Tok::Bracket(_) | Tok::Hash) => true,
+                Some(Tok::RParen) => true,
+                _ => false,
+            };
+            let starts = match s.get(j) {
+                Some('(') => !matches!(out.last(), Some(Tok::Ident(_))),
+                Some(n) => n.is_alphabetic() || matches!(n, '_' | '$' | '\'' | '['),
+                None => false,
+            };
+            if ends && starts {
+                out.push(Tok::Space);
+            }
+            i = j;
             continue;
         }
         if c.is_ascii_digit() || (c == '.' && s.get(i + 1).is_some_and(|d| d.is_ascii_digit())) {
@@ -659,18 +678,11 @@ impl Parser {
                 Some(Expr::Single(Box::new(self.unary()?)))
             }
             _ => {
-                let mut e = self.primary()?;
-                while self.peek() == Some(&Tok::Colon) {
+                let mut e = self.operand()?;
+                while self.peek() == Some(&Tok::Space) {
                     self.i += 1;
-                    let right = self.primary()?;
-                    e = Expr::Range(Box::new(e), Box::new(right));
-                }
-                if self.peek() == Some(&Tok::Hash) {
-                    if !matches!(e, Expr::Ref(_, RefKind::Cell(_))) {
-                        return None;
-                    }
-                    self.i += 1;
-                    e = Expr::Spill(Box::new(e));
+                    let right = self.operand()?;
+                    e = Expr::Intersect(Box::new(e), Box::new(right));
                 }
                 while self.peek() == Some(&Tok::Pct) {
                     self.i += 1;
@@ -679,6 +691,23 @@ impl Parser {
                 Some(e)
             }
         }
+    }
+
+    fn operand(&mut self) -> Option<Expr> {
+        let mut e = self.primary()?;
+        while self.peek() == Some(&Tok::Colon) {
+            self.i += 1;
+            let right = self.primary()?;
+            e = Expr::Range(Box::new(e), Box::new(right));
+        }
+        if self.peek() == Some(&Tok::Hash) {
+            if !matches!(e, Expr::Ref(_, RefKind::Cell(_))) {
+                return None;
+            }
+            self.i += 1;
+            e = Expr::Spill(Box::new(e));
+        }
+        Some(e)
     }
 
     fn reference(&mut self, sheet: Option<String>, first: &str) -> Option<Expr> {
@@ -967,6 +996,11 @@ pub fn print(e: &Expr, out: &mut String) {
             out.push(':');
             print(b, out);
         }
+        Expr::Intersect(a, b) => {
+            print(a, out);
+            out.push(' ');
+            print(b, out);
+        }
         Expr::Union(parts) => {
             out.push('(');
             for (i, x) in parts.iter().enumerate() {
@@ -994,7 +1028,7 @@ fn print_args(args: &[Expr], out: &mut String) {
 pub(crate) fn children(e: &Expr) -> Vec<&Expr> {
     match e {
         Expr::Neg(x) | Expr::Pos(x) | Expr::Pct(x) | Expr::Paren(x) | Expr::Spill(x) | Expr::Single(x) => vec![x],
-        Expr::Bin(_, a, b) | Expr::Range(a, b) => vec![a, b],
+        Expr::Bin(_, a, b) | Expr::Range(a, b) | Expr::Intersect(a, b) => vec![a, b],
         Expr::Call(_, args) | Expr::Union(args) => args.iter().collect(),
         Expr::Invoke(f, args) => std::iter::once(&**f).chain(args).collect(),
         Expr::Array(rows) => rows.iter().flatten().collect(),
@@ -1050,7 +1084,7 @@ pub fn to_text(e: &Expr) -> String {
 pub fn walk_mut(e: &mut Expr, f: &mut dyn FnMut(&mut Expr)) {
     match e {
         Expr::Neg(x) | Expr::Pos(x) | Expr::Pct(x) | Expr::Paren(x) | Expr::Spill(x) | Expr::Single(x) => walk_mut(x, f),
-        Expr::Bin(_, a, b) | Expr::Range(a, b) => {
+        Expr::Bin(_, a, b) | Expr::Range(a, b) | Expr::Intersect(a, b) => {
             walk_mut(a, f);
             walk_mut(b, f);
         }

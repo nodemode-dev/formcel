@@ -121,6 +121,7 @@ const SPECS: Spec[] = [
   },
   { id: 'template', title: 'Save as template', ok: 'Save', fields: [{ k: 'name', label: 'Template name', kind: 'text' }, { k: 'desc', label: 'Description', kind: 'text' }] },
   { id: 'fview', title: 'Save filter view', ok: 'Save', fields: [{ k: 'name', label: 'Name', kind: 'text' }] },
+  { id: 'totalfn', title: 'Total row formula', ok: 'Set', fields: [{ k: 'formula', label: 'Formula for this total cell (structured references such as [Sales] are allowed)', kind: 'text' }] },
   { id: 'slicer', title: 'Insert slicer', ok: 'Insert', fields: [{ k: 'col', label: 'Column', kind: 'select' }] },
 ];
 
@@ -502,6 +503,17 @@ export class DataTools {
     this.show('template', async (v) => {
       if (!(v.name as string).trim()) throw new Error('Give the template a name.');
       return save((v.name as string).trim(), v.desc as string);
+    });
+  }
+
+  customTotal(initial: string): void {
+    this.prepare('totalfn');
+    this.put('totalfn', 'formula', initial);
+    this.show('totalfn', async (v) => {
+      const f = (v.formula as string).trim();
+      if (!f) throw new Error('Type a formula.');
+      await this.c.grid.setActive(f.startsWith('=') ? f : `=${f}`);
+      return '';
     });
   }
 

@@ -101,7 +101,7 @@ fn reduce(e: &mut Expr, ev: &Eval, hit: &mut Option<Expr>) {
             }
         }
     }
-    let whole = matches!(e, Expr::Call(n, _) if WHOLE.contains(&n.as_str())) || matches!(e, Expr::Name(_) | Expr::Invoke(..) | Expr::Table(..) | Expr::Range(..));
+    let whole = matches!(e, Expr::Call(n, _) if WHOLE.contains(&n.as_str())) || matches!(e, Expr::Name(_) | Expr::Invoke(..) | Expr::Table(..) | Expr::Range(..) | Expr::Intersect(..));
     if !whole {
         for k in kids(e) {
             reduce(k, ev, hit);

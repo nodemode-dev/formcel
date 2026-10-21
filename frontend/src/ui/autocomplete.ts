@@ -2,10 +2,44 @@ import catalog from '../../../docs/functions.json';
 
 export interface Suggestion {
   name: string;
-  kind: 'function' | 'name';
+  kind: 'function' | 'name' | 'table' | 'column';
   summary: string;
   args?: string[];
+  table?: string;
 }
+
+export interface Structured {
+  start: number;
+  partial: string;
+  table: string | null;
+}
+
+export function structuredContext(text: string, caret: number): Structured | null {
+  if (!text.startsWith('=')) return null;
+  const s = text.slice(0, caret);
+  const lb = s.lastIndexOf('[');
+  if (lb < 0 || lb < s.lastIndexOf(']')) return null;
+  const open = s.slice(0, lb);
+  if ((open.match(/"/g)?.length ?? 0) % 2 === 1) return null;
+  let depth = 0;
+  let table: string | null = null;
+  for (let j = lb; j >= 0; j--) {
+    const c = s[j];
+    if (c === ']') depth++;
+    else if (c === '[') {
+      if (depth === 0) {
+        const m = /([A-Za-z_][A-Za-z0-9_.]*)$/.exec(s.slice(0, j));
+        if (m) {
+          table = m[1];
+          break;
+        }
+      } else depth--;
+    }
+  }
+  return { start: lb + 1, partial: s.slice(lb + 1), table };
+}
+
+const escapeColumn = (name: string) => name.replace(/(['[\]#])/g, "'$1");
 
 interface Scan {
   word: { start: number; text: string } | null;
@@ -104,8 +138,20 @@ export class Autocomplete {
     const caret = this.field.selectionStart ?? this.field.value.length;
     const sc = scan(this.field.value, caret);
     const all = this.items();
+    const st = this.enabled ? structuredContext(this.field.value, caret) : null;
+    if (st) {
+      const want = st.partial.replace(/^\[|^@/, '').toUpperCase();
+      this.matches = all.filter((it) => it.kind === 'column' && (!st.table || it.table?.toUpperCase() === st.table.toUpperCase()) && it.name.toUpperCase().startsWith(want));
+      this.matches.sort((a, b) => a.name.localeCompare(b.name));
+      this.word = this.matches.length ? { start: st.start + (st.partial.length - want.length), text: want } : null;
+      if (this.matches.length) {
+        this.renderList();
+        this.tip.hidden = true;
+      } else this.list.hidden = true;
+      return;
+    }
     const w = sc.word;
-    this.matches = this.enabled && w ? all.filter((it) => it.name.toUpperCase().startsWith(w.text.toUpperCase())) : [];
+    this.matches = this.enabled && w ? all.filter((it) => it.kind !== 'column' && it.name.toUpperCase().startsWith(w.text.toUpperCase())) : [];
     this.matches.sort((a, b) => a.name.localeCompare(b.name));
     this.word = this.matches.length ? w : null;
     if (this.matches.length) {
@@ -144,7 +190,7 @@ export class Autocomplete {
       }
       row.hidden = false;
       const [kind, name, sum] = row.children as unknown as HTMLElement[];
-      const k = m.kind === 'function' ? 'fx' : 'name';
+      const k = m.kind === 'function' ? 'fx' : m.kind === 'column' ? 'col' : m.kind === 'table' ? 'table' : 'name';
       if (kind.textContent !== k) kind.textContent = k;
       if (name.textContent !== m.name) name.textContent = m.name;
       if (sum.textContent !== m.summary) sum.textContent = m.summary;
@@ -199,7 +245,7 @@ export class Autocomplete {
     if (!m || !w) return;
     const v = this.field.value;
     const caret = this.field.selectionStart ?? v.length;
-    const add = m.name + (m.kind === 'function' && v[caret] !== '(' ? '(' : '');
+    const add = m.kind === 'column' ? escapeColumn(m.name) + (v[caret] === ']' ? '' : ']') : m.name + (m.kind === 'function' && v[caret] !== '(' ? '(' : m.kind === 'table' && v[caret] !== '[' ? '[' : '');
     this.field.value = v.slice(0, w.start) + add + v.slice(caret);
     const pos = w.start + add.length;
     this.field.setSelectionRange(pos, pos);

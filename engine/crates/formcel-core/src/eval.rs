@@ -508,6 +508,18 @@ impl<'a> Eval<'a> {
                 (Arg::V(Value::Error(k)), _) | (_, Arg::V(Value::Error(k))) => Arg::V(err(k)),
                 _ => Arg::V(err(ErrKind::Ref)),
             },
+            Expr::Intersect(a, b) => match (self.arg(a), self.arg(b)) {
+                (Arg::R(s1, x), Arg::R(s2, y)) if s1 == s2 => {
+                    let (r0, r1, c0, c1) = (x.r0.max(y.r0), x.r1.min(y.r1), x.c0.max(y.c0), x.c1.min(y.c1));
+                    if r0 > r1 || c0 > c1 {
+                        Arg::V(err(ErrKind::Null))
+                    } else {
+                        Arg::R(s1, Area { r0, c0, r1, c1 })
+                    }
+                }
+                (Arg::V(Value::Error(k)), _) | (_, Arg::V(Value::Error(k))) => Arg::V(err(k)),
+                _ => Arg::V(err(ErrKind::Value)),
+            },
             Expr::Bin(op, a, b) => {
                 let (x, y) = (self.arg(a), self.arg(b));
                 if multi(&x) || multi(&y) {

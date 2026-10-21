@@ -390,7 +390,14 @@ export class App {
     } catch {
       this.grid.autoComplete = true;
     }
-    const suggestions = (): Suggestion[] => [...FUNCTIONS, ...(this.open?.names ?? []).map(([name, refers]): Suggestion => ({ name, kind: 'name', summary: refers }))];
+    const suggestions = (): Suggestion[] => [
+      ...FUNCTIONS,
+      ...(this.open?.names ?? []).map(([name, refers]): Suggestion => ({ name, kind: 'name', summary: refers })),
+      ...this.grid.tables().flatMap((t): Suggestion[] => [
+        { name: t.name, kind: 'table', summary: 'Table' },
+        ...t.cols.filter(Boolean).map((c): Suggestion => ({ name: c, kind: 'column', summary: `Column of ${t.name}`, table: t.name })),
+      ]),
+    ];
     new Autocomplete(p.formulaBar, suggestions);
     const cellAc = new Autocomplete(this.grid.editor, suggestions);
     this.grid.editorHook = (e) => cellAc.take(e);
@@ -1251,7 +1258,7 @@ export class App {
       const ref = /^[A-Za-z0-9 ]+$/.test(name) && !/^ | $/.test(name) ? `[${name}]` : `[[${name.replace(/[[\]#'@]/g, "'$&")}]]`;
       const cell = this.grid.cellRect();
       const pick = (raw: string) => () => void this.grid.setActive(raw).then(() => this.grid.focus());
-      this.menu.show(cell.left, cell.bottom + 2, [{ label: 'None', run: pick('') }, ...TOTALS.map(([label, n]) => ({ label, run: pick(`=SUBTOTAL(${n},${ref})`) }))], () => this.grid.focus());
+      this.menu.show(cell.left, cell.bottom + 2, [{ label: 'None', run: pick('') }, ...TOTALS.map(([label, n]) => ({ label, run: pick(`=SUBTOTAL(${n},${ref})`) })), { sep: true }, { label: 'More functions (custom formula)', run: () => this.tools.customTotal(`=SUM(${ref})`) }], () => this.grid.focus());
       return;
     }
     const items = await this.grid.listItems();
