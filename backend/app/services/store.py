@@ -480,7 +480,7 @@ class Store:
         b = self._load(wid)
         with b.lock:
             b.fit_views()
-            return a11y.check(b.engine, b.views)
+            return a11y.check(b.engine, b.views, b.fit_objects())
 
     def export_html(self, wid: str, sheet: int | None) -> tuple[str, str]:
         from . import html
