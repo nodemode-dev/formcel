@@ -1,4 +1,4 @@
-import { engine, type Area, type Changed, type FormatChange, type LinkChange, type Name, type Shift } from './engine';
+import { engine, type Area, type Changed, type Effect, type FormatChange, type LinkChange, type Name, type Shift } from './engine';
 import { colName, parseRef, type Range } from './grid/a1';
 import { Autocomplete, FUNCTIONS, type Suggestion } from './ui/autocomplete';
 import { Grid, type BorderKind, type MenuKind, type PasteKind, type SheetView } from './grid/grid';
@@ -9,6 +9,7 @@ import { Home, type TemplateMeta, type WorkbookMeta } from './ui/home';
 import { Menu, type MenuItem } from './ui/menu';
 import type { ShellParts } from './ui/shell';
 import { icon } from './ui/icons';
+import { emptyPivot, formatPivot, outArea, parseFields, parsePivot, PivotDialog, PivotPanel, type PivotDef } from './ui/pivot';
 import { DATE_PERIODS, describe, parseRule, PRESETS, rangeText, ruleLine, withStop } from './ui/rules';
 
 interface CsvPreview {
@@ -240,12 +241,16 @@ export class App {
         if (document.activeElement !== p.formulaBar) p.formulaBar.value = text;
         this.formatBar();
         this.linkChip();
+        this.pivotFollow(range);
       },
       onHistory: (undo, redo) => {
         this.button('edit.undo').disabled = !undo;
         this.button('edit.redo').disabled = !redo;
       },
-      onChanged: (changes) => this.queueSave(changes),
+      onChanged: (changes) => {
+        this.queueSave(changes);
+        this.pivotAuto(changes);
+      },
       onSheet: (sheet) => {
         this.markTab(sheet);
         queueMicrotask(() => this.zoomLabel());
@@ -265,7 +270,10 @@ export class App {
       onInvalid: (rule) => this.invalidBox(rule),
       onRule: (rule, at) => this.showPrompt(rule, at),
       onList: () => void this.dropList(),
-      onTables: (lines) => this.sendTables(lines),
+      onTables: (lines) => {
+        this.sendTables(lines);
+        void this.pivotSync();
+      },
       onTableKey: () => void runCommand('table.create'),
       onLinks: (changes) => this.sendLinks(changes),
       onOpenLink: () => void this.grid.linkTarget().then((t) => this.followLink(t)),
@@ -379,6 +387,10 @@ export class App {
     cmd('data.sort', 'Custom sort', 'Sort by several columns, each A to Z or Z to A, with or without a header row.', true, () => this.sortBox());
     cmd('data.filter', 'Filter', 'Add filter buttons to the header row of the data around the active cell, or take them off.', true, () => this.toggleFilter(), 'Mod+Shift+L');
     cmd('table.create', 'Table', 'Turn the data around the active cell into a table with a header row, banded rows and filter buttons, or change the table the active cell is in.', true, () => (g.activeTable() ? this.designBox() : this.tableBox()), 'Mod+T');
+    cmd('pivot.create', 'PivotTable', 'Summarize the data around the active cell in a PivotTable on a new sheet or a chosen cell, with recommended layouts to start from. Inside a PivotTable this opens its fields panel instead.', true, () => this.pivotBox());
+    cmd('pivot.fields', 'PivotTable fields', 'Choose which fields of the PivotTable under the active cell go in Rows, Columns, Values and Filters, how values are summarized and shown, and add calculated fields.', false, () => this.pivotFields());
+    cmd('pivot.refresh', 'Refresh PivotTable', 'Recompute the PivotTable under the active cell from its current source data, or every PivotTable when the active cell is not in one.', true, () => this.pivotRefresh(false));
+    cmd('pivot.refresh-all', 'Refresh all PivotTables', 'Recompute every PivotTable in the workbook from its current source data.', true, () => this.pivotRefresh(true));
     cmd('data.validation', 'Data validation', 'Limit what can be typed in the selected cells, offer a dropdown list, show a message when a cell is selected and an alert when a value is not allowed.', true, () => this.validBox());
     cmd('data.filter-clear', 'Clear filter', 'Show every row again and keep the filter buttons.', true, () => this.filterWith(null));
     cmd('data.filter-reapply', 'Reapply filter', 'Run the filter again over the current values, taking in rows added below it.', true, () => g.reapplyFilter());
@@ -1277,7 +1289,7 @@ export class App {
   private async openWorkbook(id: string, setHash = true): Promise<void> {
     this.flush();
     await this.saving;
-    let doc: WorkbookMeta & { cells: [number, number, string][][]; formats?: [number, number, string][][]; styles?: [number, number, string][][]; merges?: Area[][]; rules?: string[][]; filters?: string[]; validations?: string[][]; tables?: string[]; links?: [number, number, string][][]; theme?: string; cellStyles?: string[]; views?: SheetView[]; names?: Name[] };
+    let doc: WorkbookMeta & { cells: [number, number, string][][]; formats?: [number, number, string][][]; styles?: [number, number, string][][]; merges?: Area[][]; rules?: string[][]; filters?: string[]; validations?: string[][]; tables?: string[]; pivots?: string[]; links?: [number, number, string][][]; theme?: string; cellStyles?: string[]; views?: SheetView[]; names?: Name[] };
     try {
       doc = await api('GET', `/api/workbooks/${id}`);
     } catch {
@@ -1302,6 +1314,9 @@ export class App {
     }
     for (const [n, f] of doc.names ?? []) await e.defineName(book, n, f).catch(() => []);
     await e.loadTables(book, doc.tables ?? []);
+    await e.loadPivots(book, doc.pivots ?? []);
+    this.pivotLines = doc.pivots ?? [];
+    this.pivotPanel?.hide();
     const names = doc.names?.length ? await e.names(book) : [];
     this.open = { id, book, title: doc.title, sheets: doc.sheets, views: doc.sheets.map((_, i) => doc.views?.[i] ?? {}), names, macros: !!doc.macros };
     const p = this.p;
@@ -1625,6 +1640,196 @@ export class App {
         this.p.save.title = err instanceof Error ? err.message : '';
       }
     });
+  }
+
+  private pivotLines: string[] = [];
+  private pivotPanel: PivotPanel | null = null;
+  private pivotForm: PivotDialog | null = null;
+  private pivotBusy = false;
+  private pivotTimer = 0;
+
+  private pivotDefs(): PivotDef[] {
+    return this.pivotLines.map(parsePivot).filter((d): d is PivotDef => !!d);
+  }
+
+  private pivotAt(sheet: number, r: number, c: number): PivotDef | null {
+    return this.pivotDefs().find((d) => {
+      const o = outArea(d);
+      return !!o && o.sheet === sheet && r >= o.area[0] && r <= o.area[2] && c >= o.area[1] && c <= o.area[3];
+    }) ?? null;
+  }
+
+  private sendPivots(lines: string[]): void {
+    const o = this.open;
+    if (!o) return;
+    this.status('Saving');
+    this.saving = this.saving.then(async () => {
+      try {
+        await api('PUT', `/api/workbooks/${o.id}/pivots`, { lines });
+        if (!this.pending.size) this.status('Saved');
+      } catch (err) {
+        this.status('Not saved', true);
+        this.p.save.title = err instanceof Error ? err.message : '';
+      }
+    });
+  }
+
+  private async pivotSync(): Promise<void> {
+    const o = this.open;
+    if (!o) return;
+    const lines = await engine().pivots(o.book);
+    if (lines.join('\n') === this.pivotLines.join('\n')) return;
+    this.pivotLines = lines;
+    this.sendPivots(lines);
+    const p = this.pivotPanel;
+    if (p && !p.el.hidden) {
+      const d = this.pivotDefs().find((x) => x.name === p.name);
+      if (d) p.sync(d);
+      else p.hide();
+    }
+  }
+
+  private async pivotApply(run: (book: number) => Promise<Effect>): Promise<void> {
+    const o = this.open;
+    if (!o) return;
+    this.pivotBusy = true;
+    try {
+      await this.grid.applyPivot(await run(o.book));
+    } finally {
+      this.pivotBusy = false;
+    }
+    await this.pivotSync();
+  }
+
+  private pivotAuto(changes: Changed[]): void {
+    if (this.pivotBusy || !this.pivotLines.length) return;
+    const hit = this.pivotDefs().some((d) => {
+      if (!d.flags.includes('a')) return false;
+      const out = outArea(d);
+      return changes.some((c) => c[0] === d.srcSheet && !(out && out.sheet === c[0] && c[1] >= out.area[0] && c[1] <= out.area[2] && c[2] >= out.area[1] && c[2] <= out.area[3]));
+    });
+    if (!hit) return;
+    window.clearTimeout(this.pivotTimer);
+    this.pivotTimer = window.setTimeout(() => void this.pivotAutoRun(), 350);
+  }
+
+  private async pivotAutoRun(): Promise<void> {
+    const o = this.open;
+    if (!o) return;
+    const e = engine();
+    const mark = await e.undoMark(o.book);
+    for (const d of this.pivotDefs().filter((x) => x.flags.includes('a'))) {
+      try {
+        await this.pivotApply((book) => e.refreshPivot(book, d.name));
+      } catch {
+        continue;
+      }
+    }
+    if (mark > 0 && (await e.undoMark(o.book)) > mark) await e.undoGroup(o.book, mark - 1);
+  }
+
+  private pivotFollow(range: Range): void {
+    const p = this.pivotPanel;
+    if (!p || p.el.hidden || !this.pivotLines.length) return;
+    const d = this.pivotAt(this.grid.sheetIndex, range.r0, range.c0);
+    if (d && d.name !== p.name) void this.pivotShow(d);
+  }
+
+  private async pivotShow(d: PivotDef): Promise<void> {
+    const o = this.open;
+    if (!o) return;
+    let p = this.pivotPanel;
+    if (!p) {
+      p = this.pivotPanel = new PivotPanel({
+        change: (def) => this.pivotApply((book) => engine().setPivot(book, def.name, formatPivot(def))),
+        refresh: (name) => this.pivotApply((book) => engine().refreshPivot(book, name)),
+        remove: async (name) => {
+          await this.pivotApply((book) => engine().removePivot(book, name));
+          this.pivotPanel?.hide();
+        },
+        items: (name, field) => engine().pivotItems(this.open?.book ?? -1, name, field),
+        close: () => {
+          this.pivotPanel?.hide();
+          this.grid.focus();
+        },
+      });
+      document.getElementById('overlay-root')!.appendChild(p.el);
+    }
+    const f = parseFields(await engine().pivotFields(o.book, d.name));
+    p.show(d, f.fields);
+  }
+
+  private pivotFields(): void {
+    const s = this.grid.selection();
+    const here = this.pivotAt(this.grid.sheetIndex, s.r0, s.c0);
+    const d = here ?? (this.pivotDefs().filter((x) => outArea(x)?.sheet === this.grid.sheetIndex).length === 1 ? this.pivotDefs().find((x) => outArea(x)?.sheet === this.grid.sheetIndex) ?? null : null);
+    if (!d) {
+      this.status('Select a cell inside a PivotTable first');
+      return;
+    }
+    void this.pivotShow(d);
+  }
+
+  private async pivotRefresh(all: boolean): Promise<void> {
+    const s = this.grid.selection();
+    const here = all ? null : this.pivotAt(this.grid.sheetIndex, s.r0, s.c0);
+    if (!this.pivotLines.length) {
+      this.status('There are no PivotTables to refresh');
+      return;
+    }
+    await this.pivotApply((book) => engine().refreshPivot(book, here?.name ?? ''));
+  }
+
+  private async pivotBox(): Promise<void> {
+    const o = this.open;
+    if (!o) return;
+    const s = this.grid.selection();
+    const here = this.pivotAt(this.grid.sheetIndex, s.r0, s.c0);
+    if (here) {
+      await this.pivotShow(here);
+      return;
+    }
+    const f = this.pivotForm ??= new PivotDialog({
+      create: (src, dest, layout) => this.pivotCreate(src, dest, layout),
+      suggest: (src) => engine().pivotSuggest(this.open?.book ?? -1, this.grid.sheetIndex, src),
+    }, () => this.grid.focus());
+    const t = this.grid.activeTable();
+    const { range } = await this.grid.sortTarget();
+    const prefix = sheetPrefix(o.sheets[this.grid.sheetIndex] ?? '');
+    const src = t ? t.name : `${prefix}${colName(range.c0)}${range.r0 + 1}:${colName(range.c1)}${range.r1 + 1}`;
+    f.open(src, `${prefix}${colName(range.c1 + 2)}${range.r0 + 1}`);
+  }
+
+  private async pivotCreate(src: string, dest: string | null, layout: string | null): Promise<void> {
+    const o = this.open;
+    if (!o) throw new Error('Open a workbook first.');
+    const e = engine();
+    const fields = parseFields(await e.pivotSource(o.book, this.grid.sheetIndex, src));
+    let sheet = this.grid.sheetIndex;
+    let row = 2;
+    let col = 0;
+    if (dest !== null) {
+      const bang = dest.lastIndexOf('!');
+      const name = bang < 0 ? null : dest.slice(0, bang).replace(/^'|'$/g, '').replace(/''/g, "'");
+      const at = parseRef(dest.slice(bang + 1).replace(/\$/g, ''));
+      if (!at) throw new Error('Type a cell such as H2 for the PivotTable to start in.');
+      if (name !== null) {
+        sheet = o.sheets.indexOf(name);
+        if (sheet < 0) throw new Error(`There is no sheet called ${name}.`);
+      }
+      row = at.r0;
+      col = at.c0;
+    } else {
+      await this.addSheet();
+      sheet = o.sheets.length - 1;
+    }
+    if (sheet !== this.grid.sheetIndex) this.showSheet(sheet);
+    const base = (layout ? parsePivot(layout) : null) ?? emptyPivot(fields, sheet, row, col);
+    const def = { ...base, sheet, row, col, name: '', out: '', flags: base.flags || 'rcsa' };
+    await this.pivotApply((book) => e.createPivot(book, formatPivot(def)));
+    this.grid.select(row, col);
+    const made = this.pivotDefs().find((d) => d.sheet === sheet && d.row === row && d.col === col);
+    if (made) await this.pivotShow(made);
   }
 
   private sendValid(sheet: number, lines: string[]): void {

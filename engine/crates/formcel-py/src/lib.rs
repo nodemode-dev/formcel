@@ -285,6 +285,18 @@ impl Workbook {
         self.inner.create_table(sheet, area, header).map(|_| ()).map_err(|e| PyValueError::new_err(e.to_string()))
     }
 
+    fn pivots(&self) -> Vec<String> {
+        self.inner.pivots()
+    }
+
+    fn load_pivots(&mut self, lines: Vec<String>) -> usize {
+        self.inner.load_pivots(&lines)
+    }
+
+    fn refresh_pivot(&mut self, name: &str) -> PyResult<()> {
+        self.inner.refresh_pivot(name).map(|_| ()).map_err(|e| PyValueError::new_err(e.to_string()))
+    }
+
     fn set_table(&mut self, name: &str, line: &str) -> PyResult<()> {
         self.inner.set_table(name, line).map(|_| ()).map_err(|e| PyValueError::new_err(e.to_string()))
     }

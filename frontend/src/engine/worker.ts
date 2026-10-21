@@ -50,6 +50,17 @@ interface Exports {
   fc_create_table(book: number, sheet: number, r0: number, c0: number, r1: number, c1: number, header: number): number;
   fc_set_table(book: number, name: number, nameLen: number, t: number, len: number): number;
   fc_remove_table(book: number, name: number, len: number): number;
+  fc_pivot_error(): number;
+  fc_pivots(book: number): number;
+  fc_load_pivots(book: number, lines: number, len: number): number;
+  fc_pivot_source(book: number, sheet: number, src: number, len: number): number;
+  fc_pivot_fields(book: number, name: number, len: number): number;
+  fc_pivot_items(book: number, name: number, nameLen: number, field: number, fieldLen: number): number;
+  fc_pivot_suggest(book: number, sheet: number, src: number, len: number): number;
+  fc_create_pivot(book: number, line: number, len: number): number;
+  fc_set_pivot(book: number, name: number, nameLen: number, line: number, len: number): number;
+  fc_refresh_pivot(book: number, name: number, len: number): number;
+  fc_remove_pivot(book: number, name: number, len: number): number;
   fc_validations(book: number, sheet: number): number;
   fc_load_validations(book: number, sheet: number, lines: number, len: number): number;
   fc_set_validation(book: number, sheet: number, r0: number, c0: number, r1: number, c1: number, t: number, len: number): number;
@@ -160,6 +171,11 @@ const ready: Promise<Exports> = WebAssembly.instantiateStreaming(fetch('/engine/
 function out(x: Exports, len: number): string {
   if (len < 0) throw new Error('The engine refused that cell address or sheet.');
   return dec.decode(new Uint8Array(x.memory.buffer, x.fc_out_ptr(), len));
+}
+
+function pivotOut(x: Exports, len: number): string {
+  if (len === -3) throw new Error(out(x, x.fc_pivot_error()) || 'That PivotTable is not allowed.');
+  return out(x, len);
 }
 
 function withStrings<T>(x: Exports, parts: string[], fn: (args: number[]) => T): T {
@@ -332,6 +348,26 @@ function run(x: Exports, req: Request): Value {
       });
     case 'table.remove':
       return withStrings(x, [req.name], ([p, l]) => effect(out(x, x.fc_remove_table(req.book, p, l))));
+    case 'pivot.list':
+      return out(x, x.fc_pivots(req.book)).split('\n').filter(Boolean);
+    case 'pivot.load':
+      return withStrings(x, [req.lines.join('\n')], ([p, l]) => ok(x.fc_load_pivots(req.book, p, l), 'The engine refused those PivotTables.'));
+    case 'pivot.source':
+      return withStrings(x, [req.src], ([p, l]) => pivotOut(x, x.fc_pivot_source(req.book, req.sheet, p, l)));
+    case 'pivot.fields':
+      return withStrings(x, [req.name], ([p, l]) => pivotOut(x, x.fc_pivot_fields(req.book, p, l)));
+    case 'pivot.items':
+      return withStrings(x, [req.name, req.field], ([p, l, q, m]) => pivotOut(x, x.fc_pivot_items(req.book, p, l, q, m)).split('\n').filter(Boolean).map(unescape));
+    case 'pivot.suggest':
+      return withStrings(x, [req.src], ([p, l]) => pivotOut(x, x.fc_pivot_suggest(req.book, req.sheet, p, l)).split('\n').filter(Boolean));
+    case 'pivot.create':
+      return withStrings(x, [req.line], ([p, l]) => effect(pivotOut(x, x.fc_create_pivot(req.book, p, l))));
+    case 'pivot.set':
+      return withStrings(x, [req.name, req.line], ([p, l, q, m]) => effect(pivotOut(x, x.fc_set_pivot(req.book, p, l, q, m))));
+    case 'pivot.refresh':
+      return withStrings(x, [req.name], ([p, l]) => effect(pivotOut(x, x.fc_refresh_pivot(req.book, p, l))));
+    case 'pivot.remove':
+      return withStrings(x, [req.name], ([p, l]) => effect(pivotOut(x, x.fc_remove_pivot(req.book, p, l))));
     case 'valid.list':
       return out(x, x.fc_validations(req.book, req.sheet)).split('\n').filter(Boolean);
     case 'valid.load':

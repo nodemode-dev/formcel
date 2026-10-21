@@ -337,3 +337,10 @@ The .fcel file keeps each sheet's rules under `validations`; GET returns them as
 - logged: v0.33.0 · 2026-10-21
 
 Tables are workbook-wide in the .fcel file (`tables`, the engine's lines) and PUT /api/workbooks/{id}/tables stores the window's. In .xlsx each table is a table part: displayName and ref, headerRowCount, totalsRowCount, tableStyleInfo with its four stripes and column options, one tableColumn per column with calculatedColumnFormula and, in the total row, totalsRowLabel or a custom totalsRowFormula. Formulas with structured references are written in the long qualified form (`Table1[[#This Row],[Qty]]`) from the engine's `file_formula`. A sheet filter over the table's header and data rows is written as the table's own autoFilter, since a sheet autoFilter on the same range is not valid; on reading, a table's autoFilter becomes the sheet filter when the sheet has none. Tables without a header row and table styles FormCel does not draw come in with a note. LibreOffice 24.2 opens a written table and computes `SUBTOTAL(109,Table1[Total])` and the calculated column. .ods has no tables here: formulas with structured references are written with plain absolute references (`plain_formula`).
+
+### PivotTables in files
+- refers-to: app/services/store.py :: set_pivots, _write, _load, get; app/routers/workbooks.py :: set_pivots; PUT /api/workbooks/{id}/pivots
+- kind: explainer
+- logged: v0.34.0 · 2026-10-21
+
+PivotTable definitions are workbook-wide in the .fcel file (`pivots`, the engine's lines, one per PivotTable) and PUT /api/workbooks/{id}/pivots stores the window's. The cells a PivotTable drew are ordinary cells, with the formatting the engine gave them, so they are saved by the usual cell routes. In .xlsx the PivotTable is written as plain values with that formatting (bold header band, bold totals, percent formats); no pivot cache or pivot table part is written, so Excel shows the numbers but not a PivotTable. Importing an .xlsx with PivotTables brings their cells in as plain values the same way. This is the first step: a real pivotCacheDefinition and pivotTableDefinition part is not written.

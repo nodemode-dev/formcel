@@ -52,6 +52,8 @@ export const icons = {
   sort: svg('<path d="M4 6h10M4 11h7M4 16h4M17 4v16M14 7l3-3 3 3M14 17l3 3 3-3"/>'),
   filter: svg('<path d="M4 5h16l-6 7.5V19l-4-1.5v-5z"/>'),
   table: svg('<rect x="3.5" y="4.5" width="17" height="15" rx="2"/><path d="M3.5 9.5h17M3.5 14.5h17M9.5 9.5v10"/><path d="M3.5 7h17" stroke-width="3.5"/>'),
+  pivot: svg('<rect x="3.5" y="4.5" width="17" height="15" rx="2"/><path d="M3.5 10h17M10 4.5v15"/><path d="M13 13.5h4.5M13 16.5h4.5"/><path d="M5.5 13l2 2 2-2"/>'),
+  refresh: svg('<path d="M19.5 12a7.5 7.5 0 1 1-2.2-5.3M19.5 4.5v4h-4"/>'),
   validation: svg('<rect x="3.5" y="4.5" width="17" height="15" rx="2"/><path d="M7.5 12l3 3 6-6"/>'),
   download: svg('<path d="M12 4v11M7.5 10.5L12 15l4.5-4.5M5 19.5h14"/>'),
   upload: svg('<path d="M12 15V4M7.5 8.5L12 4l4.5 4.5M5 19.5h14"/>'),

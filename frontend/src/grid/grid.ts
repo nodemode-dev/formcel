@@ -758,6 +758,10 @@ export class Grid {
     await this.applyEffect(await this.engine.createTable(this.book, this.sheet, range.r0, range.c0, range.r1, range.c1, header));
   }
 
+  async applyPivot(e: Effect): Promise<void> {
+    await this.applyEffect(e);
+  }
+
   async setTable(name: string, line: string): Promise<void> {
     await this.applyEffect(await this.engine.setTable(this.book, name, line));
   }
