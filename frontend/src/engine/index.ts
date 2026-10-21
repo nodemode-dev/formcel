@@ -230,6 +230,10 @@ export class EngineClient {
     return (await this.call({ op: 'values.read', book, sheet, r0, c0, r1, c1 })) as Edit[];
   }
 
+  async formatNumbers(code: string, nums: number[]): Promise<string[]> {
+    return (await this.call({ op: 'format.numbers', code, nums })) as string[];
+  }
+
   async linkAt(book: number, sheet: number, row: number, col: number): Promise<string> {
     return (await this.call({ op: 'link.at', book, sheet, row, col })) as string;
   }

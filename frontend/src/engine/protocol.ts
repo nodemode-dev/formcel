@@ -36,6 +36,7 @@ export type Request =
   | { id: number; op: 'style.delete'; book: number; name: string }
   | { id: number; op: 'style.apply'; book: number; sheet: number; r0: number; c0: number; r1: number; c1: number; name: string }
   | { id: number; op: 'values.read'; book: number; sheet: number; r0: number; c0: number; r1: number; c1: number }
+  | { id: number; op: 'format.numbers'; code: string; nums: number[] }
   | { id: number; op: 'rules.get'; book: number; sheet: number }
   | { id: number; op: 'rules.set' | 'rules.load'; book: number; sheet: number; lines: string[] }
   | { id: number; op: 'table.list'; book: number }

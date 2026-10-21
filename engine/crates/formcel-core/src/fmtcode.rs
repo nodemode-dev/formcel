@@ -624,3 +624,15 @@ impl Code {
 pub fn text(v: &Value, code: &str) -> Option<String> {
     parse(code)?.render(v).map(|r| r.0)
 }
+
+pub fn render_numbers(code: &str, nums: &[f64]) -> Vec<String> {
+    let parsed = parse(code);
+    nums.iter()
+        .map(|&n| {
+            parsed
+                .as_ref()
+                .and_then(|c| c.render(&Value::Number(n)))
+                .map_or_else(|| general(n), |r| r.0)
+        })
+        .collect()
+}

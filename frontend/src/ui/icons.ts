@@ -52,6 +52,8 @@ export const icons = {
   sort: svg('<path d="M4 6h10M4 11h7M4 16h4M17 4v16M14 7l3-3 3 3M14 17l3 3 3-3"/>'),
   filter: svg('<path d="M4 5h16l-6 7.5V19l-4-1.5v-5z"/>'),
   chart: svg('<path d="M4.5 4.5v15h15"/><rect x="8" y="11" width="2.6" height="5.5" rx=".5"/><rect x="12" y="7.5" width="2.6" height="9" rx=".5"/><rect x="16" y="13" width="2.6" height="3.5" rx=".5"/>'),
+  chartRecommended: svg('<rect x="3.5" y="4.5" width="7" height="6" rx="1"/><rect x="13.5" y="4.5" width="7" height="6" rx="1"/><rect x="3.5" y="13.5" width="7" height="6" rx="1"/><path d="M15 17.5l2 2 3.5-4"/>'),
+  pivotChart: svg('<path d="M4.5 4.5v15h15"/><path d="M8 15l3.5-4 3 2.5L19 8"/><path d="M5.5 9h5"/>'),
   picture: svg('<rect x="3.5" y="4.5" width="17" height="15" rx="2"/><circle cx="9" cy="10" r="1.6"/><path d="M4 18l5.5-5 3.5 3 2.5-2.5L20 17"/>'),
   sparkline: svg('<rect x="3.5" y="6.5" width="17" height="11" rx="1.5"/><path d="M6 14.5l3-3 2.5 2 3-4.5 2.5 2"/>'),
   cellPicture: svg('<rect x="3.5" y="4.5" width="17" height="15" rx="2"/><rect x="7.5" y="8.5" width="9" height="7" rx="1"/><circle cx="10.5" cy="11" r="1"/><path d="M8 15l3-2.5 2 1.5 3.5-2"/>'),

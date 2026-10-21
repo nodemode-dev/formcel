@@ -1,13 +1,14 @@
 import type { EngineClient } from '../engine';
-import { build, parseRangeText, readMatrix, recommend } from './data';
-import { renderChart } from './svg';
-import { CHART_TYPES, blankChart, type ChartSpec, type ChartType, type Legend } from './types';
+import { build, parseRangeText, readMatrix, recommendRanked } from './data';
+import { renderChart, renderChartAsync } from './svg';
+import { CHART_TYPES, ERR_KINDS, PALETTE, TREND_KINDS, blankChart, type ChartData, type ChartSpec, type ChartType, type ErrKind, type Legend, type TrendKind } from './types';
 
 export interface EditorContext {
   eng: EngineClient;
   book(): number;
   sheet(): number;
   sheetNames(): string[];
+  pivotData?(name: string): Promise<ChartData | null>;
 }
 
 const LEGENDS: [Legend, string][] = [['right', 'Right'], ['bottom', 'Bottom'], ['top', 'Top'], ['left', 'Left'], ['none', 'None']];
@@ -17,7 +18,12 @@ export class ChartEditor {
   private done: ((s: ChartSpec | null) => void) | null = null;
   private timer = 0;
   private lastPreview = '';
+  private lastRecs = '';
+  private lastSeries = '';
   private seq = 0;
+  private base: ChartSpec = blankChart('column', '');
+  private preset: (string | undefined)[] = [];
+  private wantSeries: string[] = ['-1', '-1'];
 
   constructor(private readonly ctx: EditorContext, private readonly focus: () => void) {
     const form = document.createElement('form');
@@ -28,11 +34,13 @@ export class ChartEditor {
     const groups = [...new Set(CHART_TYPES.map((t) => t.group))];
     const types = groups.map((g) => `<optgroup label="${g}">${CHART_TYPES.filter((t) => t.group === g).map((t) => `<option value="${t.id}">${t.label}</option>`).join('')}</optgroup>`).join('');
     const legends = LEGENDS.map(([v, l]) => `<option value="${v}">${l}</option>`).join('');
+    const trendKinds = `<option value="">None</option>${TREND_KINDS.map(([v, l]) => `<option value="${v}">${l}</option>`).join('')}`;
+    const errKinds = `<option value="">None</option>${ERR_KINDS.map(([v, l]) => `<option value="${v}">${l}</option>`).join('')}`;
     form.innerHTML = `<span class="fc-fmt-title">Chart editor</span>
 <div class="fc-chart-grid">
 <div class="fc-chart-fields">
 <label class="fc-fmt-label">Chart type<select class="fc-fmt-input" data-k="type">${types}</select></label>
-<div class="fc-chart-rec" data-k="rec"></div>
+<details class="fc-chart-sec" data-k="recbox" open><summary>Recommended charts</summary><div class="fc-chart-recs" data-k="rec" role="group" aria-label="Recommended charts"></div></details>
 <label class="fc-fmt-label">Data range<input class="fc-fmt-input" data-k="range" spellcheck="false" autocomplete="off" placeholder="A1:C10"></label>
 <label class="fc-fmt-label">Series are in<select class="fc-fmt-input" data-k="byRows"><option value="cols">Columns</option><option value="rows">Rows</option></select></label>
 <label class="fc-fmt-label">Chart title<input class="fc-fmt-input" data-k="title" autocomplete="off"></label>
@@ -42,7 +50,45 @@ export class ChartEditor {
 <label class="fc-fmt-label">Secondary axis series (combo, for example 2,3)<input class="fc-fmt-input" data-k="secondary" autocomplete="off"></label>
 <label class="fc-fmt-label">Axis minimum (blank for automatic)<input class="fc-fmt-input" data-k="min" inputmode="decimal" autocomplete="off"></label>
 <label class="fc-fmt-label">Axis maximum, or gauge top (blank for automatic)<input class="fc-fmt-input" data-k="max" inputmode="decimal" autocomplete="off"></label>
+<label class="fc-fmt-label">Gauge bands, two thresholds (for example 30,70)<input class="fc-fmt-input" data-k="bands" autocomplete="off" placeholder="30,70"></label>
 <label class="fc-sort-check"><input type="checkbox" data-k="labels"> Data labels</label>
+<label class="fc-fmt-label">Data label number format (for example 0.0% or $#,##0)<input class="fc-fmt-input" data-k="labelFmt" spellcheck="false" autocomplete="off"></label>
+<label class="fc-fmt-label" data-k="binsRow">Histogram bins (blank for automatic)<input class="fc-fmt-input" data-k="bins" inputmode="numeric" autocomplete="off"></label>
+<label class="fc-fmt-label" data-k="totalsRow">Waterfall totals, row numbers (blank for automatic)<input class="fc-fmt-input" data-k="totals" autocomplete="off" placeholder="5,9"></label>
+<details class="fc-chart-sec"><summary>Axes and gridlines</summary>
+<div class="fc-chart-row">
+<label class="fc-fmt-label">Value axis number format<input class="fc-fmt-input" data-k="yFmt" spellcheck="false" autocomplete="off" placeholder="General"></label>
+<label class="fc-fmt-label">Horizontal axis number format<input class="fc-fmt-input" data-k="xFmt" spellcheck="false" autocomplete="off" placeholder="General"></label>
+</div>
+<label class="fc-sort-check"><input type="checkbox" data-k="logY"> Logarithmic value axis</label>
+<label class="fc-sort-check"><input type="checkbox" data-k="grid"> Horizontal gridlines</label>
+<label class="fc-sort-check"><input type="checkbox" data-k="xGrid"> Vertical gridlines</label>
+</details>
+<details class="fc-chart-sec"><summary>Colours and areas</summary>
+<div class="fc-chart-colors" data-k="colors" role="group" aria-label="Series colours"></div>
+<div class="fc-chart-row">
+<label class="fc-fmt-label">Chart area fill<input class="fc-fmt-input" data-k="fill" spellcheck="false" autocomplete="off" placeholder="Automatic, or #f5f5f5"></label>
+<label class="fc-fmt-label">Plot area fill<input class="fc-fmt-input" data-k="plotFill" spellcheck="false" autocomplete="off" placeholder="Automatic, or #ffffff"></label>
+</div>
+</details>
+<details class="fc-chart-sec"><summary>Trendline and error bars</summary>
+<div class="fc-chart-row">
+<label class="fc-fmt-label">Trendline<select class="fc-fmt-input" data-k="trendKind">${trendKinds}</select></label>
+<label class="fc-fmt-label">On<select class="fc-fmt-input" data-k="trendSeries"></select></label>
+</div>
+<div class="fc-chart-row">
+<label class="fc-fmt-label">Polynomial order or average period<input class="fc-fmt-input" data-k="trendN" inputmode="numeric" autocomplete="off" placeholder="2"></label>
+<span class="fc-chart-row"><label class="fc-sort-check"><input type="checkbox" data-k="trendEq"> Equation</label><label class="fc-sort-check"><input type="checkbox" data-k="trendR2"> R squared</label></span>
+</div>
+<div class="fc-chart-row">
+<label class="fc-fmt-label">Error bars<select class="fc-fmt-input" data-k="errKind">${errKinds}</select></label>
+<label class="fc-fmt-label">On<select class="fc-fmt-input" data-k="errSeries"></select></label>
+</div>
+<div class="fc-chart-row">
+<label class="fc-fmt-label">Amount (value, percent or multiples)<input class="fc-fmt-input" data-k="errValue" inputmode="decimal" autocomplete="off" placeholder="1"></label>
+<label class="fc-fmt-label">Direction<select class="fc-fmt-input" data-k="errDir"><option value="both">Both</option><option value="plus">Plus</option><option value="minus">Minus</option></select></label>
+</div>
+</details>
 </div>
 <div class="fc-chart-preview" data-k="preview" aria-label="Preview"></div>
 </div>
@@ -62,13 +108,17 @@ export class ChartEditor {
     form.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') this.close(null);
     });
-    form.addEventListener('input', () => this.queue());
+    form.addEventListener('input', (e) => {
+      const t = e.target as HTMLElement;
+      if (t instanceof HTMLInputElement && t.type === 'color') t.dataset.custom = '1';
+      this.queue();
+    });
     form.addEventListener('change', () => this.queue());
     form.addEventListener('submit', (e) => {
       e.preventDefault();
       const s = this.read();
       const ref = parseRangeText(s.range);
-      if (!ref || (ref.sheet && !this.ctx.sheetNames().includes(ref.sheet))) {
+      if (!s.pivot && (!ref || (ref.sheet && !this.ctx.sheetNames().includes(ref.sheet)))) {
         form.dataset.state = 'error';
         this.q('hint').textContent = 'Type a range such as A1:D10, or Sheet2!A1:D10.';
         return;
@@ -84,7 +134,7 @@ export class ChartEditor {
   private read(): ChartSpec {
     const v = (k: string) => this.q<HTMLInputElement>(k).value;
     const num = (k: string) => (v(k).trim() === '' || !Number.isFinite(Number(v(k))) ? undefined : Number(v(k)));
-    const s = blankChart(v('type') as ChartType, v('range').trim());
+    const s: ChartSpec = { ...this.base, type: v('type') as ChartType, range: this.base.pivot ? '' : v('range').trim() };
     s.byRows = v('byRows') === 'rows';
     s.title = v('title');
     s.xTitle = v('xTitle');
@@ -94,13 +144,65 @@ export class ChartEditor {
     s.secondary = v('secondary').split(/[,\s]+/).map((x) => Number(x) - 1).filter((x) => Number.isInteger(x) && x >= 0);
     s.min = num('min');
     s.max = num('max');
+    const bn = v('bands').split(/[,\s]+/).map(Number).filter((x) => Number.isFinite(x));
+    s.bands = bn.length === 2 && bn[0] < bn[1] ? [bn[0], bn[1]] : undefined;
+    const text = (k: string) => v(k).trim() || undefined;
+    const check = (k: string) => this.q<HTMLInputElement>(k).checked;
+    s.yFmt = text('yFmt');
+    s.xFmt = text('xFmt');
+    s.labelFmt = text('labelFmt');
+    s.fill = text('fill');
+    s.plotFill = text('plotFill');
+    s.logY = check('logY') || undefined;
+    s.grid = check('grid') ? undefined : false;
+    s.xGrid = check('xGrid') || undefined;
+    const bins = num('bins');
+    s.bins = bins && bins > 0 ? Math.round(bins) : undefined;
+    const totals = v('totals').split(/[,\s]+/).map((x) => Number(x) - 1).filter((x) => Number.isInteger(x) && x >= 0);
+    s.totals = totals.length ? totals : undefined;
+    const colors = Array.from(this.form.querySelectorAll<HTMLInputElement>('[data-k="colors"] input')).map((el, i) => (el.dataset.custom === '1' ? el.value : this.preset[i] ?? ''));
+    while (colors.length && !colors[colors.length - 1]) colors.pop();
+    s.colors = colors.length ? colors : undefined;
+    const series = (k: string) => Number(v(k));
+    const tk = v('trendKind') as TrendKind | '';
+    const n = num('trendN');
+    s.trends = tk ? [{ series: series('trendSeries'), kind: tk, order: tk === 'poly' ? Math.max(2, Math.min(6, Math.round(n ?? 2))) : undefined, period: tk === 'mavg' ? Math.max(2, Math.round(n ?? 2)) : undefined, eq: check('trendEq') || undefined, r2: check('trendR2') || undefined }] : undefined;
+    const ek = v('errKind') as ErrKind | '';
+    s.errBars = ek ? [{ series: series('errSeries'), kind: ek, value: num('errValue') ?? 1, dir: v('errDir') as 'both' | 'plus' | 'minus' }] : undefined;
+    const bag = s as unknown as Record<string, unknown>;
+    for (const key of Object.keys(bag)) if (bag[key] === undefined) delete bag[key];
     return s;
   }
 
   open(spec: ChartSpec, title: string): Promise<ChartSpec | null> {
     const set = (k: string, val: string) => (this.q<HTMLInputElement>(k).value = val);
+    this.base = { ...spec };
+    this.preset = spec.colors ? [...spec.colors] : [];
+    this.lastRecs = '';
+    this.lastSeries = '';
     set('type', spec.type);
-    set('range', spec.range);
+    set('range', spec.pivot ? `PivotTable ${spec.pivot}` : spec.range);
+    this.q<HTMLInputElement>('range').disabled = !!spec.pivot;
+    set('yFmt', spec.yFmt ?? '');
+    set('xFmt', spec.xFmt ?? '');
+    set('labelFmt', spec.labelFmt ?? '');
+    set('fill', spec.fill ?? '');
+    set('plotFill', spec.plotFill ?? '');
+    set('bins', spec.bins === undefined ? '' : String(spec.bins));
+    set('totals', (spec.totals ?? []).map((i) => i + 1).join(','));
+    this.q<HTMLInputElement>('logY').checked = !!spec.logY;
+    this.q<HTMLInputElement>('grid').checked = spec.grid !== false;
+    this.q<HTMLInputElement>('xGrid').checked = !!spec.xGrid;
+    const tr = spec.trends?.[0];
+    set('trendKind', tr?.kind ?? '');
+    set('trendN', tr ? String(tr.kind === 'mavg' ? tr.period ?? '' : tr.kind === 'poly' ? tr.order ?? '' : '') : '');
+    this.q<HTMLInputElement>('trendEq').checked = !!tr?.eq;
+    this.q<HTMLInputElement>('trendR2').checked = !!tr?.r2;
+    const eb = spec.errBars?.[0];
+    set('errKind', eb?.kind ?? '');
+    set('errValue', eb ? String(eb.value) : '');
+    set('errDir', eb?.dir ?? 'both');
+    this.wantSeries = [tr ? String(tr.series) : '-1', eb ? String(eb.series) : '-1'];
     set('byRows', spec.byRows ? 'rows' : 'cols');
     set('title', spec.title);
     set('xTitle', spec.xTitle);
@@ -109,6 +211,7 @@ export class ChartEditor {
     set('secondary', spec.secondary.map((i) => i + 1).join(','));
     set('min', spec.min === undefined ? '' : String(spec.min));
     set('max', spec.max === undefined ? '' : String(spec.max));
+    set('bands', spec.bands ? spec.bands.join(',') : '');
     this.q<HTMLInputElement>('labels').checked = spec.labels;
     this.q('hint').textContent = '';
     this.form.dataset.state = '';
@@ -137,25 +240,81 @@ export class ChartEditor {
   private async preview(): Promise<void> {
     const seq = ++this.seq;
     const s = this.read();
-    const ref = parseRangeText(s.range);
     const box = this.q<HTMLElement>('preview');
-    const rec = this.q<HTMLElement>('rec');
     let html = '<div class="fc-chart-empty">Type a data range to see the chart.</div>';
-    let recHtml = '';
-    if (ref) {
-      const sheet = ref.sheet ? this.ctx.sheetNames().indexOf(ref.sheet) : this.ctx.sheet();
-      if (sheet >= 0) {
-        const m = await readMatrix(this.ctx.eng, this.ctx.book(), sheet, ref.range);
-        if (seq !== this.seq) return;
-        html = renderChart(s, build(m, s.byRows, s.type), 360, 260);
-        const label = (id: string) => CHART_TYPES.find((t) => t.id === id)?.label ?? id;
-        recHtml = `<span>Recommended</span>${recommend(s.byRows ? m[0].map((_, j) => m.map((r) => r[j])) : m).map((id) => `<button type="button" class="fc-btn" data-rec="${id}">${label(id)}</button>`).join('')}`;
+    let data: ChartData | null = null;
+    let ranked: { type: ChartType; why: string; svg: string }[] = [];
+    if (s.pivot) {
+      data = (await this.ctx.pivotData?.(s.pivot)) ?? null;
+      if (seq !== this.seq) return;
+      html = data ? await renderChartAsync(this.ctx.eng, s, data, 360, 260) : '<div class="fc-chart-empty">The PivotTable has no values to chart yet.</div>';
+    } else {
+      const ref = parseRangeText(s.range);
+      if (ref) {
+        const sheet = ref.sheet ? this.ctx.sheetNames().indexOf(ref.sheet) : this.ctx.sheet();
+        if (sheet >= 0) {
+          const m = await readMatrix(this.ctx.eng, this.ctx.book(), sheet, ref.range);
+          if (seq !== this.seq) return;
+          data = build(m, s.byRows, s.type);
+          html = await renderChartAsync(this.ctx.eng, s, data, 360, 260);
+          const oriented = s.byRows ? m[0].map((_, j) => m.map((r) => r[j])) : m;
+          ranked = recommendRanked(oriented).map((r) => ({ ...r, svg: renderChart({ ...blankChart(r.type, ''), legend: 'none' }, build(m, s.byRows, r.type), 112, 84) }));
+        }
       }
     }
+    if (seq !== this.seq) return;
     if (html !== this.lastPreview) {
       this.lastPreview = html;
       box.innerHTML = html;
     }
-    if (rec.innerHTML !== recHtml) rec.innerHTML = recHtml;
+    this.recs(ranked, s.type);
+    this.syncSeries(data, s.type);
+    this.q<HTMLElement>('binsRow').hidden = s.type !== 'histogram';
+    this.q<HTMLElement>('totalsRow').hidden = s.type !== 'waterfall';
+  }
+
+  private recs(ranked: { type: ChartType; why: string; svg: string }[], current: ChartType): void {
+    const rec = this.q<HTMLElement>('rec');
+    const key = ranked.map((r) => `${r.type}|${r.svg.length}`).join(',');
+    if (key !== this.lastRecs) {
+      this.lastRecs = key;
+      const label = (id: string) => CHART_TYPES.find((t) => t.id === id)?.label ?? id;
+      rec.innerHTML = ranked.length
+        ? ranked.map((r) => `<button type="button" data-rec="${r.type}" title="${r.why}" aria-pressed="false">${r.svg}<span>${label(r.type)}</span></button>`).join('')
+        : '';
+    }
+    rec.querySelectorAll<HTMLElement>('[data-rec]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.rec === current)));
+  }
+
+  private syncSeries(d: ChartData | null, type: ChartType): void {
+    const names = d ? d.series.map((x) => x.name) : [];
+    const pointy = ['pie', 'doughnut', 'funnel', 'treemap', 'sunburst'].includes(type);
+    const items = pointy && d ? d.cats : names;
+    const key = `${names.join('\u0001')}\u0002${pointy ? items.join('\u0001') : ''}`;
+    if (key === this.lastSeries) return;
+    const first = this.lastSeries === '';
+    this.lastSeries = key;
+    const picks = ['trendSeries', 'errSeries'];
+    picks.forEach((k, n) => {
+      const el = this.q<HTMLSelectElement>(k);
+      const prev = first ? this.wantSeries[n] : el.value;
+      el.replaceChildren(new Option('All series', '-1'), ...names.map((nm, i) => new Option(nm, String(i))));
+      el.value = Array.from(el.options).some((o) => o.value === prev) ? prev : '-1';
+    });
+    const box = this.q<HTMLElement>('colors');
+    const have = Array.from(box.querySelectorAll<HTMLInputElement>('input'));
+    have.forEach((el, i) => {
+      if (el.dataset.custom === '1') this.preset[i] = el.value;
+    });
+    box.replaceChildren(
+      ...items.slice(0, 24).map((nm, i) => {
+        const el = document.createElement('input');
+        el.type = 'color';
+        el.value = /^#[0-9a-f]{6}$/i.test(this.preset[i] ?? '') ? (this.preset[i] as string) : PALETTE[i % PALETTE.length];
+        el.title = nm;
+        el.setAttribute('aria-label', `Colour of ${nm}`);
+        return el;
+      }),
+    );
   }
 }

@@ -42,6 +42,7 @@ interface Exports {
   fc_delete_style(book: number, name: number, len: number): number;
   fc_apply_style(book: number, sheet: number, r0: number, c0: number, r1: number, c1: number, name: number, len: number): number;
   fc_values_in(book: number, sheet: number, r0: number, c0: number, r1: number, c1: number): number;
+  fc_format_numbers(code: number, codeLen: number, nums: number, numsLen: number): number;
   fc_rules(book: number, sheet: number): number;
   fc_set_rules(book: number, sheet: number, lines: number, len: number): number;
   fc_load_rules(book: number, sheet: number, lines: number, len: number): number;
@@ -425,6 +426,8 @@ function run(x: Exports, req: Request): Value {
       return lines(out(x, x.fc_eval_steps(req.book, req.sheet, req.row, req.col))).map(([b, c, a]) => [unescape(b ?? ''), unescape(c ?? ''), unescape(a ?? '')] as EvalStep);
     case 'values.read':
       return lines(out(x, x.fc_values_in(req.book, req.sheet, req.r0, req.c0, req.r1, req.c1))).map(([r, c, v]) => [Number(r), Number(c), unescape(v ?? '')] as [number, number, string]);
+    case 'format.numbers':
+      return withStrings(x, [req.code, req.nums.join('\n')], ([c, cl, n, nl]) => out(x, x.fc_format_numbers(c, cl, n, nl)).split('\n'));
     case 'link.at':
       return out(x, x.fc_link_at(req.book, req.sheet, req.row, req.col));
     case 'link.set':
