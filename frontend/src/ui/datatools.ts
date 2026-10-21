@@ -28,6 +28,14 @@ interface Dlg {
   run: ((v: Values, button: string) => Promise<string>) | null;
 }
 
+export interface DocProps {
+  props: Record<string, string>;
+  title: string;
+  created: string;
+  modified: string;
+  stats: { sheets: number; cells: number; formulas: number; names: number; tables: number; notes: number };
+}
+
 export interface DataCtx {
   grid: Grid;
   menu: Menu;
@@ -39,6 +47,8 @@ export interface DataCtx {
   filterValues(col: number): Promise<{ values: string[]; blanks: boolean }>;
   goTo(sheet: number, row: number, col: number): void;
   names(): [string, string][];
+  properties(): Promise<DocProps | null>;
+  saveProperties(props: Record<string, string>): Promise<void>;
   jump(text: string): boolean;
   noteCells(sheet: number): [number, number][];
   pasteNotes(src: { sheet: number; r0: number; c0: number; r1: number; c1: number }, dr: number, dc: number, transpose: boolean): Promise<number>;
@@ -139,6 +149,23 @@ const SPECS: Spec[] = [
       { k: 'op', label: 'Operation', kind: 'select', options: [['none', 'None'], ['add', 'Add'], ['subtract', 'Subtract'], ['multiply', 'Multiply'], ['divide', 'Divide']] },
       { k: 'skip', label: 'Skip blanks', kind: 'check' },
       { k: 'transpose', label: 'Transpose', kind: 'check' },
+    ],
+  },
+  {
+    id: 'docprops',
+    title: 'Document properties',
+    ok: 'Save',
+    width: 440,
+    fields: [
+      { k: 'title', label: 'Title', kind: 'text' },
+      { k: 'subject', label: 'Subject', kind: 'text' },
+      { k: 'author', label: 'Author', kind: 'text' },
+      { k: 'manager', label: 'Manager', kind: 'text' },
+      { k: 'company', label: 'Company', kind: 'text' },
+      { k: 'categories', label: 'Categories', kind: 'text' },
+      { k: 'tags', label: 'Tags (keywords)', kind: 'text' },
+      { k: 'status', label: 'Status', kind: 'text' },
+      { k: 'comments', label: 'Comments', kind: 'area' },
     ],
   },
   {
@@ -591,6 +618,22 @@ export class DataTools {
       await g.pasteSpecial(what as PasteKind, t);
       return '';
     });
+  }
+
+  async docProps(): Promise<void> {
+    const doc = await this.c.properties();
+    if (!doc) return;
+    this.prepare('docprops');
+    for (const k of ['title', 'subject', 'author', 'manager', 'company', 'categories', 'tags', 'status', 'comments']) this.put('docprops', k, doc.props[k] ?? '');
+    this.show('docprops', async (v) => {
+      const out: Record<string, string> = {};
+      for (const [k, val] of Object.entries(v)) out[k] = String(val);
+      await this.c.saveProperties(out);
+      return 'Saved the document properties.';
+    });
+    const s = doc.stats;
+    const when = (t: string) => new Date(t).toLocaleString();
+    this.dlgs.get('docprops')!.hint.textContent = `File ${doc.title}. Created ${when(doc.created)}. Modified ${when(doc.modified)}. ${s.sheets} sheets, ${s.cells} cells, ${s.formulas} formulas, ${s.names} names, ${s.tables} tables, ${s.notes} notes.`;
   }
 
   private goStops: Range[] = [];

@@ -413,6 +413,34 @@ def set_name(wid: str, body: NameIn) -> dict:
         raise HTTPException(422, f"That name could not be saved: {e}")
 
 
+class PropsIn(BaseModel):
+    title: str = ""
+    subject: str = ""
+    author: str = ""
+    tags: str = ""
+    categories: str = ""
+    comments: str = ""
+    company: str = ""
+    manager: str = ""
+    status: str = ""
+
+
+@router.get("/workbooks/{wid}/properties")
+def get_properties(wid: str) -> dict:
+    try:
+        return store().properties(wid)
+    except (KeyError, FileNotFoundError):
+        raise missing(wid)
+
+
+@router.put("/workbooks/{wid}/properties")
+def put_properties(wid: str, body: PropsIn) -> dict:
+    try:
+        return store().set_properties(wid, body.model_dump())
+    except (KeyError, FileNotFoundError):
+        raise missing(wid)
+
+
 def sheet_call(wid: str, *args, **kw) -> dict:
     try:
         return store().sheet_op(wid, *args, **kw)

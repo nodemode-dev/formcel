@@ -7,11 +7,13 @@ from openpyxl.utils import get_column_letter
 from openpyxl.workbook.defined_name import DefinedName
 from openpyxl.worksheet.hyperlink import Hyperlink
 
+from ...version import VERSION
 from .. import page
 from .autofilter import filter_out
 from .cf import rules_out
 from .drawings import objects_out
 from .formulas import to_file
+from .props import app_xml, core_out, patch_app
 from .protect import book_out, notes_out, sheet_out
 from .styles import apply_out
 from .tables import ref_of, tables_out
@@ -31,8 +33,10 @@ def _number(text: str) -> int | float:
     return int(n) if n.is_integer() and abs(n) < 2**53 else n
 
 
-def write(eng, views: list[dict], vba: dict[str, bytes] | None = None, objects: list[list[dict]] | None = None, notes: dict | None = None) -> bytes:
+def write(eng, views: list[dict], vba: dict[str, bytes] | None = None, objects: list[list[dict]] | None = None, notes: dict | None = None, props: dict | None = None, stamps: tuple[str, str] | None = None) -> bytes:
     wb = Workbook()
+    if stamps:
+        core_out(wb, props or {}, *stamps)
     xml, body, heading = theme_out(eng.theme())
     wb.loaded_theme = xml
     wb._fonts[0] = Font(name=body, sz=10)
@@ -151,4 +155,4 @@ def write(eng, views: list[dict], vba: dict[str, bytes] | None = None, objects: 
         wb.vba_archive = zipfile.ZipFile(io.BytesIO(buf.getvalue()))
     out = io.BytesIO()
     wb.save(out)
-    return out.getvalue()
+    return patch_app(out.getvalue(), app_xml(props or {}, eng.sheet_names(), VERSION)) if stamps else out.getvalue()

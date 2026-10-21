@@ -11,7 +11,7 @@ import { listCommands, registerCommand, runCommand } from './ui/commands';
 import { Home, type TemplateMeta, type WorkbookMeta } from './ui/home';
 import { Menu, type MenuItem } from './ui/menu';
 import { Collab, identityHeaders } from './ui/collab';
-import { DataTools } from './ui/datatools';
+import { DataTools, type DocProps } from './ui/datatools';
 import type { ShellParts } from './ui/shell';
 import { icon } from './ui/icons';
 import { emptyPivot, formatPivot, outArea, parseFields, parsePivot, PivotDialog, PivotPanel, type PivotDef } from './ui/pivot';
@@ -362,6 +362,17 @@ export class App {
         return { values: l.values, blanks: l.blanks };
       },
       names: () => this.open?.names ?? [],
+      properties: async () => {
+        const o = this.open;
+        if (!o) return null;
+        this.flush();
+        await this.saving;
+        return api<DocProps>('GET', `/api/workbooks/${o.id}/properties`);
+      },
+      saveProperties: async (props) => {
+        const o = this.open;
+        if (o) await api('PUT', `/api/workbooks/${o.id}/properties`, props);
+      },
       jump: (text) => this.jumpTo(text),
       noteCells: (sheet) => this.collab.noteCells(sheet),
       pasteNotes: (src, dr, dc, t) => this.collab.pasteNotes(src, dr, dc, t),
@@ -581,6 +592,7 @@ export class App {
     cmd('edit.series', 'Fill series', 'Fill the selection with a linear, growth, date or AutoFill series with a step and stop value, or fit a linear or growth trend to the numbers already there.', true, () => T().series());
     cmd('edit.insert-cells', 'Insert cells', 'Insert blank cells in the selection and shift the cells below them down or the cells to their right over.', true, () => this.cellsMenu(true));
     cmd('edit.delete-cells', 'Delete cells', 'Delete the selected cells and shift the cells below up or the cells to the right left.', true, () => this.cellsMenu(false));
+    cmd('file.properties', 'Document properties', 'Edit the title, subject, author, manager, company, categories, tags, status and comments saved with the workbook and written to .xlsx, and see its dates and statistics.', false, () => T().docProps());
     cmd('file.save-template', 'Save as template', 'Save a copy of this workbook in your personal templates.', false, () => this.saveTemplate());
     cmd('sheet.hide', 'Hide sheet', 'Hide the active sheet tab. The sheet and its data stay in the workbook.', true, () => this.hideSheet(this.grid.sheetIndex, true));
     cmd('sheet.ungroup', 'Ungroup sheets', 'Stop editing several sheets together.', false, () => {
@@ -2853,6 +2865,7 @@ export class App {
       { label: 'Paste special options', run: run('edit.paste-ops') },
       { label: auto ? 'AutoComplete: on' : 'AutoComplete: off', run: run('edit.autocomplete') },
       { sep: true },
+      { label: 'Document properties', run: run('file.properties') },
       { label: 'Save as template', run: run('file.save-template') },
     ], () => this.grid.focus());
   }
