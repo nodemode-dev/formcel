@@ -43,6 +43,28 @@ const FILTER_OPS: [string, string][] = [
 
 const fieldEsc = (s: string) => s.replace(/\\/g, '\\\\').replace(/\t/g, '\\t').replace(/\n/g, '\\n').replace(/\r/g, '\\r');
 
+interface ValidForm {
+  form: HTMLFormElement;
+  title: HTMLElement;
+  f: Record<string, HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>;
+  labelA: HTMLElement;
+  labelB: HTMLElement;
+  hint: HTMLElement;
+}
+
+interface AlertForm {
+  form: HTMLFormElement;
+  icon: HTMLElement;
+  title: HTMLElement;
+  text: HTMLElement;
+  buttons: HTMLElement;
+  done: ((c: 'retry' | 'accept' | 'cancel') => void) | null;
+}
+
+const VALID_KINDS: [string, string][] = [['any', 'Any value'], ['whole', 'Whole number'], ['decimal', 'Decimal'], ['list', 'List'], ['date', 'Date'], ['time', 'Time'], ['length', 'Text length'], ['custom', 'Custom']];
+const VALID_OPS: [string, string][] = [['between', 'between'], ['notbetween', 'not between'], ['eq', 'equal to'], ['ne', 'not equal to'], ['gt', 'greater than'], ['lt', 'less than'], ['ge', 'greater than or equal to'], ['le', 'less than or equal to']];
+const ALERT_TEXT = 'The value you entered is not allowed in this cell.';
+
 interface SortForm {
   form: HTMLFormElement;
   title: HTMLElement;
@@ -237,6 +259,10 @@ export class App {
       onFilter: (sheet, text) => this.sendFilter(sheet, text),
       onFilterMenu: (col) => void this.filterBox(col),
       onFilterKey: () => void runCommand('data.filter'),
+      onValid: (sheet, lines) => this.sendValid(sheet, lines),
+      onInvalid: (rule) => this.invalidBox(rule),
+      onRule: (rule, at) => this.showPrompt(rule, at),
+      onList: () => void this.dropList(),
       onLinks: (changes) => this.sendLinks(changes),
       onOpenLink: () => void this.grid.linkTarget().then((t) => this.followLink(t)),
       onLinkBox: () => this.linkBox(),
@@ -348,6 +374,7 @@ export class App {
     cmd('data.sort-desc', 'Sort Z to A', 'Sort the rows of the selection, or the data around the active cell, by the active column, largest first.', true, () => this.sorted(g.quickSort(true)));
     cmd('data.sort', 'Custom sort', 'Sort by several columns, each A to Z or Z to A, with or without a header row.', true, () => this.sortBox());
     cmd('data.filter', 'Filter', 'Add filter buttons to the header row of the data around the active cell, or take them off.', true, () => this.toggleFilter(), 'Mod+Shift+L');
+    cmd('data.validation', 'Data validation', 'Limit what can be typed in the selected cells, offer a dropdown list, show a message when a cell is selected and an alert when a value is not allowed.', true, () => this.validBox());
     cmd('data.filter-clear', 'Clear filter', 'Show every row again and keep the filter buttons.', true, () => this.filterWith(null));
     cmd('data.filter-reapply', 'Reapply filter', 'Run the filter again over the current values, taking in rows added below it.', true, () => g.reapplyFilter());
     cmd('format.merge', 'Merge cells', 'Merge the selected cells into one, or split a merged cell.', true, () => this.mergeMenu());
@@ -571,6 +598,171 @@ export class App {
       });
     });
     return f;
+  }
+
+  private validBox(): void {
+    const v = this.validForm ??= this.makeValidForm();
+    const rule = this.grid.activeRule();
+    const s = this.grid.selection();
+    v.title.textContent = `Data validation for ${colName(s.c0)}${s.r0 + 1}${s.r0 === s.r1 && s.c0 === s.c1 ? '' : `:${colName(s.c1)}${s.r1 + 1}`}`;
+    const [, kind = 'any', op = 'between', a = '', b = '', flags = 'bde', style = 'stop', pt = '', pm = '', et = '', em = ''] = rule ?? [];
+    const f = v.f;
+    f.kind.value = kind;
+    f.op.value = op || 'between';
+    f.a.value = a;
+    f.b.value = b;
+    (f.blank as HTMLInputElement).checked = flags.includes('b');
+    (f.drop as HTMLInputElement).checked = !rule || flags.includes('d');
+    (f.prompt as HTMLInputElement).checked = !rule || flags.includes('p');
+    (f.alert as HTMLInputElement).checked = !rule || flags.includes('e');
+    f.style.value = style;
+    f.pt.value = pt;
+    f.pm.value = pm;
+    f.et.value = et;
+    f.em.value = em;
+    v.hint.textContent = '';
+    v.form.dataset.state = '';
+    this.validTab(v, 'settings');
+    this.validSync(v);
+    v.form.hidden = false;
+    f.kind.focus();
+  }
+
+  private validTab(v: ValidForm, tab: string): void {
+    for (const b of v.form.querySelectorAll<HTMLElement>('[data-tab]')) b.setAttribute('aria-selected', String(b.dataset.tab === tab));
+    for (const p of v.form.querySelectorAll<HTMLElement>('[data-panel]')) p.hidden = p.dataset.panel !== tab;
+  }
+
+  private validSync(v: ValidForm): void {
+    const kind = v.f.kind.value;
+    const op = v.f.op.value;
+    const ranged = !['any', 'list', 'custom'].includes(kind);
+    const two = ranged && (op === 'between' || op === 'notbetween');
+    v.f.op.disabled = !ranged;
+    v.f.a.disabled = kind === 'any';
+    v.f.b.disabled = !two;
+    v.f.drop.disabled = kind !== 'list';
+    const word = kind === 'date' ? ['Start date', 'End date', 'Date'] : kind === 'time' ? ['Start time', 'End time', 'Time'] : kind === 'length' ? ['Minimum length', 'Maximum length', 'Length'] : ['Minimum', 'Maximum', 'Value'];
+    v.labelA.textContent = kind === 'list' ? 'Source (items separated by commas, or a range such as =$E$1:$E$9)' : kind === 'custom' ? 'Formula (TRUE when the value is allowed)' : kind === 'any' ? 'Value' : two ? word[0] : word[2];
+    v.labelB.textContent = word[1];
+  }
+
+  private makeValidForm(): ValidForm {
+    const form = document.createElement('form');
+    form.className = 'fc-fmt-custom fc-pw fc-valid';
+    form.hidden = true;
+    form.setAttribute('role', 'dialog');
+    const opt = (list: [string, string][]) => list.map(([k, l]) => `<option value="${k}">${l}</option>`).join('');
+    form.innerHTML = `<span class="fc-fmt-title"></span><div class="fc-valid-tabs" role="tablist"><button type="button" role="tab" class="fc-btn" data-tab="settings">Settings</button><button type="button" role="tab" class="fc-btn" data-tab="input">Input message</button><button type="button" role="tab" class="fc-btn" data-tab="error">Error alert</button></div>
+<div class="fc-valid-panel" data-panel="settings"><label class="fc-fmt-label">Allow<select class="fc-fmt-input" data-k="kind">${opt(VALID_KINDS)}</select></label><label class="fc-fmt-label">Data<select class="fc-fmt-input" data-k="op">${opt(VALID_OPS)}</select></label><label class="fc-fmt-label"><span class="fc-valid-a"></span><input class="fc-fmt-input" data-k="a" spellcheck="false" autocomplete="off"></label><label class="fc-fmt-label"><span class="fc-valid-b"></span><input class="fc-fmt-input" data-k="b" spellcheck="false" autocomplete="off"></label><label class="fc-sort-check"><input type="checkbox" data-k="blank"> Ignore blank</label><label class="fc-sort-check"><input type="checkbox" data-k="drop"> In-cell dropdown</label></div>
+<div class="fc-valid-panel" data-panel="input" hidden><label class="fc-sort-check"><input type="checkbox" data-k="prompt"> Show input message when cell is selected</label><label class="fc-fmt-label">Title<input class="fc-fmt-input" data-k="pt" maxlength="225" autocomplete="off"></label><label class="fc-fmt-label">Input message<textarea class="fc-fmt-input fc-valid-text" data-k="pm" maxlength="225"></textarea></label></div>
+<div class="fc-valid-panel" data-panel="error" hidden><label class="fc-sort-check"><input type="checkbox" data-k="alert"> Show error alert after invalid data is entered</label><label class="fc-fmt-label">Style<select class="fc-fmt-input" data-k="style"><option value="stop">Stop</option><option value="warning">Warning</option><option value="info">Information</option></select></label><label class="fc-fmt-label">Title<input class="fc-fmt-input" data-k="et" maxlength="225" autocomplete="off"></label><label class="fc-fmt-label">Error message<textarea class="fc-fmt-input fc-valid-text" data-k="em" maxlength="225"></textarea></label></div>
+<span class="fc-fmt-hint" aria-live="polite"></span><div class="fc-csv-actions"><button type="button" class="fc-btn" data-a="clear">Clear all</button><button type="button" class="fc-btn" data-a="cancel">Cancel</button><button type="submit" class="fc-btn fc-btn-primary">OK</button></div>`;
+    document.getElementById('overlay-root')!.appendChild(form);
+    const f: ValidForm['f'] = {};
+    for (const el of form.querySelectorAll<HTMLInputElement>('[data-k]')) f[el.dataset.k!] = el;
+    const v: ValidForm = { form, title: form.querySelector('.fc-fmt-title')!, f, labelA: form.querySelector('.fc-valid-a')!, labelB: form.querySelector('.fc-valid-b')!, hint: form.querySelector('.fc-fmt-hint')! };
+    const close = () => { form.hidden = true; this.grid.focus(); };
+    const fail = (err: unknown) => {
+      form.dataset.state = 'error';
+      v.hint.textContent = err instanceof Error ? err.message : 'Not saved';
+    };
+    form.addEventListener('click', (e) => {
+      const t = (e.target as HTMLElement).closest<HTMLElement>('[data-a], [data-tab]');
+      if (t?.dataset.tab) this.validTab(v, t.dataset.tab);
+      if (t?.dataset.a === 'cancel') close();
+      if (t?.dataset.a === 'clear') void this.grid.setValidation('').then(close, fail);
+    });
+    form.addEventListener('change', () => this.validSync(v));
+    form.addEventListener('keydown', (e) => { if (e.key === 'Escape') close(); });
+    form.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const kind = f.kind.value;
+      const a = f.a.value.trim();
+      if (kind !== 'any' && !a) {
+        form.dataset.state = 'error';
+        v.hint.textContent = kind === 'list' ? 'Enter the items or a range for the list.' : kind === 'custom' ? 'Enter a formula.' : 'Enter a value.';
+        return;
+      }
+      const flags = [['blank', 'b'], ['drop', 'd'], ['prompt', 'p'], ['alert', 'e']].filter(([k]) => (f[k] as HTMLInputElement).checked && !f[k].disabled).map(([, c]) => c).join('');
+      const formula = kind === 'custom' && !a.startsWith('=') ? `=${a}` : a;
+      const parts = [kind, f.op.disabled ? '' : f.op.value, kind === 'any' ? '' : formula, f.b.disabled ? '' : f.b.value.trim(), flags, f.style.value, f.pt.value, f.pm.value, f.et.value, f.em.value];
+      void this.grid.setValidation(parts.map(fieldEsc).join('\t')).then(close, fail);
+    });
+    return v;
+  }
+
+  private invalidBox(rule: string[]): Promise<'retry' | 'accept' | 'cancel'> {
+    const [, , , , , flags = '', style = 'stop', , , et = '', em = ''] = rule;
+    if (!flags.includes('e')) return Promise.resolve('accept');
+    const f = this.alertForm ??= this.makeAlertForm();
+    f.title.textContent = et || 'FormCel';
+    f.text.textContent = em || ALERT_TEXT;
+    f.icon.dataset.style = style;
+    f.icon.textContent = style === 'stop' ? 'Stop' : style === 'warning' ? 'Warning' : 'Information';
+    const btn = (a: string, label: string, primary = false) => `<button type="button" class="fc-btn${primary ? ' fc-btn-primary' : ''}" data-a="${a}">${label}</button>`;
+    f.buttons.innerHTML = style === 'stop' ? btn('cancel', 'Cancel') + btn('retry', 'Retry', true)
+      : style === 'warning' ? `<span class="fc-alert-ask">Continue?</span>${btn('cancel', 'Cancel')}${btn('retry', 'No')}${btn('accept', 'Yes', true)}`
+        : btn('cancel', 'Cancel') + btn('accept', 'OK', true);
+    f.form.hidden = false;
+    f.buttons.querySelector<HTMLElement>('.fc-btn-primary')?.focus();
+    return new Promise((resolve) => { f.done = resolve; });
+  }
+
+  private makeAlertForm(): AlertForm {
+    const form = document.createElement('form');
+    form.className = 'fc-fmt-custom fc-pw fc-alert';
+    form.hidden = true;
+    form.setAttribute('role', 'alertdialog');
+    form.innerHTML = '<span class="fc-fmt-title"></span><div class="fc-alert-body"><span class="fc-alert-icon"></span><p class="fc-alert-text"></p></div><div class="fc-csv-actions"></div>';
+    document.getElementById('overlay-root')!.appendChild(form);
+    const f: AlertForm = { form, icon: form.querySelector('.fc-alert-icon')!, title: form.querySelector('.fc-fmt-title')!, text: form.querySelector('.fc-alert-text')!, buttons: form.querySelector('.fc-csv-actions')!, done: null };
+    const finish = (c: 'retry' | 'accept' | 'cancel') => {
+      form.hidden = true;
+      const d = f.done;
+      f.done = null;
+      d?.(c);
+    };
+    form.addEventListener('click', (e) => {
+      const a = (e.target as HTMLElement).closest<HTMLElement>('[data-a]')?.dataset.a;
+      if (a === 'retry' || a === 'accept' || a === 'cancel') finish(a);
+    });
+    form.addEventListener('keydown', (e) => { if (e.key === 'Escape') finish('cancel'); });
+    form.addEventListener('submit', (e) => e.preventDefault());
+    return f;
+  }
+
+  private showPrompt(rule: string[] | null, at: DOMRect | null): void {
+    const [, , , , , flags = '', , pt = '', pm = ''] = rule ?? [];
+    const on = !!rule && !!at && flags.includes('p') && !!(pt || pm);
+    if (!on) {
+      if (this.prompt) this.prompt.hidden = true;
+      return;
+    }
+    if (!this.prompt) {
+      this.prompt = document.createElement('div');
+      this.prompt.className = 'fc-prompt';
+      this.prompt.setAttribute('role', 'tooltip');
+      this.prompt.hidden = true;
+      this.prompt.innerHTML = '<strong class="fc-prompt-title"></strong><span class="fc-prompt-text"></span>';
+      document.getElementById('overlay-root')!.appendChild(this.prompt);
+    }
+    const el = this.prompt;
+    el.querySelector('.fc-prompt-title')!.textContent = pt;
+    el.querySelector('.fc-prompt-text')!.textContent = pm;
+    el.style.left = `${Math.min(at!.right + 20, innerWidth - 248)}px`;
+    el.style.top = `${Math.min(at!.bottom + 6, innerHeight - 120)}px`;
+    el.hidden = false;
+  }
+
+  private async dropList(): Promise<void> {
+    const at = this.grid.listButton();
+    if (!at) return;
+    const items = await this.grid.listItems();
+    if (!items.length) return;
+    if (this.prompt) this.prompt.hidden = true;
+    const cell = this.grid.cellRect();
+    this.menu.show(cell.left, cell.bottom + 2, items.map((label) => ({ label, run: () => void this.grid.setActive(label).then(() => this.grid.focus()) })), () => this.grid.focus());
   }
 
   private async toggleFilter(): Promise<void> {
@@ -951,7 +1143,7 @@ export class App {
   private async openWorkbook(id: string, setHash = true): Promise<void> {
     this.flush();
     await this.saving;
-    let doc: WorkbookMeta & { cells: [number, number, string][][]; formats?: [number, number, string][][]; styles?: [number, number, string][][]; merges?: Area[][]; rules?: string[][]; filters?: string[]; links?: [number, number, string][][]; theme?: string; cellStyles?: string[]; views?: SheetView[]; names?: Name[] };
+    let doc: WorkbookMeta & { cells: [number, number, string][][]; formats?: [number, number, string][][]; styles?: [number, number, string][][]; merges?: Area[][]; rules?: string[][]; filters?: string[]; validations?: string[][]; links?: [number, number, string][][]; theme?: string; cellStyles?: string[]; views?: SheetView[]; names?: Name[] };
     try {
       doc = await api('GET', `/api/workbooks/${id}`);
     } catch {
@@ -970,6 +1162,7 @@ export class App {
       await e.loadMerges(book, i, doc.merges?.[i] ?? []);
       await e.loadRules(book, i, doc.rules?.[i] ?? []);
       await e.loadFilter(book, i, doc.filters?.[i] ?? '');
+      await e.loadValidations(book, i, doc.validations?.[i] ?? []);
       await e.loadLinks(book, i, doc.links?.[i] ?? []);
       if (doc.cells[i]?.length) await e.load(book, doc.cells[i], i);
     }
@@ -1221,6 +1414,9 @@ export class App {
   private csvForm: CsvForm | null = null;
   private pwForm: PasswordForm | null = null;
   private sortForm: SortForm | null = null;
+  private validForm: ValidForm | null = null;
+  private alertForm: AlertForm | null = null;
+  private prompt: HTMLElement | null = null;
   private filterForm: FilterForm | null = null;
 
   private linkBox(): void {
@@ -1277,6 +1473,21 @@ export class App {
       if (!form.hidden && !form.contains(e.target as Node)) form.hidden = true;
     }, true);
     return { form, text, url, hint };
+  }
+
+  private sendValid(sheet: number, lines: string[]): void {
+    const o = this.open;
+    if (!o) return;
+    this.status('Saving');
+    this.saving = this.saving.then(async () => {
+      try {
+        await api('PUT', `/api/workbooks/${o.id}/validations`, { sheet, lines });
+        if (!this.pending.size) this.status('Saved');
+      } catch (err) {
+        this.status('Not saved', true);
+        this.p.save.title = err instanceof Error ? err.message : '';
+      }
+    });
   }
 
   private sendFilter(sheet: number, text: string): void {

@@ -36,6 +36,7 @@ const HEAD_H = 24;
 const HEAD_W = 60;
 const KEY = (r: number, c: number) => r * MAX_COLS + c;
 const FILTER_BTN = 16;
+const LIST_BTN = 16;
 const unescapeField = (s: string) => s.replace(/\\(.)/g, (_, ch: string) => (ch === 't' ? '\t' : ch === 'n' ? '\n' : ch === 'r' ? '\r' : ch));
 const ERRORS = new Set(['#DIV/0!', '#VALUE!', '#REF!', '#NAME?', '#N/A', '#NUM!', '#NULL!', '#ERROR!']);
 const OUTLINE_PAD = 3;
@@ -70,6 +71,10 @@ export interface GridEvents {
   onFilter(sheet: number, text: string): void;
   onFilterMenu(col: number): void;
   onFilterKey(): void;
+  onValid(sheet: number, lines: string[]): void;
+  onInvalid(rule: string[]): Promise<'retry' | 'accept' | 'cancel'>;
+  onRule(rule: string[] | null, at: DOMRect | null): void;
+  onList(): void;
   onLinks(changes: LinkChange[]): void;
   onOpenLink(): void;
   onLinkBox(): void;
@@ -102,6 +107,9 @@ export class Grid {
   private filterArea: Area | null = null;
   private filterCols = new Map<number, string[]>();
   private filterText = '';
+  private validLines: string[] = [];
+  private rule: string[] | null = null;
+  private ruleSeq = 0;
   look: Look = themeOf('');
   themeText = '';
   themeNames: string[] = [];
@@ -397,6 +405,7 @@ export class Grid {
     this.paintHeaders(rowSets, colSets);
     this.pr = this.apr;
     this.pc = this.apc;
+    this.paintListArrow();
     ctx.strokeStyle = pal.frozen;
     ctx.lineWidth = 2;
     if (this.fr) this.line(HEAD_W, HEAD_H + fh, w, HEAD_H + fh);
@@ -1222,6 +1231,97 @@ export class Grid {
   private announce(): void {
     const k = KEY(this.ar, this.ac);
     this.events.onActive(this.fx.get(k) ?? this.cache.get(k) ?? '', rangeText(this.sel()), this.sel());
+    void this.loadRule();
+  }
+
+  private async loadValid(): Promise<void> {
+    if (this.book < 0) return;
+    const sheet = this.sheet;
+    const lines = await this.engine.validations(this.book, sheet);
+    if (sheet !== this.sheet) return;
+    this.validLines = lines;
+    await this.loadRule();
+  }
+
+  private async loadRule(): Promise<void> {
+    const seq = ++this.ruleSeq;
+    const had = this.rule;
+    let rule: string[] | null = null;
+    if (this.validLines.length && this.book >= 0) {
+      const line = await this.engine.validationAt(this.book, this.sheet, this.ar, this.ac);
+      if (seq !== this.ruleSeq) return;
+      rule = line ? line.split('\t').map(unescapeField) : null;
+    }
+    this.rule = rule;
+    if (!had && !rule) return;
+    this.events.onRule(rule, rule ? this.cellRect() : null);
+    this.paint();
+  }
+
+  cellRect(): DOMRect {
+    const r = this.canvas.getBoundingClientRect();
+    const [x, y, w, h] = this.activeArea();
+    return new DOMRect(r.left + x * this.z, r.top + y * this.z, w * this.z, h * this.z);
+  }
+
+  activeRule(): string[] | null {
+    return this.rule;
+  }
+
+  validations(): string[] {
+    return this.validLines;
+  }
+
+  async setValidation(line: string): Promise<void> {
+    const s = this.sel();
+    await this.applyEffect(await this.engine.setValidation(this.book, this.sheet, s.r0, s.c0, s.r1, s.c1, line));
+  }
+
+  async listItems(): Promise<string[]> {
+    return this.engine.listItems(this.book, this.sheet, this.ar, this.ac);
+  }
+
+  private hasList(): boolean {
+    return !!this.rule && this.rule[1] === 'list' && (this.rule[5] ?? '').includes('d');
+  }
+
+  private listArrow(): [number, number, number, number] | null {
+    if (!this.hasList() || this.editing) return null;
+    const [x, y, w, h] = this.activeArea();
+    return [x + w + 1, y, LIST_BTN, Math.min(h, 24)];
+  }
+
+  private paintListArrow(): void {
+    const b = this.listArrow();
+    if (!b) return;
+    const { ctx, pal } = this;
+    const [x, y, w, h] = b;
+    ctx.fillStyle = pal.headBg;
+    ctx.fillRect(x, y, w, h);
+    ctx.strokeStyle = pal.grid;
+    ctx.lineWidth = 1;
+    ctx.strokeRect(Math.round(x) + 0.5, Math.round(y) + 0.5, w - 1, h - 1);
+    ctx.fillStyle = pal.headFg;
+    ctx.beginPath();
+    const mx = x + w / 2;
+    const my = y + h / 2;
+    ctx.moveTo(mx - 4, my - 2);
+    ctx.lineTo(mx + 4, my - 2);
+    ctx.lineTo(mx, my + 2.5);
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  listButton(): DOMRect | null {
+    const b = this.listArrow();
+    if (!b) return null;
+    const r = this.canvas.getBoundingClientRect();
+    return new DOMRect(r.left + b[0] * this.z, r.top + b[1] * this.z, b[2] * this.z, b[3] * this.z);
+  }
+
+  private onListArrow(px: number, py: number): boolean {
+    const b = this.listArrow();
+    return !!b && px >= b[0] && px <= b[0] + b[2] && py >= b[1] && py <= b[1] + b[3];
   }
 
   goTo(ref: string): boolean {
@@ -1299,6 +1399,10 @@ export class Grid {
     this.filterCols = new Map();
     this.filterText = '';
     this.rows.setFiltered([]);
+    this.validLines = [];
+    if (this.rule) this.events.onRule(null, null);
+    this.rule = null;
+    void this.loadValid();
     void this.loadMerges();
     void this.loadRules();
     void this.loadFilter();
@@ -1560,8 +1664,24 @@ export class Grid {
     this.paint();
   }
 
-  async setActive(raw: string): Promise<void> {
+  async setActive(raw: string): Promise<boolean> {
+    if (this.validLines.length && raw !== '') {
+      const line = await this.engine.checkInput(this.book, this.sheet, this.ar, this.ac, raw);
+      if (line) {
+        const choice = await this.events.onInvalid(line.split('\t').map(unescapeField));
+        if (choice === 'retry') {
+          this.startEdit(raw);
+          this.editor.select();
+          return false;
+        }
+        if (choice === 'cancel') {
+          this.paint();
+          return false;
+        }
+      }
+    }
     await this.commitEdits(await this.engine.apply(this.book, [[this.ar, this.ac, raw]], this.sheet));
+    return true;
   }
 
   async clearSelection(): Promise<void> {
@@ -1609,6 +1729,12 @@ export class Grid {
       const text = await this.engine.filter(this.book, sheet);
       if (sheet === this.sheet) await this.loadFilter();
       this.events.onFilter(sheet, text);
+    }
+    if (e.valid !== null) {
+      const sheet = e.valid;
+      const lines = await this.engine.validations(this.book, sheet);
+      if (sheet === this.sheet) await this.loadValid();
+      this.events.onValid(sheet, lines);
     }
     if (e.merges !== null) {
       const sheet = e.merges;
@@ -1922,7 +2048,7 @@ export class Grid {
     this.editor.hidden = true;
     this.focus();
     const start = this.tabStart;
-    if (commit) await this.setActive(value);
+    if (commit && !(await this.setActive(value))) return;
     this.tabStart = start;
     if (move && key) this.step(key, move);
     else if (move) this.move(move, false);
@@ -2078,6 +2204,8 @@ export class Grid {
       } else if (p.x < HEAD_W) {
         this.drag = { kind: 'rows' };
         this.enqueue(() => (pane(true, false), shift ? this.extendTo(row, MAX_COLS - 1) : this.select(row, 0, row, MAX_COLS - 1, false)));
+      } else if (!shift && this.onListArrow(p.x, p.y)) {
+        this.enqueue(() => this.events.onList());
       } else if (!shift && this.onFilterButton(p.x, p.y, row, col, pr, pc)) {
         this.enqueue(() => {
           pane(true, true);
@@ -2341,6 +2469,10 @@ export class Grid {
     }
     if (dir === 'down' && e.altKey && !e.shiftKey && !mod && this.filterArea && this.ar === this.filterArea[0] && this.ac >= this.filterArea[1] && this.ac <= this.filterArea[3]) {
       this.events.onFilterMenu(this.ac);
+      return;
+    }
+    if (dir === 'down' && e.altKey && !e.shiftKey && !mod && this.hasList()) {
+      this.events.onList();
       return;
     }
     if (dir) {

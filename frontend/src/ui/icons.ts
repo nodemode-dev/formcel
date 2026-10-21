@@ -51,6 +51,7 @@ export const icons = {
   sortDesc: svg('<path d="M7 4v16M3.5 16.5L7 20l3.5-3.5M13 6h8M13 11h6M13 16h4"/>'),
   sort: svg('<path d="M4 6h10M4 11h7M4 16h4M17 4v16M14 7l3-3 3 3M14 17l3 3 3-3"/>'),
   filter: svg('<path d="M4 5h16l-6 7.5V19l-4-1.5v-5z"/>'),
+  validation: svg('<rect x="3.5" y="4.5" width="17" height="15" rx="2"/><path d="M7.5 12l3 3 6-6"/>'),
   download: svg('<path d="M12 4v11M7.5 10.5L12 15l4.5-4.5M5 19.5h14"/>'),
   upload: svg('<path d="M12 15V4M7.5 8.5L12 4l4.5 4.5M5 19.5h14"/>'),
 } as const;

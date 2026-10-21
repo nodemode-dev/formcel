@@ -35,6 +35,11 @@ export type Request =
   | { id: number; op: 'values.read'; book: number; sheet: number; r0: number; c0: number; r1: number; c1: number }
   | { id: number; op: 'rules.get'; book: number; sheet: number }
   | { id: number; op: 'rules.set' | 'rules.load'; book: number; sheet: number; lines: string[] }
+  | { id: number; op: 'valid.list'; book: number; sheet: number }
+  | { id: number; op: 'valid.load'; book: number; sheet: number; lines: string[] }
+  | { id: number; op: 'valid.set'; book: number; sheet: number; r0: number; c0: number; r1: number; c1: number; line: string }
+  | { id: number; op: 'valid.at' | 'valid.items'; book: number; sheet: number; row: number; col: number }
+  | { id: number; op: 'valid.check'; book: number; sheet: number; row: number; col: number; raw: string }
   | { id: number; op: 'filter.get' | 'filter.reapply'; book: number; sheet: number }
   | { id: number; op: 'filter.set' | 'filter.load'; book: number; sheet: number; text: string }
   | { id: number; op: 'filter.values'; book: number; sheet: number; col: number }
@@ -81,6 +86,7 @@ export interface Effect {
   named: boolean;
   rules: number | null;
   filter: number | null;
+  valid: number | null;
 }
 export interface FilterList {
   values: string[];

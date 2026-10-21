@@ -45,6 +45,12 @@ interface Exports {
   fc_rules(book: number, sheet: number): number;
   fc_set_rules(book: number, sheet: number, lines: number, len: number): number;
   fc_load_rules(book: number, sheet: number, lines: number, len: number): number;
+  fc_validations(book: number, sheet: number): number;
+  fc_load_validations(book: number, sheet: number, lines: number, len: number): number;
+  fc_set_validation(book: number, sheet: number, r0: number, c0: number, r1: number, c1: number, t: number, len: number): number;
+  fc_validation_at(book: number, sheet: number, row: number, col: number): number;
+  fc_list_items(book: number, sheet: number, row: number, col: number): number;
+  fc_check_input(book: number, sheet: number, row: number, col: number, raw: number, len: number): number;
   fc_filter(book: number, sheet: number): number;
   fc_set_filter(book: number, sheet: number, t: number, len: number): number;
   fc_load_filter(book: number, sheet: number, t: number, len: number): number;
@@ -98,7 +104,7 @@ function cells(s: string): Cell[] {
 }
 
 function changed(s: string): Changed[] {
-  return lines(s).filter((l) => !'%#&=^@!~'.includes(l[0])).map(([sh, r, c, fl, t, f]) => [Number(sh), Number(r), Number(c), unescape(t ?? ''), f === undefined ? undefined : unescape(f), fl.startsWith('n'), colorOf(fl), fl.includes('l')]);
+  return lines(s).filter((l) => !'%#&=^@!~?'.includes(l[0])).map(([sh, r, c, fl, t, f]) => [Number(sh), Number(r), Number(c), unescape(t ?? ''), f === undefined ? undefined : unescape(f), fl.startsWith('n'), colorOf(fl), fl.includes('l')]);
 }
 
 function formatsOf(s: string, tag = '%'): FormatChange[] {
@@ -115,8 +121,9 @@ function effect(s: string): Effect {
   const m = /^=\t(\d+)$/m.exec(s);
   const rl = /^!\t(\d+)$/m.exec(s);
   const fl = /^~\t(\d+)$/m.exec(s);
+  const vl = /^\?\t(\d+)$/m.exec(s);
   const styles = lines(s).filter((l) => l[0] === '&').map(([, sh, r, c, raw, shown]) => [Number(sh), Number(r), Number(c), unescape(raw ?? ''), unescape(shown ?? raw ?? '')] as StyleChange);
-  return { shift, changes: changed(s).filter((l) => !Number.isNaN(l[0])), formats: formatsOf(s), styles, merges: m ? Number(m[1]) : null, theme: /^\^$/m.test(s), named: /^@$/m.test(s), rules: rl ? Number(rl[1]) : null, filter: fl ? Number(fl[1]) : null };
+  return { shift, changes: changed(s).filter((l) => !Number.isNaN(l[0])), formats: formatsOf(s), styles, merges: m ? Number(m[1]) : null, theme: /^\^$/m.test(s), named: /^@$/m.test(s), rules: rl ? Number(rl[1]) : null, filter: fl ? Number(fl[1]) : null, valid: vl ? Number(vl[1]) : null };
 }
 
 const MERGE_MODES = { center: 0, across: 1, cells: 2, unmerge: 3 } as const;
@@ -197,7 +204,7 @@ function run(x: Exports, req: Request): Value {
     case 'undo':
     case 'redo': {
       const n = req.op === 'undo' ? x.fc_undo(req.book) : x.fc_redo(req.book);
-      return n === -2 ? { changes: [], shift: null, formats: [], styles: [], merges: null, theme: false, named: false, rules: null, filter: null } : effect(out(x, n));
+      return n === -2 ? { changes: [], shift: null, formats: [], styles: [], merges: null, theme: false, named: false, rules: null, filter: null, valid: null } : effect(out(x, n));
     }
     case 'shift':
       return shiftOf(out(x, x.fc_shift(req.book, req.sheet, req.rows ? 1 : 0, req.at, req.n, req.insert ? 1 : 0)).trim());
@@ -303,6 +310,22 @@ function run(x: Exports, req: Request): Value {
       });
     case 'rules.load':
       return withStrings(x, [req.lines.join('\n')], ([p, l]) => ok(x.fc_load_rules(req.book, req.sheet, p, l), 'The engine refused those rules.'));
+    case 'valid.list':
+      return out(x, x.fc_validations(req.book, req.sheet)).split('\n').filter(Boolean);
+    case 'valid.load':
+      return withStrings(x, [req.lines.join('\n')], ([p, l]) => ok(x.fc_load_validations(req.book, req.sheet, p, l), 'The engine refused those validation rules.'));
+    case 'valid.set':
+      return withStrings(x, [req.line], ([p, l]) => {
+        const n = x.fc_set_validation(req.book, req.sheet, req.r0, req.c0, req.r1, req.c1, p, l);
+        if (n === -3) throw new Error('That rule is not one FormCel can read. Check its values and formulas.');
+        return effect(out(x, n));
+      });
+    case 'valid.at':
+      return out(x, x.fc_validation_at(req.book, req.sheet, req.row, req.col));
+    case 'valid.items':
+      return out(x, x.fc_list_items(req.book, req.sheet, req.row, req.col)).split('\n').filter((l) => l !== '').map(unescape);
+    case 'valid.check':
+      return withStrings(x, [req.raw], ([p, l]) => out(x, x.fc_check_input(req.book, req.sheet, req.row, req.col, p, l)));
     case 'filter.get':
       return out(x, x.fc_filter(req.book, req.sheet));
     case 'filter.set':

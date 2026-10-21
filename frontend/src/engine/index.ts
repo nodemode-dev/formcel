@@ -210,6 +210,30 @@ export class EngineClient {
     if (lines.length) await this.call({ op: 'rules.load', book, sheet, lines });
   }
 
+  async validations(book: number, sheet: number): Promise<string[]> {
+    return (await this.call({ op: 'valid.list', book, sheet })) as string[];
+  }
+
+  async loadValidations(book: number, sheet: number, lines: string[]): Promise<void> {
+    if (lines.length) await this.call({ op: 'valid.load', book, sheet, lines });
+  }
+
+  async setValidation(book: number, sheet: number, r0: number, c0: number, r1: number, c1: number, line: string): Promise<Effect> {
+    return (await this.call({ op: 'valid.set', book, sheet, r0, c0, r1, c1, line })) as Effect;
+  }
+
+  async validationAt(book: number, sheet: number, row: number, col: number): Promise<string> {
+    return (await this.call({ op: 'valid.at', book, sheet, row, col })) as string;
+  }
+
+  async listItems(book: number, sheet: number, row: number, col: number): Promise<string[]> {
+    return (await this.call({ op: 'valid.items', book, sheet, row, col })) as string[];
+  }
+
+  async checkInput(book: number, sheet: number, row: number, col: number, raw: string): Promise<string> {
+    return (await this.call({ op: 'valid.check', book, sheet, row, col, raw })) as string;
+  }
+
   async filter(book: number, sheet: number): Promise<string> {
     return (await this.call({ op: 'filter.get', book, sheet })) as string;
   }
