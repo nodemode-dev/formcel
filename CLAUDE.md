@@ -1,0 +1,29 @@
+# CLAUDE.md · FormCel
+
+Spreadsheet app in the form family. Read `README.md`, then the `HASHOUT_LOG.md` of the side you touch, before editing.
+
+## Layout
+
+- `engine/` · Rust workspace. `formcel-core` holds every calculation rule; `formcel-wasm` and `formcel-py` only translate calls. A rule written anywhere else is a bug.
+- `backend/` · FastAPI engine process on 127.0.0.1:8199. Imports `formcel_engine` (the Python build).
+- `frontend/` · TypeScript and Vite window on localhost:5199. The engine runs in `src/engine/worker.ts`; the UI talks to it only through `src/engine/index.ts`.
+
+## Commands
+
+```
+./formcel_oc_install          install everything
+./formcel                     run engine and window
+engine/build_wasm             rebuild the window's engine after a Rust change
+pip install ../engine/crates/formcel-py   (from backend/, venv active) rebuild the Python engine
+cd frontend && npx tsc --noEmit           typecheck
+```
+
+## Rules
+
+- Surgical edits only: one region per edit, by hand. No scripted edits, patches or codemods.
+- No DOM re-renders, flashes or layout jumps. Patch the node that changed; reserve space first.
+- Every z-index is a token from `frontend/src/styles/z-layers.css`.
+- No emoji, no icon libraries (inline `currentColor` SVG in `src/ui/icons.ts`), no em dashes in markdown.
+- Near-zero comments in code; explanations go in the side's `HASHOUT_LOG.md`.
+- Commits as `nodemode-ai <mackin@nodemode.ai>`. Versions read `v` digit dot digit dot digit and match across `frontend/package.json`, `backend/app/version.py` and `engine/Cargo.toml`.
+- No tests unless the owner asks for them; describe them in `TEST_PLAN.md` instead.
