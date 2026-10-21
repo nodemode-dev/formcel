@@ -42,6 +42,7 @@ export interface SheetView {
   split?: [number, number] | null;
   hidden?: boolean | null;
   fviews?: { name: string; text: string }[] | null;
+  sviews?: { name: string; text: string; rows: AxisState; cols: AxisState }[] | null;
   slicers?: { id: string; col: number; title: string; x: number; y: number }[] | null;
 }
 
@@ -1810,6 +1811,19 @@ export class Grid {
     this.announce();
     this.paint();
     this.objectsHook?.sheet(sheet);
+  }
+
+  axes(): { rows: AxisState; cols: AxisState } {
+    return { rows: this.rows.state(), cols: this.cols.state() };
+  }
+
+  applyAxes(rows: AxisState, cols: AxisState): void {
+    this.rows.restore(rows);
+    this.cols.restore(cols);
+    this.pushHidden();
+    this.resize();
+    this.emitView();
+    this.paint();
   }
 
   get sheetIndex(): number {

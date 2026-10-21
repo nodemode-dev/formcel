@@ -1,4 +1,5 @@
 import type { Grid, SheetView } from '../grid/grid';
+import type { AxisState } from '../grid/axis';
 import { colName, parseRef, rangeText, type Range } from '../grid/a1';
 import type { Menu, MenuItem } from './menu';
 
@@ -35,6 +36,7 @@ export interface DataCtx {
   sheetNames(): string[];
   views(): SheetView[];
   patchView(sheet: number, part: Partial<SheetView>): void;
+  workbookId(): string;
   headers(range: Range): Promise<string[]>;
   filterValues(col: number): Promise<{ values: string[]; blanks: boolean }>;
   goTo(sheet: number, row: number, col: number): void;
@@ -120,7 +122,8 @@ const SPECS: Spec[] = [
     ],
   },
   { id: 'template', title: 'Save as template', ok: 'Save', fields: [{ k: 'name', label: 'Template name', kind: 'text' }, { k: 'desc', label: 'Description', kind: 'text' }] },
-  { id: 'fview', title: 'Save filter view', ok: 'Save', fields: [{ k: 'name', label: 'Name', kind: 'text' }] },
+  { id: 'fview', title: 'Save filter view', ok: 'Save', fields: [{ k: 'name', label: 'Name', kind: 'text' }, { k: 'where', label: 'Keep it', kind: 'select', options: [['file', 'In the file, for everyone who opens it'], ['mine', 'For me only, in this browser']] }] },
+  { id: 'sview', title: 'Save sheet view', ok: 'Save', fields: [{ k: 'name', label: 'Name', kind: 'text' }] },
   { id: 'totalfn', title: 'Total row formula', ok: 'Set', fields: [{ k: 'formula', label: 'Formula for this total cell (structured references such as [Sales] are allowed)', kind: 'text' }] },
   { id: 'slicer', title: 'Insert slicer', ok: 'Insert', fields: [{ k: 'col', label: 'Column', kind: 'select' }] },
 ];
@@ -521,19 +524,163 @@ export class DataTools {
     return this.c.views()[this.c.grid.sheetIndex]?.fviews ?? [];
   }
 
+  private readonly temp = new Map<number, { text: string; rows: AxisState; cols: AxisState; label: string }>();
+  private bar: HTMLElement | null = null;
+
+  private mineKey(): string {
+    return `fc.fviews:${this.c.workbookId()}:${this.c.sheetNames()[this.c.grid.sheetIndex] ?? ''}`;
+  }
+
+  private mine(): { name: string; text: string }[] {
+    try {
+      const v: unknown = JSON.parse(localStorage.getItem(this.mineKey()) ?? '[]');
+      return Array.isArray(v) ? v.filter((x): x is { name: string; text: string } => typeof x?.name === 'string' && typeof x?.text === 'string') : [];
+    } catch {
+      return [];
+    }
+  }
+
+  private keepMine(list: { name: string; text: string }[]): void {
+    try {
+      localStorage.setItem(this.mineKey(), JSON.stringify(list));
+    } catch {
+      this.c.status('This browser would not keep the view.', true);
+    }
+  }
+
+  isTemp(sheet: number): boolean {
+    return this.temp.has(sheet);
+  }
+
+  resetTemp(): void {
+    this.temp.clear();
+    this.syncBar();
+  }
+
+  private syncBar(): void {
+    const t = this.temp.get(this.c.grid.sheetIndex);
+    if (!t) {
+      if (this.bar) this.bar.hidden = true;
+      return;
+    }
+    if (!this.bar) {
+      const bar = document.createElement('div');
+      bar.className = 'fc-viewbar';
+      bar.setAttribute('role', 'status');
+      bar.innerHTML = '<span class="fc-viewbar-text"></span><button type="button" class="fc-btn" data-a="exit">Exit view</button>';
+      bar.addEventListener('click', (e) => {
+        if ((e.target as HTMLElement).closest('[data-a="exit"]')) void this.exitTemp();
+      });
+      document.getElementById('overlay-root')!.appendChild(bar);
+      this.bar = bar;
+    }
+    this.bar.querySelector<HTMLElement>('.fc-viewbar-text')!.textContent = `${t.label}: your own view of this sheet, not saved and not seen by anyone else.`;
+    this.bar.hidden = false;
+  }
+
+  private baseText(): string {
+    return (this.c.grid.filterInfo()?.text ?? '').split('\n').filter((l) => !l.startsWith('hidden\t')).join('\n');
+  }
+
+  private async startTemp(label: string, text: string | null, axes?: { rows: AxisState; cols: AxisState }): Promise<void> {
+    const g = this.c.grid;
+    const sheet = g.sheetIndex;
+    if (!this.temp.has(sheet)) this.temp.set(sheet, { text: this.baseText(), ...g.axes(), label });
+    else this.temp.get(sheet)!.label = label;
+    if (text !== null) await g.setFilter(text);
+    if (axes) g.applyAxes(axes.rows, axes.cols);
+    this.syncBar();
+  }
+
+  async exitTemp(): Promise<void> {
+    const g = this.c.grid;
+    const sheet = g.sheetIndex;
+    const t = this.temp.get(sheet);
+    if (!t) return;
+    this.temp.delete(sheet);
+    await g.setFilter(t.text);
+    g.applyAxes(t.rows, t.cols);
+    this.syncBar();
+    this.c.status('Back to the shared view.');
+  }
+
+  private linkOf(text: string): string {
+    const payload = JSON.stringify({ s: this.c.sheetNames()[this.c.grid.sheetIndex] ?? '', t: text });
+    const b64 = btoa(String.fromCharCode(...new TextEncoder().encode(payload))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+    return `${location.origin}${location.pathname}?view=${b64}${location.hash}`;
+  }
+
+  private async copyLink(text: string): Promise<void> {
+    const link = this.linkOf(text);
+    try {
+      await navigator.clipboard.writeText(link);
+      this.c.status('Link to the view copied.');
+    } catch {
+      this.c.status('Copy was blocked; the link is in the address bar.', true);
+      history.replaceState(null, '', link);
+    }
+  }
+
+  async openLink(showSheet: (i: number) => void): Promise<void> {
+    const raw = new URLSearchParams(location.search).get('view');
+    if (!raw) return;
+    history.replaceState(null, '', `${location.pathname}${location.hash}`);
+    try {
+      const bin = atob(raw.replace(/-/g, '+').replace(/_/g, '/'));
+      const data = JSON.parse(new TextDecoder().decode(Uint8Array.from(bin, (ch) => ch.charCodeAt(0)))) as { s?: string; t?: string };
+      const i = this.c.sheetNames().indexOf(data.s ?? '');
+      if (i < 0 || typeof data.t !== 'string') throw new Error('bad');
+      if (i !== this.c.grid.sheetIndex) showSheet(i);
+      await new Promise((r) => window.setTimeout(r, 200));
+      await this.startTemp('Shared view', data.t);
+    } catch {
+      this.c.status('The link to a view could not be read.', true);
+    }
+  }
+
   filterViewsMenu(x: number, y: number): void {
     const g = this.c.grid;
     const sheet = g.sheetIndex;
     const list = this.views();
-    const items: MenuItem[] = [{ label: 'Save current filter as a view', run: () => this.saveView() }];
-    if (list.length) items.push({ sep: true });
-    for (const v of list) items.push({ label: `Open view: ${v.name}`, run: () => g.setFilter(v.text) });
-    if (list.length) {
+    const mine = this.mine();
+    const items: MenuItem[] = [{ label: 'Start a temporary view', run: () => this.startTemp('Temporary view', null) }, { label: 'Save current filter as a view', run: () => this.saveView() }];
+    if (list.length || mine.length) items.push({ sep: true });
+    for (const v of list) items.push({ label: `Open view: ${v.name}`, run: () => this.startTemp(v.name, v.text) });
+    for (const v of mine) items.push({ label: `Open my view: ${v.name}`, run: () => this.startTemp(v.name, v.text) });
+    if (list.length || mine.length) {
       items.push({ sep: true });
+      for (const v of [...list, ...mine]) items.push({ label: `Copy link to view: ${v.name}`, run: () => this.copyLink(v.text) });
       for (const v of list) items.push({ label: `Delete view: ${v.name}`, danger: true, run: () => this.c.patchView(sheet, { fviews: this.views().filter((o) => o.name !== v.name) }) });
+      for (const v of mine) items.push({ label: `Delete my view: ${v.name}`, danger: true, run: () => this.keepMine(this.mine().filter((o) => o.name !== v.name)) });
     }
-    items.push({ sep: true }, { label: 'Exit filter view', run: () => g.setFilter('') });
+    const sv = this.c.views()[sheet]?.sviews ?? [];
+    items.push({ sep: true }, { label: 'Sheet view: Default', run: () => this.startTemp('Default view', '', this.openAxes()) });
+    for (const v of sv) items.push({ label: `Sheet view: ${v.name}`, run: () => this.startTemp(v.name, v.text, { rows: v.rows, cols: v.cols }) });
+    items.push({ label: 'Save current layout as a sheet view', run: () => this.saveSheetView() });
+    for (const v of sv) items.push({ label: `Delete sheet view: ${v.name}`, danger: true, run: () => this.c.patchView(sheet, { sviews: (this.c.views()[sheet]?.sviews ?? []).filter((o) => o.name !== v.name) }) });
+    items.push({ sep: true }, { label: this.temp.has(sheet) ? 'Exit view' : 'Clear filter', run: () => (this.temp.has(sheet) ? this.exitTemp() : g.setFilter('')) });
     this.c.menu.show(x, y, items);
+  }
+
+  private openAxes(): { rows: AxisState; cols: AxisState } {
+    const a = this.c.grid.axes();
+    return { rows: { ...a.rows, hidden: [] }, cols: { ...a.cols, hidden: [] } };
+  }
+
+  private saveSheetView(): void {
+    const g = this.c.grid;
+    const sheet = g.sheetIndex;
+    const text = this.baseText();
+    const axes = g.axes();
+    this.prepare('sview');
+    this.put('sview', 'name', `View ${(this.c.views()[sheet]?.sviews ?? []).length + 1}`);
+    this.show('sview', async (v) => {
+      const name = (v.name as string).trim();
+      if (!name) throw new Error('Give the view a name.');
+      const old = this.c.views()[sheet]?.sviews ?? [];
+      this.c.patchView(sheet, { sviews: [...old.filter((o) => o.name !== name), { name, text, rows: axes.rows, cols: axes.cols }] });
+      return `Saved sheet view ${name}.`;
+    });
   }
 
   private saveView(): void {
@@ -544,13 +691,18 @@ export class DataTools {
     }
     const sheet = this.c.grid.sheetIndex;
     this.prepare('fview');
-    this.put('fview', 'name', `Filter view ${this.views().length + 1}`);
+    this.put('fview', 'name', `Filter view ${this.views().length + this.mine().length + 1}`);
+    this.put('fview', 'where', 'file');
     this.show('fview', async (v) => {
       const name = (v.name as string).trim();
       if (!name) throw new Error('Give the view a name.');
       const text = info.text.split('\n').filter((l) => !l.startsWith('hidden\t')).join('\n');
+      if (v.where === 'mine') {
+        this.keepMine([...this.mine().filter((o) => o.name !== name), { name, text }]);
+        return `Saved filter view ${name} for you in this browser.`;
+      }
       this.c.patchView(sheet, { fviews: [...this.views().filter((o) => o.name !== name), { name, text }] });
-      return `Saved filter view ${name}.`;
+      return `Saved filter view ${name} in the file.`;
     });
   }
 
@@ -586,6 +738,7 @@ export class DataTools {
   }
 
   syncSlicers(): void {
+    this.syncBar();
     const sheet = this.c.grid.sheetIndex;
     const list = this.c.views()[sheet]?.slicers ?? [];
     const keep = new Set(list.map((s) => s.id));

@@ -322,7 +322,7 @@ export class App {
       onPasteMenu: (x, y) => this.pasteMenu(x, y),
       onRules: (sheet, lines) => this.sendRules(sheet, lines),
       onFilter: (sheet, text) => {
-        this.sendFilter(sheet, text);
+        if (!this.tools.isTemp(sheet)) this.sendFilter(sheet, text);
         void this.tools.refreshSlicers();
       },
       onFilterMenu: (col) => void this.filterBox(col),
@@ -361,6 +361,7 @@ export class App {
       sheetNames: () => this.open?.sheets ?? [],
       views: () => this.open?.views ?? [],
       patchView: (s, part) => this.patchView(s, part),
+      workbookId: () => this.open?.id ?? '',
       headers: async (r) => {
         const o = this.open;
         const out: string[] = Array.from({ length: r.c1 - r.c0 + 1 }, () => '');
@@ -725,6 +726,7 @@ export class App {
     this.collab.detach();
     this.auto.closed();
     this.grouped.clear();
+    this.tools.resetTemp();
     this.tools.syncSlicers();
     p.sheet.hidden = true;
     p.home.hidden = false;
@@ -1948,10 +1950,12 @@ export class App {
     this.renderTabs();
     await this.charts.layer.open();
     this.audit.load((doc.watches ?? []) as [number, number, number][]);
+    this.tools.resetTemp();
     this.showSheet(0);
     this.button('edit.undo').disabled = true;
     this.button('edit.redo').disabled = true;
     this.grid.focus();
+    window.setTimeout(() => void this.tools.openLink((i) => this.showSheet(i)), 300);
     this.auto.opened(id, (doc as unknown as { automation?: Parameters<Automation['opened']>[1] }).automation);
     if (setHash && location.hash !== `#w-${id}`) location.hash = `w-${id}`;
     this.collab.attach(id, book, doc.sheets, doc.collab, doc.protection);
@@ -2068,10 +2072,11 @@ export class App {
     const o = this.open;
     if (!o) return;
     const old = o.views[sheet] ?? {};
-    o.views[sheet] = { ...view, hidden: old.hidden, fviews: old.fviews, slicers: old.slicers };
+    o.views[sheet] = { ...view, hidden: old.hidden, fviews: old.fviews, sviews: old.sviews, slicers: old.slicers };
     this.zoomLabel();
     if (this.preview) void this.refreshBreaks();
     window.clearTimeout(this.viewTimers.get(sheet));
+    if (this.tools.isTemp(sheet)) return;
     this.viewTimers.set(sheet, window.setTimeout(() => {
       void api('PATCH', `/api/workbooks/${o.id}/sheets/${sheet}`, { view }).catch(() => this.status('View not saved', true));
     }, 500));
