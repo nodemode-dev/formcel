@@ -3,9 +3,12 @@ import type { Grid, ObjectsHook } from '../grid/grid';
 import type { PivotDef } from '../ui/pivot';
 import { anchorOf, frameOf, fromLine, toLine } from './anchor';
 import { build, readMatrix, resolveRange } from './data';
-import { FILTER_BAR, pivotChartData, pivotLabel } from './pivotchart';
+import { OrgEditor } from './orgedit';
+import { makeBar, syncBar } from './pivotbar';
+import { FILTER_BAR, pivotChartData } from './pivotchart';
+import { contrast, isLine, shapeSvg } from './shapes';
 import { renderChartAsync } from './svg';
-import { isFloat, newId, type FloatObject } from './types';
+import { isFloat, newId, type FloatObject, type ShapeSpec } from './types';
 
 export interface LayerIo {
   book(): number;
@@ -15,6 +18,7 @@ export interface LayerIo {
   pivots?(): PivotDef[];
   pivotItems?(name: string, field: string): Promise<string[]>;
   pivotFilter?(name: string, field: string, items: string[]): Promise<void>;
+  say?(text: string): void;
 }
 
 interface Node {
@@ -27,6 +31,7 @@ interface Node {
   dh: number;
   bar: HTMLElement | null;
   barKey: string;
+  art: string;
 }
 
 type Handle = 'n' | 's' | 'e' | 'w' | 'ne' | 'nw' | 'se' | 'sw';
@@ -43,11 +48,21 @@ export class ObjectLayer implements ObjectsHook {
   private timer = 0;
   private saveTimer = 0;
   private frameKey = '';
+  private readonly org: OrgEditor;
   onEdit: (o: FloatObject) => void = () => undefined;
   onData: () => void = () => undefined;
   onAlt: (o: FloatObject) => void = () => undefined;
 
   constructor(private readonly grid: Grid, private readonly eng: EngineClient, private readonly io: LayerIo) {
+    this.org = new OrgEditor({
+      eng,
+      grid,
+      book: () => io.book(),
+      sheetNames: () => io.sheetNames(),
+      sheetNo: () => this.sheetNo,
+      update: (o) => this.update(o),
+      say: (t) => io.say?.(t),
+    });
     this.el = document.createElement('div');
     this.el.className = 'fc-objects';
     this.el.setAttribute('aria-label', 'Charts, pictures and shapes');
@@ -228,6 +243,17 @@ export class ObjectLayer implements ObjectsHook {
     if (o.kind === 'chart') void this.draw(n);
   }
 
+  preview(o: FloatObject): void {
+    const n = this.nodes.get(o.id);
+    if (!n) return;
+    n.obj = o;
+    const list = this.list();
+    const i = list.findIndex((x) => x.id === o.id);
+    if (i >= 0) list[i] = o;
+    this.fill(n);
+    this.place();
+  }
+
   setAlt(id: string, text: string, decorative = false): void {
     const o = this.list().find((x) => x.id === id);
     if (!o) return;
@@ -315,6 +341,7 @@ export class ObjectLayer implements ObjectsHook {
     el.className = `fc-obj fc-obj-${o.kind}`;
     el.dataset.id = o.id;
     el.tabIndex = -1;
+    el.style.transformOrigin = '50% 50%';
     const body = document.createElement('div');
     body.className = 'fc-obj-body';
     el.appendChild(body);
@@ -324,7 +351,7 @@ export class ObjectLayer implements ObjectsHook {
       s.dataset.h = h;
       el.appendChild(s);
     }
-    const n: Node = { obj: o, el, body, html: '', moving: false, dw: o.w, dh: o.h, bar: null, barKey: '' };
+    const n: Node = { obj: o, el, body, html: '', moving: false, dw: o.w, dh: o.h, bar: null, barKey: '', art: '' };
     el.addEventListener('pointerdown', (e) => this.down(e, n));
     el.addEventListener('dblclick', (e) => {
       e.stopPropagation();
@@ -350,16 +377,7 @@ export class ObjectLayer implements ObjectsHook {
       }
       if (img.getAttribute('src') !== o.picture.src) img.src = o.picture.src;
     } else if (o.kind === 'shape' && o.shape) {
-      const s = o.shape;
-      const w = Math.max(1, o.w);
-      const h = Math.max(1, o.h);
-      const g = s.shape === 'ellipse'
-        ? `<ellipse cx="${w / 2}" cy="${h / 2}" rx="${w / 2 - 1.5}" ry="${h / 2 - 1.5}"/>`
-        : s.shape === 'arrow'
-          ? `<polygon points="1.5,${h * 0.3} ${w * 0.62},${h * 0.3} ${w * 0.62},1.5 ${w - 1.5},${h / 2} ${w * 0.62},${h - 1.5} ${w * 0.62},${h * 0.7} 1.5,${h * 0.7}"/>`
-          : `<rect x="1.5" y="1.5" width="${w - 3}" height="${h - 3}" rx="3"/>`;
-      n.body.innerHTML = `<svg viewBox="0 0 ${w} ${h}" width="100%" height="100%" preserveAspectRatio="none"><g fill="${s.fill}" stroke="${s.stroke}" stroke-width="2" vector-effect="non-scaling-stroke">${g}</g></svg><div class="fc-obj-label"></div>`;
-      n.body.querySelector<HTMLElement>('.fc-obj-label')!.textContent = s.text;
+      this.fillShape(n, o.shape);
     } else if (o.kind === 'text' && o.text) {
       let label = n.body.querySelector<HTMLElement>('.fc-obj-text');
       if (!label) {
@@ -371,6 +389,35 @@ export class ObjectLayer implements ObjectsHook {
       label.style.fontSize = `${o.text.size}px`;
       label.style.color = o.text.color;
     }
+  }
+
+  private fillShape(n: Node, s: ShapeSpec): void {
+    let art = n.body.querySelector<HTMLElement>('.fc-shape-art');
+    let label = n.body.querySelector<HTMLElement>('.fc-obj-label');
+    if (!art || !label) {
+      art = document.createElement('div');
+      art.className = 'fc-shape-art';
+      label = document.createElement('div');
+      label.className = 'fc-obj-label';
+      n.body.replaceChildren(art, label);
+      n.art = '';
+    }
+    const svg = shapeSvg(s, Math.max(1, n.obj.w), Math.max(1, n.obj.h));
+    if (svg !== n.art) {
+      n.art = svg;
+      art.innerHTML = svg;
+    }
+    if (label.contentEditable !== 'true' && label.textContent !== s.text) label.textContent = s.text;
+    const st = label.style;
+    st.fontSize = `${(s.size ?? 11) * (96 / 72)}px`;
+    st.color = s.color || contrast(s.noFill ? '#ffffff' : s.fill);
+    st.fontWeight = s.bold ? '700' : '';
+    st.fontStyle = s.italic ? 'italic' : '';
+    st.textDecoration = [s.underline ? 'underline' : '', s.strike ? 'line-through' : ''].filter(Boolean).join(' ');
+    st.fontFamily = s.font ?? '';
+    st.textAlign = s.align === 'l' ? 'left' : s.align === 'r' ? 'right' : s.align === 'j' ? 'justify' : 'center';
+    st.justifyContent = s.valign === 't' ? 'flex-start' : s.valign === 'b' ? 'flex-end' : 'center';
+    label.hidden = isLine(s.shape);
   }
 
   private editText(n: Node): void {
@@ -426,7 +473,8 @@ export class ObjectLayer implements ObjectsHook {
       }
       const x = f.ox - f.left + o.x * f.z;
       const y = f.oy - f.top + o.y * f.z;
-      s.transform = `translate(${x}px, ${y}px)`;
+      const rot = o.kind === 'shape' ? o.shape?.rot ?? 0 : 0;
+      s.transform = `translate(${x}px, ${y}px)${rot ? ` rotate(${rot}deg)` : ''}`;
       const w = `${o.w * f.z}px`;
       const h = `${o.h * f.z}px`;
       if (s.width !== w) s.width = w;
@@ -449,6 +497,7 @@ export class ObjectLayer implements ObjectsHook {
     }
     e.stopPropagation();
     this.select(n.obj.id);
+    if (n.obj.chart?.type === 'org' && this.org.pointerDown(e, n)) return;
     const h = (e.target as HTMLElement).dataset.h as Handle | undefined;
     const z = this.grid.objectFrame().z;
     const start = { x: e.clientX, y: e.clientY, ox: n.obj.x, oy: n.obj.y, ow: n.obj.w, oh: n.obj.h };
@@ -519,7 +568,7 @@ export class ObjectLayer implements ObjectsHook {
       const data = def ? await pivotChartData(this.eng, this.io.book(), def) : null;
       if (!def) html = `<div class="fc-chart-empty">The PivotTable ${spec.pivot} no longer exists. Delete this chart or edit it to pick another source.</div>`;
       else if (!data) html = '<div class="fc-chart-empty">The PivotTable has no values to chart yet. Add fields to its Rows and Values.</div>';
-      else html = await renderChartAsync(this.eng, spec, data, n.obj.w, Math.max(40, n.obj.h - FILTER_BAR));
+      else html = await renderChartAsync(this.eng, spec, data, n.obj.w, Math.max(40, n.obj.h - (spec.pivotButtons === false ? 0 : FILTER_BAR)));
     } else {
       const ref = await resolveRange(this.eng, this.io.book(), spec.range);
       if (!ref) html = `<div class="fc-chart-empty">The data range ${spec.range ? `"${spec.range}"` : ''} is not a range. Edit the chart to pick one.</div>`;
@@ -538,6 +587,7 @@ export class ObjectLayer implements ObjectsHook {
       n.html = html;
       n.body.innerHTML = html;
     }
+    if (spec.type === 'org') this.org.attach(n);
   }
 
   private filters(n: Node, def: PivotDef | null): void {
@@ -550,65 +600,20 @@ export class ObjectLayer implements ObjectsHook {
       }
       return;
     }
-    const key = JSON.stringify([def.name, def.rows, def.cols, def.filters]);
+    const shown = n.obj.chart?.pivotButtons !== false;
+    const key = JSON.stringify([shown, def.name, def.rows, def.cols, def.filters, def.values.map((v) => [v.field, v.func, v.name])]);
     if (!n.bar) {
-      const bar = document.createElement('div');
-      bar.className = 'fc-chart-filters';
-      bar.addEventListener('change', (e) => {
-        const sel = e.target as HTMLSelectElement;
-        const field = sel.dataset.field;
-        if (!field || !n.obj.chart?.pivot || sel.value.startsWith('\u0000')) return;
-        void this.io.pivotFilter?.(n.obj.chart.pivot, field, sel.value === '' ? [] : [sel.value]);
-      });
+      const bar = makeBar({
+        items: (name, field) => this.io.pivotItems?.(name, field) ?? Promise.resolve([]),
+        filter: (name, field, items) => this.io.pivotFilter?.(name, field, items) ?? Promise.resolve(),
+      }, () => (n.obj.chart?.pivot ? this.io.pivots?.().find((p) => p.name === n.obj.chart?.pivot) ?? null : null));
       n.el.insertBefore(bar, n.body);
       n.bar = bar;
-      n.body.style.top = `${FILTER_BAR}px`;
     }
     if (key === n.barKey) return;
     n.barKey = key;
-    const bar = n.bar;
-    const have = new Map<string, HTMLSelectElement>();
-    bar.querySelectorAll<HTMLSelectElement>('select').forEach((s) => have.set(s.dataset.field ?? '', s));
-    const wanted = def.filters.map((f) => f.field);
-    for (const [field, el] of have) if (!wanted.includes(field)) el.parentElement?.remove();
-    for (const f of def.filters) {
-      let sel = have.get(f.field);
-      if (!sel) {
-        const wrap = document.createElement('label');
-        wrap.className = 'fc-chart-filter';
-        const cap = document.createElement('span');
-        cap.textContent = f.field;
-        sel = document.createElement('select');
-        sel.dataset.field = f.field;
-        sel.setAttribute('aria-label', `Filter ${f.field}`);
-        wrap.append(cap, sel);
-        bar.appendChild(wrap);
-      }
-      const current = f.items.length === 1 ? f.items[0] : '';
-      const label = pivotLabel(def, f.field);
-      const target = sel;
-      const fill = (items: string[]) => {
-        const opts = [['', '(All)'], ...items.map((i) => [i, i])];
-        if (f.items.length > 1) opts.push(['\u0000multi', '(Multiple Items)']);
-        target.replaceChildren(...opts.map(([v, t]) => new Option(t, v)));
-        target.value = f.items.length > 1 ? '\u0000multi' : current;
-      };
-      fill(f.items.length === 1 ? [f.items[0]] : []);
-      target.title = label;
-      void this.io.pivotItems?.(def.name, f.field).then((items) => {
-        if (n.barKey === key) fill(items);
-      });
-    }
-    for (const t of [...def.rows, ...def.cols]) {
-      if (bar.querySelector(`[data-axis="${CSS.escape(t)}"]`)) continue;
-      const chip = document.createElement('span');
-      chip.className = 'fc-chart-axis-chip';
-      chip.dataset.axis = t;
-      chip.textContent = t;
-      bar.appendChild(chip);
-    }
-    bar.querySelectorAll<HTMLElement>('[data-axis]').forEach((c) => {
-      if (![...def.rows, ...def.cols].includes(c.dataset.axis ?? '')) c.remove();
-    });
+    n.bar.hidden = !shown;
+    n.body.style.top = shown ? `${FILTER_BAR}px` : '0px';
+    syncBar(n.bar, def);
   }
 }

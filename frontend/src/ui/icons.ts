@@ -58,6 +58,7 @@ export const icons = {
   sparkline: svg('<rect x="3.5" y="6.5" width="17" height="11" rx="1.5"/><path d="M6 14.5l3-3 2.5 2 3-4.5 2.5 2"/>'),
   cellPicture: svg('<rect x="3.5" y="4.5" width="17" height="15" rx="2"/><rect x="7.5" y="8.5" width="9" height="7" rx="1"/><circle cx="10.5" cy="11" r="1"/><path d="M8 15l3-2.5 2 1.5 3.5-2"/>'),
   timeline: svg('<path d="M4 7h9M7 12h11M10 17h8"/><circle cx="4" cy="7" r="0.8"/><circle cx="7" cy="12" r="0.8"/><circle cx="10" cy="17" r="0.8"/>'),
+  shapes: svg('<rect x="3.5" y="12.5" width="8" height="8" rx="1"/><circle cx="16.5" cy="16.5" r="4"/><path d="M8 3.5l4 7H4z"/>'),
   shapeRect: svg('<rect x="4.5" y="6.5" width="15" height="11" rx="1.5"/>'),
   shapeEllipse: svg('<ellipse cx="12" cy="12" rx="8" ry="6"/>'),
   shapeArrow: svg('<path d="M4 12h15M13.5 6.5L19 12l-5.5 5.5"/>'),

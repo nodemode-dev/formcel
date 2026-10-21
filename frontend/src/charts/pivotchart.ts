@@ -24,7 +24,7 @@ export async function pivotChartData(eng: EngineClient, book: number, def: Pivot
   const out = outArea(def);
   if (!out) return null;
   const [r0, c0, r1, c1] = out.area;
-  const m = await readMatrix(eng, book, out.sheet, { r0, c0, r1, c1 });
+  const m = (await readMatrix(eng, book, out.sheet, { r0, c0, r1, c1 })).map((row) => row.map((s) => (s.startsWith("'") ? s.slice(1) : s)));
   const kr = def.rows.length;
   const kc = def.cols.length;
   const nv = def.values.length;
