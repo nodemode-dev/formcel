@@ -2,13 +2,13 @@
 
 Spreadsheets in the form family. An open alternative to Excel and Google Sheets, built so that Claude Code, Codex or Cursor can read and edit a live workbook while you watch.
 
-Version 0.10.0 · Apache-2.0 · macOS, Windows, Linux (browser now, Tauri desktop later)
+Version 0.10.1 · Apache-2.0 · macOS, Windows, Linux (browser now, Tauri desktop later)
 
 **Stack.** Vanilla TypeScript and Vite · Python 3.12 and FastAPI · one calculation engine in Rust, compiled to WebAssembly for the window and to a Python module for the engine process · Tauri 2 later.
 
 ## Status
 
-0.10.0 continues Phase 2 in `DEV_PLAN.md`: dates and times, currency and percent kept as typed, and 76 functions checked against the worked examples on Microsoft's function pages (125 of 131 runnable cases pass), on top of Phase 1's grid, files and home.
+0.10.0 continues Phase 2 in `DEV_PLAN.md`: dates and times, currency and percent kept as typed, and 76 functions checked against the worked examples on Microsoft's function pages (153 of 159 runnable cases pass; the 6 others need features still to come), on top of Phase 1's grid, files and home.
 
 | Area | In 0.10.0 |
 | --- | --- |
