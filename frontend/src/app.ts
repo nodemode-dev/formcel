@@ -274,6 +274,10 @@ export class App {
         if (document.activeElement !== p.formulaBar) p.formulaBar.value = text;
         if (this.grid) {
           const [ar, ac] = this.grid.activeCell();
+          void this.whatIf?.tableText(ar, ac).then((t) => {
+            const [nr, nc] = this.grid.activeCell();
+            if (t && nr === ar && nc === ac && document.activeElement !== p.formulaBar) p.formulaBar.value = t;
+          });
           const shown = this.grid.shownAt(ar, ac);
           this.say(`${this.currentRef}, ${shown ? `value ${shown}` : 'empty'}${text.startsWith('=') ? `, formula ${text}` : ''}`);
         }
@@ -344,6 +348,7 @@ export class App {
       sheetNames: () => this.open?.sheets ?? [],
       makeSheet: (base) => this.makeSheet(base),
       persist: (lines) => this.sendWhatif(lines),
+      pivotsChanged: () => this.pivotSync(),
     });
     this.tools = new DataTools({
       grid: this.grid,
@@ -553,6 +558,7 @@ export class App {
     cmd('data.forecast-sheet', 'Forecast Sheet', 'Write a table of historical and forecast values, with confidence bounds, to a new sheet using FORECAST.ETS.', true, () => this.whatIf.forecast());
     cmd('data.describe', 'Descriptive Statistics', 'Write the mean, median, spread and other statistics of the selected numbers to a new sheet.', true, () => this.whatIf.describe());
     cmd('data.regression', 'Regression', 'Fit a least-squares line to selected Y and X columns and write the statistics and coefficients to a new sheet.', true, () => this.whatIf.regression());
+    cmd('data.analysis', 'Data Analysis', 'Pick an analysis tool such as ANOVA, correlation, histogram, moving average, t-test or random numbers, and write its tables to a new sheet.', true, () => this.whatIf.dataAnalysis());
     cmd('data.analyze', 'Analyze Data', 'Open a panel of simple insights about the selected data: totals, top values, trends and unusual numbers.', false, () => this.whatIf.analyze());
     cmd('data.datatable-refresh', 'Recalculate data tables', 'Recalculate every data table now.', true, () => this.whatIf.refresh());
     cmd('data.validation', 'Data validation', 'Limit what can be typed in the selected cells, offer a dropdown list, show a message when a cell is selected and an alert when a value is not allowed.', true, () => this.validBox());
@@ -681,6 +687,10 @@ export class App {
     p.formulaBar.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') {
         e.preventDefault();
+        if (p.formulaBar.value.startsWith('{=TABLE(')) {
+          this.grid.focus();
+          return;
+        }
         void this.grid.setActive(p.formulaBar.value).then(() => this.grid.focus());
       } else if (e.key === 'Escape') {
         e.preventDefault();
@@ -3014,6 +3024,7 @@ export class App {
       { label: 'Forecast Sheet', run: run('data.forecast-sheet') },
       { label: 'Descriptive Statistics', run: run('data.describe') },
       { label: 'Regression', run: run('data.regression') },
+      { label: 'Data Analysis', run: run('data.analysis') },
       { label: 'Analyze Data', run: run('data.analyze') },
       { sep: true },
       { label: 'Recalculate data tables', run: run('data.datatable-refresh') },
