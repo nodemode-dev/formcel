@@ -7,6 +7,7 @@ from openpyxl import load_workbook
 from openpyxl.utils.datetime import to_excel
 from openpyxl.worksheet.formula import ArrayFormula, DataTableFormula
 
+from .cf import rules_in
 from .formulas import from_file
 from .styles import tokens_in
 from .theme import theme_in
@@ -145,8 +146,7 @@ def read(data: bytes) -> dict:
         tab = ws.sheet_properties.tabColor
         if tab is not None and isinstance(tab.rgb, str) and len(tab.rgb) >= 6:
             view["color"] = "#" + tab.rgb[-6:].lower()
-        if ws.conditional_formatting:
-            notes["conditional formatting rules left out"] += sum(len(r.rules) for r in ws.conditional_formatting)
+        rules = rules_in(ws, notes)
         if ws.data_validations and ws.data_validations.dataValidation:
             notes["data validation rules left out"] += len(ws.data_validations.dataValidation)
         if getattr(ws, "_images", None):
@@ -162,7 +162,7 @@ def read(data: bytes) -> dict:
             notes["comments and notes left out"] += comments
         if ws.defined_names:
             notes["names scoped to one sheet left out"] += len(ws.defined_names)
-        sheets.append({"name": ws.title[:31], "cells": cells, "formats": formats, "styles": styles, "merges": merges, "links": links, "view": view})
+        sheets.append({"name": ws.title[:31], "cells": cells, "formats": formats, "styles": styles, "merges": merges, "links": links, "rules": rules, "view": view})
     for cs in wb.chartsheets:
         notes["chart sheets left out"] += 1
     names = []

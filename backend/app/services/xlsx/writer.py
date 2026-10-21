@@ -6,6 +6,7 @@ from openpyxl.utils import get_column_letter
 from openpyxl.workbook.defined_name import DefinedName
 from openpyxl.worksheet.hyperlink import Hyperlink
 
+from .cf import rules_out
 from .formulas import to_file
 from .styles import apply_out
 from .theme import theme_out
@@ -86,6 +87,7 @@ def write(eng, views: list[dict]) -> bytes:
                 cell.hyperlink = Hyperlink(ref=cell.coordinate, location=target[1:])
             else:
                 cell.hyperlink = target
+        rules_out(ws, eng.rules(i))
         for r1, c1, r2, c2 in eng.merges(i):
             ws.merge_cells(start_row=r1 + 1, start_column=c1 + 1, end_row=r2 + 1, end_column=c2 + 1)
         ws.sheet_format.defaultColWidth = round(COL_PX / 7, 4)
