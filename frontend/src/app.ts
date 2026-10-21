@@ -498,6 +498,11 @@ export class App {
     cmd('cols.insert-right', 'Insert columns right', 'Insert as many columns as are selected, right of the selection.', true, () => g.insert(false, true));
     cmd('rows.delete', 'Delete rows', 'Delete the selected rows and move the rows below up.', true, () => g.remove(true), 'Mod+-');
     cmd('cols.delete', 'Delete columns', 'Delete the selected columns and move the columns on the right left.', true, () => g.remove(false));
+    cmd('rows.height', 'Row height', 'Set the height in points of the selected rows.', true, () => this.tools.sizeDialog('rowheight'));
+    cmd('cols.width', 'Column width', 'Set the width in characters of the selected columns.', true, () => this.tools.sizeDialog('colwidth'));
+    cmd('cols.standard', 'Standard width', 'Set the width in characters that columns have unless they were sized on their own.', true, () => this.tools.sizeDialog('stdwidth'));
+    cmd('rows.autofit', 'AutoFit row height', 'Size the selected rows to fit their wrapped text, line breaks and large fonts.', true, () => g.autofitSelection(true));
+    cmd('cols.autofit', 'AutoFit column width', 'Size the selected columns to fit their longest entry.', true, () => g.autofitSelection(false));
     cmd('rows.hide', 'Hide rows', 'Hide the selected rows.', false, () => g.hide(true, true), 'Mod+9');
     cmd('rows.unhide', 'Unhide rows', 'Show hidden rows inside the selection.', false, () => g.hide(true, false), 'Mod+Shift+9');
     cmd('cols.hide', 'Hide columns', 'Hide the selected columns.', false, () => g.hide(false, true), 'Mod+0');
@@ -2944,6 +2949,9 @@ export class App {
     items.push({ label: 'Clear contents', keys: 'Delete', run: run('edit.clear') }, { label: 'Paste special', keys: 'Ctrl+Alt+V', disabled: !g.canPasteSpecial(), run: () => this.pasteMenu(x, y) }, { sep: true });
     if (kind === 'rows' || kind === 'cells') items.push({ label: 'Hide rows', keys: 'Ctrl+9', run: run('rows.hide') }, { label: 'Unhide rows', keys: 'Ctrl+Shift+9', run: run('rows.unhide') });
     if (kind === 'cols' || kind === 'cells') items.push({ label: 'Hide columns', keys: 'Ctrl+0', run: run('cols.hide') }, { label: 'Unhide columns', keys: 'Ctrl+Shift+0', run: run('cols.unhide') });
+    items.push({ sep: true });
+    if (kind !== 'cols') items.push({ label: 'Row height...', run: run('rows.height') }, { label: 'AutoFit row height', run: run('rows.autofit') });
+    if (kind !== 'rows') items.push({ label: 'Column width...', run: run('cols.width') }, { label: 'AutoFit column width', run: run('cols.autofit') }, { label: 'Standard width...', run: run('cols.standard') });
     if (kind === 'rows') items.push({ sep: true }, { label: 'Group rows', keys: 'Alt+Shift+Right', run: run('rows.group') }, { label: 'Ungroup rows', keys: 'Alt+Shift+Left', run: run('rows.ungroup') });
     if (kind === 'cols') items.push({ sep: true }, { label: 'Group columns', keys: 'Alt+Shift+Right', run: run('cols.group') }, { label: 'Ungroup columns', keys: 'Alt+Shift+Left', run: run('cols.ungroup') });
     this.menu.show(x, y, items, () => g.focus());

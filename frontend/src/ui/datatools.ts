@@ -154,6 +154,9 @@ const SPECS: Spec[] = [
       { k: 'transpose', label: 'Transpose', kind: 'check' },
     ],
   },
+  { id: 'rowheight', title: 'Row height', ok: 'OK', fields: [{ k: 'size', label: 'Row height (points, 3 to 409)', kind: 'text' }] },
+  { id: 'colwidth', title: 'Column width', ok: 'OK', fields: [{ k: 'size', label: 'Column width (characters, 0.5 to 255)', kind: 'text' }] },
+  { id: 'stdwidth', title: 'Standard width', ok: 'OK', fields: [{ k: 'size', label: 'Standard column width (characters)', kind: 'text' }] },
   {
     id: 'movecopy',
     title: 'Move or Copy',
@@ -630,6 +633,27 @@ export class DataTools {
       if (['all', 'formulas', 'values', 'formats', 'theme'].includes(what)) return this.line(await g.pasteWith(what === 'theme' ? 'all' : what, op, skip, t));
       if (op !== 'none' || skip) throw new Error('Operations and skip blanks work with All, Formulas, Values and Formats.');
       await g.pasteSpecial(what as PasteKind, t);
+      return '';
+    });
+  }
+
+  sizeDialog(kind: 'rowheight' | 'colwidth' | 'stdwidth'): void {
+    const g = this.c.grid;
+    const now = g.sizeAtActive();
+    const round = (n: number) => String(Math.round(n * 100) / 100);
+    this.prepare(kind);
+    this.put(kind, 'size', kind === 'rowheight' ? round(now.row * 0.75) : round((kind === 'colwidth' ? now.col : now.base) / 7));
+    this.show(kind, async (v) => {
+      const n = Number((v.size as string).trim());
+      if (!Number.isFinite(n)) throw new Error('Type a number.');
+      if (kind === 'rowheight') {
+        if (n < 3 || n > 409) throw new Error('A row height is between 3 and 409 points.');
+        g.setSelectionSize(true, n / 0.75);
+      } else {
+        if (n < 0.5 || n > 255) throw new Error('A column width is between 0.5 and 255 characters.');
+        if (kind === 'colwidth') g.setSelectionSize(false, n * 7);
+        else g.setStandardWidth(n * 7);
+      }
       return '';
     });
   }

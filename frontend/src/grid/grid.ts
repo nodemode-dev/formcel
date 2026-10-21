@@ -2050,6 +2050,14 @@ export class Grid {
       const st = this.styles.get(KEY(r, c));
       if (st && (st.wrap || st.size || st.rot || st.vertical)) fit.add(r);
     }
+    if (!this.replaying) {
+      const broken: StyleOp[] = [];
+      for (const [s, r, c, t, f] of changed) if (s === this.sheet && !f && t.includes('\n') && !this.styles.get(KEY(r, c))?.wrap) broken.push([r, c, r, c, 'wrap']);
+      if (broken.length) {
+        await this.setStyles(broken);
+        for (const op of broken) fit.add(op[0]);
+      }
+    }
     this.fitRows(fit);
     if (changed.length) this.events.onChanged(changed);
     if (changed.length && this.ruleLines.length) void this.refreshCf();
@@ -2458,6 +2466,42 @@ export class Grid {
     this.paint();
   }
 
+  sizeAtActive(): { row: number; col: number; base: number } {
+    return { row: this.rows.size(this.ar), col: this.cols.size(this.ac), base: this.cols.base };
+  }
+
+  setSelectionSize(rows: boolean, px: number): void {
+    const s = this.sel();
+    const axis = rows ? this.rows : this.cols;
+    const [a, b] = rows ? [s.r0, Math.min(s.r1, s.r0 + 10000)] : [s.c0, Math.min(s.c1, s.c0 + 2000)];
+    for (let i = a; i <= b; i++) axis.setSize(i, px);
+    this.resize();
+    this.emitView();
+    this.paint();
+  }
+
+  setStandardWidth(px: number): void {
+    this.cols.setBase(px);
+    this.resize();
+    this.emitView();
+    this.paint();
+  }
+
+  async autofitSelection(rows: boolean): Promise<void> {
+    const s = this.sel();
+    if (rows) {
+      const set = new Set<number>();
+      for (let r = s.r0; r <= Math.min(s.r1, s.r0 + 2000); r++) set.add(r);
+      for (const r of set) if (!this.rows.isHidden(r)) this.rows.setSize(r, this.rows.base);
+      this.fitRows(set);
+      this.emitView();
+      this.paint();
+      return;
+    }
+    for (let c = s.c0; c <= Math.min(s.c1, s.c0 + 200); c++) await this.autofit(c);
+    this.emitView();
+  }
+
   private async autofit(col: number): Promise<void> {
     const ext = await this.engine.extent(this.book, this.sheet);
     if (!ext) return;
@@ -2713,6 +2757,7 @@ export class Grid {
       if (b?.kind === 'col') void this.autofit(b.index).then(() => this.emitView());
       else if (b?.kind === 'row') {
         this.rows.setSize(b.index, this.rows.base);
+        this.fitRows(new Set([b.index]));
         this.emitView();
         this.paint();
       } else if (p.x > HEAD_W && p.y > HEAD_H) this.startEdit();

@@ -3,6 +3,7 @@ export interface AxisState {
   hidden: number[];
   levels?: [number, number][];
   folded?: [number, number][];
+  base?: number;
 }
 
 export interface OutlineRun {
@@ -23,11 +24,21 @@ export class Axis {
   private keys: number[] = [];
   private deltas: number[] = [];
 
+  readonly home: number;
+
   constructor(
     readonly count: number,
-    readonly base: number,
+    public base: number,
     readonly min = 4,
-  ) {}
+  ) {
+    this.home = base;
+  }
+
+  setBase(px: number): void {
+    this.base = Math.max(this.min, Math.min(800, Math.round(px)));
+    for (const [k, v] of [...this.sizes]) if (v === this.base) this.sizes.delete(k);
+    this.rebuild();
+  }
 
   size(i: number): number {
     return this.hidden.has(i) || this.filtered.has(i) ? 0 : this.sizes.get(i) ?? this.base;
@@ -104,10 +115,12 @@ export class Axis {
     const s: AxisState = { sizes: [...this.sizes.entries()], hidden: [...this.hidden] };
     if (this.levels.size) s.levels = [...this.levels.entries()];
     if (this.folded.size) s.folded = [...this.folded.entries()];
+    if (this.base !== this.home) s.base = this.base;
     return s;
   }
 
   restore(s: AxisState | undefined): void {
+    this.base = s?.base ?? this.home;
     this.sizes.clear();
     this.hidden.clear();
     this.levels.clear();
