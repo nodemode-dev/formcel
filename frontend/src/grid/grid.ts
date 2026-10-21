@@ -952,6 +952,11 @@ export class Grid {
     await this.applyEffect(e);
   }
 
+  async syncTables(): Promise<void> {
+    await this.loadTables();
+    this.events.onTables(await this.engine.tables(this.book));
+  }
+
   async setTable(name: string, line: string): Promise<void> {
     await this.applyEffect(await this.engine.setTable(this.book, name, line));
   }
