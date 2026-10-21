@@ -15,6 +15,7 @@ pub use numfmt::Fmt;
 mod store;
 pub mod style;
 pub mod theme;
+pub mod valid;
 pub mod wire;
 pub use formula::ErrKind;
 use formula::{Area, Expr};
@@ -199,11 +200,12 @@ pub struct Sheet {
     merges: Vec<Area>,
     rules: Vec<cf::Rule>,
     filter: Option<filter::Filter>,
+    valid: Vec<valid::Validation>,
 }
 
 impl Sheet {
     pub fn new(name: &str) -> Self {
-        Sheet { name: name.to_string(), cells: Store::default(), merges: Vec::new(), rules: Vec::new(), filter: None }
+        Sheet { name: name.to_string(), cells: Store::default(), merges: Vec::new(), rules: Vec::new(), filter: None, valid: Vec::new() }
     }
 
     pub fn len(&self) -> usize {
@@ -297,6 +299,7 @@ struct Lost {
     merges: Vec<Area>,
     rules: Vec<cf::Rule>,
     filter: Option<filter::Filter>,
+    valid: Vec<valid::Validation>,
     links: Vec<(Key, Option<String>, Option<String>)>,
 }
 
@@ -321,11 +324,13 @@ pub struct Effect {
     pub named: bool,
     pub rules: Option<usize>,
     pub filter: Option<usize>,
+    pub valid: Option<usize>,
 }
 
 impl Effect {
     fn join(mut self, o: Effect) -> Effect {
         self.rules = o.rules.or(self.rules);
+        self.valid = o.valid.or(self.valid);
         self.filter = o.filter.or(self.filter);
         self.theme |= o.theme;
         self.named |= o.named;
@@ -355,6 +360,7 @@ enum Tx {
     Named { before: Vec<theme::NamedStyle>, after: Vec<theme::NamedStyle> },
     Rules { sheet: usize, before: Vec<cf::Rule>, after: Vec<cf::Rule> },
     Filter { sheet: usize, before: Option<filter::Filter>, after: Option<filter::Filter> },
+    Valid { sheet: usize, before: Vec<valid::Validation>, after: Vec<valid::Validation> },
     Links(Vec<FormatChange>),
 }
 
@@ -1387,7 +1393,9 @@ impl Workbook {
     }
 
     fn do_shift(&mut self, s: Shift) -> (Dropped, Rewritten, Lost) {
-        let mut lost_fmt = Lost { merges: self.sheets[s.sheet].merges.clone(), rules: self.sheets[s.sheet].rules.clone(), filter: self.sheets[s.sheet].filter.clone(), ..Lost::default() };
+        let mut lost_fmt = Lost { merges: self.sheets[s.sheet].merges.clone(), rules: self.sheets[s.sheet].rules.clone(), filter: self.sheets[s.sheet].filter.clone(), valid: self.sheets[s.sheet].valid.clone(), ..Lost::default() };
+        let valid = std::mem::take(&mut self.sheets[s.sheet].valid);
+        self.sheets[s.sheet].valid = valid.into_iter().filter_map(|v| shift_span(v.area, s).map(|area| valid::Validation { area, ..v })).collect();
         let merges = std::mem::take(&mut self.sheets[s.sheet].merges);
         self.sheets[s.sheet].merges = merges.into_iter().filter_map(|m| shift_area(m, s)).collect();
         let rules = std::mem::take(&mut self.sheets[s.sheet].rules);
@@ -1768,6 +1776,10 @@ impl Workbook {
                 self.sheets[*sheet].filter = if forward { after.clone() } else { before.clone() };
                 Effect { filter: Some(*sheet), ..Effect::default() }
             }
+            Tx::Valid { sheet, before, after } => {
+                self.sheets[*sheet].valid = if forward { after.clone() } else { before.clone() };
+                Effect { valid: Some(*sheet), ..Effect::default() }
+            }
             Tx::Theme { before, after } => {
                 self.theme = if forward { (**after).clone() } else { (**before).clone() };
                 Effect { theme: true, ..Effect::default() }
@@ -1802,6 +1814,7 @@ impl Workbook {
                 self.sheets[shift.sheet].merges = lost.merges.clone();
                 self.sheets[shift.sheet].rules = lost.rules.clone();
                 self.sheets[shift.sheet].filter = lost.filter.clone();
+                self.sheets[shift.sheet].valid = lost.valid.clone();
                 self.apply_links(&lost.links, false);
                 let restored = self.apply_formats(&lost.codes, false).join(self.apply_styles(&lost.styles, false));
                 for (s, a, raw) in rewritten {
@@ -1812,7 +1825,7 @@ impl Workbook {
                 }
                 self.recalc_all();
                 let cells = dropped.iter().map(|(a, _)| (shift.sheet, *a, self.sheets[shift.sheet].cells.get(*a).cloned().unwrap_or(Value::Empty))).collect();
-                Effect { cells, shift: Some(back), merges: Some(shift.sheet), rules: Some(shift.sheet), filter: Some(shift.sheet), formats: restored.formats, styles: restored.styles, ..Effect::default() }
+                Effect { cells, shift: Some(back), merges: Some(shift.sheet), rules: Some(shift.sheet), filter: Some(shift.sheet), valid: Some(shift.sheet), formats: restored.formats, styles: restored.styles, ..Effect::default() }
             }
         }
     }

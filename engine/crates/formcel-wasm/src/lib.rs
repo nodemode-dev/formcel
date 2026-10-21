@@ -486,6 +486,90 @@ pub extern "C" fn fc_guess_header(id: u32, sheet: u32, r0: u32, c0: u32, r1: u32
     with_book(id, |wb| i32::from(wb.guess_header(sheet as usize, formcel_core::formula::Area { r0, c0, r1, c1 }))).unwrap_or(0)
 }
 
+/// A sheet's data validation rules, one line each.
+#[no_mangle]
+pub extern "C" fn fc_validations(id: u32, sheet: u32) -> i32 {
+    match with_book(id, |wb| wb.validations(sheet as usize).join("\n")) {
+        Some(s) => emit(&s) as i32,
+        None => -1,
+    }
+}
+
+/// Gives a rectangle one validation rule (the line without its area), or none when empty, as one undo step; -3 when the line does not parse.
+///
+/// # Safety
+/// `t` must point at `len` readable bytes.
+#[no_mangle]
+pub unsafe extern "C" fn fc_set_validation(id: u32, sheet: u32, r0: u32, c0: u32, r1: u32, c1: u32, t: *const u8, len: u32) -> i32 {
+    let t = text(t, len).to_string();
+    let area = formcel_core::formula::Area { r0, c0, r1, c1 };
+    match with_book(id, |wb| wb.set_validation(sheet as usize, area, &t).map(|e| wb.encode(&e))) {
+        Some(Ok(s)) => emit(&s) as i32,
+        Some(Err(formcel_core::EngineError::BadStyle(_))) => -3,
+        _ => -1,
+    }
+}
+
+/// Loads a sheet's validation rules without an undo step.
+///
+/// # Safety
+/// `lines` must point at `len` readable bytes.
+#[no_mangle]
+pub unsafe extern "C" fn fc_load_validations(id: u32, sheet: u32, lines: *const u8, len: u32) -> i32 {
+    let list: Vec<String> = text(lines, len).split('\n').filter(|l| !l.is_empty()).map(String::from).collect();
+    match with_book(id, |wb| wb.load_validations(sheet as usize, &list)) {
+        Some(Ok(n)) => n as i32,
+        _ => -1,
+    }
+}
+
+/// The validation rule over a cell, as a line, or empty.
+#[no_mangle]
+pub extern "C" fn fc_validation_at(id: u32, sheet: u32, row: u32, col: u32) -> i32 {
+    match with_book(id, |wb| wb.validation_at(sheet as usize, Addr { row, col }).map(|v| v.line()).unwrap_or_default()) {
+        Some(s) => emit(&s) as i32,
+        None => -1,
+    }
+}
+
+/// The rule an input would break in a cell, as a line, or empty when the input is allowed.
+///
+/// # Safety
+/// `raw` must point at `len` readable bytes.
+#[no_mangle]
+pub unsafe extern "C" fn fc_check_input(id: u32, sheet: u32, row: u32, col: u32, raw: *const u8, len: u32) -> i32 {
+    let raw = text(raw, len).to_string();
+    match with_book(id, |wb| wb.check_input(sheet as usize, Addr { row, col }, &raw).map(|v| v.line()).unwrap_or_default()) {
+        Some(s) => emit(&s) as i32,
+        None => -1,
+    }
+}
+
+/// The entries of a cell's dropdown list, one escaped line each.
+#[no_mangle]
+pub extern "C" fn fc_list_items(id: u32, sheet: u32, row: u32, col: u32) -> i32 {
+    match with_book(id, |wb| wb.list_items(sheet as usize, Addr { row, col })) {
+        Some(items) => {
+            let mut s = String::new();
+            for i in items {
+                wire::escape(&i, &mut s);
+                s.push('\n');
+            }
+            emit(&s) as i32
+        }
+        None => -1,
+    }
+}
+
+/// Cells in a rectangle whose values break their validation rule, as `row\tcol` lines.
+#[no_mangle]
+pub extern "C" fn fc_invalid_in(id: u32, sheet: u32, r0: u32, c0: u32, r1: u32, c1: u32) -> i32 {
+    match with_book(id, |wb| wb.invalid_in(sheet as usize, Addr { row: r0, col: c0 }, Addr { row: r1, col: c1 })) {
+        Some(list) => emit(&list.iter().map(|a| format!("{}\t{}\n", a.row, a.col)).collect::<String>()) as i32,
+        None => -1,
+    }
+}
+
 /// A sheet's filter as `area`, `col` and `hidden` lines; empty when the sheet has none.
 #[no_mangle]
 pub extern "C" fn fc_filter(id: u32, sheet: u32) -> i32 {

@@ -46,6 +46,9 @@ pub fn encode_effect(e: &Effect, fx: FxOf, shown: &dyn Fn(usize, Addr) -> String
     if let Some(s) = e.filter {
         out.push_str(&format!("~\t{s}\n"));
     }
+    if let Some(s) = e.valid {
+        out.push_str(&format!("?\t{s}\n"));
+    }
     if e.named {
         out.push_str("@\n");
     }

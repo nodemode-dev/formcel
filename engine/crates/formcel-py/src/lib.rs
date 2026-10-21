@@ -270,6 +270,43 @@ impl Workbook {
     }
 
     #[pyo3(signature = (sheet = 0))]
+    fn validations(&self, sheet: usize) -> Vec<String> {
+        self.inner.validations(sheet)
+    }
+
+    #[pyo3(signature = (lines, sheet = 0))]
+    fn load_validations(&mut self, lines: Vec<String>, sheet: usize) -> PyResult<usize> {
+        self.inner.load_validations(sheet, &lines).map_err(|e| PyValueError::new_err(e.to_string()))
+    }
+
+    #[pyo3(signature = (top, bottom, line, sheet = 0))]
+    fn set_validation(&mut self, top: &str, bottom: &str, line: &str, sheet: usize) -> PyResult<()> {
+        let t = parse_a1(top).map_err(|e| PyValueError::new_err(e.to_string()))?;
+        let b = parse_a1(bottom).map_err(|e| PyValueError::new_err(e.to_string()))?;
+        let area = formcel_core::formula::Area { r0: t.row, c0: t.col, r1: b.row, c1: b.col };
+        self.inner.set_validation(sheet, area, line).map(|_| ()).map_err(|e| PyValueError::new_err(e.to_string()))
+    }
+
+    #[pyo3(signature = (a1, raw, sheet = 0))]
+    fn check_input(&self, a1: &str, raw: &str, sheet: usize) -> PyResult<Option<String>> {
+        let a = parse_a1(a1).map_err(|e| PyValueError::new_err(e.to_string()))?;
+        Ok(self.inner.check_input(sheet, a, raw).map(|v| v.line()))
+    }
+
+    #[pyo3(signature = (a1, sheet = 0))]
+    fn list_items(&self, a1: &str, sheet: usize) -> PyResult<Vec<String>> {
+        let a = parse_a1(a1).map_err(|e| PyValueError::new_err(e.to_string()))?;
+        Ok(self.inner.list_items(sheet, a))
+    }
+
+    #[pyo3(signature = (top, bottom, sheet = 0))]
+    fn invalid_in(&self, top: &str, bottom: &str, sheet: usize) -> PyResult<Vec<String>> {
+        let t = parse_a1(top).map_err(|e| PyValueError::new_err(e.to_string()))?;
+        let b = parse_a1(bottom).map_err(|e| PyValueError::new_err(e.to_string()))?;
+        Ok(self.inner.invalid_in(sheet, t, b).into_iter().map(to_a1).collect())
+    }
+
+    #[pyo3(signature = (sheet = 0))]
     fn filter(&self, sheet: usize) -> String {
         self.inner.filter_text(sheet)
     }
