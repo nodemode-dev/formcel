@@ -1,6 +1,6 @@
 import type { Area, Cell, Changed, Dir, Edit, Effect, FormatItem, MergeMode, Name, RequestBody, Response, Shift, StyleOp, Value } from './protocol';
 
-export type { Area, Cell, Changed, Dir, Edit, Effect, FormatChange, FormatItem, MergeMode, Name, Shift, StyleOp } from './protocol';
+export type { Area, Cell, Changed, Dir, Edit, Effect, FormatChange, FormatItem, MergeMode, Name, Shift, StyleChange, StyleOp } from './protocol';
 
 type Pending = { resolve: (v: Value) => void; reject: (e: Error) => void };
 
@@ -126,6 +126,43 @@ export class EngineClient {
 
   async putFormats(book: number, sheet: number, items: FormatItem[]): Promise<Effect> {
     return (await this.call({ op: 'format.put', book, sheet, items })) as Effect;
+  }
+
+  async theme(book: number): Promise<{ current: string; names: string[] }> {
+    const [current, ...names] = (await this.call({ op: 'theme.get', book })) as string[];
+    return { current, names };
+  }
+
+  async setTheme(book: number, text: string): Promise<Effect> {
+    return (await this.call({ op: 'theme.set', book, text })) as Effect;
+  }
+
+  async loadTheme(book: number, text: string): Promise<void> {
+    if (text) await this.call({ op: 'theme.load', book, text });
+  }
+
+  async namedStyles(book: number): Promise<string[]> {
+    return (await this.call({ op: 'named.list', book })) as string[];
+  }
+
+  async loadNamed(book: number, lines: string[]): Promise<void> {
+    if (lines.length) await this.call({ op: 'named.load', book, lines });
+  }
+
+  async defineStyle(book: number, sheet: number, row: number, col: number, name: string, parts: string): Promise<Effect> {
+    return (await this.call({ op: 'style.define', book, sheet, row, col, name, parts })) as Effect;
+  }
+
+  async deleteStyle(book: number, name: string): Promise<Effect> {
+    return (await this.call({ op: 'style.delete', book, name })) as Effect;
+  }
+
+  async applyStyle(book: number, sheet: number, r0: number, c0: number, r1: number, c1: number, name: string): Promise<Effect> {
+    return (await this.call({ op: 'style.apply', book, sheet, r0, c0, r1, c1, name })) as Effect;
+  }
+
+  async readValues(book: number, sheet: number, r0: number, c0: number, r1: number, c1: number): Promise<Edit[]> {
+    return (await this.call({ op: 'values.read', book, sheet, r0, c0, r1, c1 })) as Edit[];
   }
 
   async undoMark(book: number): Promise<number> {

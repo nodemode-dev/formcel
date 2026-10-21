@@ -274,6 +274,8 @@
   position: fixed;
   z-index: var(--z-dropdown);
   min-width: 220px;
+  max-height: calc(100vh - var(--space-8));
+  overflow-y: auto;
   padding: var(--space-1);
   border: 1px solid var(--border-light);
   border-radius: var(--radius-md);
@@ -330,6 +332,9 @@
 .fc-fmt-input:focus { outline: none; border-color: var(--accent-color); }
 .fc-fmt-hint { min-height: calc(var(--text-xs) * 2.8); font-size: var(--text-xs); line-height: 1.4; color: var(--text-muted); }
 .fc-fmt-custom[data-state="error"] .fc-fmt-hint { color: var(--bad); }
+.fc-fmt-parts { display: flex; flex-wrap: wrap; gap: var(--space-2) var(--space-3); font-size: var(--text-sm); color: var(--text-secondary); }
+.fc-fmt-parts label { display: inline-flex; align-items: center; gap: var(--space-1); }
+.fc-fmt-custom .fc-btn { justify-self: end; }
 .fc-menu-keys { font-family: var(--font-mono); font-size: var(--text-xs); color: var(--text-muted); }
 .fc-menu-sep { height: 1px; margin: var(--space-1) 0; background: var(--border-color); }
 .fc-menu-swatches { display: flex; flex-wrap: wrap; gap: 6px; padding: var(--space-1) var(--space-2); }

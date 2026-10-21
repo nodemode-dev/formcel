@@ -1,7 +1,7 @@
 import { engine, type Area, type Changed, type FormatChange, type Name, type Shift } from './engine';
 import { colName, type Range } from './grid/a1';
 import { Autocomplete, FUNCTIONS, type Suggestion } from './ui/autocomplete';
-import { Grid, type BorderKind, type MenuKind, type SheetView } from './grid/grid';
+import { Grid, type BorderKind, type MenuKind, type PasteKind, type SheetView } from './grid/grid';
 import { listCommands, registerCommand, runCommand } from './ui/commands';
 import { Home, type TemplateMeta, type WorkbookMeta } from './ui/home';
 import { Menu, type MenuItem } from './ui/menu';
@@ -138,6 +138,8 @@ export class App {
       onFormats: (f) => this.sendFormats(f),
       onStyles: (s) => this.sendFormats(s, 'styles'),
       onMerges: (sheet, areas) => this.sendMerges(sheet, areas),
+      onLook: () => this.sendLook(),
+      onPasteMenu: (x, y) => this.pasteMenu(x, y),
       onPainter: (state) => this.button('format.painter').setAttribute('aria-pressed', String(state !== 'off')),
       onView: (sheet, view) => this.saveView(sheet, view),
       onMenu: (kind, x, y) => this.cellMenu(kind, x, y),
@@ -222,6 +224,12 @@ export class App {
       await g.setFormat('');
       if (this.open) await e.undoGroup(this.open.book, mark);
     });
+    cmd('format.styles', 'Cell styles', 'Apply a named cell style, or make one from the selection.', true, () => this.stylesMenu());
+    cmd('format.theme', 'Theme', 'Choose the workbook theme: the colours and fonts that styles and the default text use.', true, () => this.themeMenu());
+    cmd('edit.paste-special', 'Paste special', 'Paste only formulas, values, formats or column widths, or transpose, from the last FormCel copy.', true, () => {
+      const r = this.p.grid.getBoundingClientRect();
+      this.pasteMenu(r.left + 80, r.top + 40);
+    }, 'Mod+Alt+V');
     cmd('format.merge', 'Merge cells', 'Merge the selected cells into one, or split a merged cell.', true, () => this.mergeMenu());
     cmd('format.merge-center', 'Merge and center', 'Merge the selection into one cell and center its text. Only the upper-left value is kept.', true, () => g.merge('center'));
     cmd('format.merge-across', 'Merge across', 'Merge each selected row into one cell.', true, () => g.merge('across'));
@@ -243,7 +251,9 @@ export class App {
     const p = this.p;
     p.toolbar.addEventListener('click', (e) => {
       const b = (e.target as HTMLElement).closest<HTMLButtonElement>('[data-cmd]');
-      if (b && !b.disabled) void runCommand(b.dataset.cmd!).then(() => this.grid.focus());
+      if (b && !b.disabled) void runCommand(b.dataset.cmd!).then(() => {
+        if (!this.menu.open && document.activeElement?.closest('.fc-fmt-custom') == null) this.grid.focus();
+      });
     });
     p.homeBtn.addEventListener('click', () => void runCommand('file.home'));
     this.button('format.painter').addEventListener('dblclick', () => void this.grid.startPainter(true).then(() => this.grid.focus()));
@@ -353,7 +363,7 @@ export class App {
   private async openWorkbook(id: string, setHash = true): Promise<void> {
     this.flush();
     await this.saving;
-    let doc: WorkbookMeta & { cells: [number, number, string][][]; formats?: [number, number, string][][]; styles?: [number, number, string][][]; merges?: Area[][]; views?: SheetView[]; names?: Name[] };
+    let doc: WorkbookMeta & { cells: [number, number, string][][]; formats?: [number, number, string][][]; styles?: [number, number, string][][]; merges?: Area[][]; theme?: string; cellStyles?: string[]; views?: SheetView[]; names?: Name[] };
     try {
       doc = await api('GET', `/api/workbooks/${id}`);
     } catch {
@@ -362,6 +372,8 @@ export class App {
     }
     const e = engine();
     const book = await e.newWorkbook();
+    await e.loadTheme(book, doc.theme ?? '');
+    await e.loadNamed(book, doc.cellStyles ?? []);
     for (let i = 0; i < doc.sheets.length; i++) {
       if (i) await e.addSheet(book, doc.sheets[i]);
       await e.loadFormats(book, i, doc.formats?.[i] ?? []);
@@ -522,6 +534,130 @@ export class App {
     });
   }
 
+  private sendLook(): void {
+    const o = this.open;
+    if (!o) return;
+    this.status('Saving');
+    this.saving = this.saving.then(async () => {
+      try {
+        const e = engine();
+        const [t, cellStyles] = await Promise.all([e.theme(o.book), e.namedStyles(o.book)]);
+        await api('PUT', `/api/workbooks/${o.id}/look`, { theme: t.current, cell_styles: cellStyles });
+        if (!this.pending.size) this.status('Saved');
+      } catch (err) {
+        this.status('Not saved', true);
+        this.p.save.title = err instanceof Error ? err.message : '';
+      }
+    });
+  }
+
+  private pasteMenu(x: number, y: number): void {
+    const g = this.grid;
+    const done = () => g.focus();
+    const run = (kind: PasteKind, t = false) => () => g.pasteSpecial(kind, t).then(done);
+    if (!g.canPasteSpecial()) {
+      this.menu.show(x, y, [{ label: 'Copy cells in FormCel first to paste them in special ways', disabled: true, run: () => undefined }], done);
+      return;
+    }
+    this.menu.show(x, y, [
+      { label: 'All', run: run('all') },
+      { label: 'Formulas', run: run('formulas') },
+      { label: 'Values', run: run('values') },
+      { label: 'Formats', run: run('formats') },
+      { label: 'Formulas and number formats', run: run('formulas-formats') },
+      { label: 'Values and number formats', run: run('values-formats') },
+      { label: 'All except borders', run: run('no-borders') },
+      { label: 'Column widths', run: run('widths') },
+      { sep: true },
+      { label: 'Transpose', run: run('all', true) },
+      { label: 'Values, transposed', run: run('values', true) },
+    ], done);
+  }
+
+  private async stylesMenu(): Promise<void> {
+    const g = this.grid;
+    const o = this.open;
+    if (!o) return;
+    const lines = await engine().namedStyles(o.book);
+    const named = lines.map((l) => l.split('\t')).map(([name, , , , builtin]) => ({ name, builtin: builtin === '1' }));
+    const current = g.activeStyle().cs ?? 'Normal';
+    const [x, y] = this.below('format.styles');
+    const groups = [['Normal', 'Good', 'Bad', 'Neutral'], ['Title', 'Heading 1', 'Heading 2', 'Heading 3', 'Heading 4', 'Total'], ['Input', 'Output', 'Calculation', 'Note', 'Warning Text'], ['Accent 1', 'Accent 2', 'Accent 3', 'Accent 4', 'Accent 5', 'Accent 6'], ['Comma', 'Currency', 'Percent']];
+    const known = new Set(groups.flat());
+    const custom = named.filter((n) => !known.has(n.name)).map((n) => n.name);
+    const items: MenuItem[] = [];
+    const add = (name: string) => items.push({ label: name === current ? `${name} (current)` : name, run: () => g.applyNamed(name).then(() => g.focus()) });
+    for (const group of [...groups.map((gr) => gr.filter((n) => named.some((d) => d.name === n))), custom]) {
+      if (!group.length) continue;
+      if (items.length) items.push({ sep: true });
+      group.forEach(add);
+    }
+    items.push({ sep: true }, { label: 'New cell style from selection...', run: () => this.styleBox('') });
+    if (current !== 'Normal') {
+      items.push({ label: `Update ${current} to match selection`, run: () => this.styleBox(current) });
+      items.push({ label: `Delete ${current}`, danger: true, confirm: `Click again to delete ${current} from every cell`, run: () => g.deleteNamed(current).then(() => g.focus()) });
+    }
+    this.menu.show(x, y, items, () => g.focus());
+  }
+
+  private styleForm: { form: HTMLFormElement; name: HTMLInputElement; hint: HTMLElement; parts: HTMLInputElement[] } | null = null;
+
+  private styleBox(name: string): void {
+    const box = this.styleForm ??= this.makeStyleForm();
+    const [x, y] = this.below('format.styles');
+    box.form.style.left = `${Math.round(x)}px`;
+    box.form.style.top = `${Math.round(y)}px`;
+    box.name.value = name;
+    box.hint.textContent = 'The style takes the checked parts of the active cell’s formatting.';
+    box.form.dataset.state = '';
+    box.form.hidden = false;
+    box.name.focus();
+    box.name.select();
+  }
+
+  private makeStyleForm(): { form: HTMLFormElement; name: HTMLInputElement; hint: HTMLElement; parts: HTMLInputElement[] } {
+    const form = document.createElement('form');
+    form.className = 'fc-fmt-custom';
+    form.hidden = true;
+    const parts: [string, string][] = [['n', 'Number'], ['a', 'Alignment'], ['f', 'Font'], ['b', 'Border'], ['p', 'Fill']];
+    form.innerHTML = `<label class="fc-fmt-label">Style name<input class="fc-fmt-input" spellcheck="false" autocomplete="off" maxlength="64"></label><div class="fc-fmt-parts">${parts.map(([k, l]) => `<label><input type="checkbox" value="${k}" checked> ${l}</label>`).join('')}</div><span class="fc-fmt-hint" aria-live="polite"></span><button type="submit" class="fc-btn fc-btn-primary">Save style</button>`;
+    document.getElementById('overlay-root')!.appendChild(form);
+    const name = form.querySelector<HTMLInputElement>('.fc-fmt-input')!;
+    const hint = form.querySelector<HTMLElement>('.fc-fmt-hint')!;
+    const boxes = [...form.querySelectorAll<HTMLInputElement>('input[type="checkbox"]')];
+    const close = () => {
+      form.hidden = true;
+      this.grid.focus();
+    };
+    form.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const picked = boxes.filter((b) => b.checked).map((b) => b.value).join('');
+      void this.grid.defineNamed(name.value, picked).then(close, (err: unknown) => {
+        form.dataset.state = 'error';
+        hint.textContent = err instanceof Error ? err.message : String(err);
+      });
+    });
+    form.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        close();
+      }
+    });
+    document.addEventListener('pointerdown', (e) => {
+      if (!form.hidden && !form.contains(e.target as Node)) form.hidden = true;
+    }, true);
+    return { form, name, hint, parts: boxes };
+  }
+
+  private themeMenu(): void {
+    const g = this.grid;
+    const [x, y] = this.below('format.theme');
+    this.menu.show(x, y, g.themeNames.map((n) => ({
+      label: n === g.look.name ? `${n} (current)` : n,
+      run: () => g.setTheme(n).then(() => g.focus()),
+    })), () => g.focus());
+  }
+
   private sendMerges(sheet: number, areas: Area[]): void {
     const o = this.open;
     if (!o) return;
@@ -548,7 +684,11 @@ export class App {
     const st = g.activeStyle();
     const [x, y] = this.below(cmd);
     const pick = (c: string) => void g.styleSelection(`${key}:${c.slice(1)}`).then(() => g.focus());
+    const slots = ['dk2', 'lt2', 'accent1', 'accent2', 'accent3', 'accent4', 'accent5', 'accent6'];
+    const themed = slots.map((s) => g.look.colors[['dk1', 'lt1', 'dk2', 'lt2', 'accent1', 'accent2', 'accent3', 'accent4', 'accent5', 'accent6'].indexOf(s)]);
+    const pickTheme = (c: string) => void g.styleSelection(`${key}:t:${slots[themed.indexOf(c)]}`).then(() => g.focus());
     this.menu.show(x, y, [
+      { swatches: themed, current: st[key] ?? '', pick: pickTheme, name: `Theme colour (${g.look.name})` },
       { swatches: CELL_COLOURS, current: st[key] ?? '', pick, name: key === 'fc' ? 'Text colour' : 'Fill colour', none: key === 'fc' ? 'Automatic' : 'No fill' },
     ], () => g.focus());
   }
@@ -605,7 +745,7 @@ export class App {
     for (const h of ['left', 'center', 'right'] as const) press(`format.align-${h}`, st.ha === h);
     for (const v of ['top', 'middle', 'bottom'] as const) press(`format.valign-${v}`, st.va === v);
     const font = this.button('format.font');
-    const label = st.font ?? 'Inter';
+    const label = st.font ?? g.look.body;
     if (font.textContent !== label) font.textContent = label;
     const size = this.button('format.size');
     const sz = String(st.size ?? 10);
@@ -697,7 +837,7 @@ export class App {
     items.push({ sep: true });
     if (kind !== 'cols') items.push({ label: 'Delete rows', keys: 'Ctrl+-', run: run('rows.delete'), danger: true });
     if (kind !== 'rows') items.push({ label: 'Delete columns', run: run('cols.delete'), danger: true });
-    items.push({ label: 'Clear contents', keys: 'Delete', run: run('edit.clear') }, { sep: true });
+    items.push({ label: 'Clear contents', keys: 'Delete', run: run('edit.clear') }, { label: 'Paste special', keys: 'Ctrl+Alt+V', disabled: !g.canPasteSpecial(), run: () => this.pasteMenu(x, y) }, { sep: true });
     if (kind === 'rows' || kind === 'cells') items.push({ label: 'Hide rows', keys: 'Ctrl+9', run: run('rows.hide') }, { label: 'Unhide rows', keys: 'Ctrl+Shift+9', run: run('rows.unhide') });
     if (kind === 'cols' || kind === 'cells') items.push({ label: 'Hide columns', keys: 'Ctrl+0', run: run('cols.hide') }, { label: 'Unhide columns', keys: 'Ctrl+Shift+0', run: run('cols.unhide') });
     if (kind === 'rows') items.push({ sep: true }, { label: 'Group rows', keys: 'Alt+Shift+Right', run: run('rows.group') }, { label: 'Ungroup rows', keys: 'Alt+Shift+Left', run: run('rows.ungroup') });

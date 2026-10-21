@@ -22,6 +22,14 @@ export type Request =
   | { id: number; op: 'merge.list'; book: number; sheet: number }
   | { id: number; op: 'merge.load'; book: number; sheet: number; areas: Area[] }
   | { id: number; op: 'format.put'; book: number; sheet: number; items: FormatItem[] }
+  | { id: number; op: 'theme.get'; book: number }
+  | { id: number; op: 'theme.set' | 'theme.load'; book: number; text: string }
+  | { id: number; op: 'named.list'; book: number }
+  | { id: number; op: 'named.load'; book: number; lines: string[] }
+  | { id: number; op: 'style.define'; book: number; sheet: number; row: number; col: number; name: string; parts: string }
+  | { id: number; op: 'style.delete'; book: number; name: string }
+  | { id: number; op: 'style.apply'; book: number; sheet: number; r0: number; c0: number; r1: number; c1: number; name: string }
+  | { id: number; op: 'values.read'; book: number; sheet: number; r0: number; c0: number; r1: number; c1: number }
   | { id: number; op: 'undo.mark'; book: number }
   | { id: number; op: 'undo.group'; book: number; mark: number }
   | { id: number; op: 'format.read'; book: number; sheet: number; r0: number; c0: number; r1: number; c1: number }
@@ -52,9 +60,12 @@ export interface Effect {
   changes: Changed[];
   shift: Shift | null;
   formats: FormatChange[];
-  styles: FormatChange[];
+  styles: StyleChange[];
   merges: number | null;
+  theme: boolean;
+  named: boolean;
 }
+export type StyleChange = [sheet: number, row: number, col: number, raw: string, shown: string];
 export type Name = [name: string, refers: string];
 export type Value = string | number | string[] | Cell[] | Changed[] | Name[] | Edit[] | Area[] | [number, number] | Shift | Effect | null;
 

@@ -1,7 +1,10 @@
-import type { Area, Cell, Changed, Dir, Effect, EngineClient, FormatChange, FormatItem, MergeMode, Shift, StyleOp } from '../engine';
-import { light, parseStyle, PLAIN, type CellStyle } from './style';
+import type { Area, Cell, Changed, Dir, Effect, EngineClient, FormatChange, FormatItem, MergeMode, Shift, StyleChange, StyleOp } from '../engine';
+import { light, parseStyle, PLAIN, themeOf, type CellStyle, type Look } from './style';
 
-export type BorderKind = 'all' | 'outside' | 'inside' | 'top' | 'bottom' | 'left' | 'right' | 'none';
+export type PasteKind = 'all' | 'formulas' | 'values' | 'formats' | 'values-formats' | 'formulas-formats' | 'no-borders' | 'widths';
+const KEEP = '~';
+
+export type BorderKind ='all' | 'outside' | 'inside' | 'top' | 'bottom' | 'left' | 'right' | 'none';
 import { Axis, type AxisState } from './axis';
 import { MAX_COLS, MAX_ROWS, a1, colName, parseRef, rangeText, type Range } from './a1';
 import { fillSeries } from './fill';
@@ -52,6 +55,8 @@ export interface GridEvents {
   onStyles(styles: FormatChange[]): void;
   onMerges(sheet: number, areas: Area[]): void;
   onPainter(state: 'on' | 'sticky' | 'off'): void;
+  onLook(): void;
+  onPasteMenu(x: number, y: number): void;
   onView(sheet: number, view: SheetView): void;
   onMenu(kind: MenuKind, x: number, y: number): void;
   onGoto(): void;
@@ -75,8 +80,22 @@ export class Grid {
   private readonly colors = new Map<number, string>();
   private readonly styles = new Map<number, CellStyle>();
   private merges: Area[] = [];
+  look: Look = themeOf('');
+  themeText = '';
+  themeNames: string[] = [];
   private painter: { h: number; w: number; items: Map<number, [string, string]>; sticky: boolean } | null = null;
-  private copied: { text: string; h: number; w: number; items: Map<number, [string, string]> } | null = null;
+  private copied: {
+    text: string;
+    h: number;
+    w: number;
+    items: Map<number, [string, string]>;
+    raw: Map<number, string>;
+    values: Map<number, string>;
+    widths: number[];
+    r0: number;
+    c0: number;
+    sheet: number;
+  } | null = null;
   private wins: (Range | null)[] = [null, null, null, null];
   private pendingWins: (Range | null)[] = [null, null, null, null];
   private sh = 0;
@@ -308,7 +327,7 @@ export class Grid {
         if (r >= want.r0 && r <= want.r1 && c >= want.c0 && c <= want.c1) this.styles.delete(k);
       }
       for (const [r, c, t, f, n, col] of cells) this.store(KEY(r, c), t, f, n, col);
-      for (const [r, c, st] of sts) this.styles.set(KEY(r, c), parseStyle(st));
+      for (const [r, c, st] of sts) this.styles.set(KEY(r, c), parseStyle(st, this.look));
       if (!this.editing && this.ar >= want.r0 && this.ar <= want.r1 && this.ac >= want.c0 && this.ac <= want.c1) this.announce();
       this.paint();
     });
@@ -620,7 +639,8 @@ export class Grid {
 
   private font(st: CellStyle): number {
     const px = st.size ? Math.round(st.size * 13.333) / 10 : 13;
-    this.ctx.font = `${st.i ? 'italic ' : ''}${st.b ? '700 ' : ''}${px}px ${st.font ? `"${st.font}", ` : ''}Inter, system-ui, -apple-system, "Segoe UI", sans-serif`;
+    const face = st.font ?? this.look.body;
+    this.ctx.font = `${st.i ? 'italic ' : ''}${st.b ? '700 ' : ''}${px}px ${face !== 'Inter' ? `"${face}", ` : ''}Inter, system-ui, -apple-system, "Segoe UI", sans-serif`;
     return px;
   }
 
@@ -1088,6 +1108,7 @@ export class Grid {
     this.dropWindows();
     this.merges = [];
     void this.loadMerges();
+    void this.loadTheme();
     this.rows.restore(view.rows);
     this.cols.restore(view.cols);
     this.fr = view.fr ?? 0;
@@ -1180,14 +1201,42 @@ export class Grid {
     await this.setStyles(ops);
   }
 
-  private applyStyles(changes: FormatChange[]): void {
+  async setTheme(name: string): Promise<void> {
+    await this.applyEffect(await this.engine.setTheme(this.book, name));
+  }
+
+  async applyNamed(name: string): Promise<void> {
+    const s = this.sel();
+    await this.applyEffect(await this.engine.applyStyle(this.book, this.sheet, s.r0, s.c0, s.r1, s.c1, name));
+  }
+
+  async defineNamed(name: string, parts: string): Promise<void> {
+    await this.applyEffect(await this.engine.defineStyle(this.book, this.sheet, this.ar, this.ac, name, parts));
+  }
+
+  async deleteNamed(name: string): Promise<void> {
+    await this.applyEffect(await this.engine.deleteStyle(this.book, name));
+  }
+
+  async loadTheme(): Promise<void> {
+    if (this.book < 0) return;
+    const t = await this.engine.theme(this.book);
+    this.themeText = t.current;
+    this.themeNames = t.names;
+    this.look = themeOf(t.current);
+    for (const [k, st] of this.styles) this.styles.set(k, parseStyle(st.text, this.look));
+    this.announce();
+    this.paint();
+  }
+
+  private applyStyles(changes: StyleChange[]): void {
     let hit = false;
     const rows = new Set<number>();
-    for (const [sh, r, c, text] of changes) {
+    for (const [sh, r, c, , text] of changes) {
       if (sh !== this.sheet) continue;
       hit = true;
       const before = this.styles.get(KEY(r, c));
-      const after = text ? parseStyle(text) : null;
+      const after = text ? parseStyle(text, this.look) : null;
       if (after) this.styles.set(KEY(r, c), after);
       else this.styles.delete(KEY(r, c));
       if (before?.wrap !== after?.wrap || before?.size !== after?.size || before?.rot !== after?.rot || before?.vertical !== after?.vertical) rows.add(r);
@@ -1257,8 +1306,14 @@ export class Grid {
     if (e.formats.length) this.events.onFormats(e.formats);
     if (e.styles.length) {
       this.applyStyles(e.styles);
-      this.events.onStyles(e.styles);
+      this.events.onStyles(e.styles.map(([s, r, c, raw]) => [s, r, c, raw]));
     }
+    if (e.theme) await this.loadTheme();
+    if (e.named) {
+      this.dropWindows();
+      this.paint();
+    }
+    if (e.theme || e.named) this.events.onLook();
     if (e.merges !== null) {
       const sheet = e.merges;
       const list = await this.engine.merges(this.book, sheet);
@@ -1489,16 +1544,13 @@ export class Grid {
       if (r < MAX_ROWS && c < MAX_COLS) edits.push([r, c, v]);
     }));
     if (!edits.length) return;
-    const own = this.copied && this.copied.text.replace(/\r/g, '') === text.replace(/\r/g, '') ? this.copied : null;
-    const mark = await this.engine.undoMark(this.book);
+    if (this.copied?.text.replace(/\r/g, '') === text.replace(/\r/g, '')) {
+      await this.pasteSpecial('all');
+      return;
+    }
     await this.commitEdits(await this.engine.apply(this.book, edits, this.sheet));
     const rows = grid.length;
     const cols = Math.max(...grid.map((r) => r.length));
-    if (own) {
-      const t = { r0: this.ar, c0: this.ac, r1: Math.min(MAX_ROWS - 1, this.ar + own.h - 1), c1: Math.min(MAX_COLS - 1, this.ac + own.w - 1) };
-      await this.applyEffect(await this.engine.putFormats(this.book, this.sheet, this.tiled(own.items, own.h, own.w, t)));
-      await this.engine.undoGroup(this.book, mark);
-    }
     this.select(this.ar, this.ac, this.ar + rows - 1, this.ac + cols - 1);
   }
 
@@ -1821,9 +1873,80 @@ export class Grid {
 
   private remember(text: string, s: Range): void {
     this.copied = null;
-    void this.formatsOf(s).then((items) => {
-      if (items.size) this.copied = { text, h: s.r1 - s.r0 + 1, w: s.c1 - s.c0 + 1, items };
+    if ((s.r1 - s.r0 + 1) * (s.c1 - s.c0 + 1) > 100000) return;
+    const book = this.book;
+    const sheet = this.sheet;
+    void Promise.all([
+      this.formatsOf(s),
+      this.engine.read(book, s.r0, s.c0, s.r1, s.c1, sheet),
+      this.engine.readValues(book, sheet, s.r0, s.c0, s.r1, s.c1),
+    ]).then(([items, cells, vals]) => {
+      const raw = new Map<number, string>();
+      for (const [r, c, t, f] of cells) raw.set(KEY(r - s.r0, c - s.c0), f ?? t);
+      const values = new Map<number, string>();
+      for (const [r, c, v] of vals) values.set(KEY(r - s.r0, c - s.c0), v);
+      const widths = Array.from({ length: s.c1 - s.c0 + 1 }, (_, i) => this.cols.size(s.c0 + i));
+      this.copied = { text, h: s.r1 - s.r0 + 1, w: s.c1 - s.c0 + 1, items, raw, values, widths, r0: s.r0, c0: s.c0, sheet };
     });
+  }
+
+  canPasteSpecial(): boolean {
+    return !!this.copied;
+  }
+
+  async pasteSpecial(kind: PasteKind, transpose = false): Promise<void> {
+    const src = this.copied;
+    if (!src || this.book < 0) return;
+    const h = transpose ? src.w : src.h;
+    const w = transpose ? src.h : src.w;
+    const top = this.ar;
+    const left = this.ac;
+    const from = (i: number, j: number) => (transpose ? KEY(j, i) : KEY(i, j));
+    const content = kind !== 'formats' && kind !== 'widths';
+    const formats = kind === 'all' || kind === 'formats' || kind === 'no-borders';
+    const codes = formats || kind === 'values-formats' || kind === 'formulas-formats';
+    const mark = await this.engine.undoMark(this.book);
+    if (content) {
+      const edits: [number, number, string][] = [];
+      const moves: [string, number, number][] = [];
+      const moved: number[] = [];
+      for (let i = 0; i < h && top + i < MAX_ROWS; i++) {
+        for (let j = 0; j < w && left + j < MAX_COLS; j++) {
+          const k = from(i, j);
+          const si = Math.floor(k / MAX_COLS);
+          const sj = k % MAX_COLS;
+          const raw = src.raw.get(k) ?? '';
+          const formulas = kind === 'all' || kind === 'formulas' || kind === 'formulas-formats' || kind === 'no-borders';
+          if (formulas && raw.startsWith('=')) {
+            moved.push(edits.length);
+            moves.push([raw, top + i - (src.r0 + si), left + j - (src.c0 + sj)]);
+          }
+          edits.push([top + i, left + j, formulas ? raw : src.values.get(k) ?? '']);
+        }
+      }
+      const texts = await this.engine.offset(moves);
+      texts.forEach((t, n) => (edits[moved[n]][2] = t));
+      if (edits.length) await this.commitEdits(await this.engine.apply(this.book, edits, this.sheet));
+    }
+    if (codes) {
+      const items: FormatItem[] = [];
+      for (let i = 0; i < h && top + i < MAX_ROWS; i++) {
+        for (let j = 0; j < w && left + j < MAX_COLS; j++) {
+          const [st, code] = src.items.get(from(i, j)) ?? ['', ''];
+          const style = !formats ? KEEP : kind === 'no-borders' ? st.split(';').filter((t) => !/^b[trbl]:/.test(t)).join(';') : st;
+          items.push([top + i, left + j, style, code]);
+        }
+      }
+      await this.applyEffect(await this.engine.putFormats(this.book, this.sheet, items));
+    }
+    if (kind === 'widths') {
+      src.widths.forEach((px, j) => {
+        if (left + j < MAX_COLS) this.cols.setSize(left + j, px);
+      });
+      this.emitView();
+    }
+    await this.engine.undoGroup(this.book, mark);
+    this.select(top, left, Math.min(MAX_ROWS - 1, top + h - 1), Math.min(MAX_COLS - 1, left + w - 1));
   }
 
   private writeClipboard(e: ClipboardEvent): void {
@@ -1898,6 +2021,12 @@ export class Grid {
       this.stopPainter();
       return;
     }
+    if (mod && e.altKey && e.code === 'KeyV') {
+      const [x, y, , h] = this.activeArea();
+      const r = this.canvas.getBoundingClientRect();
+      this.events.onPasteMenu(r.left + x * this.z, r.top + (y + h) * this.z);
+      return;
+    }
     if (dir && e.altKey && e.shiftKey && !mod && (dir === 'left' || dir === 'right')) {
       this.groupAuto(dir === 'right' ? 1 : -1);
       return;
@@ -1952,6 +2081,8 @@ export class Grid {
         return this.clearSelection();
       case 'Backspace':
         return this.startEdit('');
+      case 'Escape':
+        return;
     }
     if (this.editing) {
       this.editor.value += e.key;
@@ -1998,6 +2129,7 @@ export const SHORT_FORMATS: Record<string, string> = {
 function wants(e: KeyboardEvent): boolean {
   if (ARROWS[e.key]) return true;
   const mod = e.ctrlKey || e.metaKey;
+  if (mod && e.altKey && e.code === 'KeyV') return true;
   if (mod) return !e.altKey && (['z', 'y', 'a', 'home', 'end', '+', '=', '-', '_', 'g'].includes(e.key.toLowerCase()) || e.code === 'Digit9' || e.code === 'Digit0' || (e.shiftKey && (e.code in SHORT_FORMATS || e.code === 'Digit7')) || (!e.shiftKey && e.code in TOGGLE_KEYS));
   if (['Enter', 'Tab', 'Escape', 'Home', 'PageDown', 'PageUp', 'F2', 'F5', 'Delete', 'Backspace'].includes(e.key)) return true;
   return e.key.length === 1 && !e.altKey;

@@ -40,6 +40,8 @@ export const icons = {
   merge: svg('<rect x="3.5" y="5.5" width="17" height="13" rx="1.5"/><path d="M8 12h8M10.5 9.5L8 12l2.5 2.5M13.5 9.5L16 12l-2.5 2.5"/>'),
   rotate: svg('<path d="M6 18L15.5 8.5M11 8h5v5"/><path d="M4 20h16"/>'),
   painter: svg('<rect x="5" y="3.5" width="12" height="5" rx="1.2"/><path d="M17 6h2.5v4.5H11V14"/><rect x="9.5" y="14" width="3" height="6.5" rx="1"/>'),
+  cellStyles: svg('<rect x="3.5" y="4.5" width="7.5" height="6" rx="1"/><rect x="13" y="4.5" width="7.5" height="6" rx="1"/><rect x="3.5" y="13.5" width="7.5" height="6" rx="1"/><path d="M13 16.5h7.5" stroke-width="3"/>'),
+  theme: svg('<path d="M12 3.5a8.5 8.5 0 100 17c1.2 0 1.8-.8 1.8-1.7 0-1.4-1.3-1.6-1.3-2.8 0-.9.7-1.5 1.6-1.5h2.2a3.7 3.7 0 003.7-3.7C20 6.8 16.4 3.5 12 3.5z"/><circle cx="7.8" cy="11" r="1.1" fill="currentColor" stroke="none"/><circle cx="10.5" cy="7.5" r="1.1" fill="currentColor" stroke="none"/><circle cx="15" cy="7.8" r="1.1" fill="currentColor" stroke="none"/>'),
   clearFormat: svg('<path d="M8 20h11M5.5 14.5l8-8 5 5-8 8H8.5zM9.5 10.5l5 5"/>'),
   numFormat: svg('<path d="M10 4l-2 16M16 4l-2 16M4.5 9h15M4 15h15"/>'),
   decMore: svg('<circle cx="4.5" cy="18" r="1" fill="currentColor" stroke="none"/><rect x="8" y="11" width="4.5" height="8" rx="2.25"/><rect x="15" y="11" width="4.5" height="8" rx="2.25"/><path d="M12 5.5H4M6.5 3L4 5.5 6.5 8"/>'),

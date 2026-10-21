@@ -1,4 +1,4 @@
-import type { Cell, Changed, Effect, FormatChange, Request, Response, Shift, Value } from './protocol';
+import type { Cell, Changed, Effect, FormatChange, Request, Response, Shift, StyleChange, Value } from './protocol';
 
 interface Exports {
   memory: WebAssembly.Memory;
@@ -30,6 +30,15 @@ interface Exports {
   fc_merges(book: number, sheet: number): number;
   fc_load_merges(book: number, sheet: number, lines: number, len: number): number;
   fc_put_formats(book: number, sheet: number, lines: number, len: number): number;
+  fc_theme(book: number): number;
+  fc_set_theme(book: number, t: number, len: number): number;
+  fc_load_theme(book: number, t: number, len: number): number;
+  fc_named(book: number): number;
+  fc_load_named(book: number, lines: number, len: number): number;
+  fc_define_style(book: number, sheet: number, row: number, col: number, name: number, nameLen: number, parts: number, partsLen: number): number;
+  fc_delete_style(book: number, name: number, len: number): number;
+  fc_apply_style(book: number, sheet: number, r0: number, c0: number, r1: number, c1: number, name: number, len: number): number;
+  fc_values_in(book: number, sheet: number, r0: number, c0: number, r1: number, c1: number): number;
   fc_undo_mark(book: number): number;
   fc_undo_group(book: number, mark: number): number;
   fc_formats_in(book: number, sheet: number, r0: number, c0: number, r1: number, c1: number): number;
@@ -72,7 +81,7 @@ function cells(s: string): Cell[] {
 }
 
 function changed(s: string): Changed[] {
-  return lines(s).filter((l) => l[0] !== '%' && l[0] !== '#' && l[0] !== '&' && l[0] !== '=').map(([sh, r, c, fl, t, f]) => [Number(sh), Number(r), Number(c), unescape(t ?? ''), f === undefined ? undefined : unescape(f), fl.startsWith('n'), colorOf(fl)]);
+  return lines(s).filter((l) => !'%#&=^@'.includes(l[0])).map(([sh, r, c, fl, t, f]) => [Number(sh), Number(r), Number(c), unescape(t ?? ''), f === undefined ? undefined : unescape(f), fl.startsWith('n'), colorOf(fl)]);
 }
 
 function formatsOf(s: string, tag = '%'): FormatChange[] {
@@ -87,10 +96,17 @@ function shiftOf(line: string): Shift {
 function effect(s: string): Effect {
   const shift = s.startsWith('#') ? shiftOf(s.slice(0, s.indexOf('\n'))) : null;
   const m = /^=\t(\d+)$/m.exec(s);
-  return { shift, changes: changed(s).filter((l) => !Number.isNaN(l[0])), formats: formatsOf(s), styles: formatsOf(s, '&'), merges: m ? Number(m[1]) : null };
+  const styles = lines(s).filter((l) => l[0] === '&').map(([, sh, r, c, raw, shown]) => [Number(sh), Number(r), Number(c), unescape(raw ?? ''), unescape(shown ?? raw ?? '')] as StyleChange);
+  return { shift, changes: changed(s).filter((l) => !Number.isNaN(l[0])), formats: formatsOf(s), styles, merges: m ? Number(m[1]) : null, theme: /^\^$/m.test(s), named: /^@$/m.test(s) };
 }
 
 const MERGE_MODES = { center: 0, across: 1, cells: 2, unmerge: 3 } as const;
+
+function styled(x: Exports, n: number): string {
+  if (n === -3) throw new Error('That cell style or theme is not one FormCel has, or its name is taken by Normal.');
+  if (n === -4) throw new Error('That cell has a number format FormCel cannot keep in a style.');
+  return out(x, n);
+}
 
 function ok(n: number, what: string): number {
   if (n < 0) throw new Error(what);
@@ -162,7 +178,7 @@ function run(x: Exports, req: Request): Value {
     case 'undo':
     case 'redo': {
       const n = req.op === 'undo' ? x.fc_undo(req.book) : x.fc_redo(req.book);
-      return n === -2 ? { changes: [], shift: null, formats: [], styles: [], merges: null } : effect(out(x, n));
+      return n === -2 ? { changes: [], shift: null, formats: [], styles: [], merges: null, theme: false, named: false } : effect(out(x, n));
     }
     case 'shift':
       return shiftOf(out(x, x.fc_shift(req.book, req.sheet, req.rows ? 1 : 0, req.at, req.n, req.insert ? 1 : 0)).trim());
@@ -212,6 +228,24 @@ function run(x: Exports, req: Request): Value {
       const body = req.items.map(([r, c, st, code]) => `${r}\t${c}\t${escape(st)}\t${escape(code)}`).join('\n');
       return withStrings(x, [body], ([p, l]) => effect(out(x, x.fc_put_formats(req.book, req.sheet, p, l))));
     }
+    case 'theme.get':
+      return out(x, x.fc_theme(req.book)).split('\n').filter(Boolean);
+    case 'theme.set':
+      return withStrings(x, [req.text], ([p, l]) => effect(styled(x, x.fc_set_theme(req.book, p, l))));
+    case 'theme.load':
+      return withStrings(x, [req.text], ([p, l]) => ok(x.fc_load_theme(req.book, p, l), 'The engine refused that theme.'));
+    case 'named.list':
+      return out(x, x.fc_named(req.book)).split('\n').filter(Boolean);
+    case 'named.load':
+      return withStrings(x, [req.lines.join('\n')], ([p, l]) => ok(x.fc_load_named(req.book, p, l), 'The engine refused those cell styles.'));
+    case 'style.define':
+      return withStrings(x, [req.name, req.parts], ([n, nl, p, pl]) => effect(styled(x, x.fc_define_style(req.book, req.sheet, req.row, req.col, n, nl, p, pl))));
+    case 'style.delete':
+      return withStrings(x, [req.name], ([p, l]) => effect(styled(x, x.fc_delete_style(req.book, p, l))));
+    case 'style.apply':
+      return withStrings(x, [req.name], ([p, l]) => effect(styled(x, x.fc_apply_style(req.book, req.sheet, req.r0, req.c0, req.r1, req.c1, p, l))));
+    case 'values.read':
+      return lines(out(x, x.fc_values_in(req.book, req.sheet, req.r0, req.c0, req.r1, req.c1))).map(([r, c, v]) => [Number(r), Number(c), unescape(v ?? '')] as [number, number, string]);
     case 'undo.mark':
       return ok(x.fc_undo_mark(req.book), 'No such workbook.');
     case 'undo.group':
