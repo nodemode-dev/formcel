@@ -63,6 +63,7 @@ interface Exports {
   fc_remove_pivot(book: number, name: number, len: number): number;
   fc_whatif(book: number, cmd: number, len: number): number;
   fc_load_whatif(book: number, lines: number, len: number): number;
+  fc_calc(book: number, cmd: number, len: number): number;
   fc_validations(book: number, sheet: number): number;
   fc_load_validations(book: number, sheet: number, lines: number, len: number): number;
   fc_set_validation(book: number, sheet: number, r0: number, c0: number, r1: number, c1: number, t: number, len: number): number;
@@ -208,12 +209,23 @@ function colorOf(fl: string): string | undefined {
   return i < 0 ? undefined : `#${fl.slice(i + 1, i + 7)}`;
 }
 
+const rcBooks = new Set<number>();
+let rcNow: { x: Exports; book: number } | null = null;
+
+function restyle(f: string | undefined, row: number, col: number, toR1C1: boolean): string | undefined {
+  if (!rcNow || f === undefined || !(toR1C1 ? f !== '' : f.trimStart().startsWith('='))) return f;
+  const { x, book } = rcNow;
+  const s = withStrings(x, [`convert\t${row}\t${col}\t${toR1C1 ? 1 : 0}\t${escape(f)}`], ([p, l]) => out(x, x.fc_calc(book, p, l)));
+  const i = s.indexOf('\u001f');
+  return i < 0 ? s : s.slice(0, i);
+}
+
 function cells(s: string): Cell[] {
-  return lines(s).map(([r, c, fl, t, f]) => [Number(r), Number(c), unescape(t ?? ''), f === undefined ? undefined : unescape(f), fl.startsWith('n'), colorOf(fl), fl.includes('l')]);
+  return lines(s).map(([r, c, fl, t, f]) => [Number(r), Number(c), unescape(t ?? ''), restyle(f === undefined ? undefined : unescape(f), Number(r), Number(c), true), fl.startsWith('n'), colorOf(fl), fl.includes('l')]);
 }
 
 function changed(s: string): Changed[] {
-  return lines(s).filter((l) => !'%#&=^@!~?*'.includes(l[0])).map(([sh, r, c, fl, t, f]) => [Number(sh), Number(r), Number(c), unescape(t ?? ''), f === undefined ? undefined : unescape(f), fl.startsWith('n'), colorOf(fl), fl.includes('l')]);
+  return lines(s).filter((l) => !'%#&=^@!~?*'.includes(l[0])).map(([sh, r, c, fl, t, f]) => [Number(sh), Number(r), Number(c), unescape(t ?? ''), restyle(f === undefined ? undefined : unescape(f), Number(r), Number(c), true), fl.startsWith('n'), colorOf(fl), fl.includes('l')]);
 }
 
 function formatsOf(s: string, tag = '%'): FormatChange[] {
@@ -308,7 +320,7 @@ function run(x: Exports, req: Request): Value {
     case 'cell.get':
       return withStrings(x, [req.a1], ([a, al]) => out(x, x.fc_get(req.book, req.sheet, a, al)));
     case 'apply': {
-      const body = req.edits.map(([r, c, raw]) => `${r}\t${c}\t${escape(raw)}`).join('\n');
+      const body = req.edits.map(([r, c, raw]) => `${r}\t${c}\t${escape(req.remote ? raw : restyle(raw, r, c, false) ?? raw)}`).join('\n');
       if (req.remote) x.fc_bypass(req.book, 1);
       try {
         return withStrings(x, [body], ([p, l]) => {
@@ -492,6 +504,20 @@ function run(x: Exports, req: Request): Value {
       });
     case 'whatif.load':
       return withStrings(x, [req.lines.join('\n')], ([p, l]) => ok(x.fc_load_whatif(req.book, p, l), 'The engine refused those what-if definitions.'));
+    case 'calc.run':
+      return withStrings(x, [req.cmd], ([p, l]) => {
+        const n = x.fc_calc(req.book, p, l);
+        if (n === -9) throw new Error(out(x, x.fc_last_refusal(req.book)));
+        const s = out(x, n);
+        const i = s.indexOf('\u001f');
+        const reply = { text: s.slice(0, i), effect: effect(s.slice(i + 1)) };
+        if (/^(set|load)\t/.test(req.cmd)) {
+          const now = withStrings(x, ['get'], ([p, l]) => out(x, x.fc_calc(req.book, p, l)));
+          if (/^style=r1c1$/m.test(now)) rcBooks.add(req.book);
+          else rcBooks.delete(req.book);
+        }
+        return reply;
+      });
     case 'valid.list':
       return out(x, x.fc_validations(req.book, req.sheet)).split('\n').filter(Boolean);
     case 'valid.load':
@@ -582,6 +608,7 @@ self.onmessage = async (e: MessageEvent<Request>) => {
   try {
     const x = await ready;
     x.fc_set_clock(localSerial());
+    rcNow = 'book' in req && rcBooks.has(req.book) ? { x, book: req.book } : null;
     res = { id: req.id, ok: true, value: run(x, req) };
   } catch (err) {
     res = { id: req.id, ok: false, error: err instanceof Error ? err.message : String(err) };

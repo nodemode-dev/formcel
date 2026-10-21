@@ -17,6 +17,7 @@ import { icon } from './ui/icons';
 import { emptyPivot, formatPivot, outArea, parseFields, parsePivot, PivotDialog, PivotPanel, type PivotDef } from './ui/pivot';
 import { WhatIf } from './ui/whatif';
 import { Audit } from './ui/audit';
+import { Calc, type CalcDoc } from './ui/calc';
 import { DATE_PERIODS, describe, parseRule, PRESETS, rangeText, ruleLine, withStop } from './ui/rules';
 import { bindShortcuts, Checker, initPrefs, liveRegion, setTextSize, setTheme, Shortcuts, textSize, theme, type TextSize, type ThemeName } from './ui/a11y';
 import { cleanPage, layoutOf, PageSetupDialog, type PageSetup } from './ui/pagesetup';
@@ -253,6 +254,7 @@ export class App {
   });
   private readonly auto: Automation;
   private tools!: DataTools;
+  private calc!: Calc;
   private grouped = new Set<number>();
 
   constructor(private readonly p: ShellParts) {
@@ -281,6 +283,7 @@ export class App {
         this.linkChip();
         this.collab?.active();
         this.pivotFollow(range);
+        this.calc?.active();
       },
       onError: (message) => this.collab?.refused(message),
       onHover: (row, col, x, y) => this.collab?.hover(row, col, x, y),
@@ -297,9 +300,11 @@ export class App {
         this.audit.invalidate();
         void this.audit.refresh();
         void this.mirror(changes);
+        this.calc?.changed();
       },
       onSheet: (sheet) => {
         this.markTab(sheet);
+        queueMicrotask(() => this.calc?.changed());
         queueMicrotask(() => this.tools.syncSlicers());
         queueMicrotask(() => this.zoomLabel());
         queueMicrotask(() => this.collab?.sheetChanged());
@@ -409,6 +414,23 @@ export class App {
         this.grid.goTo(`${colName(col)}${row + 1}`);
       },
     });
+    this.calc = new Calc({
+      grid: this.grid,
+      menu: this.menu,
+      engine: engine(),
+      sheetBar: p.sheet.querySelector<HTMLElement>('.fc-sheetbar')!,
+      gridBox: p.grid,
+      formulaBar: p.formulaBar,
+      book: () => this.open?.book ?? -1,
+      sheets: () => this.open?.sheets ?? [],
+      say: (t, bad) => this.status(t, !!bad),
+      anchor: (c) => this.button(c).getBoundingClientRect(),
+      post: (body) => api('POST', `/api/workbooks/${this.open?.id}/calc`, body),
+      evaluate: () => void this.audit.evaluate(),
+      arrows: (r, c, l) => this.audit.showArrows(r, c, l),
+      drain: (f) => this.auto.drain(f),
+      goSheet: (s) => this.showSheet(s),
+    });
     this.button('edit.undo').disabled = true;
     this.button('edit.redo').disabled = true;
     this.collab = new Collab({
@@ -427,6 +449,7 @@ export class App {
     });
     this.auto = new Automation({ grid: this.grid, book: () => this.open?.book ?? -1, id: () => this.open?.id ?? '', sheets: () => this.open?.sheets ?? [], title: () => this.open?.title ?? '', status: (t, e) => this.status(t, e), addSheet: (n) => this.addSheetNamed(n) });
     this.commands();
+    this.calc.commands((id, title, description, changes, run, keys) => registerCommand({ id, title, description, changes, run, keys }));
     this.collab.commands((id, title, description, changes, run, keys) => registerCommand({ id, title, description, changes, run, keys }));
     bindShortcuts(this.shortcuts, () => !!this.open);
     this.bindChrome();
@@ -1672,6 +1695,7 @@ export class App {
     this.pivotPanel?.hide();
     await e.loadWhatif(book, doc.whatif ?? []);
     this.whatIf.load(doc.whatif ?? []);
+    const calcDoc = doc as unknown as CalcDoc;
     const names = doc.names?.length ? await e.names(book) : [];
     this.grouped.clear();
     this.open = { id, book, title: doc.title, sheets: doc.sheets, views: doc.sheets.map((_, i) => doc.views?.[i] ?? {}), names, macros: !!doc.macros, pages: doc.sheets.map((_, i) => cleanPage((doc.views?.[i] as { page?: unknown } | undefined)?.page)), locale: (doc as { locale?: string }).locale ?? 'en-US' };
@@ -1691,6 +1715,7 @@ export class App {
     this.renderTabs();
     await this.charts.layer.open();
     this.audit.load((doc.watches ?? []) as [number, number, number][]);
+    await this.calc.load(book, calcDoc);
     this.showSheet(0);
     this.button('edit.undo').disabled = true;
     this.button('edit.redo').disabled = true;
@@ -3041,6 +3066,7 @@ export class App {
 
   private queueSave(changes: Changed[]): void {
     for (const [s, r, c, t, f] of changes) {
+      if (f?.startsWith('{=')) continue;
       let m = this.pending.get(s);
       if (!m) this.pending.set(s, (m = new Map()));
       m.set(`${r}:${c}`, [r, c, f ?? t]);
@@ -3074,7 +3100,7 @@ export class App {
     this.pending = new Map();
     this.saving = this.saving.then(async () => {
       try {
-        for (const [sheet, m] of batches) await api('POST', `/api/workbooks/${o.id}/cells`, { sheet, cells: [...m.values()] });
+        for (const [sheet, m] of batches) await api('POST', `/api/workbooks/${o.id}/cells`, { sheet, cells: await this.calc.canonical([...m.values()]) });
         if (!this.pending.size) this.status('Saved');
       } catch (err) {
         for (const [sheet, m] of batches) {

@@ -1,0 +1,76 @@
+.fc-calcstat {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin-left: auto;
+  padding-inline: var(--space-3);
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+}
+.fc-calcstat + .fc-zoom { margin-left: 0; }
+.fc-calcstat-calc {
+  min-width: 72px;
+  height: 22px;
+  padding: 0 var(--space-2);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-sm);
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font: inherit;
+  cursor: pointer;
+}
+.fc-calcstat-calc:hover { border-color: var(--accent-color); }
+.fc-calcstat-calc[data-on="0"], .fc-calcstat-circ[data-on="0"] { visibility: hidden; }
+.fc-calcstat-circ {
+  display: inline-block;
+  width: 240px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--bad);
+}
+
+.fc-smarttag {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: var(--z-raised);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-sm);
+  background: var(--bg-secondary);
+  color: #22a559;
+  cursor: pointer;
+}
+.fc-smarttag[hidden] { display: none; }
+.fc-smarttag:hover, .fc-smarttag:focus-visible { border-color: var(--accent-color); outline: none; }
+.fc-smarttag .fc-icon { --icon-box: 16px; --icon-size: 14px; }
+
+.fc-errchk-cell { margin: 0; font-weight: 600; }
+.fc-errchk-buttons { display: grid; gap: var(--space-2); }
+.fc-errchk-buttons .fc-btn { justify-self: stretch; text-align: left; }
+
+.fc-links { display: grid; gap: 2px; min-height: 96px; max-height: 40vh; overflow: auto; border: 1px solid var(--border-light); border-radius: var(--radius-sm); padding: var(--space-1); }
+.fc-links-row {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 2fr) minmax(0, 1.5fr);
+  gap: var(--space-2);
+  width: 100%;
+  padding: var(--space-2);
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-primary);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.fc-links-row:hover { background: var(--bg-tertiary); }
+.fc-links-row[aria-selected="true"] { border-color: var(--accent-color); background: var(--accent-color-dim); }
+.fc-links-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fc-links-state, .fc-links-used { font-size: var(--text-xs); color: var(--text-secondary); }

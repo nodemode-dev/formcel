@@ -1,4 +1,4 @@
-import type { Arrow, EvalStep, Area, Cell, CfCell, Changed, Dir, Edit, Effect, FilterList, FormatItem, LinkChange, MergeMode, Name, RequestBody, Response, Shift, StyleOp, Value, WhatIfReply } from './protocol';
+import type { Arrow, CalcReply, EvalStep, Area, Cell, CfCell, Changed, Dir, Edit, Effect, FilterList, FormatItem, LinkChange, MergeMode, Name, RequestBody, Response, Shift, StyleOp, Value, WhatIfReply } from './protocol';
 
 export type { Arrow, EvalStep, Area, Cell, CfCell, Changed, Dir, Edit, Effect, FilterList, FormatChange, FormatItem, LinkChange, MergeMode, Name, Shift, StyleChange, StyleOp } from './protocol';
 
@@ -324,6 +324,10 @@ export class EngineClient {
 
   async loadWhatif(book: number, lines: string[]): Promise<void> {
     if (lines.length) await this.call({ op: 'whatif.load', book, lines });
+  }
+
+  async calc(book: number, cmd: string): Promise<CalcReply> {
+    return (await this.call({ op: 'calc.run', book, cmd })) as CalcReply;
   }
 
   async removeTable(book: number, name: string): Promise<Effect> {
