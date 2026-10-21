@@ -69,6 +69,15 @@ Exported from form.md 0.46.0 by a scratch exporter placed inside a copy of `inte
 
 The window PUTs its command catalogue at start and GET lists it; running a command needs the agent bridge (Phase 10).
 
+## v0.7.0 entries
+
+### Formulas are saved as typed
+- refers-to: app/services/store.py :: Book.preview, _write, get; engine Workbook.cells, values
+- kind: explainer
+- logged: v0.7.0 · 2026-10-21
+
+`Workbook.cells(sheet)` now returns each cell's input (a formula as `=...`), so `.fcel` files keep formulas and the window gets them back on open; the engine on each side recalculates. `Workbook.values(sheet)` returns computed results and feeds the Home thumbnails. Files written before v0.7.0 hold display text only and open unchanged. The window sends the formula text for every changed formula cell, so edits never replace a formula with its result on disk.
+
 ## v0.4.0 entries
 
 ### services/store.py · sheet views in the file

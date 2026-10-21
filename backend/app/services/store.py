@@ -43,7 +43,7 @@ class Book:
 
     def preview(self) -> list[list[str]]:
         grid = [["" for _ in range(PREVIEW_COLS)] for _ in range(PREVIEW_ROWS)]
-        for r, c, v in self.engine.cells(0):
+        for r, c, v in self.engine.values(0):
             if r < PREVIEW_ROWS and c < PREVIEW_COLS:
                 grid[r][c] = v
         return grid
