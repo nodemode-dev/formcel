@@ -148,7 +148,7 @@ def _validation(book, body: bytes) -> list[str] | None:
     texts = []
     for _ in range(4):
         t, at = _ustr(body, at)
-        texts.append(t)
+        texts.append(t if t.replace("\x00", "").strip() else "")
     c1 = struct.unpack_from("<H", body, at)[0]
     f1 = body[at + 4 : at + 4 + c1]
     at += 4 + c1
@@ -390,7 +390,8 @@ def scan(data: bytes, book, views: list[dict], names: list[str]) -> list[dict]:
                         res["tables"].append(got[0])
                         r0, c0, r1, c1 = got[1]
                         res["covered"].update((r, c) for r in range(r0, r1 + 1) for c in range(c0, c1 + 1))
-            except (struct.error, IndexError, ValueError):
+            except Exception:
+                res["lost"] += 1
                 continue
         out.append(res)
     return out

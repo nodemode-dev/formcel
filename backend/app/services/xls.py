@@ -1,3 +1,4 @@
+import io
 from collections import Counter
 
 import xlrd
@@ -22,7 +23,7 @@ def _view(sh) -> dict:
 
 
 def read(data: bytes) -> dict:
-    book = xlrd.open_workbook(file_contents=data, formatting_info=True)
+    book = xlrd.open_workbook(file_contents=data, formatting_info=True, logfile=io.StringIO())
     notes: Counter = Counter()
     sheets = []
     kept = 0

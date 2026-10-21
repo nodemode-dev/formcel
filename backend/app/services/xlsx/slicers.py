@@ -278,7 +278,7 @@ def _positions(files: dict[str, bytes], sheet: str, view: dict) -> dict[str, tup
     return out
 
 
-def slicers_in(wb, data: bytes, order: dict, pivot_lines: list[str], views: dict[int, dict], notes: Counter) -> None:
+def slicers_in(wb, data: bytes, order: dict, pivot_lines: list[str], sheets: dict[int, dict], notes: Counter) -> None:
     pivot_names = {d["name"] for d in (pivot_parse(line) for line in pivot_lines) if d}
     try:
         with zipfile.ZipFile(io.BytesIO(data)) as z:
@@ -291,25 +291,26 @@ def slicers_in(wb, data: bytes, order: dict, pivot_lines: list[str], views: dict
     caches = _caches_in(files)
     if not caches:
         return
-    sheets = _sheet_parts(files)
+    parts = _sheet_parts(files)
     for si, ws in enumerate(wb.worksheets):
-        if si >= len(sheets):
+        if si >= len(parts):
             break
         i = order.get(ws.title)
-        view = views.get(i)
-        if view is None:
+        sheet = sheets.get(i)
+        if sheet is None:
             continue
-        rels_path, rels_xml = _rels_of(files, sheets[si])
+        view = sheet["view"]
+        rels_path, rels_xml = _rels_of(files, parts[si])
         if rels_path not in files:
             continue
-        pos = _positions(files, sheets[si], view)
+        pos = _positions(files, parts[si], view)
         found: list[dict] = []
         for m in re.finditer(r"<Relationship\b[^>]*>", rels_xml):
             tag = m.group(0)
             if REL_SLICER not in tag:
                 continue
             target = re.search(r'Target="([^"]*)"', tag)
-            part = _target(sheets[si], target.group(1)) if target else ""
+            part = _target(parts[si], target.group(1)) if target else ""
             if part not in files:
                 continue
             try:
@@ -338,24 +339,27 @@ def slicers_in(wb, data: bytes, order: dict, pivot_lines: list[str], views: dict
                     if got is None:
                         notes["slicers FormCel could not read left out"] += 1
                         continue
-                    spec["col"] = got
+                    spec["col"] = got[0]
+                    if not sheet.get("filter"):
+                        sheet["filter"] = "area\t" + ",".join(str(x) for x in got[1]) + "\n"
                 found.append(spec)
         if found:
             view["slicers"] = found
 
 
-def _table_column(ws, cache: dict) -> int | None:
+def _table_column(ws, cache: dict) -> tuple[int, tuple[int, int, int, int]] | None:
     for t in ws.tables.values():
         if cache["table"] is not None and str(t.id) != str(cache["table"]):
             continue
         try:
-            c0 = range_boundaries(t.ref)[0] - 1
+            c0, r0, c1, r1 = range_boundaries(t.ref)
         except (TypeError, ValueError):
             continue
+        area = (r0 - 1, c0 - 1, r1 - 1 - (1 if t.totalsRowCount else 0), c1 - 1)
         for j, tc in enumerate(t.tableColumns):
             if str(tc.id) == str(cache["column"]) or (cache["column"] is None and tc.name == cache["source"]):
-                return c0 + j
+                return c0 - 1 + j, area
         for j, tc in enumerate(t.tableColumns):
             if tc.name == cache["source"]:
-                return c0 + j
+                return c0 - 1 + j, area
     return None

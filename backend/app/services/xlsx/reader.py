@@ -243,7 +243,7 @@ def read(data: bytes) -> dict:
                 name_notes.append((scoped, dn.comment))
     tables = tables_in(wb, order, notes)
     pivots = pivots_in(wb, data, order, notes)
-    slicers_in(wb, data, order, pivots, {i: s["view"] for i, s in enumerate(sheets)}, notes)
+    slicers_in(wb, data, order, pivots, dict(enumerate(sheets)), notes)
     what, filled = whatif_in(wb, data, order, notes)
     for i, r, c, v in filled:
         if i < len(sheets):
