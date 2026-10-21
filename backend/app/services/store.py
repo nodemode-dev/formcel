@@ -31,7 +31,12 @@ class Book:
     modified: str
     engine: "formcel_engine.Workbook"
     template: str | None = None
+    views: list[dict] = field(default_factory=list)
     lock: threading.Lock = field(default_factory=threading.Lock)
+
+    def fit_views(self) -> None:
+        n = len(self.sheet_names())
+        self.views = (self.views + [{} for _ in range(n)])[:n]
 
     def sheet_names(self) -> list[str]:
         return self.engine.sheet_names()
@@ -44,8 +49,9 @@ class Book:
         return grid
 
     def meta(self) -> dict:
+        self.fit_views()
         return {"id": self.id, "title": self.title, "created": self.created, "modified": self.modified,
-                "sheets": self.sheet_names(), "template": self.template, "preview": self.preview()}
+                "sheets": self.sheet_names(), "views": self.views, "template": self.template, "preview": self.preview()}
 
 
 class Store:
@@ -63,7 +69,7 @@ class Store:
     def _write(self, b: Book) -> None:
         doc = {"format": FORMAT, "version": FORMAT_VERSION, "id": b.id, "title": b.title, "created": b.created,
                "modified": b.modified, "template": b.template, "preview": b.preview(),
-               "sheets": [{"name": n, "cells": b.engine.cells(i)} for i, n in enumerate(b.sheet_names())]}
+               "sheets": [{"name": n, "view": b.views[i] if i < len(b.views) else {}, "cells": b.engine.cells(i)} for i, n in enumerate(b.sheet_names())]}
         target = self.path(b.id)
         tmp = target.with_suffix(".fcel.tmp")
         with zipfile.ZipFile(tmp, "w", zipfile.ZIP_DEFLATED) as z:
@@ -91,7 +97,7 @@ class Store:
                 else:
                     eng.rename_sheet(0, s["name"])
                 eng.load([tuple(c) for c in s["cells"]], i)
-            b = Book(wid, doc["title"], doc["created"], doc["modified"], eng, doc.get("template"))
+            b = Book(wid, doc["title"], doc["created"], doc["modified"], eng, doc.get("template"), [s.get("view") or {} for s in doc["sheets"]])
             self.open[wid] = b
             return b
 
@@ -151,6 +157,33 @@ class Store:
             b.modified = now()
             self._write(b)
             return {"index": idx, "sheets": b.sheet_names()}
+
+    def shift(self, wid: str, sheet: int, rows: bool, at: int, n: int, insert: bool) -> dict:
+        b = self._load(wid)
+        with b.lock:
+            b.engine.shift(sheet, rows, at, n, insert)
+            b.modified = now()
+            self._write(b)
+            return {"id": b.id, "modified": b.modified}
+
+    def sheet_op(self, wid: str, op: str, sheet: int, to: int | None = None, name: str | None = None, view: dict | None = None) -> dict:
+        b = self._load(wid)
+        with b.lock:
+            b.fit_views()
+            if op == "delete":
+                b.engine.delete_sheet(sheet)
+                del b.views[sheet]
+            elif op == "move" and to is not None:
+                b.engine.move_sheet(sheet, to)
+                b.views.insert(to, b.views.pop(sheet))
+            elif op == "update":
+                if name:
+                    b.engine.rename_sheet(sheet, name.strip()[:31])
+                if view is not None:
+                    b.views[sheet] = {**b.views[sheet], **view}
+            b.modified = now()
+            self._write(b)
+            return {"sheets": b.sheet_names(), "views": b.views}
 
     def rename(self, wid: str, title: str | None = None, sheet: int | None = None, sheet_name: str | None = None) -> dict:
         b = self._load(wid)

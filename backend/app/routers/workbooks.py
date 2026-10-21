@@ -27,6 +27,23 @@ class SheetIn(BaseModel):
     name: str
 
 
+class ShiftIn(BaseModel):
+    sheet: int = 0
+    rows: bool = True
+    at: int = Field(ge=0)
+    n: int = Field(ge=1, le=1_048_576)
+    insert: bool = True
+
+
+class SheetUpdateIn(BaseModel):
+    name: str | None = None
+    view: dict | None = None
+
+
+class SheetMoveIn(BaseModel):
+    to: int = Field(ge=0)
+
+
 def missing(wid: str) -> HTTPException:
     return HTTPException(404, f"No workbook {wid}. It may have been moved to the Trash.")
 
@@ -68,6 +85,40 @@ def add_sheet(wid: str, body: SheetIn) -> dict:
         return store().add_sheet(wid, body.name)
     except (KeyError, FileNotFoundError):
         raise missing(wid)
+
+
+@router.post("/workbooks/{wid}/shift")
+def shift_cells(wid: str, body: ShiftIn) -> dict:
+    try:
+        return store().shift(wid, body.sheet, body.rows, body.at, body.n, body.insert)
+    except (KeyError, FileNotFoundError):
+        raise missing(wid)
+    except ValueError as e:
+        raise HTTPException(422, f"Rows or columns could not be shifted: {e}")
+
+
+def sheet_call(wid: str, *args, **kw) -> dict:
+    try:
+        return store().sheet_op(wid, *args, **kw)
+    except (KeyError, FileNotFoundError):
+        raise missing(wid)
+    except (ValueError, IndexError) as e:
+        raise HTTPException(422, f"That sheet change was refused: {e}")
+
+
+@router.patch("/workbooks/{wid}/sheets/{sheet}")
+def update_sheet(wid: str, sheet: int, body: SheetUpdateIn) -> dict:
+    return sheet_call(wid, "update", sheet, name=body.name, view=body.view)
+
+
+@router.post("/workbooks/{wid}/sheets/{sheet}/move")
+def move_sheet(wid: str, sheet: int, body: SheetMoveIn) -> dict:
+    return sheet_call(wid, "move", sheet, to=body.to)
+
+
+@router.delete("/workbooks/{wid}/sheets/{sheet}")
+def delete_sheet(wid: str, sheet: int) -> dict:
+    return sheet_call(wid, "delete", sheet)
 
 
 @router.patch("/workbooks/{wid}")

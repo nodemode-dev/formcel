@@ -69,6 +69,29 @@ Exported from form.md 0.46.0 by a scratch exporter placed inside a copy of `inte
 
 The window PUTs its command catalogue at start and GET lists it; running a command needs the agent bridge (Phase 10).
 
+## v0.4.0 entries
+
+### services/store.py · sheet views in the file
+- refers-to: app/services/store.py :: Book.views, fit_views, _write, _load, sheet_op
+- kind: explainer
+- logged: v0.4.0 · 2026-10-21
+
+Each sheet in `workbook.json` is now `{name, view, cells}`. The view holds what the window needs to show the sheet as it was left: row and column sizes, hidden rows and columns, frozen rows and columns, zoom and the tab colour. Files from v0.3.0 have no `view` and load with an empty one. `fit_views` keeps the list the same length as the sheets after any add, delete or move, and `sheet_op` moves a sheet's view with the sheet. A PATCH of a view merges into what is stored, so the window can send only the part it changed.
+
+### services/store.py · shift
+- refers-to: app/services/store.py :: Store.shift, routers/workbooks.py :: ShiftIn
+- kind: rationale
+- logged: v0.4.0 · 2026-10-21
+
+Inserting or deleting rows or columns is sent as the operation (`POST /shift` with sheet, rows, at, n, insert), not as the thousands of cell edits it causes, and the engine process runs the same Rust shift as the window. The window chains the shift after any pending cell save, so the two never arrive in the wrong order.
+
+### Threads
+- refers-to: app/services/store.py :: Book.lock
+- kind: warning-context
+- logged: v0.4.0 · 2026-10-21
+
+FastAPI runs these `def` routes on a thread pool, so one workbook is reached from several threads. Every call goes through `Book.lock`. Before v0.4.0 the Rust class refused cross-thread use and, with `panic = "abort"`, took the process down on the first request that landed on a new thread (see engine HASHOUT_LOG, #py). Checked after the fix: eight threads reading one workbook all answered.
+
 ## Table of contents
 
 - [app/main.py](#main)
