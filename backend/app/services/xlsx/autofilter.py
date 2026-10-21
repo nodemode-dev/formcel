@@ -61,8 +61,8 @@ def _column_in(fc: FilterColumn, dxfs, notes: Counter) -> list[str] | None:
     return None
 
 
-def filter_in(ws, wb, view: dict, notes: Counter) -> str:
-    af = ws.auto_filter
+def filter_in(ws, wb, view: dict, notes: Counter, af=None) -> str:
+    af = af if af is not None else ws.auto_filter
     if af is None or not af.ref:
         return ""
     try:

@@ -11,6 +11,7 @@ from .autofilter import filter_out
 from .cf import rules_out
 from .formulas import to_file
 from .styles import apply_out
+from .tables import ref_of, tables_out
 from .theme import theme_out
 from .validation import validations_out
 
@@ -58,7 +59,8 @@ def write(eng, views: list[dict], vba: dict[str, bytes] | None = None) -> bytes:
         for r, c, kind, text in eng.typed(i):
             cell = ws.cell(row=r + 1, column=c + 1)
             if kind == "f":
-                cell.value = to_file(text)
+                qualified = eng.file_formula(cell.coordinate, i) if "[" in text else None
+                cell.value = to_file(qualified or text)
             elif kind == "n":
                 cell.value = _number(text)
             elif kind == "b":
@@ -120,6 +122,14 @@ def write(eng, views: list[dict], vba: dict[str, bytes] | None = None) -> bytes:
             ws.sheet_properties.tabColor = "FF" + view["color"].lstrip("#").upper()
     for name, refers in eng.names():
         wb.defined_names[name] = DefinedName(name, attr_text=to_file(refers).lstrip("="))
+    for i, items in tables_out(wb, eng).items():
+        ws = wb.worksheets[i]
+        for tb, area in items:
+            if ws.auto_filter.ref == ref_of(*area):
+                if tb.autoFilter is not None:
+                    tb.autoFilter.filterColumn = list(ws.auto_filter.filterColumn)
+                ws.auto_filter.ref = None
+                ws.auto_filter.filterColumn = []
     wb.calculation.fullCalcOnLoad = True
     if vba:
         buf = io.BytesIO()

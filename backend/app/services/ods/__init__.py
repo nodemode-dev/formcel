@@ -436,7 +436,7 @@ def write(eng, views: list[dict]) -> tuple[bytes, list[str]]:
     row_styles: dict[int, str] = {}
     for i, name in enumerate(eng.sheet_names()):
         view = views[i] if i < len(views) else {}
-        vals = {(r, c): (k, t) for r, c, k, t in eng.typed(i)}
+        vals = {(r, c): (k, (eng.plain_formula(f"{get_column_letter(c + 1)}{r + 1}", i) or t) if k == "f" and "[" in t else t) for r, c, k, t in eng.typed(i)}
         res = {(r, c): (k, t) for r, c, k, t in eng.results(i)}
         codes = {(r, c): code for r, c, code in eng.auto_formats(i) + eng.formats(i)}
         sts = {}

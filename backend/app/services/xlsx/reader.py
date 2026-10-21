@@ -12,6 +12,7 @@ from .autofilter import filter_in
 from .cf import rules_in
 from .formulas import from_file
 from .styles import tokens_in
+from .tables import tables_in
 from .theme import theme_in
 from .validation import validations_in
 
@@ -175,8 +176,11 @@ def read(data: bytes) -> dict:
             notes["charts left out"] += len(ws._charts)
         if getattr(ws, "_pivots", None):
             notes["pivot tables left out"] += len(ws._pivots)
-        if ws.tables:
-            notes["tables brought in as plain ranges"] += len(ws.tables)
+        if not autofilter:
+            for t in ws.tables.values():
+                if t.autoFilter is not None and t.autoFilter.filterColumn:
+                    autofilter = filter_in(ws, wb, view, notes, af=t.autoFilter)
+                    break
         comments = sum(1 for c in ws._cells.values() if c.comment is not None)
         if comments:
             notes["comments and notes left out"] += comments
@@ -192,4 +196,5 @@ def read(data: bytes) -> dict:
             continue
         text = dn.attr_text or ""
         names.append((name, "=" + from_file(text.lstrip("="))))
-    return {"sheets": sheets, "names": names, "theme": theme_in(wb.loaded_theme), "cellStyles": custom, "vba": vba, "notes": [f"{n} {what}" for what, n in sorted(notes.items())]}
+    tables = tables_in(wb, {ws.title: i for i, ws in enumerate(wb.worksheets)}, notes)
+    return {"sheets": sheets, "names": names, "tables": tables, "theme": theme_in(wb.loaded_theme), "cellStyles": custom, "vba": vba, "notes": [f"{n} {what}" for what, n in sorted(notes.items())]}
