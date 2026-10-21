@@ -1,0 +1,1770 @@
+{
+ "about": "Functions FormCel computes. args come from the syntax on each Microsoft function page; excel.listed and excel.since from Microsoft's alphabetical function list; sheets.listed and sheets.category from Google's function list; both lists fetched 2026-10-21. summary is FormCel's own wording.",
+ "functions": [
+  {
+   "name": "ABS",
+   "args": [
+    "number"
+   ],
+   "summary": "Absolute value of a number.",
+   "category": "Math and trigonometry",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/abs-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Math",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "AND",
+   "args": [
+    "logical1",
+    "[logical2]",
+    "..."
+   ],
+   "summary": "TRUE when every argument is TRUE.",
+   "category": "Logical",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/and-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Logical",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "AVERAGE",
+   "args": [
+    "number1",
+    "[number2]",
+    "..."
+   ],
+   "summary": "Mean of the numbers given.",
+   "category": "Statistical",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/average-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Statistical",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "AVERAGEIF",
+   "args": [
+    "range",
+    "criteria",
+    "[average_range]"
+   ],
+   "summary": "Mean of the cells that meet one condition.",
+   "category": "Statistical",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/averageif-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Statistical",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "AVERAGEIFS",
+   "args": [
+    "average_range",
+    "criteria_range1",
+    "criteria1",
+    "[criteria_range2, criteria2]",
+    "..."
+   ],
+   "summary": "Mean of the cells that meet every condition.",
+   "category": "Statistical",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/averageifs-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Statistical",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "BYCOL",
+   "args": [
+    "array",
+    "lambda(column)"
+   ],
+   "summary": "Calls a LAMBDA on each column and returns one result per column.",
+   "category": "Logical",
+   "excel": {
+    "listed": true,
+    "since": "2024",
+    "source": "https://support.microsoft.com/en-us/excel/functions/bycol-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Array",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "BYROW",
+   "args": [
+    "array",
+    "lambda(row)"
+   ],
+   "summary": "Calls a LAMBDA on each row and returns one result per row.",
+   "category": "Logical",
+   "excel": {
+    "listed": true,
+    "since": "2024",
+    "source": "https://support.microsoft.com/en-us/excel/functions/byrow-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Array",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "CHOOSE",
+   "args": [
+    "index_num",
+    "value1",
+    "[value2]",
+    "..."
+   ],
+   "summary": "Picks a value, or a reference, by its position in the list.",
+   "category": "Lookup and reference",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/choose-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Lookup",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "CONCAT",
+   "args": [
+    "text1",
+    "[text2]",
+    "..."
+   ],
+   "summary": "Joins text, including every cell of a range.",
+   "category": "Text",
+   "excel": {
+    "listed": true,
+    "since": "2019",
+    "source": "https://support.microsoft.com/en-us/excel/functions/concat-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Operator",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "CONCATENATE",
+   "args": [
+    "text1",
+    "[text2]",
+    "..."
+   ],
+   "summary": "Joins text items into one.",
+   "category": "Text",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/concatenate-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Text",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "COUNT",
+   "args": [
+    "value1",
+    "[value2]",
+    "..."
+   ],
+   "summary": "Counts the numbers.",
+   "category": "Statistical",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/count-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Statistical",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "COUNTA",
+   "args": [
+    "value1",
+    "[value2]",
+    "..."
+   ],
+   "summary": "Counts the cells that are not empty.",
+   "category": "Statistical",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/counta-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Statistical",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "COUNTBLANK",
+   "args": [
+    "range"
+   ],
+   "summary": "Counts the empty cells in a range.",
+   "category": "Statistical",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/countblank-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Math",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "COUNTIF",
+   "args": [
+    "range",
+    "criteria"
+   ],
+   "summary": "Counts the cells that meet one condition.",
+   "category": "Statistical",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/get-started/use-the-countif-function-in-microsoft-excel"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Math",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "COUNTIFS",
+   "args": [
+    "criteria_range1",
+    "criteria1",
+    "[criteria_range2, criteria2]..."
+   ],
+   "summary": "Counts the cells that meet every condition.",
+   "category": "Statistical",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/countifs-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Math",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "DATE",
+   "args": [
+    "year",
+    "month",
+    "day"
+   ],
+   "summary": "Date serial from a year, month and day.",
+   "category": "Date and time",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/date-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Date",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "DATEVALUE",
+   "args": [
+    "date_text"
+   ],
+   "summary": "Date serial from text that looks like a date.",
+   "category": "Date and time",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/datevalue-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Date",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "DAY",
+   "args": [
+    "serial_number"
+   ],
+   "summary": "Day of the month of a date.",
+   "category": "Date and time",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/day-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Date",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "DAYS",
+   "args": [
+    "end_date",
+    "start_date"
+   ],
+   "summary": "Days between two dates.",
+   "category": "Date and time",
+   "excel": {
+    "listed": true,
+    "since": "2013",
+    "source": "https://support.microsoft.com/en-us/excel/functions/days-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Date",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "EDATE",
+   "args": [
+    "start_date",
+    "months"
+   ],
+   "summary": "The same day a number of months before or after a date.",
+   "category": "Date and time",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/edate-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Date",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "EOMONTH",
+   "args": [
+    "start_date",
+    "months"
+   ],
+   "summary": "Last day of the month a number of months away.",
+   "category": "Date and time",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/eomonth-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Date",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "FALSE",
+   "args": [],
+   "summary": "The logical value FALSE.",
+   "category": "Logical",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/false-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Logical",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "FILTER",
+   "args": [
+    "array",
+    "include",
+    "[if_empty]"
+   ],
+   "summary": "Keeps the rows or columns of an array where include is TRUE.",
+   "category": "Lookup and reference",
+   "excel": {
+    "listed": true,
+    "since": "2021",
+    "source": "https://support.microsoft.com/en-us/excel/functions/filter-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Filter",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "HLOOKUP",
+   "args": [
+    "lookup_value",
+    "table_array",
+    "row_index_num",
+    "[range_lookup]"
+   ],
+   "summary": "Looks along the top row and returns a value from a row below.",
+   "category": "Lookup and reference",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/hlookup-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Lookup",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "HOUR",
+   "args": [
+    "serial_number"
+   ],
+   "summary": "Hour of a time.",
+   "category": "Date and time",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/hour-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Date",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "IF",
+   "args": [
+    "logical_test",
+    "value_if_true",
+    "[value_if_false]"
+   ],
+   "summary": "One value when a test is TRUE, another when it is FALSE.",
+   "category": "Logical",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/if-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Logical",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "IFERROR",
+   "args": [
+    "value",
+    "value_if_error"
+   ],
+   "summary": "A fallback value when the first one is an error.",
+   "category": "Logical",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/iferror-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Logical",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "IFNA",
+   "args": [
+    "value",
+    "value_if_na"
+   ],
+   "summary": "A fallback value when the first one is #N/A.",
+   "category": "Logical",
+   "excel": {
+    "listed": true,
+    "since": "2013",
+    "source": "https://support.microsoft.com/en-us/excel/functions/ifna-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Logical",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "IFS",
+   "args": [
+    "logical_test1",
+    "value_if_true1",
+    "[logical_test2, value_if_true2]",
+    "[logical_test3, value_if_true3]",
+    "..."
+   ],
+   "summary": "The value for the first test that is TRUE.",
+   "category": "Logical",
+   "excel": {
+    "listed": true,
+    "since": "2019",
+    "source": "https://support.microsoft.com/en-us/excel/functions/ifs-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Logical",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "INDEX",
+   "args": [
+    "array",
+    "row_num",
+    "[column_num]"
+   ],
+   "summary": "The value or reference at a row and column of a range or array.",
+   "category": "Lookup and reference",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/index-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Lookup",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "INT",
+   "args": [
+    "number"
+   ],
+   "summary": "Rounds down to the nearest whole number.",
+   "category": "Math and trigonometry",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/int-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Math",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "ISBLANK",
+   "args": [
+    "value"
+   ],
+   "summary": "TRUE when the value is empty.",
+   "category": "Information",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/is-functions"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Info",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "ISERR",
+   "args": [
+    "value"
+   ],
+   "summary": "TRUE for any error except #N/A.",
+   "category": "Information",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/is-functions"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Info",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "ISERROR",
+   "args": [
+    "value"
+   ],
+   "summary": "TRUE for any error.",
+   "category": "Information",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/is-functions"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Info",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "ISLOGICAL",
+   "args": [
+    "value"
+   ],
+   "summary": "TRUE for TRUE or FALSE.",
+   "category": "Information",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/is-functions"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Info",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "ISNA",
+   "args": [
+    "value"
+   ],
+   "summary": "TRUE for #N/A.",
+   "category": "Information",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/is-functions"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Info",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "ISNONTEXT",
+   "args": [
+    "value"
+   ],
+   "summary": "TRUE for anything that is not text.",
+   "category": "Information",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/is-functions"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Info",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "ISNUMBER",
+   "args": [
+    "value"
+   ],
+   "summary": "TRUE for a number.",
+   "category": "Information",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/is-functions"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Info",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "ISREF",
+   "args": [
+    "value"
+   ],
+   "summary": "TRUE for a reference.",
+   "category": "Information",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/is-functions"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Info",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "ISTEXT",
+   "args": [
+    "value"
+   ],
+   "summary": "TRUE for text.",
+   "category": "Information",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/is-functions"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Info",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "LAMBDA",
+   "args": [
+    "[parameter1, ...]",
+    "calculation"
+   ],
+   "summary": "Makes a function from parameters and a calculation.",
+   "category": "Logical",
+   "excel": {
+    "listed": true,
+    "since": "2024",
+    "source": "https://support.microsoft.com/en-us/excel/functions/lambda-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Logical",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "LEFT",
+   "args": [
+    "text",
+    "[num_chars]"
+   ],
+   "summary": "First characters of text.",
+   "category": "Text",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/left-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Text",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "LEN",
+   "args": [
+    "text"
+   ],
+   "summary": "Number of characters in text.",
+   "category": "Text",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/len-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Text",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "LET",
+   "args": [
+    "name1",
+    "name_value1",
+    "calculation_or_name2",
+    "[name_value2, calculation_or_name3, ...]"
+   ],
+   "summary": "Names values for use later in the same formula.",
+   "category": "Logical",
+   "excel": {
+    "listed": true,
+    "since": "2021",
+    "source": "https://support.microsoft.com/en-us/excel/functions/let-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Logical",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "LOWER",
+   "args": [
+    "text"
+   ],
+   "summary": "Text in lower case.",
+   "category": "Text",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/lower-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Text",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "MAKEARRAY",
+   "args": [
+    "rows",
+    "cols",
+    "lambda(row, col)"
+   ],
+   "summary": "Builds an array by calling a LAMBDA with each row and column number.",
+   "category": "Logical",
+   "excel": {
+    "listed": true,
+    "since": "2024",
+    "source": "https://support.microsoft.com/en-us/excel/functions/makearray-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Array",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "MAP",
+   "args": [
+    "array1",
+    "lambda_or_array2, ..."
+   ],
+   "summary": "Calls a LAMBDA on each value of one or more arrays.",
+   "category": "Logical",
+   "excel": {
+    "listed": true,
+    "since": "2024",
+    "source": "https://support.microsoft.com/en-us/excel/functions/map-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Array",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "MATCH",
+   "args": [
+    "lookup_value",
+    "lookup_array",
+    "[match_type]"
+   ],
+   "summary": "Position of a value in a row or column.",
+   "category": "Lookup and reference",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/match-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Lookup",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "MAX",
+   "args": [
+    "number1",
+    "[number2]",
+    "..."
+   ],
+   "summary": "Largest number.",
+   "category": "Statistical",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/max-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Statistical",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "MID",
+   "args": [
+    "text",
+    "start_num",
+    "num_chars"
+   ],
+   "summary": "Characters from the middle of text.",
+   "category": "Text",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/mid-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Text",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "MIN",
+   "args": [
+    "number1",
+    "[number2]",
+    "..."
+   ],
+   "summary": "Smallest number.",
+   "category": "Statistical",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/min-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Statistical",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "MINUTE",
+   "args": [
+    "serial_number"
+   ],
+   "summary": "Minute of a time.",
+   "category": "Date and time",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/minute-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Date",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "MOD",
+   "args": [
+    "number",
+    "divisor"
+   ],
+   "summary": "Remainder after division.",
+   "category": "Math and trigonometry",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/mod-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Math",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "MONTH",
+   "args": [
+    "serial_number"
+   ],
+   "summary": "Month of a date.",
+   "category": "Date and time",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/month-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Date",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "NA",
+   "args": [],
+   "summary": "The #N/A error.",
+   "category": "Information",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/na-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Info",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "NOT",
+   "args": [
+    "logical"
+   ],
+   "summary": "Reverses TRUE and FALSE.",
+   "category": "Logical",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/not-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Logical",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "NOW",
+   "args": [],
+   "summary": "The current date and time.",
+   "category": "Date and time",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/now-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Date",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "OR",
+   "args": [
+    "logical1",
+    "[logical2]",
+    "..."
+   ],
+   "summary": "TRUE when any argument is TRUE.",
+   "category": "Logical",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/or-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Logical",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "PI",
+   "args": [],
+   "summary": "The number pi.",
+   "category": "Math and trigonometry",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/pi-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Math",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "POWER",
+   "args": [
+    "number",
+    "power"
+   ],
+   "summary": "A number raised to a power.",
+   "category": "Math and trigonometry",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/power-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Math",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "PRODUCT",
+   "args": [
+    "number1",
+    "[number2]",
+    "..."
+   ],
+   "summary": "Multiplies the numbers.",
+   "category": "Math and trigonometry",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/product-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Math",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "REDUCE",
+   "args": [
+    "[initial_value]",
+    "array",
+    "lambda(accumulator, value, body)"
+   ],
+   "summary": "Combines an array into one value with a LAMBDA.",
+   "category": "Logical",
+   "excel": {
+    "listed": true,
+    "since": "2024",
+    "source": "https://support.microsoft.com/en-us/excel/functions/reduce-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Array",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "RIGHT",
+   "args": [
+    "text",
+    "[num_chars]"
+   ],
+   "summary": "Last characters of text.",
+   "category": "Text",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/right-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Text",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "ROUND",
+   "args": [
+    "number",
+    "num_digits"
+   ],
+   "summary": "Rounds to a number of digits.",
+   "category": "Math and trigonometry",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/round-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Math",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "ROUNDDOWN",
+   "args": [
+    "number",
+    "num_digits"
+   ],
+   "summary": "Rounds toward zero.",
+   "category": "Math and trigonometry",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/rounddown-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Math",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "ROUNDUP",
+   "args": [
+    "number",
+    "num_digits"
+   ],
+   "summary": "Rounds away from zero.",
+   "category": "Math and trigonometry",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/roundup-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Math",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "SCAN",
+   "args": [
+    "[initial_value]",
+    "array",
+    "lambda(accumulator, value, body)"
+   ],
+   "summary": "Like REDUCE, returning every step.",
+   "category": "Logical",
+   "excel": {
+    "listed": true,
+    "since": "2024",
+    "source": "https://support.microsoft.com/en-us/excel/functions/scan-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Array",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "SECOND",
+   "args": [
+    "serial_number"
+   ],
+   "summary": "Second of a time.",
+   "category": "Date and time",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/second-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Date",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "SEQUENCE",
+   "args": [
+    "rows",
+    "[columns]",
+    "[start]",
+    "[step]"
+   ],
+   "summary": "An array of sequential numbers.",
+   "category": "Math and trigonometry",
+   "excel": {
+    "listed": true,
+    "since": "2021",
+    "source": "https://support.microsoft.com/en-us/excel/functions/sequence-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Math",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "SORT",
+   "args": [
+    "array",
+    "[sort_index]",
+    "[sort_order]",
+    "[by_col]"
+   ],
+   "summary": "Sorts an array by one of its columns or rows.",
+   "category": "Lookup and reference",
+   "excel": {
+    "listed": true,
+    "since": "2021",
+    "source": "https://support.microsoft.com/en-us/excel/functions/sort-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Filter",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "SORTBY",
+   "args": [
+    "array",
+    "by_array1",
+    "[sort_order1]",
+    "[by_array2, sort_order2]",
+    "..."
+   ],
+   "summary": "Sorts an array by other arrays.",
+   "category": "Lookup and reference",
+   "excel": {
+    "listed": true,
+    "since": "2021",
+    "source": "https://support.microsoft.com/en-us/excel/functions/sortby-function"
+   },
+   "sheets": {
+    "listed": false,
+    "category": null,
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "SQRT",
+   "args": [
+    "number"
+   ],
+   "summary": "Square root.",
+   "category": "Math and trigonometry",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/sqrt-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Math",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "SUBSTITUTE",
+   "args": [
+    "text",
+    "old_text",
+    "new_text",
+    "[instance_num]"
+   ],
+   "summary": "Replaces text with other text.",
+   "category": "Text",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/substitute-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Text",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "SUM",
+   "args": [
+    "number1",
+    "[number2]",
+    "..."
+   ],
+   "summary": "Adds the numbers.",
+   "category": "Math and trigonometry",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/sum-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Math",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "SUMIF",
+   "args": [
+    "range",
+    "criteria",
+    "[sum_range]"
+   ],
+   "summary": "Adds the cells that meet one condition.",
+   "category": "Math and trigonometry",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/sumif-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Math",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "SUMIFS",
+   "args": [
+    "sum_range",
+    "criteria_range1",
+    "criteria1",
+    "[criteria_range2, criteria2]",
+    "..."
+   ],
+   "summary": "Adds the cells that meet every condition.",
+   "category": "Math and trigonometry",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/sumifs-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Math",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "SUMSQ",
+   "args": [
+    "number1",
+    "[number2]",
+    "..."
+   ],
+   "summary": "Adds the squares of the numbers.",
+   "category": "Math and trigonometry",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/sumsq-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Math",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "SWITCH",
+   "args": [
+    "expression",
+    "value1",
+    "result1",
+    "[default or value2, result2]",
+    "...[default or value3, result3]"
+   ],
+   "summary": "The result paired with the first value that matches.",
+   "category": "Logical",
+   "excel": {
+    "listed": true,
+    "since": "2019",
+    "source": "https://support.microsoft.com/en-us/excel/functions/switch-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Logical",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "TIME",
+   "args": [
+    "hour",
+    "minute",
+    "second"
+   ],
+   "summary": "Time from hours, minutes and seconds.",
+   "category": "Date and time",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/time-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Date",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "TIMEVALUE",
+   "args": [
+    "time_text"
+   ],
+   "summary": "Time from text that looks like a time.",
+   "category": "Date and time",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/timevalue-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Date",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "TODAY",
+   "args": [],
+   "summary": "Today's date.",
+   "category": "Date and time",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/today-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Date",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "TRANSPOSE",
+   "args": [
+    "array"
+   ],
+   "summary": "Swaps rows and columns.",
+   "category": "Lookup and reference",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/transpose-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Array",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "TRIM",
+   "args": [
+    "text"
+   ],
+   "summary": "Removes extra spaces.",
+   "category": "Text",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/trim-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Text",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "TRUE",
+   "args": [],
+   "summary": "The logical value TRUE.",
+   "category": "Logical",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/true-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Logical",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "UNIQUE",
+   "args": [
+    "array",
+    "[by_col]",
+    "[exactly_once]"
+   ],
+   "summary": "The distinct rows or columns of an array.",
+   "category": "Lookup and reference",
+   "excel": {
+    "listed": true,
+    "since": "2021",
+    "source": "https://support.microsoft.com/en-us/excel/functions/unique-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Filter",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "UPPER",
+   "args": [
+    "text"
+   ],
+   "summary": "Text in upper case.",
+   "category": "Text",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/upper-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Text",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "VLOOKUP",
+   "args": [
+    "lookup_value",
+    "table_array",
+    "col_index_num",
+    "[range_lookup]"
+   ],
+   "summary": "Looks down the first column and returns a value from a column to the right.",
+   "category": "Lookup and reference",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/vlookup-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Lookup",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "WEEKDAY",
+   "args": [
+    "serial_number",
+    "[return_type]"
+   ],
+   "summary": "Day of the week of a date.",
+   "category": "Date and time",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/weekday-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Date",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "XLOOKUP",
+   "args": [
+    "lookup_value",
+    "lookup_array",
+    "return_array",
+    "[if_not_found]",
+    "[match_mode]",
+    "[search_mode]"
+   ],
+   "summary": "Finds a value and returns the matching item from another range.",
+   "category": "Lookup and reference",
+   "excel": {
+    "listed": true,
+    "since": "2021",
+    "source": "https://support.microsoft.com/en-us/excel/functions/xlookup-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Lookup",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "XMATCH",
+   "args": [
+    "lookup_value",
+    "lookup_array",
+    "[match_mode]",
+    "[search_mode]"
+   ],
+   "summary": "Position of a value, with match modes and search direction.",
+   "category": "Lookup and reference",
+   "excel": {
+    "listed": true,
+    "since": "2021",
+    "source": "https://support.microsoft.com/en-us/excel/functions/xmatch-function"
+   },
+   "sheets": {
+    "listed": false,
+    "category": null,
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "XOR",
+   "args": [
+    "logical1",
+    "[logical2]",
+    "..."
+   ],
+   "summary": "TRUE when an odd number of arguments are TRUE.",
+   "category": "Logical",
+   "excel": {
+    "listed": true,
+    "since": "2013",
+    "source": "https://support.microsoft.com/en-us/excel/functions/xor-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Logical",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "YEAR",
+   "args": [
+    "serial_number"
+   ],
+   "summary": "Year of a date.",
+   "category": "Date and time",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/year-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Date",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  }
+ ]
+}
