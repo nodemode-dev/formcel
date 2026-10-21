@@ -269,6 +269,42 @@ impl Workbook {
         self.inner.rule_lines(sheet)
     }
 
+    fn tables(&self) -> Vec<String> {
+        self.inner.tables()
+    }
+
+    fn load_tables(&mut self, lines: Vec<String>) -> usize {
+        self.inner.load_tables(&lines)
+    }
+
+    #[pyo3(signature = (top, bottom, header = true, sheet = 0))]
+    fn create_table(&mut self, top: &str, bottom: &str, header: bool, sheet: usize) -> PyResult<()> {
+        let t = parse_a1(top).map_err(|e| PyValueError::new_err(e.to_string()))?;
+        let b = parse_a1(bottom).map_err(|e| PyValueError::new_err(e.to_string()))?;
+        let area = formcel_core::formula::Area { r0: t.row, c0: t.col, r1: b.row, c1: b.col };
+        self.inner.create_table(sheet, area, header).map(|_| ()).map_err(|e| PyValueError::new_err(e.to_string()))
+    }
+
+    fn set_table(&mut self, name: &str, line: &str) -> PyResult<()> {
+        self.inner.set_table(name, line).map(|_| ()).map_err(|e| PyValueError::new_err(e.to_string()))
+    }
+
+    fn remove_table(&mut self, name: &str) -> PyResult<()> {
+        self.inner.remove_table(name).map(|_| ()).map_err(|e| PyValueError::new_err(e.to_string()))
+    }
+
+    #[pyo3(signature = (a1, sheet = 0))]
+    fn plain_formula(&self, a1: &str, sheet: usize) -> PyResult<Option<String>> {
+        let a = parse_a1(a1).map_err(|e| PyValueError::new_err(e.to_string()))?;
+        Ok(self.inner.plain_formula(sheet, a))
+    }
+
+    #[pyo3(signature = (a1, sheet = 0))]
+    fn file_formula(&self, a1: &str, sheet: usize) -> PyResult<Option<String>> {
+        let a = parse_a1(a1).map_err(|e| PyValueError::new_err(e.to_string()))?;
+        Ok(self.inner.file_formula(sheet, a))
+    }
+
     #[pyo3(signature = (sheet = 0))]
     fn validations(&self, sheet: usize) -> Vec<String> {
         self.inner.validations(sheet)

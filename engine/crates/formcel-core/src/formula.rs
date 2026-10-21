@@ -144,14 +144,228 @@ pub enum Expr {
     Invoke(Box<Expr>, Vec<Expr>),
     Spill(Box<Expr>),
     Single(Box<Expr>),
+    Table(Option<String>, TableSpec),
 }
 
-pub const FUNCTIONS: [&str; 111] = [
+pub const ITEM_ALL: u8 = 1;
+pub const ITEM_DATA: u8 = 2;
+pub const ITEM_HEADERS: u8 = 4;
+pub const ITEM_TOTALS: u8 = 8;
+pub const ITEM_THIS: u8 = 16;
+const ITEMS: [(&str, u8); 5] = [("#All", ITEM_ALL), ("#Data", ITEM_DATA), ("#Headers", ITEM_HEADERS), ("#Totals", ITEM_TOTALS), ("#This Row", ITEM_THIS)];
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct TableSpec {
+    pub items: u8,
+    pub cols: Option<(String, String)>,
+    pub long: bool,
+}
+
+fn unquote_col(s: &str) -> String {
+    let mut out = String::new();
+    let mut it = s.trim().chars();
+    while let Some(c) = it.next() {
+        if c == '\'' {
+            if let Some(n) = it.next() {
+                out.push(n);
+            }
+        } else {
+            out.push(c);
+        }
+    }
+    out
+}
+
+fn groups(s: &str) -> Option<Vec<String>> {
+    let mut out = Vec::new();
+    let mut depth = 0;
+    let mut cur = String::new();
+    let mut it = s.chars();
+    while let Some(c) = it.next() {
+        match c {
+            '\'' => {
+                cur.push(c);
+                cur.push(it.next()?);
+            }
+            '[' => {
+                depth += 1;
+                cur.push(c);
+            }
+            ']' => {
+                depth -= 1;
+                cur.push(c);
+            }
+            ',' if depth == 0 => out.push(std::mem::take(&mut cur)),
+            _ => cur.push(c),
+        }
+    }
+    (depth == 0).then(|| {
+        out.push(cur);
+        out.into_iter().map(|g| g.trim().to_string()).filter(|g| !g.is_empty()).collect()
+    })
+}
+
+fn bracketed(s: &str) -> Option<&str> {
+    s.strip_prefix('[')?.strip_suffix(']')
+}
+
+fn col_range(s: &str) -> Option<(String, String)> {
+    let s = s.trim();
+    let Some(inner) = bracketed(s) else { return Some((unquote_col(s), unquote_col(s))) };
+    let mut depth = 0;
+    let mut quoted = false;
+    for (i, c) in s.char_indices() {
+        if quoted {
+            quoted = false;
+            continue;
+        }
+        match c {
+            '\'' => quoted = true,
+            '[' => depth += 1,
+            ']' => depth -= 1,
+            ':' if depth == 0 => {
+                let a = bracketed(s[..i].trim())?;
+                let b = bracketed(s[i + 1..].trim())?;
+                return Some((unquote_col(a), unquote_col(b)));
+            }
+            _ => {}
+        }
+    }
+    Some((unquote_col(inner), unquote_col(inner)))
+}
+
+pub fn parse_spec(raw: &str) -> Option<TableSpec> {
+    let raw = raw.trim();
+    if let Some(rest) = raw.strip_prefix('@') {
+        let rest = rest.trim();
+        let cols = if rest.is_empty() { None } else { Some(col_range(rest)?) };
+        return Some(TableSpec { items: ITEM_THIS, cols, long: false });
+    }
+    if !raw.contains('[') {
+        if raw.starts_with('#') {
+            let item = ITEMS.iter().find(|(n, _)| n.eq_ignore_ascii_case(raw))?.1;
+            return Some(TableSpec { items: item, cols: None, long: false });
+        }
+        let c = unquote_col(raw);
+        return Some(TableSpec { items: 0, cols: Some((c.clone(), c)), long: false });
+    }
+    let mut spec = TableSpec { items: 0, cols: None, long: false };
+    for g in groups(raw)? {
+        let inner = bracketed(&g).map(str::trim);
+        if let Some(item) = inner.and_then(|i| ITEMS.iter().find(|(n, _)| n.eq_ignore_ascii_case(i))) {
+            spec.items |= item.1;
+        } else if spec.cols.is_none() {
+            spec.cols = Some(col_range(&g)?);
+        } else {
+            return None;
+        }
+    }
+    if spec.items & ITEM_THIS != 0 && spec.items != ITEM_THIS {
+        return None;
+    }
+    Some(spec)
+}
+
+fn escape_col(s: &str) -> String {
+    let mut out = String::new();
+    for c in s.chars() {
+        if matches!(c, '[' | ']' | '#' | '\'' | '@') {
+            out.push('\'');
+        }
+        out.push(c);
+    }
+    out
+}
+
+fn plain_col(s: &str) -> bool {
+    s.chars().all(|c| c.is_alphanumeric() || c == ' ') && !s.starts_with(' ') && !s.ends_with(' ')
+}
+
+fn print_cols(cols: &(String, String), out: &mut String) {
+    out.push('[');
+    out.push_str(&escape_col(&cols.0));
+    out.push(']');
+    if cols.0 != cols.1 {
+        out.push_str(":[");
+        out.push_str(&escape_col(&cols.1));
+        out.push(']');
+    }
+}
+
+pub fn print_spec(spec: &TableSpec, out: &mut String) {
+    let single = spec.cols.as_ref().filter(|c| c.0 == c.1);
+    if spec.items == ITEM_THIS && !spec.long {
+        out.push_str("[@");
+        match (&spec.cols, single) {
+            (None, _) => {}
+            (Some(_), Some(c)) if plain_col(&c.0) && !c.0.contains(' ') => out.push_str(&escape_col(&c.0)),
+            (Some(c), _) => print_cols(c, out),
+        }
+        out.push(']');
+        return;
+    }
+    if spec.items == 0 {
+        match (&spec.cols, single) {
+            (None, _) => {}
+            (Some(_), Some(c)) if plain_col(&c.0) => {
+                out.push('[');
+                out.push_str(&escape_col(&c.0));
+                out.push(']');
+            }
+            (Some(c), _) => {
+                out.push('[');
+                print_cols(c, out);
+                out.push(']');
+            }
+        }
+        return;
+    }
+    let names: Vec<&str> = ITEMS.iter().filter(|(_, b)| spec.items & b != 0).map(|(n, _)| *n).collect();
+    if names.len() == 1 && spec.cols.is_none() {
+        out.push('[');
+        out.push_str(names[0]);
+        out.push(']');
+        return;
+    }
+    out.push('[');
+    for (i, n) in names.iter().enumerate() {
+        if i > 0 {
+            out.push(',');
+        }
+        out.push('[');
+        out.push_str(n);
+        out.push(']');
+    }
+    if let Some(c) = &spec.cols {
+        out.push(',');
+        print_cols(c, out);
+    }
+    out.push(']');
+}
+
+pub fn tables_in(e: &Expr, f: &mut dyn FnMut(Option<&str>, &TableSpec)) {
+    match e {
+        Expr::Table(n, s) => f(n.as_deref(), s),
+        o => {
+            for c in children(o) {
+                tables_in(c, f);
+            }
+        }
+    }
+}
+
+pub fn has_table(e: &Expr) -> bool {
+    let mut any = false;
+    tables_in(e, &mut |_, _| any = true);
+    any
+}
+
+pub const FUNCTIONS: [&str; 112] = [
     "ABS", "AND", "ARRAYFORMULA", "AVERAGE", "AVERAGEIF", "AVERAGEIFS", "BYCOL", "BYROW", "CHOOSE", "CHOOSECOLS", "CHOOSEROWS", "CONCAT", "CONCATENATE", "COUNT", "COUNTA", "COUNTBLANK", "COUNTIF",
     "COUNTIFS", "DATE", "DATEVALUE", "DAY", "DAYS", "DROP", "EDATE", "EOMONTH", "ERROR.TYPE", "EXACT", "EXPAND", "FALSE", "FILTER", "FIND", "HLOOKUP", "HOUR", "HSTACK", "HYPERLINK", "IF", "IFERROR", "IFNA", "IFS", "INDEX", "INT",
     "ISBLANK", "ISERR", "ISERROR", "ISLOGICAL", "ISNA", "ISNONTEXT", "ISNUMBER", "ISREF", "ISTEXT", "LAMBDA", "LEFT", "LEN", "LET", "LOWER", "MAKEARRAY", "MAP", "MATCH", "MAX", "MID", "MIN",
     "MINUTE", "MOD", "MONTH", "NA", "NOT", "NOW", "OR", "PI", "POWER", "PRODUCT", "REDUCE", "RIGHT", "ROUND", "ROUNDDOWN", "ROUNDUP", "SCAN", "SEARCH", "SECOND", "SEQUENCE", "SORT", "SORTBY", "SQRT",
-    "SUBSTITUTE", "SUM", "SUMIF", "SUMIFS", "SUMSQ", "SWITCH", "TAKE", "TEXT", "TEXTSPLIT", "TIME", "TIMEVALUE", "TOCOL", "TODAY", "TOROW", "TRANSPOSE", "TRIM", "TRUE", "UNIQUE", "UPPER", "VLOOKUP",
+    "SUBSTITUTE", "SUBTOTAL", "SUM", "SUMIF", "SUMIFS", "SUMSQ", "SWITCH", "TAKE", "TEXT", "TEXTSPLIT", "TIME", "TIMEVALUE", "TOCOL", "TODAY", "TOROW", "TRANSPOSE", "TRIM", "TRUE", "UNIQUE", "UPPER", "VLOOKUP",
     "VSTACK", "WEEKDAY", "WRAPCOLS", "WRAPROWS", "XLOOKUP", "XMATCH", "XOR", "YEAR",
 ];
 
@@ -176,6 +390,7 @@ enum Tok {
     Semi,
     Hash,
     At,
+    Bracket(String),
 }
 
 fn lex(src: &str) -> Option<Vec<Tok>> {
@@ -222,6 +437,34 @@ fn lex(src: &str) -> Option<Vec<Tok>> {
                 i += 1;
             }
             out.push(Tok::Ident(s[st..i].iter().collect()));
+            continue;
+        }
+        if c == '[' {
+            let mut depth = 1;
+            let mut t = String::new();
+            i += 1;
+            while depth > 0 {
+                let ch = *s.get(i)?;
+                i += 1;
+                match ch {
+                    '\'' => {
+                        t.push(ch);
+                        t.push(*s.get(i)?);
+                        i += 1;
+                        continue;
+                    }
+                    '[' => depth += 1,
+                    ']' => {
+                        depth -= 1;
+                        if depth == 0 {
+                            break;
+                        }
+                    }
+                    _ => {}
+                }
+                t.push(ch);
+            }
+            out.push(Tok::Bracket(t));
             continue;
         }
         match c {
@@ -495,7 +738,13 @@ impl Parser {
                 }
                 self.sheet_ref(name)
             }
+            Tok::Bracket(raw) => Some(Expr::Table(None, parse_spec(&raw)?)),
             Tok::Ident(id) => {
+                if let Some(Tok::Bracket(raw)) = self.peek() {
+                    let spec = parse_spec(&raw.clone())?;
+                    self.i += 1;
+                    return Some(Expr::Table(Some(id), spec));
+                }
                 if self.peek() == Some(&Tok::Bang) {
                     self.i += 1;
                     return self.sheet_ref(id);
@@ -605,6 +854,16 @@ pub fn print(e: &Expr, out: &mut String) {
         Expr::Err(k) => out.push_str(k.text()),
         Expr::Missing => {}
         Expr::Name(n) => out.push_str(n),
+        Expr::Table(n, spec) => {
+            if let Some(n) = n {
+                out.push_str(n);
+            }
+            if n.is_none() && spec.items == 0 && spec.cols.is_none() {
+                out.push_str("[#Data]");
+            } else {
+                print_spec(spec, out);
+            }
+        }
         Expr::Ref(sheet, k) => {
             if let Some(s) = sheet {
                 sheet_text(s, out);

@@ -486,6 +486,60 @@ pub extern "C" fn fc_guess_header(id: u32, sheet: u32, r0: u32, c0: u32, r1: u32
     with_book(id, |wb| i32::from(wb.guess_header(sheet as usize, formcel_core::formula::Area { r0, c0, r1, c1 }))).unwrap_or(0)
 }
 
+/// Every table in the workbook, one line each.
+#[no_mangle]
+pub extern "C" fn fc_tables(id: u32) -> i32 {
+    match with_book(id, |wb| wb.tables().join("\n")) {
+        Some(s) => emit(&s) as i32,
+        None => -1,
+    }
+}
+
+/// Loads the workbook's tables without an undo step.
+///
+/// # Safety
+/// `lines` must point at `len` readable bytes.
+#[no_mangle]
+pub unsafe extern "C" fn fc_load_tables(id: u32, lines: *const u8, len: u32) -> i32 {
+    let list: Vec<String> = text(lines, len).split('\n').filter(|l| !l.is_empty()).map(String::from).collect();
+    with_book(id, |wb| wb.load_tables(&list) as i32).unwrap_or(-1)
+}
+
+/// Makes a table from a rectangle, with or without its own header row, as one undo step; -3 when it cannot.
+#[no_mangle]
+pub extern "C" fn fc_create_table(id: u32, sheet: u32, r0: u32, c0: u32, r1: u32, c1: u32, header: u32) -> i32 {
+    let area = formcel_core::formula::Area { r0, c0, r1, c1 };
+    match with_book(id, |wb| wb.create_table(sheet as usize, area, header != 0).map(|e| wb.encode(&e))) {
+        Some(Ok(s)) => emit(&s) as i32,
+        Some(Err(formcel_core::EngineError::BadStyle(_) | formcel_core::EngineError::BadName(_))) => -3,
+        _ => -1,
+    }
+}
+
+/// Changes a table's name, style, options, size or total row from a table line without its sheet; -3 when refused.
+///
+/// # Safety
+/// `name` and `t` must point at readable bytes.
+#[no_mangle]
+pub unsafe extern "C" fn fc_set_table(id: u32, name: *const u8, name_len: u32, t: *const u8, len: u32) -> i32 {
+    let (name, t) = (text(name, name_len).to_string(), text(t, len).to_string());
+    match with_book(id, |wb| wb.set_table(&name, &t).map(|e| wb.encode(&e))) {
+        Some(Ok(s)) => emit(&s) as i32,
+        Some(Err(formcel_core::EngineError::BadStyle(_) | formcel_core::EngineError::BadName(_))) => -3,
+        _ => -1,
+    }
+}
+
+/// Turns a table back into a range; references to it become cell references.
+///
+/// # Safety
+/// `name` must point at `len` readable bytes.
+#[no_mangle]
+pub unsafe extern "C" fn fc_remove_table(id: u32, name: *const u8, len: u32) -> i32 {
+    let name = text(name, len).to_string();
+    effect_or(with_book(id, |wb| wb.remove_table(&name).map(|e| wb.encode(&e))))
+}
+
 /// A sheet's data validation rules, one line each.
 #[no_mangle]
 pub extern "C" fn fc_validations(id: u32, sheet: u32) -> i32 {

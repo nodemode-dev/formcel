@@ -1614,6 +1614,27 @@
    }
   },
   {
+   "name": "SUBTOTAL",
+   "args": [
+    "function_num",
+    "ref1",
+    "[ref2]",
+    "..."
+   ],
+   "summary": "Sum, average, count and more of a list, leaving out rows a filter hides and other SUBTOTALs.",
+   "category": "Math and trigonometry",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/subtotal-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Math",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
    "name": "SUM",
    "args": [
     "number1",

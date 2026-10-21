@@ -11,6 +11,15 @@ pub trait Ctx {
     fn spill(&self, _sheet: usize, _a: Addr) -> Option<(u32, u32)> {
         None
     }
+    fn table_ref(&self, _sheet: usize, _name: Option<&str>, _spec: &crate::formula::TableSpec, _at: Option<Addr>) -> Result<(usize, Area), ErrKind> {
+        Err(ErrKind::Ref)
+    }
+    fn filtered(&self, _sheet: usize, _row: u32) -> bool {
+        false
+    }
+    fn subtotal_at(&self, _sheet: usize, _a: Addr) -> bool {
+        false
+    }
 }
 
 #[derive(Debug)]
@@ -406,6 +415,10 @@ impl<'a> Eval<'a> {
                 Some(s) => Arg::R(s, kind.area()),
                 None => Arg::V(err(ErrKind::Ref)),
             },
+            Expr::Table(name, spec) => match self.ctx.table_ref(self.sheet, name.as_deref(), spec, self.at) {
+                Ok((s, a)) => Arg::R(s, a),
+                Err(k) => Arg::V(err(k)),
+            },
             Expr::Paren(x) => self.arg(x),
             Expr::Single(x) => self.single(self.arg(x)),
             Expr::Spill(x) => match self.arg(x) {
@@ -751,6 +764,90 @@ impl<'a> Eval<'a> {
                         return Err(ErrKind::Na);
                     }
                     Value::Bool(self.t(a, 0)? == self.t(a, 1)?)
+                }
+                "SUBTOTAL" => {
+                    if a.len() < 2 {
+                        return Err(ErrKind::Na);
+                    }
+                    let n = self.n(a, 0)?.trunc() as i64;
+                    if !(1..=11).contains(&n) && !(101..=111).contains(&n) {
+                        return Err(ErrKind::Value);
+                    }
+                    let code = n % 100;
+                    let mut nums: Vec<f64> = Vec::new();
+                    let mut filled = 0usize;
+                    let mut bad: Option<ErrKind> = None;
+                    for x in &a[1..] {
+                        match self.arg(x) {
+                            Arg::R(s, area) => self.ctx.each(s, area, &mut |at, v| {
+                                if self.ctx.filtered(s, at.row) || self.ctx.subtotal_at(s, at) {
+                                    return;
+                                }
+                                match v {
+                                    Value::Empty => {}
+                                    Value::Number(x) => {
+                                        filled += 1;
+                                        nums.push(*x);
+                                    }
+                                    Value::Error(k) => {
+                                        filled += 1;
+                                        bad.get_or_insert(*k);
+                                    }
+                                    _ => filled += 1,
+                                }
+                            }),
+                            Arg::A(arr) => {
+                                for v in &arr.data {
+                                    match v {
+                                        Value::Number(x) => {
+                                            filled += 1;
+                                            nums.push(*x);
+                                        }
+                                        Value::Error(k) => return Err(*k),
+                                        Value::Empty => {}
+                                        _ => filled += 1,
+                                    }
+                                }
+                            }
+                            Arg::V(Value::Error(k)) => return Err(k),
+                            Arg::V(v) => {
+                                filled += 1;
+                                if let Ok(x) = number_of(&v) {
+                                    nums.push(x);
+                                }
+                            }
+                            Arg::F(_) => return Err(ErrKind::Value),
+                        }
+                    }
+                    if let Some(k) = bad {
+                        if code != 2 && code != 3 {
+                            return Err(k);
+                        }
+                    }
+                    let len = nums.len() as f64;
+                    let sum: f64 = nums.iter().sum();
+                    let var = |pop: bool| -> Result<f64, ErrKind> {
+                        let d = if pop { len } else { len - 1.0 };
+                        if d <= 0.0 {
+                            return Err(ErrKind::Div0);
+                        }
+                        let m = sum / len;
+                        Ok(nums.iter().map(|x| (x - m) * (x - m)).sum::<f64>() / d)
+                    };
+                    match code {
+                        1 if nums.is_empty() => return Err(ErrKind::Div0),
+                        1 => num(sum / len),
+                        2 => num(len),
+                        3 => num(filled as f64),
+                        4 => num(if nums.is_empty() { 0.0 } else { nums.iter().copied().fold(f64::NEG_INFINITY, f64::max) }),
+                        5 => num(if nums.is_empty() { 0.0 } else { nums.iter().copied().fold(f64::INFINITY, f64::min) }),
+                        6 => num(if nums.is_empty() { 0.0 } else { nums.iter().product() }),
+                        7 => num(var(false)?.sqrt()),
+                        8 => num(var(true)?.sqrt()),
+                        9 => num(sum),
+                        10 => num(var(false)?),
+                        _ => num(var(true)?),
+                    }
                 }
                 "FIND" | "SEARCH" => {
                     if !count(2, 3) {

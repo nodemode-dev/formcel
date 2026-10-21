@@ -14,6 +14,7 @@ pub mod sort;
 pub use numfmt::Fmt;
 mod store;
 pub mod style;
+pub mod table;
 pub mod theme;
 pub mod valid;
 pub mod wire;
@@ -269,6 +270,10 @@ fn shift_area(m: Area, s: Shift) -> Option<Area> {
     shift_span(m, s).filter(|out| out.r0 < out.r1 || out.c0 < out.c1)
 }
 
+pub(crate) fn shift_span_pub(m: Area, s: Shift) -> Option<Area> {
+    shift_span(m, s)
+}
+
 fn shift_span(m: Area, s: Shift) -> Option<Area> {
     let (a0, a1) = if s.rows { (m.r0, m.r1) } else { (m.c0, m.c1) };
     let (a0, a1, at) = (i64::from(a0), i64::from(a1), i64::from(s.at));
@@ -300,6 +305,7 @@ struct Lost {
     rules: Vec<cf::Rule>,
     filter: Option<filter::Filter>,
     valid: Vec<valid::Validation>,
+    tables: Vec<table::Table>,
     links: Vec<(Key, Option<String>, Option<String>)>,
 }
 
@@ -325,11 +331,13 @@ pub struct Effect {
     pub rules: Option<usize>,
     pub filter: Option<usize>,
     pub valid: Option<usize>,
+    pub tables: bool,
 }
 
 impl Effect {
     fn join(mut self, o: Effect) -> Effect {
         self.rules = o.rules.or(self.rules);
+        self.tables |= o.tables;
         self.valid = o.valid.or(self.valid);
         self.filter = o.filter.or(self.filter);
         self.theme |= o.theme;
@@ -361,6 +369,7 @@ enum Tx {
     Rules { sheet: usize, before: Vec<cf::Rule>, after: Vec<cf::Rule> },
     Filter { sheet: usize, before: Option<filter::Filter>, after: Option<filter::Filter> },
     Valid { sheet: usize, before: Vec<valid::Validation>, after: Vec<valid::Validation> },
+    Tables { before: Vec<table::Table>, after: Vec<table::Table> },
     Links(Vec<FormatChange>),
 }
 
@@ -383,6 +392,8 @@ pub struct Workbook {
     named_codes: FastMap<String, std::sync::Arc<(String, fmtcode::Code)>>,
     links: FastMap<Key, String>,
     link_log: Vec<(usize, Addr, String)>,
+    tables: Vec<table::Table>,
+    table_quiet: bool,
 }
 
 const SPILL_PASSES: usize = 8;
@@ -412,6 +423,18 @@ impl eval::Ctx for Workbook {
         }
         self.names.get(&name.to_ascii_uppercase()).map(|n| &n.1)
     }
+
+    fn table_ref(&self, sheet: usize, name: Option<&str>, spec: &formula::TableSpec, at: Option<Addr>) -> Result<(usize, Area), ErrKind> {
+        self.resolve_table(sheet, name, spec, at)
+    }
+
+    fn filtered(&self, sheet: usize, row: u32) -> bool {
+        self.sheets.get(sheet).and_then(|s| s.filter.as_ref()).is_some_and(|f| f.hidden.binary_search(&row).is_ok())
+    }
+
+    fn subtotal_at(&self, sheet: usize, a: Addr) -> bool {
+        self.formulas.get(&(sheet, a)).is_some_and(|f| f.src.to_ascii_uppercase().contains("SUBTOTAL("))
+    }
 }
 
 impl Default for Workbook {
@@ -440,6 +463,8 @@ impl Workbook {
             named_codes: FastMap::default(),
             links: FastMap::default(),
             link_log: Vec::new(),
+            tables: Vec::new(),
+            table_quiet: false,
         }
         .with_named_codes()
     }
@@ -670,6 +695,10 @@ impl Workbook {
         let edited: Vec<Addr> = tx.iter().map(|c| c.addr).collect();
         if !tx.is_empty() {
             self.record(Tx::Cells(tx));
+        }
+        if !self.tables.is_empty() && !self.table_quiet {
+            let more = self.table_hook(sheet, edits);
+            seeds.extend(more);
         }
         let changed = self.recalc(&seeds);
         self.auto_links(sheet, &edited);
@@ -1125,6 +1154,14 @@ impl Workbook {
         if let Some(e) = &f.ast {
             let mut seen: Vec<String> = Vec::new();
             self.expr_areas(k.0, e, &mut out, &mut seen);
+            if !self.tables.is_empty() {
+                formula::tables_in(e, &mut |n, spec| {
+                    let full = formula::TableSpec { items: if spec.items == formula::ITEM_THIS { 0 } else { spec.items }, ..spec.clone() };
+                    if let Ok((s, a)) = self.resolve_table(k.0, n, &full, Some(k.1)) {
+                        out.push((s, a));
+                    }
+                });
+            }
         }
         out
     }
@@ -1393,7 +1430,8 @@ impl Workbook {
     }
 
     fn do_shift(&mut self, s: Shift) -> (Dropped, Rewritten, Lost) {
-        let mut lost_fmt = Lost { merges: self.sheets[s.sheet].merges.clone(), rules: self.sheets[s.sheet].rules.clone(), filter: self.sheets[s.sheet].filter.clone(), valid: self.sheets[s.sheet].valid.clone(), ..Lost::default() };
+        let mut lost_fmt = Lost { merges: self.sheets[s.sheet].merges.clone(), rules: self.sheets[s.sheet].rules.clone(), filter: self.sheets[s.sheet].filter.clone(), valid: self.sheets[s.sheet].valid.clone(), tables: self.tables.clone(), ..Lost::default() };
+        self.shift_tables(s);
         let valid = std::mem::take(&mut self.sheets[s.sheet].valid);
         self.sheets[s.sheet].valid = valid.into_iter().filter_map(|v| shift_span(v.area, s).map(|area| valid::Validation { area, ..v })).collect();
         let merges = std::mem::take(&mut self.sheets[s.sheet].merges);
@@ -1780,6 +1818,12 @@ impl Workbook {
                 self.sheets[*sheet].valid = if forward { after.clone() } else { before.clone() };
                 Effect { valid: Some(*sheet), ..Effect::default() }
             }
+            Tx::Tables { before, after } => {
+                self.tables = if forward { after.clone() } else { before.clone() };
+                self.graph.built = false;
+                let cells = self.recalc_all();
+                Effect { cells, tables: true, ..Effect::default() }
+            }
             Tx::Theme { before, after } => {
                 self.theme = if forward { (**after).clone() } else { (**before).clone() };
                 Effect { theme: true, ..Effect::default() }
@@ -1815,6 +1859,8 @@ impl Workbook {
                 self.sheets[shift.sheet].rules = lost.rules.clone();
                 self.sheets[shift.sheet].filter = lost.filter.clone();
                 self.sheets[shift.sheet].valid = lost.valid.clone();
+                self.tables = lost.tables.clone();
+                self.graph.built = false;
                 self.apply_links(&lost.links, false);
                 let restored = self.apply_formats(&lost.codes, false).join(self.apply_styles(&lost.styles, false));
                 for (s, a, raw) in rewritten {
@@ -1825,7 +1871,7 @@ impl Workbook {
                 }
                 self.recalc_all();
                 let cells = dropped.iter().map(|(a, _)| (shift.sheet, *a, self.sheets[shift.sheet].cells.get(*a).cloned().unwrap_or(Value::Empty))).collect();
-                Effect { cells, shift: Some(back), merges: Some(shift.sheet), rules: Some(shift.sheet), filter: Some(shift.sheet), valid: Some(shift.sheet), formats: restored.formats, styles: restored.styles, ..Effect::default() }
+                Effect { cells, shift: Some(back), merges: Some(shift.sheet), rules: Some(shift.sheet), filter: Some(shift.sheet), valid: Some(shift.sheet), tables: true, formats: restored.formats, styles: restored.styles, ..Effect::default() }
             }
         }
     }
