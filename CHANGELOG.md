@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.8.0 · 2026-10-21
+
+- Faster recalculation: the engine keeps its dependency graph between edits. Changing one value in a sheet of 100,000 formulas recalculates in 2.5 to 7 ms in the window (it took about 45 ms before). A single 100,000-step chain still takes about 300 ms.
+- Functions with criteria: SUMIF, SUMIFS, COUNTIF, COUNTIFS, AVERAGEIF, AVERAGEIFS, with `<`, `>`, `<=`, `>=`, `<>`, `=`, the wildcards `*` and `?` and `~` to escape them.
+- Lookups: VLOOKUP, HLOOKUP, INDEX, MATCH, XLOOKUP (with if-not-found, match mode and search mode) and XMATCH.
+- IFS, SWITCH and CHOOSE. 55 functions in all.
+
 ## 0.7.0 · 2026-10-21
 
 - Formulas (Phase 2, first slice): type `=` to enter a formula. References to cells, ranges, whole columns and rows, other sheets (`Sheet2!A1`, `'My sheet'!A1:B4`), `$` anchors, the operators `+ - * / ^ & = <> < > <= >= %`, and 40 functions: IF, IFERROR, IFNA, SUM, PRODUCT, AVERAGE, MIN, MAX, COUNT, COUNTA, COUNTBLANK, AND, OR, XOR, NOT, TRUE, FALSE, ABS, INT, SQRT, POWER, MOD, PI, ROUND, ROUNDUP, ROUNDDOWN, LEN, UPPER, LOWER, TRIM, LEFT, RIGHT, MID, CONCAT, CONCATENATE, ISBLANK, ISNUMBER, ISTEXT, ISERROR, NA.
