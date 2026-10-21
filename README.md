@@ -2,7 +2,7 @@
 
 Spreadsheets in the form family. An open alternative to Excel and Google Sheets, built so that Claude Code, Codex or Cursor can read and edit a live workbook while you watch.
 
-Version 0.4.0 · Apache-2.0 · macOS, Windows, Linux (browser now, Tauri desktop later)
+Version 0.5.0 · Apache-2.0 · macOS, Windows, Linux (browser now, Tauri desktop later)
 
 **Stack.** Vanilla TypeScript and Vite · Python 3.12 and FastAPI · one calculation engine in Rust, compiled to WebAssembly for the window and to a Python module for the engine process · Tauri 2 later.
 

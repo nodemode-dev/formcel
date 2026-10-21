@@ -2,8 +2,8 @@
 
 Living log of comment content and rationale for the window. Source stays comment-free; it lives here.
 
-Current build version: v0.3.0
-Last updated: 2026-10-21 · home, saving, sheets
+Current build version: v0.5.0
+Last updated: 2026-10-21 · outlines, app icon
 
 ---
 
