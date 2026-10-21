@@ -34,8 +34,9 @@ enum X {
     IsNull(Box<X>, bool),
 }
 
-const RESERVED: [&str; 28] = [
-    "select", "where", "group", "pivot", "order", "limit", "offset", "label", "format", "options", "by", "and", "or", "not", "is", "null", "true", "false", "contains", "starts", "ends", "with", "matches", "like", "asc", "desc", "date", "from",
+const RESERVED: [&str; 30] = [
+    "select", "where", "group", "pivot", "order", "limit", "offset", "label", "format", "options", "by", "and", "or", "not", "is", "null", "true", "false", "contains", "starts", "ends", "with", "matches", "like", "asc", "desc", "date", "from", "datetime",
+    "timeofday",
 ];
 
 fn lex(src: &str) -> Result<Vec<(Tk, usize, usize)>, ErrKind> {
@@ -261,6 +262,14 @@ impl Parser<'_> {
                         }
                         return Err(ErrKind::Value);
                     }
+                    "datetime" | "timeofday" => {
+                        if let Some((Tk::Str(s), _, _)) = self.t.get(self.i).cloned() {
+                            self.i += 1;
+                            let (n, _) = numfmt::parse(&s).ok_or(ErrKind::Value)?;
+                            return Ok(X::Lit(Q::Num(if lw == "timeofday" { n.fract() } else { n })));
+                        }
+                        return Err(ErrKind::Value);
+                    }
                     _ => {}
                 }
                 if self.eat_tk(&Tk::Open) {
@@ -407,6 +416,8 @@ fn eval(x: &X, rows: &[&Vec<Q>]) -> Result<Q, ErrKind> {
                 ("hour", _) => n.map_or(Q::Null, |s| Q::Num(numfmt::hms(s).0 as f64)),
                 ("minute", _) => n.map_or(Q::Null, |s| Q::Num(numfmt::hms(s).1 as f64)),
                 ("second", _) => n.map_or(Q::Null, |s| Q::Num(numfmt::hms(s).2 as f64)),
+                ("millisecond", _) => n.map_or(Q::Null, |s| Q::Num(((s.fract() * 86_400_000.0).round() % 1000.0).abs())),
+                ("now", _) => Q::Num(numfmt::now()),
                 ("todate", _) => n.map_or(Q::Null, |s| Q::Num(s.floor())),
                 ("datediff", _) => match (v.first(), v.get(1)) {
                     (Some(Q::Num(a)), Some(Q::Num(b))) => Q::Num(a.floor() - b.floor()),
@@ -444,7 +455,7 @@ fn eval(x: &X, rows: &[&Vec<Q>]) -> Result<Q, ErrKind> {
                         "starts" => s.starts_with(&p),
                         "ends" => s.ends_with(&p),
                         "like" => like(&p, &s),
-                        _ => regex::Regex::new(&format!("^(?:{p})$")).map_err(|_| ErrKind::Value)?.is_match(&s),
+                        _ => fancy_regex::Regex::new(&format!("^(?:{p})$")).map_err(|_| ErrKind::Value)?.is_match(&s).map_err(|_| ErrKind::Value)?,
                     })
                 }
                 _ => {
@@ -493,11 +504,15 @@ struct Plan {
     offset: usize,
     labels: Vec<(X, String)>,
     star: bool,
+    pivot: Vec<X>,
+    formats: Vec<(X, String)>,
+    no_format: bool,
+    no_values: bool,
 }
 
 fn parse(src: &str, cols: usize, names: &[String]) -> Result<Plan, ErrKind> {
     let mut p = Parser { t: lex(src)?, i: 0, cols, names };
-    let mut plan = Plan { select: Vec::new(), wher: None, group: Vec::new(), order: Vec::new(), limit: None, offset: 0, labels: Vec::new(), star: true };
+    let mut plan = Plan { select: Vec::new(), wher: None, group: Vec::new(), order: Vec::new(), limit: None, offset: 0, labels: Vec::new(), star: true, pivot: Vec::new(), formats: Vec::new(), no_format: false, no_values: false };
     let span = |p: &Parser, from: usize| -> String {
         let (a, b) = (p.t[from].1, p.t[p.i - 1].2);
         src[a..b].to_string()
@@ -530,6 +545,9 @@ fn parse(src: &str, cols: usize, names: &[String]) -> Result<Plan, ErrKind> {
             return Err(ErrKind::Value);
         }
         plan.group = list(&mut p)?.into_iter().map(|x| x.0).collect();
+    }
+    if p.eat("pivot") {
+        plan.pivot = list(&mut p)?.into_iter().map(|x| x.0).collect();
     }
     if p.eat("order") {
         if !p.eat("by") {
@@ -580,9 +598,12 @@ fn parse(src: &str, cols: usize, names: &[String]) -> Result<Plan, ErrKind> {
     }
     if p.eat("format") {
         loop {
-            p.or()?;
-            match p.t.get(p.i) {
-                Some((Tk::Str(_), _, _)) => p.i += 1,
+            let x = p.or()?;
+            match p.t.get(p.i).cloned() {
+                Some((Tk::Str(s), _, _)) => {
+                    p.i += 1;
+                    plan.formats.push((x, s));
+                }
                 _ => return Err(ErrKind::Value),
             }
             if !p.eat_tk(&Tk::Comma) {
@@ -591,7 +612,12 @@ fn parse(src: &str, cols: usize, names: &[String]) -> Result<Plan, ErrKind> {
         }
     }
     if p.eat("options") {
-        while p.word().is_some() {
+        while let Some(w) = p.word() {
+            match w.as_str() {
+                "no_format" => plan.no_format = true,
+                "no_values" => plan.no_values = true,
+                _ => return Err(ErrKind::Value),
+            }
             p.i += 1;
         }
     }
@@ -656,7 +682,11 @@ impl Eval<'_> {
                 kept.push(row);
             }
         }
-        let grouped = !plan.group.is_empty() || select.iter().any(|s| has_agg(&s.0)) || plan.order.iter().any(|o| has_agg(&o.0));
+        let pivoted = !plan.pivot.is_empty();
+        if pivoted && !select.iter().any(|s| has_agg(&s.0)) {
+            return Err(ErrKind::Value);
+        }
+        let grouped = pivoted || !plan.group.is_empty() || select.iter().any(|s| has_agg(&s.0)) || plan.order.iter().any(|o| has_agg(&o.0));
         let units: Vec<Vec<&Vec<Q>>> = if grouped {
             let mut keyed: Vec<(Vec<Q>, Vec<&Vec<Q>>)> = Vec::new();
             for row in &kept {
@@ -674,9 +704,38 @@ impl Eval<'_> {
         } else {
             kept.iter().map(|r| vec![*r]).collect()
         };
+        let plain: Vec<usize> = (0..select.len()).filter(|i| !has_agg(&select[*i].0)).collect();
+        let aggs: Vec<usize> = (0..select.len()).filter(|i| has_agg(&select[*i].0)).collect();
+        let mut pivkeys: Vec<Vec<Q>> = Vec::new();
+        if pivoted {
+            for row in &kept {
+                let key: Vec<Q> = plan.pivot.iter().map(|x| eval(x, &[row])).collect::<Result<_, _>>()?;
+                if !pivkeys.contains(&key) {
+                    pivkeys.push(key);
+                }
+            }
+            pivkeys.sort_by(|x, y| x.iter().zip(y).map(|(p, q)| order(p, q)).find(|o| *o != Ordering::Equal).unwrap_or(Ordering::Equal));
+        }
         let mut rows: Vec<(Vec<Q>, Vec<Q>)> = Vec::new();
         for u in &units {
-            let out: Vec<Q> = select.iter().map(|s| eval(&s.0, u)).collect::<Result<_, _>>()?;
+            let out: Vec<Q> = if pivoted {
+                let mut o: Vec<Q> = plain.iter().map(|i| eval(&select[*i].0, u)).collect::<Result<_, _>>()?;
+                for pk in &pivkeys {
+                    let mut sub: Vec<&Vec<Q>> = Vec::new();
+                    for r in u {
+                        let k: Vec<Q> = plan.pivot.iter().map(|x| eval(x, &[*r])).collect::<Result<_, _>>()?;
+                        if &k == pk {
+                            sub.push(*r);
+                        }
+                    }
+                    for i in &aggs {
+                        o.push(if sub.is_empty() { Q::Null } else { eval(&select[*i].0, &sub)? });
+                    }
+                }
+                o
+            } else {
+                select.iter().map(|s| eval(&s.0, u)).collect::<Result<_, _>>()?
+            };
             let keys: Vec<Q> = plan.order.iter().map(|o| eval(&o.0, u)).collect::<Result<_, _>>()?;
             rows.push((keys, out));
         }
@@ -702,14 +761,49 @@ impl Eval<'_> {
                 _ => src.to_string(),
             }
         };
-        let width = select.len();
+        let mut heads: Vec<String> = Vec::new();
+        let mut formats: Vec<Option<String>> = Vec::new();
+        let pattern = |x: &X| if plan.no_format { None } else { plan.formats.iter().find(|f| f.0 == *x).map(|f| f.1.clone()) };
+        for i in &plain {
+            heads.push(head(&select[*i].0, &select[*i].1));
+            formats.push(pattern(&select[*i].0));
+        }
+        if pivoted {
+            for pk in &pivkeys {
+                let label = pk.iter().map(text_of_q).collect::<Vec<_>>().join(", ");
+                for i in &aggs {
+                    heads.push(if aggs.len() == 1 { label.clone() } else { format!("{label} {}", head(&select[*i].0, &select[*i].1)) });
+                    formats.push(pattern(&select[*i].0));
+                }
+            }
+        } else {
+            heads.clear();
+            formats.clear();
+            for s in &select {
+                heads.push(head(&s.0, &s.1));
+                formats.push(pattern(&s.0));
+            }
+        }
+        let width = heads.len();
+        if plan.no_values {
+            if hdr == 0 {
+                return Err(ErrKind::Na);
+            }
+            return Ok(Arg::A(Array { rows: 1, cols: width, data: heads.into_iter().map(Value::Text).collect() }));
+        }
         let mut data = Vec::new();
         if hdr > 0 {
-            data.extend(select.iter().map(|s| Value::Text(head(&s.0, &s.1))));
+            data.extend(heads.into_iter().map(Value::Text));
         }
         let height = rows.len() + usize::from(hdr > 0);
         for r in &rows {
-            data.extend(r.iter().map(value_of));
+            for (c, q) in r.iter().enumerate() {
+                let shown = match (q, formats.get(c).and_then(Option::as_ref)) {
+                    (Q::Num(n), Some(pat)) => crate::fmtcode::text(&Value::Number(*n), pat).map(Value::Text),
+                    _ => None,
+                };
+                data.push(shown.unwrap_or_else(|| value_of(q)));
+            }
         }
         if rows.is_empty() {
             return Err(ErrKind::Na);
