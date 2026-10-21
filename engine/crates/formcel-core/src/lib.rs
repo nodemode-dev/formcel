@@ -706,7 +706,7 @@ impl Workbook {
             fmtcode::Class::Percent => return format!("{}%", Value::Number(eval::sig15(n * 100.0))),
             _ => None,
         };
-        as_fmt.and_then(|f| numfmt::show(n, f)).unwrap_or_else(|| v.to_string())
+        as_fmt.and_then(|f| numfmt::show(n, f)).filter(|t| matches!(Value::parse_input(t), Value::Number(m) if (m - n).abs() < 1e-9)).unwrap_or_else(|| v.to_string())
     }
 
     pub fn meta(&self, sheet: usize, a: Addr) -> wire::Meta {

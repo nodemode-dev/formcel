@@ -366,3 +366,10 @@ Rules live on their sheet in precedence order, highest first, as MS-CF's Rules M
 - logged: v0.23.0 · 2026-10-21
 
 HYPERLINK(link_location, [friendly_name]) shows the friendly name, or the link when it is left out (MS-HYPERLINK); a friendly name that is an error shows the error; one that points at an empty cell shows the link, and an empty string shows nothing but keeps the link (GS-HYPERLINK). Its target is read from the formula when asked (`link_at`), so a link built from another cell follows that cell. A cell can also hold a link of its own, set with Insert link (text to display plus target, one undo step), or made when a web address or an email address is typed, as MS-LINKS and GS-HYPERLINK describe; typing over a linked cell keeps the link, clearing it removes the link (MS-LINKS: Delete), and Remove link keeps the text (MS-LINKS: Remove Hyperlink). FormCel links http, https, mailto and ftp addresses and places in the workbook written `#Sheet2!A1`, `#A10` or `#Name`; any other scheme is not linked, after GS-HYPERLINK's allowed list; `www.` and bare domains get http, addresses with `@` get mailto. Links move with inserted and deleted rows and columns and come back on undo. The wire's flags gain `l` for a linked cell. `take_link_changes` hands the window every link change since the last call, so it can save them; the engine process never detects links itself, so a reload never brings back a link that was removed.
+
+### Saved text of dated cells
+- refers-to: src/lib.rs :: const_text
+- kind: explainer
+- logged: v0.24.0 · 2026-10-21
+
+A number in a cell with a date or time code is saved and edited as date or time text (`3/4/2026 4:36:03 PM`), as Excel's formula bar shows it. That text keeps whole seconds only, so a value with a fraction of a second, such as an elapsed `[ss].00` time, came back rounded after a save. The text is now used only when reading it back gives the same number; otherwise the plain number is kept. Found by the Formatting check template.
