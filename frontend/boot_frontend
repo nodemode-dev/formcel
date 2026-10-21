@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+set -e
+cd "$(dirname "$0")"
+[ -f public/engine/formcel.wasm ] || ../engine/build_wasm
+npm run dev

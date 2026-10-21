@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+set -e
+cd "$(dirname "$0")"
+npm install
+if ! command -v cargo >/dev/null 2>&1; then
+  echo "FormCel needs Rust to build its engine. Install it from https://rustup.rs, then run this again." >&2
+  exit 1
+fi
+../engine/build_wasm

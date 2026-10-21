@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+set -e
+cd "$(dirname "$0")"
+
+if [ -d backend ]; then
+  ( cd backend && ./oc_install )
+fi
+if [ -d frontend ]; then
+  ( cd frontend && ./oc_install )
+fi

@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+set -e
+cd "$(dirname "$0")"
+
+pids=()
+if [ -d backend ]; then
+  ( cd backend && ./boot_backend ) &
+  pids+=($!)
+fi
+if [ -d frontend ]; then
+  ( cd frontend && ./boot_frontend ) &
+  pids+=($!)
+fi
+
+trap 'kill "${pids[@]}" 2>/dev/null' EXIT
+wait

@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+set -e
+cd "$(dirname "$0")"
+# shellcheck disable=SC1091
+source venv/bin/activate
+uvicorn app.main:app --reload --host "${FORMCEL_HOST:-127.0.0.1}" --port "${FORMCEL_PORT:-8199}"
