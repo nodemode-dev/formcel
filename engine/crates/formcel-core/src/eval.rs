@@ -1,11 +1,23 @@
 use crate::formula::{Area, ErrKind, Expr, Op};
 use crate::{numfmt, Addr, Value};
+use std::cell::{Cell, RefCell};
+use std::rc::Rc;
 
 pub trait Ctx {
     fn sheet_index(&self, name: &str) -> Option<usize>;
     fn cell(&self, sheet: usize, a: Addr) -> Value;
     fn each(&self, sheet: usize, area: Area, f: &mut dyn FnMut(Addr, &Value));
+    fn name(&self, name: &str) -> Option<&Expr>;
 }
+
+#[derive(Debug)]
+pub struct Lambda {
+    params: Vec<String>,
+    body: Expr,
+    env: Vec<(String, Arg)>,
+}
+
+const MAX_DEPTH: u32 = 200;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Array {
@@ -51,19 +63,23 @@ pub enum Out {
 
 const MAX_ARRAY: u64 = 2_000_000;
 
+#[derive(Clone, Debug)]
 enum Arg {
     V(Value),
     R(usize, Area),
     A(Array),
+    F(Rc<Lambda>),
 }
 
 fn multi(a: &Arg) -> bool {
     match a {
-        Arg::V(_) => false,
+        Arg::V(_) | Arg::F(_) => false,
         Arg::R(_, ar) => ar.r0 != ar.r1 || ar.c0 != ar.c1,
         Arg::A(x) => x.rows * x.cols != 1,
     }
 }
+
+const SCOPED_FNS: [&str; 2] = ["LET", "LAMBDA"];
 
 fn zero(v: Value) -> Value {
     if v == Value::Empty {
@@ -127,11 +143,107 @@ fn num(n: f64) -> Value {
 }
 
 pub struct Eval<'a> {
-    pub ctx: &'a dyn Ctx,
-    pub sheet: usize,
+    ctx: &'a dyn Ctx,
+    sheet: usize,
+    env: RefCell<Vec<(String, Arg)>>,
+    depth: Cell<u32>,
 }
 
-impl Eval<'_> {
+impl<'a> Eval<'a> {
+    pub fn new(ctx: &'a dyn Ctx, sheet: usize) -> Self {
+        Eval { ctx, sheet, env: RefCell::new(Vec::new()), depth: Cell::new(0) }
+    }
+
+    fn local(&self, name: &str) -> Option<Arg> {
+        let env = self.env.borrow();
+        env.iter().rev().find(|(n, _)| n.eq_ignore_ascii_case(name)).map(|(_, a)| a.clone())
+    }
+
+    fn user(&self, name: &str) -> bool {
+        crate::formula::FUNCTIONS.binary_search(&name).is_err() && (self.local(name).is_some() || self.ctx.name(name).is_some())
+    }
+
+    fn routed(&self, name: &str) -> bool {
+        ARRAY_FNS.contains(&name) || SCOPED_FNS.contains(&name) || self.user(name)
+    }
+
+    fn deeper<T>(&self, f: impl FnOnce() -> Result<T, ErrKind>) -> Result<T, ErrKind> {
+        let d = self.depth.get();
+        if d >= MAX_DEPTH {
+            return Err(ErrKind::Num);
+        }
+        self.depth.set(d + 1);
+        let r = f();
+        self.depth.set(d);
+        r
+    }
+
+    fn named(&self, name: &str) -> Result<Arg, ErrKind> {
+        if let Some(a) = self.local(name) {
+            return Ok(a);
+        }
+        let e = self.ctx.name(name).ok_or(ErrKind::Name)?;
+        self.deeper(|| {
+            let saved = std::mem::take(&mut *self.env.borrow_mut());
+            let a = self.arg(e);
+            *self.env.borrow_mut() = saved;
+            Ok(a)
+        })
+    }
+
+    fn invoke(&self, f: Arg, args: &[Expr]) -> Result<Arg, ErrKind> {
+        let f = match f {
+            Arg::F(f) => f,
+            Arg::V(Value::Error(k)) => return Err(k),
+            _ => return Err(ErrKind::Value),
+        };
+        if f.params.len() != args.len() {
+            return Err(ErrKind::Value);
+        }
+        let vals: Vec<Arg> = args.iter().map(|a| self.arg(a)).collect();
+        self.deeper(|| {
+            let mut env = f.env.clone();
+            env.extend(f.params.iter().cloned().zip(vals));
+            let saved = std::mem::replace(&mut *self.env.borrow_mut(), env);
+            let a = self.arg(&f.body);
+            *self.env.borrow_mut() = saved;
+            Ok(a)
+        })
+    }
+
+    fn scoped(&self, name: &str, a: &[Expr]) -> Result<Arg, ErrKind> {
+        let ident = |e: &Expr| match e {
+            Expr::Name(n) if crate::formula::valid_name(n) => Ok(n.to_ascii_uppercase()),
+            _ => Err(ErrKind::Value),
+        };
+        if name == "LAMBDA" {
+            let (body, params) = a.split_last().ok_or(ErrKind::Value)?;
+            if params.len() > 253 {
+                return Err(ErrKind::Value);
+            }
+            let params = params.iter().map(ident).collect::<Result<Vec<_>, _>>()?;
+            return Ok(Arg::F(Rc::new(Lambda { params, body: body.clone(), env: self.env.borrow().clone() })));
+        }
+        if a.len() < 3 || a.len().is_multiple_of(2) {
+            return Err(ErrKind::Value);
+        }
+        let base = self.env.borrow().len();
+        for p in a[..a.len() - 1].chunks(2) {
+            match ident(&p[0]) {
+                Ok(n) => {
+                    let v = self.arg(&p[1]);
+                    self.env.borrow_mut().push((n, v));
+                }
+                Err(k) => {
+                    self.env.borrow_mut().truncate(base);
+                    return Err(k);
+                }
+            }
+        }
+        let out = self.arg(&a[a.len() - 1]);
+        self.env.borrow_mut().truncate(base);
+        Ok(out)
+    }
     pub fn formula(&self, e: &Expr) -> Out {
         let a = self.arg(e);
         if !multi(&a) {
@@ -147,6 +259,7 @@ impl Eval<'_> {
         match a {
             Arg::V(v) => Ok(Array { rows: 1, cols: 1, data: vec![v] }),
             Arg::A(x) => Ok(x),
+            Arg::F(_) => Err(ErrKind::Calc),
             Arg::R(s, ar) => {
                 let (h, w) = ((ar.r1 - ar.r0 + 1) as usize, (ar.c1 - ar.c0 + 1) as usize);
                 if (h as u64) * (w as u64) > MAX_ARRAY {
@@ -213,10 +326,18 @@ impl Eval<'_> {
                     Arg::V(f(&self.deref(a), &Value::Empty))
                 }
             }
-            Expr::Call(name, args) if ARRAY_FNS.contains(&name.as_str()) => match self.call_arg(name, args) {
-                Ok(a) => a,
-                Err(k) => Arg::V(err(k)),
-            },
+            Expr::Call(name, args) if self.routed(name) => {
+                let r = if self.user(name) {
+                    self.named(name).and_then(|f| self.invoke(f, args))
+                } else if SCOPED_FNS.contains(&name.as_str()) {
+                    self.scoped(name, args)
+                } else {
+                    self.call_arg(name, args)
+                };
+                r.unwrap_or_else(|k| Arg::V(err(k)))
+            }
+            Expr::Name(n) => self.named(n).unwrap_or_else(|k| Arg::V(err(k))),
+            Expr::Invoke(f, args) => self.invoke(self.arg(f), args).unwrap_or_else(|k| Arg::V(err(k))),
             o => Arg::V(self.scalar(o)),
         }
     }
@@ -245,6 +366,7 @@ impl Eval<'_> {
                     err(ErrKind::Value)
                 }
             }
+            Arg::F(_) => err(ErrKind::Calc),
         }
     }
 
@@ -255,10 +377,9 @@ impl Eval<'_> {
             Expr::Bool(b) => Value::Bool(*b),
             Expr::Err(k) => err(*k),
             Expr::Missing => Value::Empty,
-            Expr::Name(_) => err(ErrKind::Name),
             Expr::Pos(x) => self.scalar(x),
             Expr::Union(_) => err(ErrKind::Value),
-            Expr::Call(name, args) if !ARRAY_FNS.contains(&name.as_str()) => self.call(name, args),
+            Expr::Call(name, args) if !self.routed(name) => self.call(name, args),
             _ => {
                 let a = self.arg(e);
                 self.deref(a)
@@ -332,6 +453,7 @@ impl Eval<'_> {
                         f(v, false)?;
                     }
                 }
+                Arg::F(_) => f(&err(ErrKind::Calc), true)?,
             }
         }
         Ok(())
@@ -409,6 +531,7 @@ impl Eval<'_> {
                                 }
                             }),
                             Arg::A(x) => c += x.data.len() as f64,
+                            Arg::F(_) => c += 1.0,
                         }
                     }
                     Value::Number(c)
@@ -509,6 +632,26 @@ impl Eval<'_> {
                         return Err(ErrKind::Value);
                     }
                     Value::Text(s.iter().skip(st as usize - 1).take(k as usize).collect())
+                }
+                "SUBSTITUTE" => {
+                    if !count(3, 4) {
+                        return Err(ErrKind::Na);
+                    }
+                    let (s, old, new) = (self.t(a, 0)?, self.t(a, 1)?, self.t(a, 2)?);
+                    if old.is_empty() {
+                        return Ok(Value::Text(s));
+                    }
+                    if a.len() == 3 {
+                        return Ok(Value::Text(s.replace(&old, &new)));
+                    }
+                    let k = self.n(a, 3)?.trunc();
+                    if k < 1.0 {
+                        return Err(ErrKind::Value);
+                    }
+                    match s.match_indices(&old).nth(k as usize - 1) {
+                        Some((i, _)) => Value::Text(format!("{}{}{}", &s[..i], new, &s[i + old.len()..])),
+                        None => Value::Text(s),
+                    }
                 }
                 "CONCAT" | "CONCATENATE" => {
                     let mut out = String::new();
@@ -781,6 +924,7 @@ impl Eval<'_> {
         match self.arg(e) {
             Arg::R(s, ar) => Ok(Src::R(s, ar)),
             Arg::A(x) => Ok(Src::A(x)),
+            Arg::F(_) => Err(ErrKind::Calc),
             Arg::V(Value::Error(k)) => Err(k),
             Arg::V(v) => Ok(Src::A(Array { rows: 1, cols: 1, data: vec![v] })),
         }

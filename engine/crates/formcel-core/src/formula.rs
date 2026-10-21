@@ -141,7 +141,15 @@ pub enum Expr {
     Array(Vec<Vec<Expr>>),
     Range(Box<Expr>, Box<Expr>),
     Union(Vec<Expr>),
+    Invoke(Box<Expr>, Vec<Expr>),
 }
+
+pub const FUNCTIONS: [&str; 81] = [
+    "ABS", "AND", "AVERAGE", "AVERAGEIF", "AVERAGEIFS", "CHOOSE", "CONCAT", "CONCATENATE", "COUNT", "COUNTA", "COUNTBLANK", "COUNTIF", "COUNTIFS", "DATE", "DATEVALUE", "DAY", "DAYS", "EDATE",
+    "EOMONTH", "FALSE", "HLOOKUP", "HOUR", "IF", "IFERROR", "IFNA", "IFS", "INDEX", "INT", "ISBLANK", "ISERR", "ISERROR", "ISLOGICAL", "ISNA", "ISNONTEXT", "ISNUMBER", "ISREF", "ISTEXT", "LAMBDA",
+    "LEFT", "LEN", "LET", "LOWER", "MATCH", "MAX", "MID", "MIN", "MINUTE", "MOD", "MONTH", "NA", "NOT", "NOW", "OR", "PI", "POWER", "PRODUCT", "RIGHT", "ROUND", "ROUNDDOWN", "ROUNDUP", "SECOND",
+    "SEQUENCE", "SQRT", "SUBSTITUTE", "SUM", "SUMIF", "SUMIFS", "SWITCH", "TIME", "TIMEVALUE", "TODAY", "TRANSPOSE", "TRIM", "TRUE", "UPPER", "VLOOKUP", "WEEKDAY", "XLOOKUP", "XMATCH", "XOR", "YEAR",
+];
 
 #[derive(Clone, Debug, PartialEq)]
 enum Tok {
@@ -470,25 +478,13 @@ impl Parser {
                     return self.sheet_ref(id);
                 }
                 if self.peek() == Some(&Tok::LParen) {
-                    self.i += 1;
-                    let mut args = Vec::new();
-                    if self.peek() == Some(&Tok::RParen) {
-                        self.i += 1;
-                        return Some(Expr::Call(id.to_ascii_uppercase(), args));
+                    let up = id.to_ascii_uppercase();
+                    let name = if FUNCTIONS.contains(&up.as_str()) { up } else { id };
+                    let mut e = Expr::Call(name, self.args()?);
+                    while self.peek() == Some(&Tok::LParen) {
+                        e = Expr::Invoke(Box::new(e), self.args()?);
                     }
-                    loop {
-                        if matches!(self.peek(), Some(Tok::Comma) | Some(Tok::RParen)) {
-                            args.push(Expr::Missing);
-                        } else {
-                            args.push(self.expr(0)?);
-                        }
-                        match self.next()? {
-                            Tok::Comma => continue,
-                            Tok::RParen => break,
-                            _ => return None,
-                        }
-                    }
-                    return Some(Expr::Call(id.to_ascii_uppercase(), args));
+                    return Some(e);
                 }
                 match id.to_ascii_uppercase().as_str() {
                     "TRUE" => return Some(Expr::Bool(true)),
@@ -501,6 +497,27 @@ impl Parser {
                 Some(Expr::Name(id))
             }
             _ => None,
+        }
+    }
+
+    fn args(&mut self) -> Option<Vec<Expr>> {
+        self.i += 1;
+        let mut args = Vec::new();
+        if self.peek() == Some(&Tok::RParen) {
+            self.i += 1;
+            return Some(args);
+        }
+        loop {
+            if matches!(self.peek(), Some(Tok::Comma) | Some(Tok::RParen)) {
+                args.push(Expr::Missing);
+            } else {
+                args.push(self.expr(0)?);
+            }
+            match self.next()? {
+                Tok::Comma => continue,
+                Tok::RParen => return Some(args),
+                _ => return None,
+            }
         }
     }
 
@@ -611,14 +628,11 @@ pub fn print(e: &Expr, out: &mut String) {
         }
         Expr::Call(name, args) => {
             out.push_str(name);
-            out.push('(');
-            for (i, a) in args.iter().enumerate() {
-                if i > 0 {
-                    out.push(',');
-                }
-                print(a, out);
-            }
-            out.push(')');
+            print_args(args, out);
+        }
+        Expr::Invoke(f, args) => {
+            print(f, out);
+            print_args(args, out);
         }
         Expr::Paren(x) => {
             out.push('(');
@@ -658,14 +672,61 @@ pub fn print(e: &Expr, out: &mut String) {
     }
 }
 
+fn print_args(args: &[Expr], out: &mut String) {
+    out.push('(');
+    for (i, a) in args.iter().enumerate() {
+        if i > 0 {
+            out.push(',');
+        }
+        print(a, out);
+    }
+    out.push(')');
+}
+
 fn children(e: &Expr) -> Vec<&Expr> {
     match e {
         Expr::Neg(x) | Expr::Pos(x) | Expr::Pct(x) | Expr::Paren(x) => vec![x],
         Expr::Bin(_, a, b) | Expr::Range(a, b) => vec![a, b],
         Expr::Call(_, args) | Expr::Union(args) => args.iter().collect(),
+        Expr::Invoke(f, args) => std::iter::once(&**f).chain(args).collect(),
         Expr::Array(rows) => rows.iter().flatten().collect(),
         _ => Vec::new(),
     }
+}
+
+pub fn names(e: &Expr, f: &mut dyn FnMut(&str)) {
+    match e {
+        Expr::Name(n) | Expr::Call(n, _) => {
+            f(n);
+            for c in children(e) {
+                names(c, f);
+            }
+        }
+        o => {
+            for c in children(o) {
+                names(c, f);
+            }
+        }
+    }
+}
+
+pub fn valid_name(n: &str) -> bool {
+    let mut cs = n.chars();
+    let Some(first) = cs.next() else { return false };
+    let upper = n.to_ascii_uppercase();
+    (first.is_alphabetic() || first == '_' || first == '\\')
+        && cs.all(|c| c.is_alphanumeric() || c == '_' || c == '.')
+        && n.chars().count() <= 255
+        && !matches!(upper.as_str(), "C" | "R" | "TRUE" | "FALSE")
+        && parse_cell(n).is_none()
+        && !is_r1c1(&upper)
+}
+
+fn is_r1c1(u: &str) -> bool {
+    let Some(rest) = u.strip_prefix('R') else { return false };
+    let digits = rest.chars().take_while(char::is_ascii_digit).count();
+    let rest = &rest[digits..];
+    (rest.is_empty() && digits > 0) || rest.strip_prefix('C').is_some_and(|c| c.chars().all(|d| d.is_ascii_digit()))
 }
 
 pub fn to_text(e: &Expr) -> String {
@@ -682,6 +743,12 @@ pub fn walk_mut(e: &mut Expr, f: &mut dyn FnMut(&mut Expr)) {
             walk_mut(b, f);
         }
         Expr::Call(_, args) | Expr::Union(args) => {
+            for a in args {
+                walk_mut(a, f);
+            }
+        }
+        Expr::Invoke(g, args) => {
+            walk_mut(g, f);
             for a in args {
                 walk_mut(a, f);
             }

@@ -123,6 +123,8 @@ pub enum EngineError {
     BadAddress(String),
     OutOfRange { row: u32, col: u32 },
     NoSheet(usize),
+    BadName(String),
+    BadFormula(String),
 }
 
 impl fmt::Display for EngineError {
@@ -131,6 +133,8 @@ impl fmt::Display for EngineError {
             EngineError::BadAddress(a) => write!(f, "not a cell address: {a}"),
             EngineError::OutOfRange { row, col } => write!(f, "cell outside the grid: row {row}, column {col}"),
             EngineError::NoSheet(i) => write!(f, "no sheet at index {i}"),
+            EngineError::BadName(n) => write!(f, "not a valid name: {n}"),
+            EngineError::BadFormula(s) => write!(f, "not a valid formula: {s}"),
         }
     }
 }
@@ -267,6 +271,7 @@ pub struct Workbook {
     spills: FastMap<Key, (u32, u32)>,
     spilled: FastMap<Key, Key>,
     touched: Vec<Key>,
+    names: FastMap<String, (String, Expr)>,
 }
 
 const SPILL_PASSES: usize = 8;
@@ -284,6 +289,13 @@ impl eval::Ctx for Workbook {
         if let Some(s) = self.sheets.get(sheet) {
             s.cells.for_each_in(Addr { row: area.r0, col: area.c0 }, Addr { row: area.r1, col: area.c1 }, |a, v| f(a, v));
         }
+    }
+
+    fn name(&self, name: &str) -> Option<&Expr> {
+        if self.names.is_empty() {
+            return None;
+        }
+        self.names.get(&name.to_ascii_uppercase()).map(|n| &n.1)
     }
 }
 
@@ -305,6 +317,7 @@ impl Workbook {
             spills: FastMap::default(),
             spilled: FastMap::default(),
             touched: Vec::new(),
+            names: FastMap::default(),
         }
     }
 
@@ -332,6 +345,9 @@ impl Workbook {
             if let Some(e) = f.ast.as_mut() {
                 formula::rename_refs(e, &old, name);
             }
+        }
+        for (_, e) in self.names.values_mut() {
+            formula::rename_refs(e, &old, name);
         }
         self.graph.built = false;
         self.recalc_all();
@@ -499,16 +515,58 @@ impl Workbook {
     fn areas_of(&self, k: &Key, f: &Formula) -> Vec<(usize, Area)> {
         let mut out = Vec::new();
         if let Some(e) = &f.ast {
-            formula::refs(e, &mut |s, area| {
-                let idx = match s {
-                    None => Some(k.0),
-                    Some(n) => self.sheet_by_name(n),
-                };
-                if let Some(i) = idx {
-                    out.push((i, area));
-                }
-            });
+            let mut seen: Vec<String> = Vec::new();
+            self.expr_areas(k.0, e, &mut out, &mut seen);
         }
+        out
+    }
+
+    fn expr_areas(&self, sheet: usize, e: &Expr, out: &mut Vec<(usize, Area)>, seen: &mut Vec<String>) {
+        formula::refs(e, &mut |s, area| {
+            let idx = match s {
+                None => Some(sheet),
+                Some(n) => self.sheet_by_name(n),
+            };
+            if let Some(i) = idx {
+                out.push((i, area));
+            }
+        });
+        if self.names.is_empty() {
+            return;
+        }
+        let mut used = Vec::new();
+        formula::names(e, &mut |n| used.push(n.to_ascii_uppercase()));
+        for n in used {
+            if seen.contains(&n) {
+                continue;
+            }
+            if let Some((_, x)) = self.names.get(&n) {
+                seen.push(n);
+                self.expr_areas(sheet, x, out, seen);
+            }
+        }
+    }
+
+    pub fn define_name(&mut self, name: &str, refers: &str) -> Result<Changed, EngineError> {
+        let key = name.to_ascii_uppercase();
+        if refers.trim().is_empty() {
+            self.names.remove(&key);
+        } else {
+            if !formula::valid_name(name) {
+                return Err(EngineError::BadName(name.to_string()));
+            }
+            let src = refers.strip_prefix('=').unwrap_or(refers);
+            let e = formula::parse(src).ok_or_else(|| EngineError::BadFormula(refers.to_string()))?;
+            self.names.insert(key, (name.to_string(), e));
+        }
+        self.graph.built = false;
+        let changed = self.recalc_all();
+        Ok(self.present(changed))
+    }
+
+    pub fn names(&self) -> Vec<(String, String)> {
+        let mut out: Vec<(String, String)> = self.names.values().map(|(n, e)| (n.clone(), format!("={}", formula::to_text(e)))).collect();
+        out.sort_by_key(|a| a.0.to_ascii_uppercase());
         out
     }
 
@@ -616,7 +674,7 @@ impl Workbook {
             let (s, a) = ids[i];
             let (o, f) = match &self.formulas[&(s, a)].ast {
                 None => (eval::Out::V(Value::Error(ErrKind::Error)), None),
-                Some(e) => (eval::Eval { ctx: &*self, sheet: s }.formula(e), self.infer(s, e)),
+                Some(e) => (eval::Eval::new(&*self, s).formula(e), self.infer(s, e)),
             };
             let v = match o {
                 eval::Out::V(v) => {
@@ -757,6 +815,9 @@ impl Workbook {
                     rewritten.push((*sh, *a, before));
                 }
             }
+        }
+        for (_, e) in self.names.values_mut() {
+            formula::shift_refs(e, "\u{0}", &target, s.rows, s.at, s.delta);
         }
         self.graph.built = false;
         let values = self.sheets[s.sheet].cells.shift(s.rows, s.at, s.delta);

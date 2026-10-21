@@ -193,6 +193,40 @@ pub extern "C" fn fc_move_sheet(id: u32, from: u32, to: u32) -> i32 {
     }
 }
 
+/// Defines, replaces or (with empty `refers`) removes a workbook name; the out buffer gets the changed cells.
+/// Returns -3 for an invalid name and -4 for a formula that does not parse.
+///
+/// # Safety
+/// `name` and `refers` must point at `name_len` and `refers_len` readable bytes.
+#[no_mangle]
+pub unsafe extern "C" fn fc_define_name(id: u32, name: *const u8, name_len: u32, refers: *const u8, refers_len: u32) -> i32 {
+    let (name, refers) = (text(name, name_len).to_string(), text(refers, refers_len).to_string());
+    match with_book(id, |wb| wb.define_name(&name, &refers).map(|c| wire::encode_changed(&c, &|s, a| wb.formula_text(s, a)))) {
+        Some(Ok(s)) => emit(&s) as i32,
+        Some(Err(formcel_core::EngineError::BadName(_))) => -3,
+        Some(Err(_)) => -4,
+        None => -1,
+    }
+}
+
+/// Lists workbook names as `name\t=formula` lines.
+#[no_mangle]
+pub extern "C" fn fc_names(id: u32) -> i32 {
+    match with_book(id, |wb| wb.names()) {
+        Some(names) => {
+            let mut s = String::new();
+            for (n, f) in names {
+                wire::escape(&n, &mut s);
+                s.push('\t');
+                wire::escape(&f, &mut s);
+                s.push('\n');
+            }
+            emit(&s) as i32
+        }
+        None => -1,
+    }
+}
+
 /// # Safety
 /// `name` must point at `len` readable bytes.
 #[no_mangle]

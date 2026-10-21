@@ -74,6 +74,14 @@ impl Workbook {
         self.inner.rename_sheet(sheet, name).map_err(|e| PyValueError::new_err(e.to_string()))
     }
 
+    fn define_name(&mut self, name: &str, refers: &str) -> PyResult<()> {
+        self.inner.define_name(name, refers).map(|_| ()).map_err(|e| PyValueError::new_err(e.to_string()))
+    }
+
+    fn names(&self) -> Vec<(String, String)> {
+        self.inner.names()
+    }
+
     fn undo(&mut self) -> Option<Vec<(String, String)>> {
         self.inner.undo().map(|e| pairs(e.cells))
     }

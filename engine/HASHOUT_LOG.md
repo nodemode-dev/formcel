@@ -2,8 +2,8 @@
 
 Living log of comment content and rationale for the Rust engine. Source stays near comment-free; it lives here.
 
-Current build version: v0.11.0
-Last updated: 2026-10-21 · dynamic arrays
+Current build version: v0.12.0
+Last updated: 2026-10-21 · names, LET, LAMBDA
 
 ### Workbook::load, clear_history, rename_sheet (v0.3.0)
 - refers-to: crates/formcel-core/src/lib.rs :: load, clear_history, rename_sheet; formcel-wasm fc_load, fc_add_sheet, fc_sheet_names; formcel-py load, cells, rename_sheet
@@ -208,6 +208,21 @@ Every example table on Microsoft's page for each function (data pasted at A1 as 
 `Graph` holds each formula's resolved areas, an index from single cells to the formulas that read them, and 64-row by 16-column buckets for ranges; a range spanning more than 256 buckets (a whole column, say) goes in a short list checked on every change. `set_raw` updates it in place. Anything that can change what a reference points at (adding, renaming, deleting or moving a sheet, a shift) marks it stale and the next recalculation rebuilds it. Maps on this path use `Fx`, a small multiply-rotate hasher, because the standard hasher dominated the profile.
 
 Measured (scratch harness and the window's engine, not shipped): one precedent in a sheet of 100,000 row formulas plus one SUM over them went from 47 ms to 1 to 2 ms native and 2.5 to 6 ms through the window's worker, against the Phase 2 target of 100 ms. A 100,000-step chain (each cell adds 1 to the one above) recalculates all 100,000 cells in 130 ms native and 306 ms through the worker, including sending every changed cell back; that worst case is over the target.
+
+### Names, LET and LAMBDA
+- refers-to: src/formula.rs :: Expr::Invoke, FUNCTIONS, names, valid_name, is_r1c1; src/eval.rs :: Ctx::name, Lambda, Arg::F, Eval::new, local, user, routed, deeper, named, invoke, scoped; src/lib.rs :: names, define_name, names(), expr_areas; formcel-wasm fc_define_name, fc_names; formcel-py define_name, names
+- kind: explainer
+- logged: v0.12.0 · 2026-10-21
+
+Workbook names map a name to a formula (`=Sheet1!$A$1:$A$3`, `=0.2`, `=LAMBDA(x,x*x)`). Name rules follow Microsoft's "Names in formulas" page: the first character is a letter, underscore or backslash; the rest are letters, digits, periods and underscores; at most 255 characters; not C or R; not a cell reference in A1 or R1C1 form; case-insensitive. TRUE and FALSE are refused too, from Google's named-range page. Every name is workbook-scoped; sheet-scoped names are not built. LET and LAMBDA parameters use the same rule, so `LET(r, ...)` is `#VALUE!` here; whether Excel accepts that has not been checked.
+
+A name is looked up when a formula uses it as a value or calls it. Lookup order is LET and LAMBDA locals (innermost first), then workbook names, then `#NAME?`. Built-in functions win over both: a call to a name in `FUNCTIONS` (sorted, binary-searched) never looks anything up, so names cost nothing on ordinary formulas. A name's formula is evaluated with no locals in scope, on the calling formula's sheet. LAMBDA builds a function value (`Arg::F`) that captures the locals it was made in. Calling it with the wrong number of arguments gives `#VALUE!`, a formula whose result is an uncalled LAMBDA gives `#CALC!` (both as Microsoft's LAMBDA page says), and recursion deeper than 200 calls gives `#NUM!` (the page says too many recursive calls can return `#NUM!`; the limit of 200 is FormCel's). `LAMBDA(x,x+1)(1)` parses as `Expr::Invoke`.
+
+The parser now uppercases only the names of built-in functions, so `=Sq(3)` keeps the case it was typed in and `=sum(a1)` still becomes `=SUM(A1)`. A formula that uses a name depends on the cells the name's formula reads, including names used inside it (`expr_areas`, with a seen list against loops). Defining, changing or removing a name rebuilds the graph and recalculates the workbook. Inserting or deleting rows and columns rewrites references inside names, and so does renaming a sheet. Names are not part of undo, and a shift's undo moves them back only by shifting again.
+
+Measured on the Python build (scratch harness): with 100,000 `=ABS(A1)*2` formulas, one edit takes 6.5 ms with or without names defined. Defining a name recalculates everything: 216 ms with no other names, 348 ms with two (the graph rebuild walks every formula for names). Recalculating 100,000 calls to a named LAMBDA took 369 ms.
+
+Conformance: the runner now reads "Define the following in the Name Manager: Name: ... Refers to: ..." blocks on a page and defines those names before running its tables. With the LET, LAMBDA, SEQUENCE, TRANSPOSE and SUBSTITUTE pages added: 175 pass, 5 fail. All 5 are THANKSGIVINGDATE, which needs TEXT, which needs the Phase 3 number formats.
 
 ### Dynamic arrays and spilling
 - refers-to: src/formula.rs :: Expr::Array, Expr::Range, Expr::Union, ErrKind::Spill, ErrKind::Calc; src/eval.rs :: Array, Out, Arg::A, Src, grid, lift, call_arg; src/lib.rs :: spills, spilled, touched, recalc_with, recalc_pass, spill, unspill, unspill_all
