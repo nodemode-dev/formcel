@@ -10,7 +10,7 @@ from formcel_engine import reads_as_text
 from openpyxl.utils import get_column_letter
 
 from ..xlsx.autofilter import filtered_rows
-from . import cf, numfmt
+from . import cf, filters, numfmt, valid
 from .formulas import from_file, range_in, to_file
 
 NS = {
@@ -224,7 +224,7 @@ def read(data: bytes) -> dict:
             for k in range(min(rep, MAX_REPEAT)):
                 if h:
                     rsizes.append((r + k, round(h)))
-                if row.get(f"{T}visibility") == "collapse":
+                if row.get(f"{T}visibility") in ("collapse", "filter"):
                     hidden_rows.append(r + k)
             if rep > MAX_REPEAT and filled:
                 notes["repeated rows beyond 1,000 left out"] += rep - MAX_REPEAT
@@ -267,12 +267,10 @@ def read(data: bytes) -> dict:
         names.append((ne.get(f"{T}name"), from_file(ne.get(f"{T}expression") or "")))
     if any(True for _ in root.iter(f"{O}annotation")):
         notes["comments left out"] += sum(1 for _ in root.iter(f"{O}annotation"))
-    checks = sum(1 for _ in root.iter(f"{T}content-validation"))
-    if checks:
-        notes["data validation rules left out"] += checks
-    filters = sum(1 for _ in root.iter(f"{T}filter"))
-    if filters:
-        notes["filters left out"] += filters
+    tables = list(root.iter(f"{T}table"))
+    for sheet, lines in zip(sheets, valid.lines_in(root, tables, T, X, notes)):
+        sheet["validations"] = lines
+    filters.attach(root, sheets, {**{(tb.get(f"{T}name") or ""): i for i, tb in enumerate(tables)}, **{s["name"]: i for i, s in enumerate(sheets)}}, O, T, notes)
     return {"sheets": sheets, "names": names, "theme": None, "cellStyles": [], "vba": None, "notes": [f"{n} {what}" for what, n in sorted(notes.items())]}
 
 
@@ -431,7 +429,11 @@ def write(eng, views: list[dict]) -> tuple[bytes, list[str]]:
             named_styles.append(f'<style:style style:name="{cf_names[tokens]}" style:family="table-cell" style:parent-style-name="Default">{_style_props(tokens, look)}</style:style>')
         return cf_names[tokens]
 
+    vxml, vcells, vlost = valid.out([(n, eng.validations(i)) for i, n in enumerate(eng.sheet_names())])
+    if vlost:
+        notes["data validation cells beyond 200,000 left out"] += vlost
     tables = []
+    ranges: list[tuple[int, str, str]] = []
     col_styles: dict[int, str] = {}
     row_styles: dict[int, str] = {}
     for i, name in enumerate(eng.sheet_names()):
@@ -446,13 +448,16 @@ def write(eng, views: list[dict]) -> tuple[bytes, list[str]]:
         merges = {(r0, c0): (r1 - r0 + 1, c1 - c0 + 1) for r0, c0, r1, c1 in eng.merges(i)}
         covered = {(r, c) for (r0, c0), (h, w) in merges.items() for r in range(r0, r0 + h) for c in range(c0, c0 + w) if (r, c) != (r0, c0)}
         links = {(r, c): t for r, c, t in eng.links(i)}
-        keys = set(vals) | set(codes) | set(sts) | set(merges) | covered
+        checks = vcells.get(name, {})
+        keys = set(vals) | set(codes) | set(sts) | set(merges) | covered | set(checks)
+        ranges.append((i, name, eng.filter(i)))
         nrows = max((r for r, _ in keys), default=-1) + 1
         ncols = max((c for _, c in keys), default=-1) + 1
         cols = dict((view.get("cols") or {}).get("sizes", []))
         hidden_c = set((view.get("cols") or {}).get("hidden", []))
         rows = dict((view.get("rows") or {}).get("sizes", []))
-        hidden_r = set((view.get("rows") or {}).get("hidden", [])) | filtered_rows(eng.filter(i))
+        manual_r = set((view.get("rows") or {}).get("hidden", []))
+        filtered_r = filtered_rows(eng.filter(i)) - manual_r
         parts = [f"<table:table table:name={quoteattr(name)}>"]
         for c in range(max(ncols, 1)):
             px = cols.get(c, 100)
@@ -472,8 +477,10 @@ def write(eng, views: list[dict]) -> tuple[bytes, list[str]]:
                     row_styles[px] = f"ro{len(row_styles) + 1}"
                     auto.append(f'<style:style style:name="{row_styles[px]}" style:family="table-row"><style:table-row-properties style:row-height="{px / 96:.4f}in" style:use-optimal-row-height="false"/></style:style>')
                 attrs += f' table:style-name="{row_styles[px]}"'
-            if r in hidden_r:
+            if r in manual_r:
                 attrs += ' table:visibility="collapse"'
+            elif r in filtered_r:
+                attrs += ' table:visibility="filter"'
             cs = sorted(by_row.get(r, []))
             if not cs:
                 parts.append(f"<table:table-row{attrs}><table:table-cell/></table:table-row>")
@@ -483,7 +490,7 @@ def write(eng, views: list[dict]) -> tuple[bytes, list[str]]:
             for c in cs:
                 if c > at:
                     parts.append(f'<table:table-cell table:number-columns-repeated="{c - at}"/>' if c - at > 1 else "<table:table-cell/>")
-                parts.append(_cell_xml(r, c, vals, res, codes, sts, merges, covered, links, cell_style, data_style))
+                parts.append(_cell_xml(r, c, vals, res, codes, sts, merges, covered, links, cell_style, data_style, checks.get((r, c))))
                 at = c + 1
             parts.append("</table:table-row>")
         parts.append(cf.rules_out(eng.rules(i), name, cf_style))
@@ -492,12 +499,15 @@ def write(eng, views: list[dict]) -> tuple[bytes, list[str]]:
     named = []
     for n, refers in eng.names():
         named.append(f"<table:named-expression table:name={quoteattr(n)} table:expression={quoteattr(to_file(refers))}/>")
+    dbxml, flost = filters.database_ranges(ranges)
+    if flost:
+        notes["filters by date group, dynamic date, average or icon written as the rows they show"] += flost
     face_decls = "".join(f"<style:font-face style:name={quoteattr(f)} svg:font-family={quoteattr(f)}/>" for f in sorted(fonts))
     content = (f'<?xml version="1.0" encoding="UTF-8"?>\n<office:document-content {ROOT_NS} xmlns:svg="urn:oasis:names:tc:opendocument:xmlns:svg-compatible:1.0" office:version="1.3">'
                f"<office:font-face-decls>{face_decls}</office:font-face-decls>"
-               f"<office:automatic-styles>{''.join(auto)}</office:automatic-styles><office:body><office:spreadsheet>{''.join(tables)}"
+               f"<office:automatic-styles>{''.join(auto)}</office:automatic-styles><office:body><office:spreadsheet>{vxml}{''.join(tables)}"
                + (f"<table:named-expressions>{''.join(named)}</table:named-expressions>" if named else "")
-               + "</office:spreadsheet></office:body></office:document-content>")
+               + dbxml + "</office:spreadsheet></office:body></office:document-content>")
     out = io.BytesIO()
     with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as z:
         z.writestr(zipfile.ZipInfo("mimetype"), "application/vnd.oasis.opendocument.spreadsheet", compress_type=zipfile.ZIP_STORED)
@@ -530,10 +540,12 @@ def _value_attrs(kind: str, text: str, code: str | None, data_style) -> str:
     return 'office:value-type="string"'
 
 
-def _cell_xml(r, c, vals, res, codes, sts, merges, covered, links, cell_style, data_style) -> str:
+def _cell_xml(r, c, vals, res, codes, sts, merges, covered, links, cell_style, data_style, check=None) -> str:
     if (r, c) in covered:
         return "<table:covered-table-cell/>"
     attrs = []
+    if check:
+        attrs.append(f'table:content-validation-name="{check}"')
     code = codes.get((r, c))
     tokens = sts.get((r, c), "")
     if tokens or code:
