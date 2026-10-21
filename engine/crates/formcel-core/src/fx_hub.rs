@@ -1,6 +1,6 @@
 use super::*;
 
-pub(super) const ARRAY_MORE: [&str; 8] = ["COLUMN", "INDIRECT", "OFFSET", "QUERY", "REGEXEXTRACT", "ROW", "SORTN", "SPLIT"];
+pub(super) const ARRAY_MORE: [&str; 9] = ["COLUMN", "INDIRECT", "OFFSET", "QUERY", "REGEXEXTRACT", "ROW", "SORTN", "SPLIT", "XLOOKUP"];
 
 impl Eval<'_> {
     pub(super) fn call_more(&self, name: &str, a: &[Expr]) -> Result<Value, ErrKind> {
@@ -29,6 +29,7 @@ impl Eval<'_> {
         match name {
             "REGEXEXTRACT" => self.extract(a),
             "SPLIT" => self.split_text(a),
+            "XLOOKUP" => self.xlookup(a),
             "QUERY" => self.query(a),
             "SORTN" => self.sortn(a),
             _ => self.call_ref(name, a).unwrap_or(Err(ErrKind::Name)),

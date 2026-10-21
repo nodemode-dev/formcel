@@ -27,6 +27,8 @@ mod fx_query;
 mod fx_regex;
 #[path = "fx_text.rs"]
 mod fx_text;
+#[path = "fx_xl.rs"]
+mod fx_xl;
 
 pub trait Ctx {
     fn formula_at(&self, _sheet: usize, _a: Addr) -> Option<String> {
@@ -1206,8 +1208,9 @@ impl<'a> Eval<'a> {
                         self.at(&t, off, pos)
                     }
                 }
-                "MATCH" | "XMATCH" => {
-                    if !count(2, if name == "MATCH" { 3 } else { 4 }) {
+                "XMATCH" => self.xmatch(a)?,
+                "MATCH" => {
+                    if !count(2, 3) {
                         return Err(ErrKind::Na);
                     }
                     let key = self.scalar(&a[0]);
@@ -1220,36 +1223,9 @@ impl<'a> Eval<'a> {
                         return Err(ErrKind::Na);
                     }
                     let opt = |i: usize, d: f64| -> Result<f64, ErrKind> { if a.len() > i && !matches!(a[i], Expr::Missing) { self.n(a, i) } else { Ok(d) } };
-                    let (mode, back) = if name == "MATCH" {
-                        (match opt(2, 1.0)? { m if m > 0.0 => 1, m if m < 0.0 => -1, _ => 2 }, false)
-                    } else {
-                        (xmode(opt(2, 0.0)?)?, opt(3, 1.0)? < 0.0)
-                    };
-                    let pos = self.find(&key, self.line(&t, w == 1, 0), mode, back)?.ok_or(ErrKind::Na)?;
+                    let mode = match opt(2, 1.0)? { m if m > 0.0 => 1, m if m < 0.0 => -1, _ => 2 };
+                    let pos = self.find(&key, self.line(&t, w == 1, 0), mode, false)?.ok_or(ErrKind::Na)?;
                     Value::Number(f64::from(pos + 1))
-                }
-                "XLOOKUP" => {
-                    if !count(3, 6) {
-                        return Err(ErrKind::Na);
-                    }
-                    let key = self.scalar(&a[0]);
-                    if let Value::Error(k) = key {
-                        return Err(k);
-                    }
-                    let (look, ret) = (self.table(&a[1])?, self.table(&a[2])?);
-                    let ((lh, lw), (rh, rw)) = (look.dims(), ret.dims());
-                    let vertical = lw == 1;
-                    if (lh != 1 && lw != 1) || (vertical && (lh != rh || rw != 1)) || (!vertical && (lw != rw || rh != 1)) {
-                        return Err(ErrKind::Value);
-                    }
-                    let opt = |i: usize, d: f64| -> Result<f64, ErrKind> { if a.len() > i && !matches!(a[i], Expr::Missing) { self.n(a, i) } else { Ok(d) } };
-                    let mode = xmode(opt(4, 0.0)?)?;
-                    let back = opt(5, 1.0)? < 0.0;
-                    match self.find(&key, self.line(&look, vertical, 0), mode, back)? {
-                        Some(p) => self.at(&ret, if vertical { p } else { 0 }, if vertical { 0 } else { p }),
-                        None if a.len() > 3 && !matches!(a[3], Expr::Missing) => self.scalar(&a[3]),
-                        None => return Err(ErrKind::Na),
-                    }
                 }
                 "PERCENTOF" => self.percentof(a)?,
                 _ => match self.call_chart(name, a) {
@@ -1897,16 +1873,6 @@ impl Eval<'_> {
                 Ok(best.map(|b| b.0))
             }
         }
-    }
-}
-
-fn xmode(m: f64) -> Result<i32, ErrKind> {
-    match m as i64 {
-        0 => Ok(0),
-        -1 => Ok(10),
-        1 => Ok(11),
-        2 => Ok(2),
-        _ => Err(ErrKind::Value),
     }
 }
 
