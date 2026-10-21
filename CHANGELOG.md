@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.33.0 · 2026-10-21
+
+- Tables: the Table button (or Ctrl+T) turns the data around the active cell into a table with a header row, filter buttons and banded rows. Inside a table the same button opens Table design: name, style (eight to choose from), resize, Total row, banded rows and columns, first and last column, filter button, and Convert to range.
+- Structured references: `=SUM(DeptSales[Sales Amount])`, `=[@Qty]*[@Price]`, `DeptSales[[#Headers],[Region]]`, `#All`, `#Data`, `#Totals` and column ranges. Renaming the table or a header updates every formula that uses it; Convert to range turns them into cell references.
+- Calculated columns: a formula typed into an empty table column fills the whole column, and new rows get it too. Typing just below or beside a table makes it bigger.
+- Total row: a list on each total cell gives Sum, Average, Count, Count Numbers, Max, Min, StdDev and Var as SUBTOTAL formulas. New function SUBTOTAL, which leaves out rows a filter hides. 112 functions.
+- Tables are saved in .xlsx files and read from them; LibreOffice opens them and computes the totals. In .ods files table formulas are written with plain cell references. Not yet: tables without a header row, Excel's exact style colours, and SUBTOTAL 101 to 111 leaving out rows hidden by hand.
+
 ## 0.32.0 · 2026-10-21
 
 - Data validation: the Data validation button opens a dialog with Settings, Input message and Error alert. Allow whole numbers, decimals, a list, dates, times, a text length or a custom formula, between or beyond limits that can be values or formulas such as `=TODAY()+3`.
