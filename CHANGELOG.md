@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.6.0 · 2026-10-21
+
+- Split panes: the toolbar's split button divides the sheet above and left of the active cell into two or four panes. Panes scroll on their own (side-by-side panes share their rows, stacked panes share their columns), the wheel scrolls the pane under the pointer, and keys move in the pane last clicked. Drag a split bar to move it, double-click it or press the button again to remove the split. Split and freeze turn each other off. The split is saved with the sheet.
+- Each pane, and each frozen band, keeps its own window of cells, so panes far apart on a large sheet show their data without reloading each other's.
+- Fixed: after jumping to a far cell (Name Box, Go To, Ctrl+End) the formula bar could stay empty until you moved again; it now fills in when the cells arrive.
+- Phase 1 is complete: its exit check (a workbook from Home, 10,000 typed values, the last cell XFD1048576, row 1 frozen, reopened from Recent with everything there; 1,000,000 filled rows scrolling at a 16.7 ms p95 frame with the CPU slowed 4x) passes.
+
 ## 0.5.0 · 2026-10-21
 
 - The form family app icon (the owner's artwork): a dark glass sheet with spectrum-gradient cells and a selected cell with its fill handle, as the window's icon.
