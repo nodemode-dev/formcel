@@ -70,6 +70,7 @@ interface Exports {
   fc_set_validation(book: number, sheet: number, r0: number, c0: number, r1: number, c1: number, t: number, len: number): number;
   fc_validation_at(book: number, sheet: number, row: number, col: number): number;
   fc_list_items(book: number, sheet: number, row: number, col: number): number;
+  fc_invalid_in(book: number, sheet: number, r0: number, c0: number, r1: number, c1: number): number;
   fc_check_input(book: number, sheet: number, row: number, col: number, raw: number, len: number): number;
   fc_filter(book: number, sheet: number): number;
   fc_set_filter(book: number, sheet: number, t: number, len: number): number;
@@ -517,6 +518,8 @@ function run(x: Exports, req: Request): Value {
       return out(x, x.fc_validation_at(req.book, req.sheet, req.row, req.col));
     case 'valid.items':
       return out(x, x.fc_list_items(req.book, req.sheet, req.row, req.col)).split('\n').filter((l) => l !== '').map(unescape);
+    case 'valid.invalid':
+      return lines(out(x, x.fc_invalid_in(req.book, req.sheet, req.r0, req.c0, req.r1, req.c1))).map(([r, c]) => [Number(r), Number(c)]);
     case 'valid.check':
       return withStrings(x, [req.raw], ([p, l]) => out(x, x.fc_check_input(req.book, req.sheet, req.row, req.col, p, l)));
     case 'filter.get':

@@ -358,6 +358,10 @@ export class EngineClient {
     return (await this.call({ op: 'valid.items', book, sheet, row, col })) as string[];
   }
 
+  async invalidIn(book: number, sheet: number, r0: number, c0: number, r1: number, c1: number): Promise<[number, number][]> {
+    return (await this.call({ op: 'valid.invalid', book, sheet, r0, c0, r1, c1 })) as [number, number][];
+  }
+
   async checkInput(book: number, sheet: number, row: number, col: number, raw: string): Promise<string> {
     return (await this.call({ op: 'valid.check', book, sheet, row, col, raw })) as string;
   }

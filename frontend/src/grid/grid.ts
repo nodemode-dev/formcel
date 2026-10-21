@@ -755,8 +755,14 @@ export class Grid {
         const k = KEY(r, c);
         const t = this.cache.get(k);
         if (!t || !this.cols.size(c) || merged(r, c)) continue;
-        if (this.isCheck(r, c) && (t === 'TRUE' || t === 'FALSE')) {
-          if (c >= c0 && c <= c1) this.paintCheck(t === 'TRUE', this.x(c), this.y(r), this.cols.size(c), rh);
+        const box = this.checkRule(r, c);
+        if (box && (t === box.on || t === box.off)) {
+          if (c >= c0 && c <= c1) this.paintCheck(t === box.on, this.x(c), this.y(r), this.cols.size(c), rh);
+          continue;
+        }
+        const chip = this.chips.length ? this.chipRule(r, c) : null;
+        if (chip) {
+          if (c >= c0 && c <= c1) this.paintChips(chip, t, this.x(c), this.y(r), this.cols.size(c), rh);
           continue;
         }
         const span = this.textSpan(k, t, r, c, merged);
@@ -770,6 +776,7 @@ export class Grid {
       const [x, y, w, h] = this.areaRect(mr0, mc0, mr1, mc1);
       this.cellText(KEY(mr0, mc0), t, x, x + w, y, h);
     }
+    if (this.circles.size) this.paintCircles(r0, r1, c0, c1);
     ctx.textBaseline = 'middle';
     ctx.font = '13px Inter, system-ui, -apple-system, "Segoe UI", sans-serif';
     if (!this.styles.size && !this.cfs.size) return;
@@ -1054,6 +1061,10 @@ export class Grid {
     const col = this.ac;
     const { range, header } = await this.sortTarget();
     await this.sortRange(range, [[col, descending]], header);
+  }
+
+  activeRow(): number {
+    return this.ar;
   }
 
   activeColumn(): number {
@@ -1437,15 +1448,104 @@ export class Grid {
     const lines = await this.engine.validations(this.book, sheet);
     if (sheet !== this.sheet) return;
     this.validLines = lines;
-    this.checks = lines.map((l) => l.split('\t')).filter((p) => p[1] === 'checkbox').map((p) => p[0].split(',').map(Number) as [number, number, number, number]);
+    const parsed = lines.map((l) => l.split('\t').map(unescapeField));
+    const box = (p: string[]) => p[0].split(',').map(Number) as [number, number, number, number];
+    this.checks = parsed.filter((p) => p[1] === 'checkbox').map((p) => ({ area: box(p), on: p[3]?.trim() || 'TRUE', off: p[4]?.trim() || 'FALSE' }));
+    this.chips = parsed.filter((p) => p[1] === 'list' && (p[5] ?? '').includes('c')).map((p) => ({
+      area: box(p),
+      multi: (p[5] ?? '').includes('m'),
+      colors: new Map((p[11] ?? '').split(';').map((s) => s.split('=')).filter((kv) => kv.length === 2 && kv[0].trim() && kv[1].trim()).map(([k, v]) => [k.trim().toLowerCase(), v.trim()] as [string, string])),
+    }));
     this.paint();
     await this.loadRule();
+    if (this.circles.size) await this.refreshCircles();
   }
 
-  private checks: [number, number, number, number][] = [];
+  private checks: { area: [number, number, number, number]; on: string; off: string }[] = [];
+  private chips: { area: [number, number, number, number]; multi: boolean; colors: Map<string, string> }[] = [];
+  private circles = new Set<number>();
+
+  private checkRule(r: number, c: number): { on: string; off: string } | null {
+    return this.checks.find(({ area: a }) => r >= a[0] && r <= a[2] && c >= a[1] && c <= a[3]) ?? null;
+  }
 
   private isCheck(r: number, c: number): boolean {
-    return this.checks.some((a) => r >= a[0] && r <= a[2] && c >= a[1] && c <= a[3]);
+    return !!this.checkRule(r, c);
+  }
+
+  private chipRule(r: number, c: number): { multi: boolean; colors: Map<string, string> } | null {
+    return this.chips.find(({ area: a }) => r >= a[0] && r <= a[2] && c >= a[1] && c <= a[3]) ?? null;
+  }
+
+  async circleInvalid(): Promise<number> {
+    const ext = await this.engine.extent(this.book, this.sheet);
+    const found = ext ? await this.engine.invalidIn(this.book, this.sheet, 0, 0, ext[0], ext[1]) : [];
+    this.circles = new Set(found.map(([r, c]) => KEY(r, c)));
+    this.paint();
+    return this.circles.size;
+  }
+
+  clearCircles(): void {
+    if (!this.circles.size) return;
+    this.circles.clear();
+    this.paint();
+  }
+
+  private async refreshCircles(): Promise<void> {
+    const ext = await this.engine.extent(this.book, this.sheet);
+    const found = ext ? await this.engine.invalidIn(this.book, this.sheet, 0, 0, ext[0], ext[1]) : [];
+    const now = new Set(found.map(([r, c]) => KEY(r, c)));
+    this.circles = new Set([...this.circles].filter((k) => now.has(k)));
+    this.paint();
+  }
+
+  private paintChips(rule: { multi: boolean; colors: Map<string, string> }, t: string, x: number, y: number, w: number, h: number): void {
+    const { ctx } = this;
+    const parts = rule.multi ? t.split(',').map((s) => s.trim()).filter(Boolean) : [t];
+    const ch = Math.min(h - 6, 20);
+    if (ch < 8) return;
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(x + 1, y, w - 2, h);
+    ctx.clip();
+    ctx.font = '12px Inter, system-ui, -apple-system, "Segoe UI", sans-serif';
+    ctx.textBaseline = 'middle';
+    let cx = x + 4;
+    const top = y + (h - ch) / 2;
+    for (const part of parts) {
+      const tw = ctx.measureText(part).width;
+      const fill = rule.colors.get(part.toLowerCase()) ?? '#e3e6ea';
+      ctx.fillStyle = fill;
+      ctx.beginPath();
+      ctx.roundRect(cx, top, tw + 12, ch, ch / 2);
+      ctx.fill();
+      const n = parseInt(fill.slice(1), 16);
+      const lum = /^#[0-9a-f]{6}$/i.test(fill) ? (0.299 * (n >> 16) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255)) / 255 : 1;
+      ctx.fillStyle = lum > 0.6 ? '#1f2328' : '#ffffff';
+      ctx.fillText(part, cx + 6, top + ch / 2 + 0.5);
+      cx += tw + 18;
+      if (cx > x + w) break;
+    }
+    ctx.restore();
+  }
+
+  private paintCircles(r0: number, r1: number, c0: number, c1: number): void {
+    const { ctx } = this;
+    ctx.save();
+    ctx.strokeStyle = '#d93025';
+    ctx.lineWidth = 2;
+    for (const k of this.circles) {
+      const r = Math.floor(k / MAX_COLS);
+      const c = k % MAX_COLS;
+      if (r < r0 || r > r1 || c < c0 || c > c1) continue;
+      const w = this.cols.size(c);
+      const h = this.rows.size(r);
+      if (!w || !h) continue;
+      ctx.beginPath();
+      ctx.ellipse(this.x(c) + w / 2, this.y(r) + h / 2, w / 2 - 1, h / 2 - 1, 0, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+    ctx.restore();
   }
 
   private paintCheck(on: boolean, x: number, y: number, w: number, h: number): void {
@@ -1487,9 +1587,10 @@ export class Grid {
   }
 
   async toggleCheck(r = this.ar, c = this.ac): Promise<boolean> {
-    if (!this.isCheck(r, c)) return false;
-    const on = this.cache.get(KEY(r, c)) === 'TRUE';
-    await this.commitEdits(await this.engine.apply(this.book, [[r, c, on ? 'FALSE' : 'TRUE']], this.sheet));
+    const box = this.checkRule(r, c);
+    if (!box) return false;
+    const on = this.cache.get(KEY(r, c)) === box.on;
+    await this.commitEdits(await this.engine.apply(this.book, [[r, c, on ? box.off : box.on]], this.sheet));
     return true;
   }
 
@@ -2004,6 +2105,7 @@ export class Grid {
     this.fitRows(fit);
     if (changed.length) this.events.onChanged(changed);
     if (changed.length && this.ruleLines.length) void this.refreshCf();
+    if (changed.length && this.circles.size) void this.refreshCircles();
     const links = await this.engine.takeLinks(this.book);
     if (links.length) this.events.onLinks(links);
     const hst = await this.engine.history(this.book);

@@ -291,6 +291,7 @@ impl Workbook {
             "typecheck" => self.t_typecheck(sheet, &p),
             "complete" => self.t_complete(sheet, &p),
             "mirror" => self.t_mirror(sheet, &p),
+            "copyvalid" => self.t_copyvalid(sheet, &p),
             _ => bad("unknown tool"),
         };
         self.undo_group(mark);
@@ -909,14 +910,16 @@ impl Workbook {
     fn t_checkbox(&mut self, sheet: usize, p: &[String]) -> Out {
         let Some(area) = area_of(arg(p, 1)) else { return bad("bad range") };
         let on = flag(p, 2);
-        let mut out = self.set_validation(sheet, area, if on { "checkbox\t\t\t\tb\tstop" } else { "" })?;
+        let (checked, unchecked) = (arg(p, 3).trim(), arg(p, 4).trim());
+        let spec = format!("checkbox\t\t{}\t{}\tb\tstop", say(checked), say(unchecked));
+        let mut out = self.set_validation(sheet, area, if on { &spec } else { "" })?;
         if on {
             let mut edits = Vec::new();
             let last = area.r1.min(area.r0 + 20_000);
             for r in area.r0..=last {
                 for c in area.c0..=area.c1 {
                     if matches!(self.cell_val(sheet, a(r, c)), Value::Empty) {
-                        edits.push((a(r, c), "FALSE".to_string()));
+                        edits.push((a(r, c), if unchecked.is_empty() { "FALSE".to_string() } else { unchecked.to_string() }));
                     }
                 }
             }
@@ -925,12 +928,43 @@ impl Workbook {
         Ok((out, say(if on { "Checkboxes inserted." } else { "Checkboxes removed." })))
     }
 
+    fn t_copyvalid(&mut self, sheet: usize, p: &[String]) -> Out {
+        let (Some(src), Ok(dr), Ok(dc)) = (area_of(arg(p, 1)), arg(p, 2).parse::<u32>(), arg(p, 3).parse::<u32>()) else { return bad("bad range") };
+        let ss = arg(p, 4).parse::<usize>().ok().filter(|s| *s < self.sheets.len()).unwrap_or(sheet);
+        let dest = Area { r0: dr, c0: dc, r1: (dr + src.r1 - src.r0).min(crate::MAX_ROWS - 1), c1: (dc + src.c1 - src.c0).min(crate::MAX_COLS - 1) };
+        let mut out = self.set_validation(sheet, dest, "")?;
+        let mut n = 0;
+        for v in self.sheets[ss].valid.clone() {
+            let (r0, r1, c0, c1) = (v.area.r0.max(src.r0), v.area.r1.min(src.r1), v.area.c0.max(src.c0), v.area.c1.min(src.c1));
+            let to = Area { r0: r0 - src.r0 + dr, c0: c0 - src.c0 + dc, r1: (r1 + dr).saturating_sub(src.r0), c1: (c1 + dc).saturating_sub(src.c0) };
+            if r0 > r1 || c0 > c1 || to.r1 >= crate::MAX_ROWS || to.c1 >= crate::MAX_COLS {
+                continue;
+            }
+            let shift_r = i64::from(r0) - i64::from(v.area.r0) + i64::from(dr) - i64::from(src.r0);
+            let shift_c = i64::from(c0) - i64::from(v.area.c0) + i64::from(dc) - i64::from(src.c0);
+            let mut moved = v.clone();
+            for f in [&mut moved.a, &mut moved.b] {
+                if f.trim_start().starts_with('=') {
+                    *f = offset_text(f, shift_r, shift_c);
+                }
+            }
+            let line = moved.line();
+            out = out.join(self.set_validation(sheet, to, line.split_once('\t').map_or("", |x| x.1))?);
+            n += 1;
+        }
+        Ok((out, say(&format!("Pasted {n} validation rules."))))
+    }
+
     fn t_paste(&mut self, sheet: usize, p: &[String]) -> Out {
         let (Some(src), Ok(dr), Ok(dc)) = (area_of(arg(p, 1)), arg(p, 2).parse::<u32>(), arg(p, 3).parse::<u32>()) else { return bad("bad range") };
         let what = arg(p, 4).to_string();
         let op = arg(p, 5).to_string();
         let skip = flag(p, 6);
         let transpose = flag(p, 7);
+        if what == "validation" {
+            let q: Vec<String> = ["copyvalid", arg(p, 1), arg(p, 2), arg(p, 3), arg(p, 8)].iter().map(|s| s.to_string()).collect();
+            return self.t_copyvalid(sheet, &q);
+        }
         let ss = arg(p, 8).parse::<usize>().ok().filter(|s| *s < self.sheets.len()).unwrap_or(sheet);
         let (h, w) = (src.r1 - src.r0 + 1, src.c1 - src.c0 + 1);
         let mut edits = Vec::new();
@@ -946,7 +980,7 @@ impl Workbook {
                 if skip && src_empty {
                     continue;
                 }
-                if matches!(what.as_str(), "all" | "values" | "formulas" | "validation" | "comments") || what.is_empty() {
+                if matches!(what.as_str(), "all" | "values" | "formulas" | "comments") || what.is_empty() {
                     let mut raw = match what.as_str() {
                         "values" => self.plain(ss, from),
                         _ => {

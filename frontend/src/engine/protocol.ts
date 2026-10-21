@@ -60,6 +60,7 @@ export type Request =
   | { id: number; op: 'valid.list'; book: number; sheet: number }
   | { id: number; op: 'valid.load'; book: number; sheet: number; lines: string[] }
   | { id: number; op: 'valid.set'; book: number; sheet: number; r0: number; c0: number; r1: number; c1: number; line: string }
+  | { id: number; op: 'valid.invalid'; book: number; sheet: number; r0: number; c0: number; r1: number; c1: number }
   | { id: number; op: 'valid.at' | 'valid.items'; book: number; sheet: number; row: number; col: number }
   | { id: number; op: 'valid.check'; book: number; sheet: number; row: number; col: number; raw: string }
   | { id: number; op: 'filter.get' | 'filter.reapply'; book: number; sheet: number }
@@ -147,7 +148,7 @@ export interface SortChoices {
   fonts: string[];
   icons: string[];
 }
-export type DataValue = string[][] | SortChoices;
+export type DataValue = string[][] | number[][] | SortChoices;
 
 export type Response =
   | { id: number; ok: true; value: Value }

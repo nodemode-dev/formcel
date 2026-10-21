@@ -66,6 +66,9 @@ interface ValidForm {
   labelA: HTMLElement;
   labelB: HTMLElement;
   hint: HTMLElement;
+  colors: HTMLElement;
+  colorKey: string;
+  saved: string;
 }
 
 interface AlertForm {
@@ -77,7 +80,7 @@ interface AlertForm {
   done: ((c: 'retry' | 'accept' | 'cancel') => void) | null;
 }
 
-const VALID_KINDS: [string, string][] = [['any', 'Any value'], ['whole', 'Whole number'], ['decimal', 'Decimal'], ['list', 'List'], ['date', 'Date'], ['time', 'Time'], ['length', 'Text length'], ['custom', 'Custom']];
+const VALID_KINDS: [string, string][] = [['any', 'Any value'], ['whole', 'Whole number'], ['decimal', 'Decimal'], ['list', 'List'], ['date', 'Date'], ['time', 'Time'], ['length', 'Text length'], ['custom', 'Custom'], ['checkbox', 'Checkbox']];
 const VALID_OPS: [string, string][] = [['between', 'between'], ['notbetween', 'not between'], ['eq', 'equal to'], ['ne', 'not equal to'], ['gt', 'greater than'], ['lt', 'less than'], ['ge', 'greater than or equal to'], ['le', 'less than or equal to']];
 const TOTALS: [string, number][] = [['Average', 101], ['Count', 103], ['Count Numbers', 102], ['Max', 104], ['Min', 105], ['Sum', 109], ['StdDev', 107], ['Var', 110]];
 const ALERT_TEXT ='The value you entered is not allowed in this cell.';
@@ -572,6 +575,8 @@ export class App {
     cmd('data.subtotal', 'Subtotal', 'Insert SUBTOTAL rows at each change in a column, group the detail rows in an outline and add a grand total, or remove them all.', true, () => T().subtotal());
     cmd('data.advanced-filter', 'Advanced filter', 'Filter a list in place or copy the matching records elsewhere using a criteria range, with unique records only if you want.', true, () => T().advancedFilter());
     cmd('data.flash-fill', 'Flash Fill', 'Fill the cells next to your data by following the pattern of the examples you typed.', true, () => T().flashFill(), 'Mod+E');
+    cmd('data.circle-invalid', 'Circle invalid data', 'Draw a red circle around every cell whose value breaks its data validation rule.', true, () => this.grid.circleInvalid().then((n) => this.status(n ? `${n} cell${n === 1 ? '' : 's'} circled.` : 'No invalid data found.')));
+    cmd('data.clear-circles', 'Clear validation circles', 'Remove the red circles drawn by Circle invalid data.', true, () => this.grid.clearCircles());
     cmd('data.checkbox-insert', 'Insert checkboxes', 'Turn the selected cells into checkboxes that hold TRUE or FALSE. Click one or press Space to toggle it.', true, () => T().checkboxes(true));
     cmd('data.checkbox-remove', 'Remove checkboxes', 'Turn the selected checkbox cells back into plain cells.', true, () => T().checkboxes(false));
     cmd('data.column-type', 'Table column type', 'Set a type for a table column: text, number, date, dropdown or checkbox. Entries of another type ask before they are kept.', true, () => T().columnType());
@@ -1041,7 +1046,7 @@ export class App {
     const rule = this.grid.activeRule();
     const s = this.grid.selection();
     v.title.textContent = `Data validation for ${colName(s.c0)}${s.r0 + 1}${s.r0 === s.r1 && s.c0 === s.c1 ? '' : `:${colName(s.c1)}${s.r1 + 1}`}`;
-    const [, kind = 'any', op = 'between', a = '', b = '', flags = 'bde', style = 'stop', pt = '', pm = '', et = '', em = ''] = rule ?? [];
+    const [, kind = 'any', op = 'between', a = '', b = '', flags = 'bde', style = 'stop', pt = '', pm = '', et = '', em = '', colors = ''] = rule ?? [];
     const f = v.f;
     f.kind.value = kind;
     f.op.value = op || 'between';
@@ -1051,6 +1056,11 @@ export class App {
     (f.drop as HTMLInputElement).checked = !rule || flags.includes('d');
     (f.prompt as HTMLInputElement).checked = !rule || flags.includes('p');
     (f.alert as HTMLInputElement).checked = !rule || flags.includes('e');
+    (f.chips as HTMLInputElement).checked = flags.includes('c');
+    (f.multi as HTMLInputElement).checked = flags.includes('m');
+    v.saved = colors;
+    v.colorKey = '';
+    v.colors.replaceChildren();
     f.style.value = style;
     f.pt.value = pt;
     f.pm.value = pm;
@@ -1072,15 +1082,50 @@ export class App {
   private validSync(v: ValidForm): void {
     const kind = v.f.kind.value;
     const op = v.f.op.value;
-    const ranged = !['any', 'list', 'custom'].includes(kind);
+    const ranged = !['any', 'list', 'custom', 'checkbox'].includes(kind);
     const two = ranged && (op === 'between' || op === 'notbetween');
     v.f.op.disabled = !ranged;
     v.f.a.disabled = kind === 'any';
-    v.f.b.disabled = !two;
+    v.f.b.disabled = !two && kind !== 'checkbox';
     v.f.drop.disabled = kind !== 'list';
+    v.f.chips.disabled = kind !== 'list';
+    v.f.multi.disabled = kind !== 'list';
+    v.f.blank.disabled = kind === 'checkbox';
+    const chips = kind === 'list' && (v.f.chips as HTMLInputElement).checked;
+    v.colors.hidden = !chips;
+    if (chips) void this.validColors(v);
     const word = kind === 'date' ? ['Start date', 'End date', 'Date'] : kind === 'time' ? ['Start time', 'End time', 'Time'] : kind === 'length' ? ['Minimum length', 'Maximum length', 'Length'] : ['Minimum', 'Maximum', 'Value'];
-    v.labelA.textContent = kind === 'list' ? 'Source (items separated by commas, or a range such as =$E$1:$E$9)' : kind === 'custom' ? 'Formula (TRUE when the value is allowed)' : kind === 'any' ? 'Value' : two ? word[0] : word[2];
-    v.labelB.textContent = word[1];
+    v.labelA.textContent = kind === 'list' ? 'Source (items separated by commas, or a range such as =$E$1:$E$9)' : kind === 'custom' ? 'Formula (TRUE when the value is allowed)' : kind === 'checkbox' ? 'Checked value (blank for TRUE)' : kind === 'any' ? 'Value' : two ? word[0] : word[2];
+    v.labelB.textContent = kind === 'checkbox' ? 'Unchecked value (blank for FALSE)' : word[1];
+  }
+
+  private async validColors(v: ValidForm): Promise<void> {
+    const a = v.f.a.value.trim();
+    const typed = a.startsWith('=') ? await this.grid.listItems() : a.split(',').map((s) => s.trim()).filter(Boolean);
+    const items = [...new Set(typed)];
+    const key = items.join('\u001f');
+    if (key === v.colorKey) return;
+    v.colorKey = key;
+    const prev = new Map<string, string>();
+    for (const part of v.saved.split(';')) {
+      const [k, c] = part.split('=');
+      if (k && c) prev.set(k.trim().toLowerCase(), c.trim());
+    }
+    for (const input of v.colors.querySelectorAll<HTMLInputElement>('input[data-item]')) prev.set(input.dataset.item!.toLowerCase(), input.value);
+    const palette = ['#d2e3fc', '#ceead6', '#fce8b2', '#fad2cf', '#e8d0f4', '#d1e7e9', '#fde2c5', '#e0e3e7'];
+    v.colors.replaceChildren(...items.slice(0, 60).map((item, i) => {
+      const row = document.createElement('label');
+      row.className = 'fc-valid-color';
+      const input = document.createElement('input');
+      input.type = 'color';
+      input.dataset.item = item;
+      const saved = prev.get(item.toLowerCase()) ?? palette[i % palette.length];
+      input.value = /^#[0-9a-f]{6}$/i.test(saved) ? saved : palette[i % palette.length];
+      const name = document.createElement('span');
+      name.textContent = item;
+      row.append(input, name);
+      return row;
+    }));
   }
 
   private makeValidForm(): ValidForm {
@@ -1090,14 +1135,14 @@ export class App {
     form.setAttribute('role', 'dialog');
     const opt = (list: [string, string][]) => list.map(([k, l]) => `<option value="${k}">${l}</option>`).join('');
     form.innerHTML = `<span class="fc-fmt-title"></span><div class="fc-valid-tabs" role="tablist"><button type="button" role="tab" class="fc-btn" data-tab="settings">Settings</button><button type="button" role="tab" class="fc-btn" data-tab="input">Input message</button><button type="button" role="tab" class="fc-btn" data-tab="error">Error alert</button></div>
-<div class="fc-valid-panel" data-panel="settings"><label class="fc-fmt-label">Allow<select class="fc-fmt-input" data-k="kind">${opt(VALID_KINDS)}</select></label><label class="fc-fmt-label">Data<select class="fc-fmt-input" data-k="op">${opt(VALID_OPS)}</select></label><label class="fc-fmt-label"><span class="fc-valid-a"></span><input class="fc-fmt-input" data-k="a" spellcheck="false" autocomplete="off"></label><label class="fc-fmt-label"><span class="fc-valid-b"></span><input class="fc-fmt-input" data-k="b" spellcheck="false" autocomplete="off"></label><label class="fc-sort-check"><input type="checkbox" data-k="blank"> Ignore blank</label><label class="fc-sort-check"><input type="checkbox" data-k="drop"> In-cell dropdown</label></div>
+<div class="fc-valid-panel" data-panel="settings"><label class="fc-fmt-label">Allow<select class="fc-fmt-input" data-k="kind">${opt(VALID_KINDS)}</select></label><label class="fc-fmt-label">Data<select class="fc-fmt-input" data-k="op">${opt(VALID_OPS)}</select></label><label class="fc-fmt-label"><span class="fc-valid-a"></span><input class="fc-fmt-input" data-k="a" spellcheck="false" autocomplete="off"></label><label class="fc-fmt-label"><span class="fc-valid-b"></span><input class="fc-fmt-input" data-k="b" spellcheck="false" autocomplete="off"></label><label class="fc-sort-check"><input type="checkbox" data-k="blank"> Ignore blank</label><label class="fc-sort-check"><input type="checkbox" data-k="drop"> In-cell dropdown</label><label class="fc-sort-check"><input type="checkbox" data-k="chips"> Show items as coloured chips</label><label class="fc-sort-check"><input type="checkbox" data-k="multi"> Allow multiple selections</label><div class="fc-valid-colors" hidden></div></div>
 <div class="fc-valid-panel" data-panel="input" hidden><label class="fc-sort-check"><input type="checkbox" data-k="prompt"> Show input message when cell is selected</label><label class="fc-fmt-label">Title<input class="fc-fmt-input" data-k="pt" maxlength="225" autocomplete="off"></label><label class="fc-fmt-label">Input message<textarea class="fc-fmt-input fc-valid-text" data-k="pm" maxlength="225"></textarea></label></div>
 <div class="fc-valid-panel" data-panel="error" hidden><label class="fc-sort-check"><input type="checkbox" data-k="alert"> Show error alert after invalid data is entered</label><label class="fc-fmt-label">Style<select class="fc-fmt-input" data-k="style"><option value="stop">Stop</option><option value="warning">Warning</option><option value="info">Information</option></select></label><label class="fc-fmt-label">Title<input class="fc-fmt-input" data-k="et" maxlength="225" autocomplete="off"></label><label class="fc-fmt-label">Error message<textarea class="fc-fmt-input fc-valid-text" data-k="em" maxlength="225"></textarea></label></div>
 <span class="fc-fmt-hint" aria-live="polite"></span><div class="fc-csv-actions"><button type="button" class="fc-btn" data-a="clear">Clear all</button><button type="button" class="fc-btn" data-a="cancel">Cancel</button><button type="submit" class="fc-btn fc-btn-primary">OK</button></div>`;
     document.getElementById('overlay-root')!.appendChild(form);
     const f: ValidForm['f'] = {};
     for (const el of form.querySelectorAll<HTMLInputElement>('[data-k]')) f[el.dataset.k!] = el;
-    const v: ValidForm = { form, title: form.querySelector('.fc-fmt-title')!, f, labelA: form.querySelector('.fc-valid-a')!, labelB: form.querySelector('.fc-valid-b')!, hint: form.querySelector('.fc-fmt-hint')! };
+    const v: ValidForm = { form, title: form.querySelector('.fc-fmt-title')!, f, labelA: form.querySelector('.fc-valid-a')!, labelB: form.querySelector('.fc-valid-b')!, hint: form.querySelector('.fc-fmt-hint')!, colors: form.querySelector('.fc-valid-colors')!, colorKey: '', saved: '' };
     const close = () => { form.hidden = true; this.grid.focus(); };
     const fail = (err: unknown) => {
       form.dataset.state = 'error';
@@ -1115,14 +1160,20 @@ export class App {
       e.preventDefault();
       const kind = f.kind.value;
       const a = f.a.value.trim();
+      if (kind === 'checkbox') {
+        const s = this.grid.selection();
+        void this.grid.runTool('checkbox', `${s.r0},${s.c0},${s.r1},${s.c1}`, '1', a, f.b.value.trim()).then(close, fail);
+        return;
+      }
       if (kind !== 'any' && !a) {
         form.dataset.state = 'error';
         v.hint.textContent = kind === 'list' ? 'Enter the items or a range for the list.' : kind === 'custom' ? 'Enter a formula.' : 'Enter a value.';
         return;
       }
-      const flags = [['blank', 'b'], ['drop', 'd'], ['prompt', 'p'], ['alert', 'e']].filter(([k]) => (f[k] as HTMLInputElement).checked && !f[k].disabled).map(([, c]) => c).join('');
+      const flags = [['blank', 'b'], ['drop', 'd'], ['prompt', 'p'], ['alert', 'e'], ['chips', 'c'], ['multi', 'm']].filter(([k]) => (f[k] as HTMLInputElement).checked && !f[k].disabled).map(([, c]) => c).join('');
       const formula = kind === 'custom' && !a.startsWith('=') ? `=${a}` : a;
-      const parts = [kind, f.op.disabled ? '' : f.op.value, kind === 'any' ? '' : formula, f.b.disabled ? '' : f.b.value.trim(), flags, f.style.value, f.pt.value, f.pm.value, f.et.value, f.em.value];
+      const chipColors = flags.includes('c') ? [...v.colors.querySelectorAll<HTMLInputElement>('input[data-item]')].map((i) => `${i.dataset.item!.replace(/[;=]/g, ' ')}=${i.value}`).join(';') : '';
+      const parts = [kind, f.op.disabled ? '' : f.op.value, kind === 'any' ? '' : formula, f.b.disabled ? '' : f.b.value.trim(), flags, f.style.value, f.pt.value, f.pm.value, f.et.value, f.em.value, chipColors];
       void this.grid.setValidation(parts.map(fieldEsc).join('\t')).then(close, fail);
     });
     return v;
@@ -1207,6 +1258,20 @@ export class App {
     if (!items.length) return;
     if (this.prompt) this.prompt.hidden = true;
     const cell = this.grid.cellRect();
+    const rule = this.grid.activeRule();
+    if (rule && rule[1] === 'list' && (rule[5] ?? '').includes('m')) {
+      const o = this.open;
+      const cur = o ? (await engine().readValues(o.book, this.grid.sheetIndex, this.grid.activeRow(), this.grid.activeColumn(), this.grid.activeRow(), this.grid.activeColumn()))[0]?.[2] ?? '' : '';
+      const chosen = new Set(cur.replace(/^'/, '').split(',').map((s) => s.trim()).filter(Boolean));
+      const toggle = (label: string) => () => {
+        if (chosen.has(label)) chosen.delete(label);
+        else chosen.add(label);
+        const value = items.filter((i) => chosen.has(i)).join(', ');
+        void this.grid.setActive(value).then(() => this.dropList());
+      };
+      this.menu.show(cell.left, cell.bottom + 2, items.map((label) => ({ label: `${chosen.has(label) ? '[x]' : '[ ]'} ${label}`, run: toggle(label) })), () => this.grid.focus());
+      return;
+    }
     this.menu.show(cell.left, cell.bottom + 2, items.map((label) => ({ label, run: () => void this.grid.setActive(label).then(() => this.grid.focus()) })), () => this.grid.focus());
   }
 
@@ -2627,6 +2692,7 @@ export class App {
       { label: 'Values and number formats', run: run('values-formats') },
       { label: 'All except borders', run: run('no-borders') },
       { label: 'Column widths', run: run('widths') },
+      { label: 'Validation', run: () => void g.pasteWith('validation', 'none', false, false).then((m) => { if (m) this.status(m); done(); }) },
       { sep: true },
       { label: 'Transpose', run: run('all', true) },
       { label: 'Values, transposed', run: run('values', true) },
@@ -2902,6 +2968,8 @@ export class App {
       { label: 'Filter views', run: run('data.filter-views') },
       { label: 'Insert slicer', run: run('data.slicer') },
       { sep: true },
+      { label: 'Circle invalid data', run: run('data.circle-invalid') },
+      { label: 'Clear validation circles', run: run('data.clear-circles') },
       { label: 'Insert checkboxes', run: run('data.checkbox-insert') },
       { label: 'Remove checkboxes', run: run('data.checkbox-remove') },
       { label: 'Table column type', run: run('data.column-type') },

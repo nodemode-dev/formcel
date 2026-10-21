@@ -113,7 +113,7 @@ const SPECS: Spec[] = [
     title: 'Paste special',
     ok: 'Paste',
     fields: [
-      { k: 'what', label: 'Paste', kind: 'select', options: [['all', 'All'], ['values', 'Values'], ['formulas', 'Formulas'], ['formats', 'Formats']] },
+      { k: 'what', label: 'Paste', kind: 'select', options: [['all', 'All'], ['values', 'Values'], ['formulas', 'Formulas'], ['formats', 'Formats'], ['validation', 'Validation']] },
       { k: 'op', label: 'Operation', kind: 'select', options: [['none', 'None'], ['add', 'Add'], ['subtract', 'Subtract'], ['multiply', 'Multiply'], ['divide', 'Divide']] },
       { k: 'skip', label: 'Skip blanks', kind: 'check' },
       { k: 'transpose', label: 'Transpose', kind: 'check' },

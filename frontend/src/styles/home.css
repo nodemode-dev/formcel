@@ -355,6 +355,9 @@
 .fc-valid-tabs .fc-btn[aria-selected="true"] { border-color: var(--accent-color); color: var(--text-primary); }
 .fc-valid-panel { display: grid; align-content: start; gap: var(--space-2); min-height: 300px; }
 .fc-valid-panel :disabled { opacity: 0.5; }
+.fc-valid-colors { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-1) var(--space-3); max-height: 120px; overflow: auto; }
+.fc-valid-color { display: flex; align-items: center; gap: var(--space-2); font-size: var(--text-sm); }
+.fc-valid-color input { width: 28px; height: 20px; padding: 0; border: 1px solid var(--border-light); background: transparent; }
 .fc-valid-text { height: 96px; padding: var(--space-2); resize: none; font: inherit; }
 .fc-alert { width: 400px; }
 .fc-alert-body { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: var(--space-3); align-items: start; }

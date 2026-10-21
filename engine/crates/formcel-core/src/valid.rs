@@ -24,6 +24,13 @@ pub struct Validation {
     pub prompt_text: String,
     pub error_title: String,
     pub error_text: String,
+    pub chips: bool,
+    pub multi: bool,
+    pub colors: String,
+}
+
+pub fn item_colors(spec: &str) -> Vec<(String, String)> {
+    spec.split(';').filter_map(|p| p.rsplit_once('=')).map(|(k, v)| (k.trim().to_string(), v.trim().to_string())).filter(|(k, v)| !k.is_empty() && !v.is_empty()).collect()
 }
 
 fn clip(s: String) -> String {
@@ -58,6 +65,7 @@ impl Validation {
             return None;
         }
         let flags = arg(5);
+        let is_list = kind == "list";
         let style = Some(arg(6)).filter(|s| ALERTS.contains(&s.as_str())).unwrap_or_else(|| "stop".into());
         Some(Validation {
             area: Area { r0: n[0], c0: n[1], r1: n[2], c1: n[3] },
@@ -74,19 +82,22 @@ impl Validation {
             prompt_text: clip(arg(8)),
             error_title: clip(arg(9)),
             error_text: clip(arg(10)),
+            chips: flags.contains('c'),
+            multi: flags.contains('m') && is_list,
+            colors: arg(11),
         })
     }
 
     pub fn line(&self) -> String {
         let a = self.area;
         let mut flags = String::new();
-        for (on, ch) in [(self.blank_ok, 'b'), (self.dropdown, 'd'), (self.prompt, 'p'), (self.alert, 'e')] {
+        for (on, ch) in [(self.blank_ok, 'b'), (self.dropdown, 'd'), (self.prompt, 'p'), (self.alert, 'e'), (self.chips, 'c'), (self.multi, 'm')] {
             if on {
                 flags.push(ch);
             }
         }
         let mut out = format!("{},{},{},{}", a.r0, a.c0, a.r1, a.c1);
-        for f in [&self.kind, &self.op, &self.a, &self.b, &flags, &self.style, &self.prompt_title, &self.prompt_text, &self.error_title, &self.error_text] {
+        for f in [&self.kind, &self.op, &self.a, &self.b, &flags, &self.style, &self.prompt_title, &self.prompt_text, &self.error_title, &self.error_text, &self.colors] {
             out.push('\t');
             escape(f, &mut out);
         }
@@ -168,6 +179,11 @@ fn same(x: &Value, y: &Value) -> bool {
         (Value::Bool(a), Value::Bool(b)) => a == b,
         _ => false,
     }
+}
+
+pub fn checkbox_values(v: &Validation) -> (Value, Value) {
+    let pick = |s: &str, default: bool| if s.trim().is_empty() { Value::Bool(default) } else { Value::parse_input(s.trim()) };
+    (pick(&v.a, true), pick(&v.b, false))
 }
 
 fn compare(op: &str, x: f64, a: Option<f64>, b: Option<f64>) -> bool {
@@ -286,7 +302,10 @@ impl Workbook {
         let operands = || (num(self.rule_value(sheet, v, &v.a, a, self)), num(self.rule_value(sheet, v, &v.b, a, self)));
         match v.kind.as_str() {
             "any" => true,
-            "checkbox" => matches!(x, Value::Bool(_)),
+            "checkbox" => {
+                let (on, off) = checkbox_values(v);
+                same(x, &on) || same(x, &off)
+            }
             "whole" | "decimal" | "date" | "time" => {
                 let Value::Number(n) = x else { return false };
                 if v.kind == "whole" && n.fract() != 0.0 {
@@ -299,7 +318,16 @@ impl Workbook {
                 let (lo, hi) = operands();
                 compare(&v.op, x.to_string().chars().count() as f64, lo, hi)
             }
-            "list" => self.list_values(sheet, v, a).iter().any(|item| same(x, item) || same(&Value::Text(x.to_string()), &Value::Text(item.to_string()))),
+            "list" => {
+                let items = self.list_values(sheet, v, a);
+                let known = |y: &Value| items.iter().any(|item| same(y, item) || same(&Value::Text(y.to_string()), &Value::Text(item.to_string())));
+                if v.multi {
+                    let parts: Vec<Value> = x.to_string().split(',').map(str::trim).filter(|s| !s.is_empty()).map(Value::parse_input).collect();
+                    !parts.is_empty() && parts.iter().all(known)
+                } else {
+                    known(x)
+                }
+            }
             "custom" => {
                 let ctx = With { wb: self, sheet, at: a, v: x.clone() };
                 match self.rule_value(sheet, v, &v.a, a, &ctx) {
