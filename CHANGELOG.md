@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.21.0 · 2026-10-21
+
+- Cell styles: a gallery of 24 built-in styles, from Good, Bad and Neutral to headings, Total, Input and Output, accents and number styles. Applying a style resets the parts of the formatting it covers. Make your own from the selection, choosing which parts it includes (number, alignment, font, border, fill), then update or delete it. Changing a style changes every cell that uses it.
+- Themes: FormCel, Slate, Forest, Ember and Mono, each with ten colours and a heading and a body font. Styles that use theme colours, and the default text font, follow the theme. The colour menus show the theme's colours first.
+- Paste Special (Ctrl+Alt+V, or right-click): All, Formulas, Values, Formats, Formulas and number formats, Values and number formats, All except borders, Column widths, and Transpose.
+- Pasting cells copied in FormCel now pastes their formulas, with relative references moved, instead of the text they showed.
+- A leading apostrophe now keeps typed input as text, for example `'007`.
+- Fixed: a menu opened from the toolbar lost keyboard focus right after opening, and Escape on a cell started an edit.
+- Not yet: Paste Special's math operations and Skip blanks; custom themes.
+
 ## 0.20.0 · 2026-10-21
 
 - Merged cells: Merge and center, Merge across, Merge cells and Unmerge cells. As in Excel, only the upper-left value is kept. A merged cell selects, moves and edits as one cell, and merges follow inserted and deleted rows and columns.
