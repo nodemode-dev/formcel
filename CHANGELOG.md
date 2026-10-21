@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.15.0 · 2026-10-21
+
+- Array shaping: VSTACK and HSTACK, TOCOL and TOROW, TAKE and DROP, CHOOSECOLS and CHOOSEROWS, WRAPROWS and WRAPCOLS, and EXPAND. All spill, and gaps are padded with `#N/A` unless you give a pad value.
+- TEXTSPLIT splits text into columns and rows at one or more delimiters, for example `=TEXTSPLIT(A1,",",";")`.
+- 104 functions in all, and all of them are in autocomplete.
+- Fixed: autocomplete missed letters typed very quickly right after moving to a cell, and Tab then committed the cell instead of inserting the function.
+- The Microsoft pages for these functions show results only as pictures. All 44 of their examples were run on the pages' own data and checked against each example's description: 41 agree, and 3 contradict their own page.
+
 ## 0.14.0 · 2026-10-21
 
 - Formula autocomplete: typing a formula lists the matching functions and workbook names, in the cell and in the formula bar. Up and Down choose, Tab inserts (with the opening bracket for a function), Escape closes the list, and Alt+Down turns it on or off.
