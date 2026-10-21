@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.22.0 · 2026-10-21
+
+- Conditional formatting, from the new toolbar button:
+  - Highlight rules: greater than, less than, between, equal to, text that contains (with `?` and `*` wildcards), a date occurring, and duplicate or unique values.
+  - Top and bottom rules: top or bottom N items or N percent, above or below average.
+  - Data bars, two- and three-colour scales, and icon sets (3 arrows, traffic lights, flags, symbols, 5 arrows).
+  - Formula rules, written for the first cell of the selection, for example `=$B1="Yes"` to format whole rows.
+- Manage rules: see every rule on the sheet with where it applies, move rules up and down, turn on Stop If True, delete. When two rules set the same thing the higher one wins.
+- Rules update as you type, are saved with the workbook, undo, and move with inserted and deleted rows and columns.
+- Not yet: editing a rule after it is made, custom icon cut-offs and bar colours from the window, and references inside rule formulas moving when rows are inserted.
+
 ## 0.21.0 · 2026-10-21
 
 - Cell styles: a gallery of 24 built-in styles, from Good, Bad and Neutral to headings, Total, Input and Output, accents and number styles. Applying a style resets the parts of the formatting it covers. Make your own from the selection, choosing which parts it includes (number, alignment, font, border, fill), then update or delete it. Changing a style changes every cell that uses it.
