@@ -7,7 +7,7 @@ import re
 from datetime import date, datetime
 from pathlib import Path
 
-from . import pquery
+from . import pquery, qparams
 
 MAX_ROWS = pquery.MAX_ROWS
 Table = pquery.Table
@@ -25,10 +25,7 @@ class Ctx:
 
 
 def single_select(sql: str) -> str:
-    s = sql.strip().rstrip(";").strip()
-    if not re.match(r"(?is)^(select|with)\b", s) or ";" in s:
-        raise QueryError("only one SELECT statement is run")
-    return s
+    return qparams.one_statement(sql)
 
 
 def postgres_table(src: dict) -> Table:
@@ -36,16 +33,18 @@ def postgres_table(src: dict) -> Table:
         import psycopg
     except ImportError:
         raise QueryError("PostgreSQL needs the psycopg package: pip install \"psycopg[binary]\"")
-    sql = single_select(src.get("sql", ""))
+    sql, args = qparams.bind(single_select(src.get("sql", "")), src.get("params"), "pyformat")
     try:
         with psycopg.connect(host=src.get("host") or "localhost", port=int(src.get("port") or 5432), user=src.get("user") or None, password=src.get("password") or None, dbname=src.get("database") or None, connect_timeout=10, options="-c statement_timeout=30000 -c default_transaction_read_only=on") as con:
             con.read_only = True
-            cur = con.execute(sql)
-            cols = [d.name for d in cur.description or []]
-            rows = [list(r) for r in cur.fetchmany(MAX_ROWS)]
+            cur = con.execute(sql, args)
+            if cur.description is None:
+                raise QueryError("the statement returned no rows")
+            cols = [d.name for d in cur.description]
+            rows = [qparams.row(r) for r in cur.fetchmany(MAX_ROWS)]
     except psycopg.Error as e:
         raise QueryError(f"PostgreSQL: {str(e).strip().splitlines()[0] if str(e).strip() else 'error'}")
-    return Table(cols or ["Column1"], rows)
+    return Table(pquery.unique(cols) if cols else ["Column1"], rows)
 
 
 def mysql_table(src: dict) -> Table:
@@ -53,20 +52,22 @@ def mysql_table(src: dict) -> Table:
         import pymysql
     except ImportError:
         raise QueryError("MySQL needs the PyMySQL package: pip install pymysql")
-    sql = single_select(src.get("sql", ""))
+    sql, args = qparams.bind(single_select(src.get("sql", "")), src.get("params"), "pyformat")
     try:
         con = pymysql.connect(host=src.get("host") or "localhost", port=int(src.get("port") or 3306), user=src.get("user") or "", password=src.get("password") or "", database=src.get("database") or None, connect_timeout=10, read_timeout=30)
         try:
             with con.cursor() as cur:
                 cur.execute("SET SESSION TRANSACTION READ ONLY")
-                cur.execute(sql)
-                cols = [d[0] for d in cur.description or []]
-                rows = [list(r) for r in cur.fetchmany(MAX_ROWS)]
+                cur.execute(sql, args)
+                if cur.description is None:
+                    raise QueryError("the statement returned no rows")
+                cols = [d[0] for d in cur.description]
+                rows = [qparams.row(r) for r in cur.fetchmany(MAX_ROWS)]
         finally:
             con.close()
     except pymysql.MySQLError as e:
         raise QueryError(f"MySQL: {e}")
-    return Table(cols or ["Column1"], rows)
+    return Table(pquery.unique(cols) if cols else ["Column1"], rows)
 
 
 def drivers() -> dict:
@@ -82,19 +83,26 @@ def drivers() -> dict:
 
 def schema(src: dict) -> list[dict]:
     kind = src.get("kind", "")
+    src = {k: v for k, v in src.items() if k != "params"}
     if kind == "sqlite":
-        sql = "SELECT m.name AS t, p.name AS c FROM sqlite_master m, pragma_table_info(m.name) p WHERE m.type IN ('table','view') AND m.name NOT LIKE 'sqlite_%' ORDER BY m.name, p.cid"
+        sql = "SELECT m.name AS t, p.name AS c, p.type AS y, m.type AS k, '' AS s FROM sqlite_master m, pragma_table_info(m.name) p WHERE m.type IN ('table','view') AND m.name NOT LIKE 'sqlite_%' ORDER BY m.name, p.cid"
         t = pquery.sqlite_table(src.get("path", ""), sql)
+        quote = lambda s, n: '"' + n.replace('"', '""') + '"'
     elif kind == "postgres":
-        t = postgres_table({**src, "sql": "SELECT table_schema || '.' || table_name AS t, column_name AS c FROM information_schema.columns WHERE table_schema NOT IN ('pg_catalog','information_schema') ORDER BY 1, ordinal_position"})
+        t = postgres_table({**src, "sql": "SELECT c.table_name AS t, c.column_name AS c, c.data_type AS y, lower(tb.table_type) AS k, c.table_schema AS s FROM information_schema.columns c JOIN information_schema.tables tb ON tb.table_schema = c.table_schema AND tb.table_name = c.table_name WHERE c.table_schema NOT IN ('pg_catalog','information_schema') ORDER BY c.table_schema, c.table_name, c.ordinal_position"})
+        quote = lambda s, n: '"' + s.replace('"', '""') + '"."' + n.replace('"', '""') + '"'
     elif kind == "mysql":
-        t = mysql_table({**src, "sql": "SELECT table_name AS t, column_name AS c FROM information_schema.columns WHERE table_schema = DATABASE() ORDER BY table_name, ordinal_position"})
+        t = mysql_table({**src, "sql": "SELECT c.table_name AS t, c.column_name AS c, c.column_type AS y, lower(tb.table_type) AS k, c.table_schema AS s FROM information_schema.columns c JOIN information_schema.tables tb ON tb.table_schema = c.table_schema AND tb.table_name = c.table_name WHERE c.table_schema = DATABASE() ORDER BY c.table_name, c.ordinal_position"})
+        quote = lambda s, n: "`" + n.replace("`", "``") + "`"
     else:
         raise QueryError("choose a database")
-    tables: dict[str, list[str]] = {}
+    tables: dict[tuple, dict] = {}
     for r in t.rows:
-        tables.setdefault(str(r[0]), []).append(str(r[1]))
-    return [{"name": k, "columns": v} for k, v in tables.items()]
+        key = (str(r[4]), str(r[0]))
+        e = tables.setdefault(key, {"name": f"{r[4]}.{r[0]}" if r[4] and kind == "postgres" else str(r[0]), "ref": quote(*key), "kind": "view" if "view" in str(r[3]) else "table", "columns": [], "types": []})
+        e["columns"].append(str(r[1]))
+        e["types"].append(str(r[2]))
+    return list(tables.values())
 
 
 def cell_value(v):
@@ -231,21 +239,32 @@ def append(a: Table, b: Table) -> Table:
     return Table(cols, rows)
 
 
-def other_table(s: dict, ctx: Ctx) -> Table:
-    if ctx.depth > 4:
-        raise QueryError("queries refer to each other too deeply")
-    ref = s.get("query")
-    if ref:
-        q = ctx.library.get(ref) or next((v for v in ctx.library.values() if v.get("name") == ref), None)
-        if q is None:
-            raise QueryError(f"there is no saved query {ref}")
-    else:
-        q = s.get("other") or {}
-    t = pquery.source(q.get("source") or {}, ctx.books, ctx.fresh)
+def query_table(q: dict, ctx: Ctx) -> Table:
+    if ctx.depth > 8:
+        raise QueryError("queries refer to each other too deeply or in a circle")
+    q = qparams.apply(q)
     inner = Ctx(ctx.books, ctx.fresh, ctx.library, ctx.depth + 1)
+    t = pquery.source(q.get("source") or {}, ctx.books, ctx.fresh, inner)
     for st in q.get("steps") or []:
         t = pquery.step(t, st, inner)
     return t
+
+
+def library_query(ref, ctx: Ctx) -> dict:
+    q = ctx.library.get(ref) or next((v for v in ctx.library.values() if v.get("name") == ref), None)
+    if q is None:
+        raise QueryError(f"there is no saved query {ref}")
+    return q
+
+
+def ref_table(src: dict, ctx: Ctx) -> Table:
+    return query_table(library_query(src.get("query"), ctx), ctx)
+
+
+def other_table(s: dict, ctx: Ctx) -> Table:
+    ref = s.get("query")
+    q = library_query(ref, ctx) if ref else (s.get("other") or {})
+    return query_table(q, ctx)
 
 
 def key_of(r: list, idx: list[int]) -> tuple:

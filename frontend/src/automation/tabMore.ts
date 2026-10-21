@@ -10,7 +10,21 @@ interface Ext {
   scripts: { name: string; code: string; custom: boolean; button?: string }[];
 }
 
+interface Registry {
+  url: string;
+  key: string;
+  require_signature: boolean;
+  fingerprint: string;
+}
+
+interface Catalog {
+  registry: { url: string; name: string };
+  categories: string[];
+  items: { id: string; name: string; version: string; description: string; author: string; category: string; signed: boolean; status: string; installedVersion: string | null; folder: string | null }[];
+}
+
 export class MoreTab {
+  private market: Catalog['items'] = [];
   readonly root = el('div', 'fc-auto-pane');
   private readonly ext: HTMLElement;
   private readonly btns: HTMLElement;
@@ -24,7 +38,14 @@ export class MoreTab {
       <h3 class="fc-auto-h">Buttons on this sheet</h3>
       <div class="fc-auto-list" data-l="btns"></div>
       <h3 class="fc-auto-h">Extensions</h3>
-      <p class="fc-auto-hint">A package is a folder or a .zip with a manifest.json (name, version, description, scripts: [{file, name, custom, button}]) at its top. Installed packages live in the Extensions folder of FormCel's data folder; Add to workbook copies their scripts in. FormCel has no online marketplace.</p>
+      <p class="fc-auto-hint">Browse a registry: an address that serves a JSON index of packages, each with a download address and a SHA-256 hash (and optionally an Ed25519 signature). Every download is checked against its hash before it is installed; pin the publisher's key to require a valid signature as well.</p>
+      <div class="fc-auto-row"><input class="fc-auto-input fc-grow" data-f="regurl" placeholder="Registry address, such as https://example.org/formcel/index.json" spellcheck="false" aria-label="Registry address"><button type="button" class="fc-btn" data-a="regsave">Save registry</button></div>
+      <div class="fc-auto-row"><input class="fc-auto-input fc-grow" data-f="regkey" placeholder="Pinned publisher key (base64, optional)" spellcheck="false" aria-label="Pinned publisher key"><label class="fc-auto-small"><input type="checkbox" data-f="regreq"> Require signatures</label></div>
+      <p class="fc-auto-hint fc-reg-msg" aria-live="polite"></p>
+      <div class="fc-auto-row"><input class="fc-auto-input fc-grow" type="search" data-f="mq" placeholder="Search extensions" aria-label="Search extensions"><select class="fc-auto-input" data-f="mcat" aria-label="Category"><option value="">All categories</option></select><button type="button" class="fc-btn" data-a="mbrowse">Browse</button><button type="button" class="fc-btn" data-a="mupall" disabled>Update all</button></div>
+      <div class="fc-auto-list fc-market" data-l="market"></div>
+      <h3 class="fc-auto-h">Installed</h3>
+      <p class="fc-auto-hint">A package is a folder or a .zip with a manifest.json (name, version, description, scripts: [{file, name, custom, button}]) at its top. Installed packages live in the Extensions folder of FormCel's data folder; Add to workbook copies their scripts in.</p>
       <div class="fc-auto-row"><input class="fc-auto-input fc-grow" data-f="extpath" placeholder="Folder or .zip path on this computer" spellcheck="false"><button type="button" class="fc-btn" data-a="extpath">Install</button></div>
       <div class="fc-auto-row"><input class="fc-auto-input fc-grow" type="file" accept=".zip,application/zip" data-f="extzip" aria-label="Choose a package zip"></div>
       <p class="fc-auto-hint fc-ext-msg" aria-live="polite"></p>
@@ -57,6 +78,10 @@ export class MoreTab {
       else if (a === 'install') this.install(b.dataset.id ?? '');
       else if (a === 'extpath') void this.installPath();
       else if (a === 'extdel') void this.removeExt(b.dataset.id ?? '');
+      else if (a === 'regsave') void this.saveRegistry();
+      else if (a === 'mbrowse') void this.browse();
+      else if (a === 'mget') void this.marketInstall(b.dataset.id ?? '');
+      else if (a === 'mupall') void this.updateAll();
       else if (a === 'pytoggle') void this.togglePython();
       else if (a === 'pwa') void promptInstall().then(() => this.paintPwa());
       else if (a === 'delbtn') {
@@ -101,9 +126,10 @@ export class MoreTab {
       : '<p class="fc-auto-hint">No extensions installed.</p>';
     void this.paintRuntime();
     this.paintPwa();
+    void this.loadRegistry();
     try {
       const s = await api<{ enabled: boolean }>('GET', '/api/settings/api');
-      this.apiState.innerHTML = `Read and write cells over HTTP at <code>/api/v1/workbooks/{id}/sheets/{sheet}/values?range=A1:C5</code> (GET, PUT and DELETE), plus create, rename and delete for workbooks and sheets, formulas (<code>/formulas</code>) and number formats and styles (<code>/formats</code>). ${s.enabled ? 'A token is required: send <code>Authorization: Bearer TOKEN</code>.' : 'No token is set, so calls from this computer are open.'} This workbook's id is <code>${esc(this.env.id())}</code>.`;
+      this.apiState.innerHTML = `Read and write cells over HTTP at <code>/api/v1/workbooks/{id}/sheets/{sheet}/values?range=A1:C5</code> (GET, PUT and DELETE), plus create, rename and delete for workbooks and sheets, formulas (<code>/formulas</code>), number formats and styles (<code>/formats</code>), names, tables, charts, pivots, conditional formats, validations, filters and sheet copy and order. Every endpoint is listed on the OpenAPI page. ${s.enabled ? 'A token is required: send <code>Authorization: Bearer TOKEN</code>.' : 'No token is set, so calls from this computer are open.'} This workbook's id is <code>${esc(this.env.id())}</code>.`;
     } catch {
       setText(this.apiState, 'The engine process could not be reached.');
     }
@@ -144,6 +170,77 @@ export class MoreTab {
     const done = installed();
     b.disabled = done || !installable();
     setText(t, done ? 'FormCel is running as an installed app.' : installable() ? 'Install FormCel to open it in its own window from your Start menu, Dock, Home Screen or app drawer. The app shell is cached, but it still needs the FormCel engine process running on this computer or a server you host; workbooks are not stored in the browser.' : 'Your browser offers install from its menu: Chrome and Edge on Windows, macOS and Android (Install app), Safari on macOS (File, Add to Dock) and iOS (Share, Add to Home Screen). This is a web app install, not a native build; native desktop installers come from the src-tauri shell.');
+  }
+
+  private regMsg(text: string): void {
+    setText(this.root.querySelector('.fc-reg-msg')!, text);
+  }
+
+  private async loadRegistry(): Promise<void> {
+    try {
+      const r = await api<Registry>('GET', '/api/settings/registry');
+      this.root.querySelector<HTMLInputElement>('[data-f="regurl"]')!.value = r.url;
+      this.root.querySelector<HTMLInputElement>('[data-f="regkey"]')!.value = r.key;
+      this.root.querySelector<HTMLInputElement>('[data-f="regreq"]')!.checked = r.require_signature;
+      this.regMsg(r.url ? `Registry set${r.key ? `; publisher key ${r.fingerprint} is pinned` : '; no publisher key is pinned, so packages are checked by hash only'}.` : 'No registry is set.');
+    } catch {
+      this.regMsg('The engine process could not be reached.');
+    }
+  }
+
+  private async saveRegistry(): Promise<void> {
+    const q = <T extends HTMLElement>(s: string) => this.root.querySelector<T>(s)!;
+    try {
+      await api('PUT', '/api/settings/registry', { url: q<HTMLInputElement>('[data-f="regurl"]').value.trim(), key: q<HTMLInputElement>('[data-f="regkey"]').value.trim(), require_signature: q<HTMLInputElement>('[data-f="regreq"]').checked });
+      await this.loadRegistry();
+      await this.browse();
+    } catch (err) {
+      this.regMsg(err instanceof Error ? err.message : String(err));
+    }
+  }
+
+  private async browse(): Promise<void> {
+    const q = (this.root.querySelector<HTMLInputElement>('[data-f="mq"]')!.value || '').trim();
+    const catSel = this.root.querySelector<HTMLSelectElement>('[data-f="mcat"]')!;
+    const list = this.root.querySelector<HTMLElement>('[data-l="market"]')!;
+    const upall = this.root.querySelector<HTMLButtonElement>('[data-a="mupall"]')!;
+    try {
+      const r = await api<Catalog>('GET', `/api/extensions/catalog?q=${encodeURIComponent(q)}&category=${encodeURIComponent(catSel.value)}`);
+      const keep = catSel.value;
+      catSel.innerHTML = `<option value="">All categories</option>${r.categories.map((c) => `<option value="${esc(c)}">${esc(c)}</option>`).join('')}`;
+      catSel.value = r.categories.includes(keep) ? keep : '';
+      this.market = r.items;
+      upall.disabled = !r.items.some((i) => i.status === 'update');
+      list.innerHTML = r.items.length
+        ? r.items
+            .map((i) => {
+              const act = i.status === 'update' ? `<button type="button" class="fc-btn fc-btn-primary" data-a="mget" data-id="${esc(i.id)}">Update to ${esc(i.version)}</button>` : i.status === 'installed' ? '<span class="fc-chip">Installed</span>' : `<button type="button" class="fc-btn" data-a="mget" data-id="${esc(i.id)}">Install</button>`;
+              const rm = i.folder ? `<button type="button" class="fc-btn fc-btn-danger" data-a="extdel" data-id="${esc(i.folder)}">Remove</button>` : '';
+              return `<div class="fc-auto-item fc-market-item"><span class="fc-grow">${esc(i.name)} ${esc(i.version)} <span class="fc-chip">${esc(i.category)}</span>${i.signed ? ' <span class="fc-chip">signed</span>' : ''}<small>${esc(i.description)}${i.author ? ` By ${esc(i.author)}.` : ''}${i.installedVersion ? ` Installed: ${esc(i.installedVersion)}.` : ''}</small></span>${act}${rm}</div>`;
+            })
+            .join('')
+        : '<p class="fc-auto-hint">Nothing in the registry matches.</p>';
+      this.regMsg(`${r.items.length} extension${r.items.length === 1 ? '' : 's'} in ${r.registry.name || r.registry.url}.`);
+    } catch (err) {
+      list.replaceChildren();
+      this.regMsg(err instanceof Error ? err.message : String(err));
+    }
+  }
+
+  private async marketInstall(id: string): Promise<void> {
+    this.regMsg('Downloading and checking the package');
+    try {
+      const r = await api<Ext & { trust: string }>('POST', '/api/extensions/market/install', { id });
+      this.regMsg(`Installed ${r.name} ${r.version}. Check: ${r.trust}.`);
+      await this.load();
+      await this.browse();
+    } catch (err) {
+      this.regMsg(err instanceof Error ? err.message : String(err));
+    }
+  }
+
+  private async updateAll(): Promise<void> {
+    for (const i of this.market.filter((x) => x.status === 'update')) await this.marketInstall(i.id);
   }
 
   private async installPath(): Promise<void> {

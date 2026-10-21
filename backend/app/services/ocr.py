@@ -122,7 +122,14 @@ def to_rows(ws: list[dict]) -> list[list[str]]:
 
 
 def read_picture(data: bytes, lang: str = "eng") -> dict:
-    ws = words(data, lang)
-    rows = to_rows(ws)
+    from . import ocrprep, ocrtable
+
+    sniff(data)
+    prep = ocrprep.prepare(data)
+    ws = words(prep["data"], lang)
     conf = round(sum(w["conf"] for w in ws) / len(ws), 1) if ws else 0
-    return {"rows": rows, "words": len(ws), "confidence": conf}
+    if not ws:
+        return {"rows": [], "words": 0, "confidence": 0, "cells": [], "merges": [], "columns": [], "header": False, "fixed": 0}
+    table = ocrtable.build(ws, prep["vlines"])
+    rows = [[c["v"] for c in row] for row in table["cells"]]
+    return {"rows": rows, "words": len(ws), "confidence": conf, "scale": prep["scale"], **table}

@@ -58,7 +58,7 @@ def txt(v) -> str:
     return str(v)
 
 
-def source(src: dict, books, fresh: bool = False) -> Table:
+def source(src: dict, books, fresh: bool = False, ctx=None) -> Table:
     kind = src.get("kind", "")
     if kind in ("csv", "text"):
         text = src.get("text") or ""
@@ -103,29 +103,31 @@ def source(src: dict, books, fresh: bool = False) -> Table:
             data = ranges.grid(b.engine, sheet, a)
         return blank(data)
     if kind == "sqlite":
-        return sqlite_table(src.get("path", ""), src.get("sql", ""))
+        return sqlite_table(src.get("path", ""), src.get("sql", ""), src.get("params"))
     from . import pqx
 
+    if kind == "query":
+        return pqx.ref_table(src, ctx or pqx.Ctx(books, fresh))
     t = pqx.source(kind, src)
     if t is None:
         raise QueryError("choose a source")
     return t
 
 
-def sqlite_table(path: str, sql: str) -> Table:
+def sqlite_table(path: str, sql: str, params: dict | None = None) -> Table:
+    from . import qparams
+
     p = Path(path).expanduser()
     if not p.is_file():
         raise QueryError(f"no database file at {path}")
-    s = sql.strip().rstrip(";").strip()
-    if not re.match(r"(?is)^(select|with)\b", s) or ";" in s:
-        raise QueryError("only one SELECT statement is run")
+    s, args = qparams.bind(qparams.one_statement(sql), params, "named")
     try:
         con = sqlite3.connect(f"file:{p.as_posix()}?mode=ro", uri=True)
         try:
             con.execute("PRAGMA query_only = ON")
-            cur = con.execute(s)
+            cur = con.execute(s, args or {})
             cols = [d[0] for d in cur.description or []]
-            rows = [list(r) for r in cur.fetchmany(MAX_ROWS)]
+            rows = [qparams.row(r) for r in cur.fetchmany(MAX_ROWS)]
         finally:
             con.close()
     except sqlite3.Error as e:
@@ -268,10 +270,11 @@ def step(t: Table, s: dict, ctx=None) -> Table:
 
 
 def run(q: dict, books, fresh: bool = False, library: dict | None = None) -> dict:
-    from . import pqx
+    from . import pqx, qparams
 
-    t = source(q.get("source") or {}, books, fresh)
+    q = qparams.apply(q)
     ctx = pqx.Ctx(books, fresh, library or {})
+    t = source(q.get("source") or {}, books, fresh, ctx)
     for s in q.get("steps") or []:
         t = step(t, s, ctx)
     out = [list(t.cols)] + t.rows

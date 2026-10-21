@@ -27,6 +27,8 @@ export interface Query {
   onOpen?: boolean;
   asTable?: boolean;
   tabled?: boolean;
+  tableName?: string;
+  params?: { name: string; type?: string; value: string }[];
   last?: { rows: number; cols: number };
   refreshed?: number;
 }

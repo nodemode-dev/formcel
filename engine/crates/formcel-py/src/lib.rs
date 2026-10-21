@@ -402,6 +402,18 @@ impl Workbook {
         self.inner.refresh_pivot(name).map(|_| ()).map_err(|e| PyValueError::new_err(e.to_string()))
     }
 
+    fn create_pivot(&mut self, line: &str) -> PyResult<()> {
+        self.inner.create_pivot(line).map(|_| ()).map_err(|e| PyValueError::new_err(e.to_string()))
+    }
+
+    fn set_pivot(&mut self, name: &str, line: &str) -> PyResult<()> {
+        self.inner.set_pivot(name, line).map(|_| ()).map_err(|e| PyValueError::new_err(e.to_string()))
+    }
+
+    fn remove_pivot(&mut self, name: &str) -> PyResult<()> {
+        self.inner.remove_pivot(name).map(|_| ()).map_err(|e| PyValueError::new_err(e.to_string()))
+    }
+
     fn set_table(&mut self, name: &str, line: &str) -> PyResult<()> {
         self.inner.set_table(name, line).map(|_| ()).map_err(|e| PyValueError::new_err(e.to_string()))
     }
