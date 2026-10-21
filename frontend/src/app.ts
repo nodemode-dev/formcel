@@ -1,7 +1,7 @@
 import { engine, type Changed, type FormatChange, type Name, type Shift } from './engine';
 import { colName, type Range } from './grid/a1';
 import { Autocomplete, FUNCTIONS, type Suggestion } from './ui/autocomplete';
-import { Grid, type MenuKind, type SheetView } from './grid/grid';
+import { Grid, type BorderKind, type MenuKind, type SheetView } from './grid/grid';
 import { listCommands, registerCommand, runCommand } from './ui/commands';
 import { Home, type TemplateMeta, type WorkbookMeta } from './ui/home';
 import { Menu, type MenuItem } from './ui/menu';
@@ -40,6 +40,15 @@ const NUMBER_FORMATS: { id: string; label: string; description: string; code: st
   { id: 'time-long', label: 'Time with seconds', description: 'Hour, minute and second with AM or PM.', code: 'h:mm:ss AM/PM' },
   { id: 'text', label: 'Text', description: 'Keep what is typed as text, even numbers and formulas.', code: '@' },
 ];
+
+const FONTS = ['', 'Arial', 'Georgia', 'Times New Roman', 'Courier New', 'Verdana', 'JetBrains Mono'];
+const SIZES = [8, 9, 10, 11, 12, 14, 16, 18, 20, 24, 28, 36, 48, 72];
+const CELL_COLOURS = ['', '#000000', '#ffffff', '#ef4444', '#f97316', '#eab308', '#22c55e', '#14b8a6', '#3b82f6', '#8b5cf6', '#ec4899', '#94a3b8'];
+const BORDER_KINDS: [BorderKind, string][] = [
+  ['all', 'All borders'], ['outside', 'Outside borders'], ['inside', 'Inside borders'], ['top', 'Top border'],
+  ['bottom', 'Bottom border'], ['left', 'Left border'], ['right', 'Right border'], ['none', 'No border'],
+];
+const LINES: [string, string][] = [['thin', 'Thin'], ['medium', 'Medium'], ['thick', 'Thick'], ['dashed', 'Dashed'], ['dotted', 'Dotted'], ['double', 'Double']];
 
 function bumpCode(code: string, shown: string, dir: 1 | -1): string {
   if (!code || code.toLowerCase() === 'general') {
@@ -104,6 +113,7 @@ export class App {
         this.currentRef = this.nameOf(range) ?? ref;
         if (document.activeElement !== p.nameBox) p.nameBox.value = this.currentRef;
         if (document.activeElement !== p.formulaBar) p.formulaBar.value = text;
+        this.formatBar();
       },
       onHistory: (undo, redo) => {
         this.button('edit.undo').disabled = !undo;
@@ -117,6 +127,7 @@ export class App {
       },
       onShift: (s) => this.sendShift(s),
       onFormats: (f) => this.sendFormats(f),
+      onStyles: (s) => this.sendFormats(s, 'styles'),
       onView: (sheet, view) => this.saveView(sheet, view),
       onMenu: (kind, x, y) => this.cellMenu(kind, x, y),
       onGoto: () => {
@@ -179,6 +190,31 @@ export class App {
     cmd('format.decimals-less', 'Decrease decimal places', 'Show one fewer decimal place in the selected cells.', true, () => this.bumpDecimals(-1));
     cmd('format.custom', 'Custom number format', 'Type a number format code for the selected cells.', true, () => this.customFormat());
     for (const f of NUMBER_FORMATS) cmd(`format.${f.id}`, f.label, f.description, true, () => g.setFormat(f.code), f.keys);
+    cmd('format.bold', 'Bold', 'Make the selected cells bold, or not bold.', true, () => g.toggle('b'), 'Mod+B');
+    cmd('format.italic', 'Italic', 'Make the selected cells italic, or not italic.', true, () => g.toggle('i'), 'Mod+I');
+    cmd('format.underline', 'Underline', 'Underline the selected cells, or remove the underline.', true, () => g.toggle('u'), 'Mod+U');
+    cmd('format.strike', 'Strikethrough', 'Strike through the selected cells, or remove it.', true, () => g.toggle('s'), 'Mod+5');
+    cmd('format.wrap', 'Wrap text', 'Wrap text onto several lines inside the cell, or let it overflow.', true, () => g.toggle('wrap'));
+    const align = (key: 'ha' | 'va', v: string) => () => g.styleSelection(g.activeStyle()[key] === v ? `${key}:` : `${key}:${v}`);
+    cmd('format.align-left', 'Align left', 'Line the text up at the left edge.', true, align('ha', 'left'));
+    cmd('format.align-center', 'Center', 'Center the text across the cell.', true, align('ha', 'center'));
+    cmd('format.align-right', 'Align right', 'Line the text up at the right edge.', true, align('ha', 'right'));
+    cmd('format.valign-top', 'Top align', 'Line the text up at the top of the cell.', true, align('va', 'top'));
+    cmd('format.valign-middle', 'Middle align', 'Center the text between top and bottom.', true, align('va', 'middle'));
+    cmd('format.valign-bottom', 'Bottom align', 'Line the text up at the bottom of the cell.', true, align('va', 'bottom'));
+    cmd('format.indent-more', 'Increase indent', 'Move the text one step in from its edge.', true, () => g.styleSelection('in:+1'));
+    cmd('format.indent-less', 'Decrease indent', 'Move the text one step back toward its edge.', true, () => g.styleSelection('in:-1'));
+    cmd('format.clear', 'Clear formats', 'Remove fonts, colours, borders, alignment and number formats from the selected cells.', true, async () => {
+      await g.styleSelection('clear');
+      await g.setFormat('');
+    });
+    cmd('format.text-color', 'Text colour', 'Choose the colour of the text.', true, () => this.colorMenu('format.text-color', 'fc'));
+    cmd('format.fill-color', 'Fill colour', 'Choose the colour behind the cells.', true, () => this.colorMenu('format.fill-color', 'bg'));
+    cmd('format.borders', 'Borders', 'Draw or remove lines around and inside the selection.', true, () => this.borderMenu());
+    cmd('format.outline-border', 'Outline border', 'Draw a line around the selection.', true, () => g.borders('outside'), 'Mod+Shift+&');
+    cmd('format.no-border', 'No border', 'Remove the borders of the selected cells.', true, () => g.borders('none'), 'Mod+Shift+_');
+    cmd('format.font', 'Font', 'Choose the typeface of the selected cells.', true, () => this.listMenu('format.font', FONTS.map((f) => [f || 'Inter (default)', f ? `ff:${f}` : 'ff:']), g.activeStyle().font ?? ''));
+    cmd('format.size', 'Font size', 'Choose the text size of the selected cells, in points.', true, () => this.listMenu('format.size', SIZES.map((n) => [String(n), n === 10 ? 'sz:' : `sz:${n}`]), String(g.activeStyle().size ?? 10)));
     void api('PUT', '/api/commands', listCommands()).catch(() => undefined);
   }
 
@@ -295,7 +331,7 @@ export class App {
   private async openWorkbook(id: string, setHash = true): Promise<void> {
     this.flush();
     await this.saving;
-    let doc: WorkbookMeta & { cells: [number, number, string][][]; formats?: [number, number, string][][]; views?: SheetView[]; names?: Name[] };
+    let doc: WorkbookMeta & { cells: [number, number, string][][]; formats?: [number, number, string][][]; styles?: [number, number, string][][]; views?: SheetView[]; names?: Name[] };
     try {
       doc = await api('GET', `/api/workbooks/${id}`);
     } catch {
@@ -307,6 +343,7 @@ export class App {
     for (let i = 0; i < doc.sheets.length; i++) {
       if (i) await e.addSheet(book, doc.sheets[i]);
       await e.loadFormats(book, i, doc.formats?.[i] ?? []);
+      await e.loadStyles(book, i, doc.styles?.[i] ?? []);
       if (doc.cells[i]?.length) await e.load(book, doc.cells[i], i);
     }
     for (const [n, f] of doc.names ?? []) await e.defineName(book, n, f).catch(() => []);
@@ -440,7 +477,7 @@ export class App {
     });
   }
 
-  private sendFormats(formats: FormatChange[]): void {
+  private sendFormats(formats: FormatChange[], what: 'formats' | 'styles' = 'formats'): void {
     const o = this.open;
     if (!o) return;
     const bySheet = new Map<number, [number, number, string][]>();
@@ -453,13 +490,77 @@ export class App {
     this.status('Saving');
     this.saving = this.saving.then(async () => {
       try {
-        for (const [sheet, cells] of bySheet) await api('POST', `/api/workbooks/${o.id}/formats`, { sheet, cells });
+        for (const [sheet, cells] of bySheet) await api('POST', `/api/workbooks/${o.id}/${what}`, { sheet, cells });
         if (!this.pending.size) this.status('Saved');
       } catch (err) {
         this.status('Not saved', true);
         this.p.save.title = err instanceof Error ? err.message : '';
       }
     });
+  }
+
+  private below(cmd: string): [number, number] {
+    const b = this.button(cmd).getBoundingClientRect();
+    return [b.left, b.bottom + 4];
+  }
+
+  private colorMenu(cmd: string, key: 'fc' | 'bg'): void {
+    const g = this.grid;
+    const st = g.activeStyle();
+    const [x, y] = this.below(cmd);
+    const pick = (c: string) => void g.styleSelection(`${key}:${c.slice(1)}`).then(() => g.focus());
+    this.menu.show(x, y, [
+      { swatches: CELL_COLOURS, current: st[key] ?? '', pick, name: key === 'fc' ? 'Text colour' : 'Fill colour', none: key === 'fc' ? 'Automatic' : 'No fill' },
+    ], () => g.focus());
+  }
+
+  private borderLine = 'thin';
+
+  private borderMenu(): void {
+    const g = this.grid;
+    const [x, y] = this.below('format.borders');
+    const items: MenuItem[] = BORDER_KINDS.map(([kind, label]) => ({
+      label,
+      keys: kind === 'outside' ? 'Ctrl+Shift+&' : kind === 'none' ? 'Ctrl+Shift+_' : undefined,
+      run: () => g.borders(kind, this.borderLine).then(() => g.focus()),
+    }));
+    items.push({ sep: true });
+    for (const [line, label] of LINES) items.push({ label: line === this.borderLine ? `${label} line (current)` : `${label} line`, run: () => { this.borderLine = line; } });
+    this.menu.show(x, y, items, () => g.focus());
+  }
+
+  private listMenu(cmd: string, options: [label: string, patch: string][], current: string): void {
+    const g = this.grid;
+    const [x, y] = this.below(cmd);
+    this.menu.show(x, y, options.map(([label, patch]) => ({
+      label: label === current || (current === '' && patch.endsWith(':')) ? `${label} (current)` : label,
+      run: () => g.styleSelection(patch).then(() => g.focus()),
+    })), () => g.focus());
+  }
+
+  private formatBar(): void {
+    const g = this.grid as Grid | undefined;
+    if (!g) return;
+    const st = g.activeStyle();
+    const press = (cmd: string, on: boolean) => {
+      const b = this.button(cmd);
+      if (b.getAttribute('aria-pressed') !== String(on)) b.setAttribute('aria-pressed', String(on));
+    };
+    press('format.bold', st.b);
+    press('format.italic', st.i);
+    press('format.underline', st.u);
+    press('format.strike', st.s);
+    press('format.wrap', st.wrap);
+    for (const h of ['left', 'center', 'right'] as const) press(`format.align-${h}`, st.ha === h);
+    for (const v of ['top', 'middle', 'bottom'] as const) press(`format.valign-${v}`, st.va === v);
+    const font = this.button('format.font');
+    const label = st.font ?? 'Inter';
+    if (font.textContent !== label) font.textContent = label;
+    const size = this.button('format.size');
+    const sz = String(st.size ?? 10);
+    if (size.textContent !== sz) size.textContent = sz;
+    this.button('format.text-color').style.setProperty('--swatch', st.fc ?? 'currentColor');
+    this.button('format.fill-color').style.setProperty('--swatch', st.bg ?? 'currentColor');
   }
 
   private formatMenu(): void {

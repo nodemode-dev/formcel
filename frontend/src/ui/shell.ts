@@ -38,6 +38,11 @@ export function mountShell(root: HTMLElement): ShellParts {
       <div class="fc-toolbar" role="toolbar" aria-label="Sheet">
         ${tool('edit.undo', 'undo', 'Undo (Ctrl+Z)')}${tool('edit.redo', 'redo', 'Redo (Ctrl+Y)')}
         <span class="fc-tool-sep" aria-hidden="true"></span>
+        <button type="button" class="fc-tool fc-tool-text fc-tool-font" data-cmd="format.font" title="Font" aria-label="Font"></button><button type="button" class="fc-tool fc-tool-text fc-tool-size" data-cmd="format.size" title="Font size" aria-label="Font size"></button>
+        ${tool('format.bold', 'bold', 'Bold (Ctrl+B)')}${tool('format.italic', 'italic', 'Italic (Ctrl+I)')}${tool('format.underline', 'underline', 'Underline (Ctrl+U)')}${tool('format.strike', 'strike', 'Strikethrough (Ctrl+5)')}${tool('format.text-color', 'textColor', 'Text colour')}${tool('format.fill-color', 'fillColor', 'Fill colour')}${tool('format.borders', 'borders', 'Borders')}
+        <span class="fc-tool-sep" aria-hidden="true"></span>
+        ${tool('format.align-left', 'alignLeft', 'Align left')}${tool('format.align-center', 'alignCenter', 'Center')}${tool('format.align-right', 'alignRight', 'Align right')}${tool('format.valign-top', 'alignTop', 'Top align')}${tool('format.valign-middle', 'alignMiddle', 'Middle align')}${tool('format.valign-bottom', 'alignBottom', 'Bottom align')}${tool('format.wrap', 'wrap', 'Wrap text')}${tool('format.indent-less', 'indentLess', 'Decrease indent')}${tool('format.indent-more', 'indentMore', 'Increase indent')}${tool('format.clear', 'clearFormat', 'Clear formats')}
+        <span class="fc-tool-sep" aria-hidden="true"></span>
         ${tool('format.menu', 'numFormat', 'Number format')}${tool('format.decimals-more', 'decMore', 'Increase decimal places')}${tool('format.decimals-less', 'decLess', 'Decrease decimal places')}
         <span class="fc-tool-sep" aria-hidden="true"></span>
         ${tool('view.freeze-top-row', 'freezeRow', 'Freeze top row')}${tool('view.freeze-first-column', 'freezeCol', 'Freeze first column')}${tool('view.freeze-panes', 'freezePanes', 'Freeze panes above and left of the active cell')}${tool('view.unfreeze', 'unfreeze', 'Unfreeze panes')}${tool('view.split', 'split', 'Split into panes at the active cell')}

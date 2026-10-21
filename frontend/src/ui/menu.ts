@@ -1,7 +1,7 @@
 export type MenuItem =
   | { label: string; keys?: string; run: () => void | Promise<void>; danger?: boolean; disabled?: boolean; confirm?: string }
   | { sep: true }
-  | { swatches: string[]; current?: string; pick: (c: string) => void };
+  | { swatches: string[]; current?: string; pick: (c: string) => void; name?: string; none?: string };
 
 export class Menu {
   private readonly el: HTMLElement;
@@ -61,8 +61,9 @@ export class Menu {
         const b = document.createElement('button');
         b.type = 'button';
         b.className = 'fc-swatch';
-        b.title = c ? 'Tab colour' : 'No colour';
-        b.setAttribute('aria-label', c ? `Tab colour ${c}` : 'No tab colour');
+        const what = it.name ?? 'Tab colour';
+        b.title = c ? what : it.none ?? 'No colour';
+        b.setAttribute('aria-label', c ? `${what} ${c}` : it.none ?? 'No tab colour');
         b.style.setProperty('--sw', c || 'transparent');
         if ((it.current ?? '') === c) b.setAttribute('aria-pressed', 'true');
         b.addEventListener('click', () => {

@@ -22,6 +22,10 @@ interface Exports {
   fc_set_format(book: number, sheet: number, r0: number, c0: number, r1: number, c1: number, code: number, len: number): number;
   fc_format_at(book: number, sheet: number, row: number, col: number): number;
   fc_load_formats(book: number, sheet: number, lines: number, len: number): number;
+  fc_set_styles(book: number, sheet: number, ops: number, len: number): number;
+  fc_styles_in(book: number, sheet: number, r0: number, c0: number, r1: number, c1: number): number;
+  fc_style_at(book: number, sheet: number, row: number, col: number): number;
+  fc_load_styles(book: number, sheet: number, lines: number, len: number): number;
   fc_undo(book: number): number;
   fc_redo(book: number): number;
   fc_history(book: number): number;
@@ -51,16 +55,21 @@ function lines(s: string): string[][] {
   return s ? s.split('\n').filter(Boolean).map((l) => l.split('\t')) : [];
 }
 
+function colorOf(fl: string): string | undefined {
+  const i = fl.indexOf('c');
+  return i < 0 ? undefined : `#${fl.slice(i + 1, i + 7)}`;
+}
+
 function cells(s: string): Cell[] {
-  return lines(s).map(([r, c, fl, t, f]) => [Number(r), Number(c), unescape(t ?? ''), f === undefined ? undefined : unescape(f), fl === 'n']);
+  return lines(s).map(([r, c, fl, t, f]) => [Number(r), Number(c), unescape(t ?? ''), f === undefined ? undefined : unescape(f), fl.startsWith('n'), colorOf(fl)]);
 }
 
 function changed(s: string): Changed[] {
-  return lines(s).filter((l) => l[0] !== '%' && l[0] !== '#').map(([sh, r, c, fl, t, f]) => [Number(sh), Number(r), Number(c), unescape(t ?? ''), f === undefined ? undefined : unescape(f), fl === 'n']);
+  return lines(s).filter((l) => l[0] !== '%' && l[0] !== '#' && l[0] !== '&').map(([sh, r, c, fl, t, f]) => [Number(sh), Number(r), Number(c), unescape(t ?? ''), f === undefined ? undefined : unescape(f), fl.startsWith('n'), colorOf(fl)]);
 }
 
-function formatsOf(s: string): FormatChange[] {
-  return lines(s).filter((l) => l[0] === '%').map(([, sh, r, c, code]) => [Number(sh), Number(r), Number(c), unescape(code ?? '')]);
+function formatsOf(s: string, tag = '%'): FormatChange[] {
+  return lines(s).filter((l) => l[0] === tag).map(([, sh, r, c, code]) => [Number(sh), Number(r), Number(c), unescape(code ?? '')]);
 }
 
 function shiftOf(line: string): Shift {
@@ -70,7 +79,7 @@ function shiftOf(line: string): Shift {
 
 function effect(s: string): Effect {
   const shift = s.startsWith('#') ? shiftOf(s.slice(0, s.indexOf('\n'))) : null;
-  return { shift, changes: changed(s), formats: formatsOf(s) };
+  return { shift, changes: changed(s), formats: formatsOf(s), styles: formatsOf(s, '&') };
 }
 
 function ok(n: number, what: string): number {
@@ -143,7 +152,7 @@ function run(x: Exports, req: Request): Value {
     case 'undo':
     case 'redo': {
       const n = req.op === 'undo' ? x.fc_undo(req.book) : x.fc_redo(req.book);
-      return n === -2 ? { changes: [], shift: null, formats: [] } : effect(out(x, n));
+      return n === -2 ? { changes: [], shift: null, formats: [], styles: [] } : effect(out(x, n));
     }
     case 'shift':
       return shiftOf(out(x, x.fc_shift(req.book, req.sheet, req.rows ? 1 : 0, req.at, req.n, req.insert ? 1 : 0)).trim());
@@ -164,6 +173,22 @@ function run(x: Exports, req: Request): Value {
     case 'format.load': {
       const body = req.cells.map(([r, c, code]) => `${r}\t${c}\t${escape(code)}`).join('\n');
       return withStrings(x, [body], ([p, l]) => ok(x.fc_load_formats(req.book, req.sheet, p, l), 'The engine refused those formats.'));
+    }
+    case 'style.set': {
+      const body = req.ops.map(([r0, c0, r1, c1, p]) => `${r0}\t${c0}\t${r1}\t${c1}\t${escape(p)}`).join('\n');
+      return withStrings(x, [body], ([p, l]) => {
+        const n = x.fc_set_styles(req.book, req.sheet, p, l);
+        if (n === -3) throw new Error('That is not a cell style FormCel can read.');
+        return effect(out(x, n));
+      });
+    }
+    case 'style.read':
+      return lines(out(x, x.fc_styles_in(req.book, req.sheet, req.r0, req.c0, req.r1, req.c1))).map(([, r, c, st]) => [Number(r), Number(c), unescape(st ?? '')] as [number, number, string]);
+    case 'style.at':
+      return out(x, x.fc_style_at(req.book, req.sheet, req.row, req.col));
+    case 'style.load': {
+      const body = req.cells.map(([r, c, st]) => `${r}\t${c}\t${escape(st)}`).join('\n');
+      return withStrings(x, [body], ([p, l]) => ok(x.fc_load_styles(req.book, req.sheet, p, l), 'The engine refused those styles.'));
     }
     case 'name.define':
       return withStrings(x, [req.name, req.refers], ([n, nl, r, rl]) => {

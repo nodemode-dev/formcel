@@ -1,6 +1,6 @@
-import type { Cell, Changed, Dir, Edit, Effect, Name, RequestBody, Response, Shift, Value } from './protocol';
+import type { Cell, Changed, Dir, Edit, Effect, Name, RequestBody, Response, Shift, StyleOp, Value } from './protocol';
 
-export type { Cell, Changed, Dir, Edit, Effect, FormatChange, Name, Shift } from './protocol';
+export type { Cell, Changed, Dir, Edit, Effect, FormatChange, Name, Shift, StyleOp } from './protocol';
 
 type Pending = { resolve: (v: Value) => void; reject: (e: Error) => void };
 
@@ -94,6 +94,22 @@ export class EngineClient {
 
   async loadFormats(book: number, sheet: number, cells: Edit[]): Promise<void> {
     if (cells.length) await this.call({ op: 'format.load', book, sheet, cells });
+  }
+
+  async setStyles(book: number, sheet: number, ops: StyleOp[]): Promise<Effect> {
+    return (await this.call({ op: 'style.set', book, sheet, ops })) as Effect;
+  }
+
+  async readStyles(book: number, sheet: number, r0: number, c0: number, r1: number, c1: number): Promise<Edit[]> {
+    return (await this.call({ op: 'style.read', book, sheet, r0, c0, r1, c1 })) as Edit[];
+  }
+
+  async styleAt(book: number, sheet: number, row: number, col: number): Promise<string> {
+    return (await this.call({ op: 'style.at', book, sheet, row, col })) as string;
+  }
+
+  async loadStyles(book: number, sheet: number, cells: Edit[]): Promise<void> {
+    if (cells.length) await this.call({ op: 'style.load', book, sheet, cells });
   }
 
   async defineName(book: number, name: string, refers: string): Promise<Changed[]> {

@@ -1,4 +1,7 @@
-import type { Cell, Changed, Dir, Effect, EngineClient, FormatChange, Shift } from '../engine';
+import type { Cell, Changed, Dir, Effect, EngineClient, FormatChange, Shift, StyleOp } from '../engine';
+import { light, parseStyle, PLAIN, type CellStyle } from './style';
+
+export type BorderKind = 'all' | 'outside' | 'inside' | 'top' | 'bottom' | 'left' | 'right' | 'none';
 import { Axis, type AxisState } from './axis';
 import { MAX_COLS, MAX_ROWS, a1, colName, parseRef, rangeText, type Range } from './a1';
 import { fillSeries } from './fill';
@@ -46,6 +49,7 @@ export interface GridEvents {
   onSheet(sheet: number): SheetView;
   onShift(shift: Shift): void;
   onFormats(formats: FormatChange[]): void;
+  onStyles(styles: FormatChange[]): void;
   onView(sheet: number, view: SheetView): void;
   onMenu(kind: MenuKind, x: number, y: number): void;
   onGoto(): void;
@@ -66,6 +70,8 @@ export class Grid {
   private readonly cache = new Map<number, string>();
   private readonly fx = new Map<number, string>();
   private readonly nums = new Set<number>();
+  private readonly colors = new Map<number, string>();
+  private readonly styles = new Map<number, CellStyle>();
   private wins: (Range | null)[] = [null, null, null, null];
   private pendingWins: (Range | null)[] = [null, null, null, null];
   private sh = 0;
@@ -246,6 +252,8 @@ export class Grid {
     this.cache.clear();
     this.fx.clear();
     this.nums.clear();
+    this.colors.clear();
+    this.styles.clear();
     this.wins = [null, null, null, null];
     this.pendingWins = [null, null, null, null];
   }
@@ -265,37 +273,37 @@ export class Grid {
     this.pendingWins[slot] = want;
     const book = this.book;
     const sheet = this.sheet;
-    void this.engine.read(book, want.r0, want.c0, want.r1, want.c1, sheet).then((cells: Cell[]) => {
+    void Promise.all([
+      this.engine.read(book, want.r0, want.c0, want.r1, want.c1, sheet),
+      this.engine.readStyles(book, sheet, want.r0, want.c0, want.r1, want.c1),
+    ]).then(([cells, sts]: [Cell[], [number, number, string][]]) => {
       if (this.pendingWins[slot] !== want || this.book !== book || this.sheet !== sheet) return;
       this.pendingWins[slot] = null;
       const old = this.wins[slot];
       this.wins[slot] = want;
       if (old) {
         const keep = (r: number, c: number) => this.wins.some((w) => !!w && r >= w.r0 && r <= w.r1 && c >= w.c0 && c <= w.c1);
-        for (const k of [...this.cache.keys()]) {
+        for (const k of [...this.cache.keys(), ...this.styles.keys()]) {
           const r = Math.floor(k / MAX_COLS);
           const c = k % MAX_COLS;
           if (r >= old.r0 && r <= old.r1 && c >= old.c0 && c <= old.c1 && !keep(r, c)) {
-            this.cache.delete(k);
-            this.fx.delete(k);
-            this.nums.delete(k);
+            this.forget(k);
+            this.styles.delete(k);
           }
         }
       }
       for (const k of [...this.cache.keys()]) {
         const r = Math.floor(k / MAX_COLS);
         const c = k % MAX_COLS;
-        if (r >= want.r0 && r <= want.r1 && c >= want.c0 && c <= want.c1) {
-          this.cache.delete(k);
-          this.fx.delete(k);
-          this.nums.delete(k);
-        }
+        if (r >= want.r0 && r <= want.r1 && c >= want.c0 && c <= want.c1) this.forget(k);
       }
-      for (const [r, c, t, f, n] of cells) {
-        this.cache.set(KEY(r, c), t);
-        if (f !== undefined) this.fx.set(KEY(r, c), f);
-        if (n) this.nums.add(KEY(r, c));
+      for (const k of [...this.styles.keys()]) {
+        const r = Math.floor(k / MAX_COLS);
+        const c = k % MAX_COLS;
+        if (r >= want.r0 && r <= want.r1 && c >= want.c0 && c <= want.c1) this.styles.delete(k);
       }
+      for (const [r, c, t, f, n, col] of cells) this.store(KEY(r, c), t, f, n, col);
+      for (const [r, c, st] of sts) this.styles.set(KEY(r, c), parseStyle(st));
       if (!this.editing && this.ar >= want.r0 && this.ar <= want.r1 && this.ac >= want.c0 && this.ac <= want.c1) this.announce();
       this.paint();
     });
@@ -538,35 +546,107 @@ export class Grid {
       ctx.lineTo(xx, this.y(r1 + 1));
     }
     ctx.stroke();
-    ctx.fillStyle = pal.fg;
+    const auto = (c: string) => (c === '#000000' ? pal.fg : c);
+    if (this.styles.size) {
+      for (let r = r0; r <= r1; r++) {
+        const rh = this.rows.size(r);
+        if (!rh) continue;
+        for (let c = c0; c <= c1; c++) {
+          const bg = this.styles.get(KEY(r, c))?.bg;
+          const cw = this.cols.size(c);
+          if (!bg || !cw) continue;
+          ctx.fillStyle = bg;
+          ctx.fillRect(Math.round(this.x(c)) + 1, Math.round(this.y(r)) + 1, Math.round(this.x(c) + cw) - Math.round(this.x(c)) - 1, Math.round(this.y(r) + rh) - Math.round(this.y(r)) - 1);
+        }
+      }
+    }
+    ctx.textBaseline = 'alphabetic';
+    const ca = Math.max(0, c0 - OVERFLOW_COLS);
+    const cb = Math.min(MAX_COLS - 1, c1 + OVERFLOW_COLS);
     for (let r = r0; r <= r1; r++) {
       const yy = this.y(r);
       const rh = this.rows.size(r);
       if (!rh) continue;
-      for (let c = c0; c <= c1; c++) {
-        const t = this.cache.get(KEY(r, c));
+      for (let c = ca; c <= cb; c++) {
+        const k = KEY(r, c);
+        const t = this.cache.get(k);
         if (!t) continue;
-        const xx = this.x(c);
         const cw = this.cols.size(c);
         if (!cw) continue;
-        const text = t.split('\n', 1)[0];
+        const st = this.styles.get(k) ?? PLAIN;
+        const px = st.size ? Math.round(st.size * 13.333) / 10 : 13;
+        ctx.font = `${st.i ? 'italic ' : ''}${st.b ? '700 ' : ''}${px}px ${st.font ? `"${st.font}", ` : ''}Inter, system-ui, -apple-system, "Segoe UI", sans-serif`;
+        const num = this.nums.has(k);
+        const ha = st.ha ?? (num ? 'right' : t === 'TRUE' || t === 'FALSE' || ERRORS.has(t) ? 'center' : 'left');
+        const pad = 5 + st.indent * INDENT_PX;
+        const lines = st.wrap ? wrapLines(ctx, t, cw - 10) : [t.split('\n', 1)[0]];
+        let left = this.x(c);
+        let right = left + cw;
+        if (!st.wrap && !num) {
+          const need = ctx.measureText(lines[0]).width + pad + 5;
+          const empty = (cc: number) => cc >= 0 && cc < MAX_COLS && !this.cache.has(KEY(r, cc));
+          for (let cc = c + 1; ha !== 'right' && right - left < need && empty(cc) && cc <= c + OVERFLOW_COLS; cc++) right += this.cols.size(cc);
+          for (let cc = c - 1; ha !== 'left' && right - left < need && empty(cc) && cc >= c - OVERFLOW_COLS; cc--) left -= this.cols.size(cc);
+        }
+        if ((c < c0 || c > c1) && right - left <= cw) continue;
+        const lh = Math.round(px * 1.3);
+        const va = st.va ?? 'bottom';
+        const block = lh * lines.length;
+        let base = va === 'top' ? yy + lh - 4 : va === 'middle' ? yy + (rh - block) / 2 + lh - 4 : yy + rh - block + lh - 5;
         ctx.save();
         ctx.beginPath();
-        ctx.rect(xx + 1, yy, cw - 2, rh);
+        ctx.rect(left + 1, yy, right - left - 2, rh);
         ctx.clip();
-        if (this.nums.has(KEY(r, c))) {
-          ctx.textAlign = 'right';
-          ctx.fillText(text, xx + cw - 5, yy + rh / 2);
-        } else if (text === 'TRUE' || text === 'FALSE' || ERRORS.has(text)) {
-          ctx.textAlign = 'center';
-          ctx.fillText(text, xx + cw / 2, yy + rh / 2);
-        } else {
-          ctx.textAlign = 'left';
-          ctx.fillText(text, xx + 5, yy + rh / 2);
+        ctx.fillStyle = st.fc ? auto(st.fc) : this.colors.get(k) ?? (st.bg ? (light(st.bg) ? '#1a1a1a' : '#f5f5f5') : pal.fg);
+        ctx.textAlign = ha;
+        const tx = ha === 'right' ? right - pad : ha === 'center' ? (left + right) / 2 : left + pad;
+        for (const ln of lines) {
+          ctx.fillText(ln, tx, base);
+          if (st.u || st.s) {
+            const w = ctx.measureText(ln).width;
+            const x0 = ha === 'right' ? tx - w : ha === 'center' ? tx - w / 2 : tx;
+            if (st.u) ctx.fillRect(x0, base + 2, w, Math.max(1, px / 13));
+            if (st.s) ctx.fillRect(x0, base - px * 0.3, w, Math.max(1, px / 13));
+          }
+          base += lh;
         }
         ctx.restore();
       }
     }
+    ctx.textBaseline = 'middle';
+    ctx.font = '13px Inter, system-ui, -apple-system, "Segoe UI", sans-serif';
+    if (!this.styles.size) return;
+    for (let r = r0; r <= r1; r++) {
+      const rh = this.rows.size(r);
+      if (!rh) continue;
+      for (let c = c0; c <= c1; c++) {
+        const st = this.styles.get(KEY(r, c));
+        const cw = this.cols.size(c);
+        if (!st || !cw || st.borders.every((b) => !b)) continue;
+        const x0 = Math.round(this.x(c)) + 0.5;
+        const y0 = Math.round(this.y(r)) + 0.5;
+        const x1 = Math.round(this.x(c) + cw) + 0.5;
+        const y1 = Math.round(this.y(r) + rh) + 0.5;
+        const ends: [number, number, number, number][] = [[x0, y0, x1, y0], [x1, y0, x1, y1], [x0, y1, x1, y1], [x0, y0, x0, y1]];
+        st.borders.forEach((b, i) => {
+          if (b) this.edge(ends[i], b.line, auto(b.color), i % 2 === 0);
+        });
+      }
+    }
+    ctx.setLineDash([]);
+  }
+
+  private edge([ax, ay, bx, by]: [number, number, number, number], line: string, color: string, flat: boolean): void {
+    const ctx = this.ctx;
+    ctx.strokeStyle = color;
+    ctx.lineWidth = line === 'medium' ? 2 : line === 'thick' ? 3 : 1;
+    ctx.setLineDash(line === 'dashed' ? [4, 2] : line === 'dotted' ? [1, 2] : []);
+    if (line === 'double') {
+      const dx = flat ? 0 : 1.5;
+      const dy = flat ? 1.5 : 0;
+      this.line(ax - dx, ay - dy, bx - dx, by - dy);
+      this.line(ax + dx, ay + dy, bx + dx, by + dy);
+    } else this.line(ax, ay, bx, by);
   }
 
   private sel(): Range {
@@ -864,25 +944,90 @@ export class Grid {
 
   patch(changed: Changed[]): void {
     let hit = false;
-    for (const [s, r, c, t, f, n] of changed) {
+    for (const [s, r, c, t, f, n, col] of changed) {
       if (s !== this.sheet) continue;
       const k = KEY(r, c);
-      if (this.cache.get(k) === t && this.fx.get(k) === f && this.nums.has(k) === !!n) continue;
+      if (this.cache.get(k) === t && this.fx.get(k) === f && this.nums.has(k) === !!n && this.colors.get(k) === col) continue;
       hit = true;
-      this.store(k, t, f, n);
+      this.store(k, t, f, n, col);
     }
     if (!hit) return;
     this.announce();
     this.paint();
   }
 
-  private store(k: number, t: string, f: string | undefined, n: boolean | undefined): void {
+  private store(k: number, t: string, f: string | undefined, n: boolean | undefined, color?: string): void {
     if (t || f !== undefined) this.cache.set(k, t);
     else this.cache.delete(k);
     if (f !== undefined) this.fx.set(k, f);
     else this.fx.delete(k);
     if (n) this.nums.add(k);
     else this.nums.delete(k);
+    if (color) this.colors.set(k, color);
+    else this.colors.delete(k);
+  }
+
+  private forget(k: number): void {
+    this.cache.delete(k);
+    this.fx.delete(k);
+    this.nums.delete(k);
+    this.colors.delete(k);
+  }
+
+  activeStyle(): CellStyle {
+    return this.styles.get(KEY(this.ar, this.ac)) ?? PLAIN;
+  }
+
+  async styleSelection(patch: string): Promise<void> {
+    const s = this.sel();
+    await this.setStyles([[s.r0, s.c0, s.r1, s.c1, patch]]);
+  }
+
+  async setStyles(ops: StyleOp[]): Promise<void> {
+    if (this.book < 0 || !ops.length) return;
+    await this.applyEffect(await this.engine.setStyles(this.book, this.sheet, ops));
+  }
+
+  async toggle(flag: 'b' | 'i' | 'u' | 's' | 'wrap'): Promise<void> {
+    await this.styleSelection(this.activeStyle()[flag] ? `!${flag}` : flag);
+  }
+
+  async borders(kind: BorderKind, line = 'thin', color = '000000'): Promise<void> {
+    const s = this.sel();
+    const b = (edges: string[]) => edges.map((e) => `${e}:${line}:${color}`).join(';');
+    const ops: StyleOp[] = [];
+    const add = (r0: number, c0: number, r1: number, c1: number, p: string) => {
+      if (r0 <= r1 && c0 <= c1) ops.push([r0, c0, r1, c1, p]);
+    };
+    if (kind === 'none') add(s.r0, s.c0, s.r1, s.c1, 'bt:;br:;bb:;bl:');
+    if (kind === 'all') add(s.r0, s.c0, s.r1, s.c1, b(['bt', 'br', 'bb', 'bl']));
+    if (kind === 'inside') {
+      add(s.r0, s.c0, s.r1 - 1, s.c1, b(['bb']));
+      add(s.r0, s.c0, s.r1, s.c1 - 1, b(['br']));
+    }
+    if (kind === 'top' || kind === 'outside') add(s.r0, s.c0, s.r0, s.c1, b(['bt']));
+    if (kind === 'bottom' || kind === 'outside') add(s.r1, s.c0, s.r1, s.c1, b(['bb']));
+    if (kind === 'left' || kind === 'outside') add(s.r0, s.c0, s.r1, s.c0, b(['bl']));
+    if (kind === 'right' || kind === 'outside') add(s.r0, s.c1, s.r1, s.c1, b(['br']));
+    await this.setStyles(ops);
+  }
+
+  private applyStyles(changes: FormatChange[]): void {
+    let hit = false;
+    const rows = new Set<number>();
+    for (const [sh, r, c, text] of changes) {
+      if (sh !== this.sheet) continue;
+      hit = true;
+      const before = this.styles.get(KEY(r, c));
+      const after = text ? parseStyle(text) : null;
+      if (after) this.styles.set(KEY(r, c), after);
+      else this.styles.delete(KEY(r, c));
+      if (before?.wrap !== after?.wrap || before?.size !== after?.size) rows.add(r);
+    }
+    if (!hit) return;
+    this.fitRows(rows);
+    this.announce();
+    this.paint();
   }
 
   async setFormat(code: string): Promise<void> {
@@ -899,9 +1044,14 @@ export class Grid {
     if (changed.length && changed.every(([s]) => s !== this.sheet)) {
       this.show(this.book, changed[0][0], this.events.onSheet(changed[0][0]));
     }
-    for (const [s, r, c, t, f, n] of changed) {
-      if (s === this.sheet) this.store(KEY(r, c), t, f, n);
+    const fit = new Set<number>();
+    for (const [s, r, c, t, f, n, col] of changed) {
+      if (s !== this.sheet) continue;
+      this.store(KEY(r, c), t, f, n, col);
+      const st = this.styles.get(KEY(r, c));
+      if (st && (st.wrap || st.size)) fit.add(r);
     }
+    this.fitRows(fit);
     if (changed.length) this.events.onChanged(changed);
     const hst = await this.engine.history(this.book);
     this.events.onHistory(hst.undo, hst.redo);
@@ -937,6 +1087,10 @@ export class Grid {
   private async applyEffect(e: Effect): Promise<void> {
     if (e.shift) this.afterShift(e.shift);
     if (e.formats.length) this.events.onFormats(e.formats);
+    if (e.styles.length) {
+      this.applyStyles(e.styles);
+      this.events.onStyles(e.styles);
+    }
     await this.commitEdits(e.changes);
   }
 
@@ -1152,6 +1306,30 @@ export class Grid {
     const rows = grid.length;
     const cols = Math.max(...grid.map((r) => r.length));
     this.select(this.ar, this.ac, this.ar + rows - 1, this.ac + cols - 1);
+  }
+
+  private fitRows(rows: Set<number>): void {
+    if (!rows.size || rows.size > 2000) return;
+    const want = new Map<number, number>();
+    for (const [k, st] of this.styles) {
+      const r = Math.floor(k / MAX_COLS);
+      if (!rows.has(r) || (!st.wrap && !st.size)) continue;
+      const t = this.cache.get(k) ?? '';
+      const px = st.size ? Math.round(st.size * 13.333) / 10 : 13;
+      this.ctx.font = `${st.i ? 'italic ' : ''}${st.b ? '700 ' : ''}${px}px ${st.font ? `"${st.font}", ` : ''}Inter, system-ui, sans-serif`;
+      const n = st.wrap && t ? wrapLines(this.ctx, t, this.cols.size(k % MAX_COLS) - 10).length : 1;
+      want.set(r, Math.max(want.get(r) ?? 0, n * Math.round(px * 1.3) + 8));
+    }
+    let moved = false;
+    for (const r of rows) {
+      const h = Math.min(400, Math.max(this.rows.base, want.get(r) ?? 0));
+      if (this.rows.isHidden(r) || this.rows.size(r) === h) continue;
+      this.rows.setSize(r, h);
+      moved = true;
+    }
+    if (!moved) return;
+    this.emitView();
+    this.paint();
   }
 
   private async autofit(col: number): Promise<void> {
@@ -1517,6 +1695,9 @@ export class Grid {
     if (mod) {
       const k = e.key.toLowerCase();
       if (k === '+' || k === '=') return this.insertAuto();
+      if (e.shiftKey && e.code === 'Minus') return this.borders('none');
+      if (e.shiftKey && e.code === 'Digit7') return this.borders('outside');
+      if (!e.shiftKey && e.code in TOGGLE_KEYS) return this.toggle(TOGGLE_KEYS[e.code]);
       if (k === '-' || k === '_') return this.removeAuto();
       if (e.code === 'Digit9') return this.hide(true, !e.shiftKey);
       if (e.code === 'Digit0') return this.hide(false, !e.shiftKey);
@@ -1568,6 +1749,27 @@ export class Grid {
 
 const ARROWS: Record<string, Dir> = { ArrowUp: 'up', ArrowDown: 'down', ArrowLeft: 'left', ArrowRight: 'right' };
 
+const TOGGLE_KEYS: Record<string, 'b' | 'i' | 'u' | 's'> = { KeyB: 'b', Digit2: 'b', KeyI: 'i', Digit3: 'i', KeyU: 'u', Digit4: 'u', Digit5: 's' };
+const OVERFLOW_COLS = 8;
+const INDENT_PX = 10;
+
+function wrapLines(ctx: CanvasRenderingContext2D, text: string, width: number): string[] {
+  const out: string[] = [];
+  for (const para of text.split('\n')) {
+    let cur = '';
+    for (const word of para.split(' ')) {
+      const next = cur ? `${cur} ${word}` : word;
+      if (!cur || ctx.measureText(next).width <= width) cur = next;
+      else {
+        out.push(cur);
+        cur = word;
+      }
+    }
+    out.push(cur);
+  }
+  return out;
+}
+
 export const SHORT_FORMATS: Record<string, string> = {
   Backquote: '',
   Digit1: '#,##0.00',
@@ -1581,7 +1783,7 @@ export const SHORT_FORMATS: Record<string, string> = {
 function wants(e: KeyboardEvent): boolean {
   if (ARROWS[e.key]) return true;
   const mod = e.ctrlKey || e.metaKey;
-  if (mod) return !e.altKey && (['z', 'y', 'a', 'home', 'end', '+', '=', '-', '_', 'g'].includes(e.key.toLowerCase()) || e.code === 'Digit9' || e.code === 'Digit0' || (e.shiftKey && e.code in SHORT_FORMATS));
+  if (mod) return !e.altKey && (['z', 'y', 'a', 'home', 'end', '+', '=', '-', '_', 'g'].includes(e.key.toLowerCase()) || e.code === 'Digit9' || e.code === 'Digit0' || (e.shiftKey && (e.code in SHORT_FORMATS || e.code === 'Digit7')) || (!e.shiftKey && e.code in TOGGLE_KEYS));
   if (['Enter', 'Tab', 'Escape', 'Home', 'PageDown', 'PageUp', 'F2', 'F5', 'Delete', 'Backspace'].includes(e.key)) return true;
   return e.key.length === 1 && !e.altKey;
 }

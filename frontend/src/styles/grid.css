@@ -13,7 +13,26 @@
   padding: var(--space-1) var(--space-2);
   border-bottom: 1px solid var(--border-color);
   background: var(--bg-secondary);
+  overflow-x: auto;
+  scrollbar-width: none;
 }
+
+.fc-toolbar > * { flex: none; }
+.fc-tool[aria-pressed="true"] { background: var(--accent-color-dim); color: var(--text-primary); }
+
+.fc-tool.fc-tool-text {
+  display: inline-flex;
+  justify-content: flex-start;
+  height: var(--icon-box);
+  padding: 0 var(--space-2);
+  font-size: var(--text-sm);
+  white-space: nowrap;
+  overflow: hidden;
+  border: 1px solid var(--border-color);
+}
+
+.fc-tool-font { width: 112px; }
+.fc-tool-size { width: 44px; }
 
 .fc-tool {
   display: inline-grid;
