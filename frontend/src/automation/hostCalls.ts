@@ -2,6 +2,8 @@ import { engine, type Changed } from '../engine';
 
 type Scalar = string | number | boolean | null;
 
+const SERVER = ['PY'];
+
 const esc = (s: string) => s.replace(/\\/g, '\\\\').replace(/\t/g, '\\t').replace(/\n/g, '\\n').replace(/\r/g, '\\r');
 
 export function encodeValue(v: unknown): string {
@@ -52,6 +54,7 @@ export interface CallHooks {
 
 export class HostCalls {
   private names = new Set<string>();
+  private sent = false;
   private running = false;
   private again = false;
 
@@ -61,14 +64,16 @@ export class HostCalls {
     const book = this.h.book();
     if (book < 0) return;
     const up = names.map((n) => n.toUpperCase());
-    if (up.length === this.names.size && up.every((n) => this.names.has(n))) return;
+    if (this.sent && up.length === this.names.size && up.every((n) => this.names.has(n))) return;
     this.names = new Set(up);
-    this.h.patch(await engine().hostCustom(book, up));
+    this.sent = true;
+    this.h.patch(await engine().hostCustom(book, [...up, ...SERVER.filter((s) => !up.includes(s))]));
     await this.drain();
   }
 
   reset(): void {
     this.names = new Set();
+    this.sent = false;
   }
 
   async drain(fresh = false, all = false): Promise<void> {

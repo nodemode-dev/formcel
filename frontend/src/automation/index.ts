@@ -11,6 +11,7 @@ import { AssistantTab } from './tabAssistant';
 import { DataTab } from './tabData';
 import { MoreTab } from './tabMore';
 import { ScriptsTab } from './tabScripts';
+import { strip } from './tsStrip';
 
 export interface AppHooks {
   grid: Grid;
@@ -20,6 +21,19 @@ export interface AppHooks {
   title(): string;
   status(text: string, error?: boolean): void;
   addSheet(name: string): Promise<number>;
+}
+
+function compiled(s: Script): Script {
+  if (!/@customfunction/.test(s.code)) {
+    const rest = { ...s };
+    delete rest.js;
+    return rest;
+  }
+  try {
+    return { ...s, js: strip(s.code) };
+  } catch {
+    return s;
+  }
 }
 
 const TABS: [string, string][] = [['scripts', 'Scripts'], ['assistant', 'Assistant'], ['data', 'Data'], ['more', 'More']];
@@ -151,6 +165,7 @@ export class Automation {
     this.customSoon();
     window.setTimeout(() => {
       for (const s of this.auto.scripts) if (s.triggers?.open) void this.runScript(s.id, { type: 'open' });
+      this.data.openOnOpen();
     }, 600);
   }
 
@@ -209,7 +224,8 @@ export class Automation {
     const id = this.openId;
     this.saveTimer = window.setTimeout(() => {
       if (!id || id !== this.openId) return;
-      const { scripts, queries, buttons, settings } = this.auto;
+      const { queries, buttons, settings } = this.auto;
+      const scripts = this.auto.scripts.map((s) => compiled(s));
       void api('PUT', `/api/workbooks/${id}/automation`, { scripts, queries, buttons, settings }).catch((err: unknown) => this.h.status(err instanceof Error ? err.message : 'Scripts were not saved', true));
     }, 700);
   }

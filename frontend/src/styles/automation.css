@@ -67,6 +67,15 @@ a.fc-btn { text-decoration: none; }
 .fc-ai-input { width: 100%; box-sizing: border-box; }
 .fc-ai-settings { display: grid; gap: var(--space-2); }
 
+.fc-step-tools { display: flex; flex-wrap: wrap; gap: var(--space-1); }
+.fc-webtable { align-items: flex-start; }
+.fc-webtable .fc-qprev { display: block; overflow-x: auto; max-width: 100%; }
+.fc-dbtables { max-height: 160px; overflow-y: auto; }
+.fc-pic { display: grid; gap: var(--space-2); margin-top: var(--space-3); }
+.fc-pic-out { max-height: 220px; overflow: auto; }
+.fc-ai-clean { display: grid; gap: var(--space-1); padding: var(--space-2); border: 1px solid var(--border-light); border-radius: var(--radius); }
+.fc-ai-clean .fc-auto-item { align-items: center; }
+
 .fc-btnlayer { position: fixed; inset: 0; z-index: var(--z-raised); pointer-events: none; }
 .fc-btnlayer[hidden] { display: none; }
 .fc-auto-button { position: fixed; pointer-events: auto; touch-action: none; box-shadow: var(--shadow-md); background: var(--accent-color); border-color: var(--accent-color); color: #fff; cursor: pointer; }

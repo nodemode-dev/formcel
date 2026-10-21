@@ -5,7 +5,7 @@ import { registerCommand } from '../ui/commands';
 import { recommend, readMatrix, rangeLabel } from './data';
 import { ChartEditor } from './editor';
 import { ObjectLayer } from './layer';
-import { blankChart, type ChartSpec, type FloatObject } from './types';
+import { blankChart, CHART_TYPES, type ChartSpec, type ChartType, type FloatObject } from './types';
 
 export interface ChartsHost {
   book(): number;
@@ -37,6 +37,13 @@ export class Charts {
     });
     document.body.appendChild(this.file);
     this.commands();
+    document.addEventListener('fc-ai-chart', (e) => {
+      const d = (e as CustomEvent<{ type: string; range: string; title: string; byRows: boolean }>).detail;
+      if (!this.host.active()) return;
+      const type = (CHART_TYPES.some((t) => t.id === d.type) ? d.type : 'column') as ChartType;
+      const o = this.layer.viewOrigin();
+      this.layer.add({ kind: 'chart', x: o.x, y: o.y, w: 480, h: 300, chart: { ...blankChart(type, d.range.replace(/^.*!/, '')), title: d.title, byRows: d.byRows } });
+    });
   }
 
   private commands(): void {

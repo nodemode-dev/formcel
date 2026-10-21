@@ -392,6 +392,10 @@ export class App {
       load: async () => (this.open ? (await api<{ objects: FloatObject[][] }>('GET', `/api/workbooks/${this.open.id}/objects`)).objects : []),
       save: (sheet, list) => this.sendObjects(sheet, list),
     });
+    document.addEventListener('fc-ai-pivot', (e) => {
+      const d = (e as CustomEvent<{ src: string; layout: string }>).detail;
+      this.pivotCreate(d.src, null, d.layout).catch((err: unknown) => this.status(err instanceof Error ? err.message : 'The PivotTable was not made', true));
+    });
     this.audit = new Audit({
       grid: this.grid,
       engine: engine(),
