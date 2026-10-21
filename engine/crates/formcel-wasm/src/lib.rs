@@ -486,6 +486,73 @@ pub extern "C" fn fc_guess_header(id: u32, sheet: u32, r0: u32, c0: u32, r1: u32
     with_book(id, |wb| i32::from(wb.guess_header(sheet as usize, formcel_core::formula::Area { r0, c0, r1, c1 }))).unwrap_or(0)
 }
 
+/// A sheet's filter as `area`, `col` and `hidden` lines; empty when the sheet has none.
+#[no_mangle]
+pub extern "C" fn fc_filter(id: u32, sheet: u32) -> i32 {
+    match with_book(id, |wb| wb.filter_text(sheet as usize)) {
+        Some(s) => emit(&s) as i32,
+        None => -1,
+    }
+}
+
+/// Sets, changes or (with empty text) removes a sheet's filter as one undo step; -3 when the text does not parse.
+///
+/// # Safety
+/// `t` must point at `len` readable bytes.
+#[no_mangle]
+pub unsafe extern "C" fn fc_set_filter(id: u32, sheet: u32, t: *const u8, len: u32) -> i32 {
+    let t = text(t, len).to_string();
+    effect_or(with_book(id, |wb| wb.set_filter(sheet as usize, &t).map(|e| wb.encode(&e))))
+}
+
+/// Loads a sheet's filter, hidden rows included, without an undo step.
+///
+/// # Safety
+/// `t` must point at `len` readable bytes.
+#[no_mangle]
+pub unsafe extern "C" fn fc_load_filter(id: u32, sheet: u32, t: *const u8, len: u32) -> i32 {
+    let t = text(t, len).to_string();
+    match with_book(id, |wb| wb.load_filter(sheet as usize, &t)) {
+        Some(Ok(b)) => i32::from(b),
+        _ => -1,
+    }
+}
+
+/// Runs the filter again over current values, taking in rows added below it.
+#[no_mangle]
+pub extern "C" fn fc_reapply_filter(id: u32, sheet: u32) -> i32 {
+    effect_or(with_book(id, |wb| wb.reapply_filter(sheet as usize).map(|e| wb.encode(&e))))
+}
+
+/// The list a column's filter offers: `v` lines of shown text, a `b` line when blanks exist, `m` when the list stopped at its limit, then `f` and `t` lines for fill and font colours.
+#[no_mangle]
+pub extern "C" fn fc_filter_values(id: u32, sheet: u32, col: u32) -> i32 {
+    match with_book(id, |wb| (wb.filter_values(sheet as usize, col), wb.filter_colors(sheet as usize, col))) {
+        Some(((values, blanks, more), (fills, fonts))) => {
+            let mut s = String::new();
+            for v in values {
+                s.push_str("v\t");
+                wire::escape(&v, &mut s);
+                s.push('\n');
+            }
+            if blanks {
+                s.push_str("b\n");
+            }
+            if more {
+                s.push_str("m\n");
+            }
+            for f in fills {
+                s.push_str(&format!("f\t{f}\n"));
+            }
+            for f in fonts {
+                s.push_str(&format!("t\t{f}\n"));
+            }
+            emit(&s) as i32
+        }
+        None => -1,
+    }
+}
+
 /// Applies a named style to a rectangle as one undo step.
 ///
 /// # Safety

@@ -269,6 +269,31 @@ impl Workbook {
         self.inner.rule_lines(sheet)
     }
 
+    #[pyo3(signature = (sheet = 0))]
+    fn filter(&self, sheet: usize) -> String {
+        self.inner.filter_text(sheet)
+    }
+
+    #[pyo3(signature = (text, sheet = 0))]
+    fn load_filter(&mut self, text: &str, sheet: usize) -> PyResult<bool> {
+        self.inner.load_filter(sheet, text).map_err(|e| PyValueError::new_err(e.to_string()))
+    }
+
+    #[pyo3(signature = (text, sheet = 0))]
+    fn set_filter(&mut self, text: &str, sheet: usize) -> PyResult<()> {
+        self.inner.set_filter(sheet, text).map(|_| ()).map_err(|e| PyValueError::new_err(e.to_string()))
+    }
+
+    #[pyo3(signature = (sheet = 0))]
+    fn reapply_filter(&mut self, sheet: usize) -> PyResult<()> {
+        self.inner.reapply_filter(sheet).map(|_| ()).map_err(|e| PyValueError::new_err(e.to_string()))
+    }
+
+    #[pyo3(signature = (col, sheet = 0))]
+    fn filter_values(&self, col: u32, sheet: usize) -> (Vec<String>, bool, bool) {
+        self.inner.filter_values(sheet, col)
+    }
+
     #[pyo3(signature = (lines, sheet = 0))]
     fn load_rules(&mut self, lines: Vec<String>, sheet: usize) -> PyResult<usize> {
         self.inner.load_rules(sheet, &lines).map_err(|e| PyValueError::new_err(e.to_string()))

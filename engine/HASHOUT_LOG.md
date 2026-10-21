@@ -421,3 +421,19 @@ ARRAYFORMULA(array_formula) (GS-ARRAYFORMULA) returns its argument. Its job in S
 Order, smallest first: numbers, then text (case blind, unless case sensitive is asked, when a lowercase letter comes before its capital), then FALSE and TRUE, then errors, and blank cells last in both directions. MS-SORT does not state this order; it is the one FormCel's SORT function already uses, with logical values after text, and blanks always last as Excel shows them. A rectangle that holds merged cells is refused (the window says to unmerge first). A whole-column selection is cut to the sheet's used range.
 
 `region` is the block of data around a cell: the rectangle grows while any cell touching its edge, corners included, holds a value. A one-cell selection sorts its region. `guess_header` says the first row is a header when its filled cells are all text and something below it is not, or when it is bold and the next row is not; FormCel's rule, which the custom sort dialog shows as a ticked box that can be changed. Sorting 100,000 rows of five columns by two keys takes about 2.5 seconds in the engine process's build.
+
+### Filters
+- refers-to: src/filter.rs :: Crit, Filter, parse, text, shifted, cond, set_filter, load_filter, reapply_filter, passes, hidden_by, filter_values, filter_colors; src/lib.rs :: Sheet.filter, Tx::Filter, Effect.filter, do_shift; src/wire.rs :: `~` line; crates/formcel-wasm/src/lib.rs :: fc_filter, fc_set_filter, fc_load_filter, fc_reapply_filter, fc_filter_values; crates/formcel-py/src/lib.rs :: filter, load_filter, set_filter, reapply_filter, filter_values
+- kind: explainer
+- logged: v0.31.0 · 2026-10-21
+
+A sheet has at most one filter: a rectangle whose first row holds the filter buttons, a criterion per column, and the rows the filter hides. The hidden rows are worked out when a filter is set or reapplied and kept, not recomputed when values change; MS-FILTER says to reapply a filter after the data changes, and FormCel follows that. Rows a filter hides are kept apart from rows hidden by hand.
+
+Criteria (MS-FILTER: values, Text Filters, Number Filters, Filter by Color; GS-SORT: by values, by condition, by colour):
+- values: keep rows whose shown text (as formatted) is in the list, case blind, and blank rows when Blanks is ticked.
+- cond: one or two conditions joined by And or Or. eq and ne match the shown text with `?`, `*` and `~` wildcards, or a number exactly when both sides are numbers; gt, ge, lt and le compare numbers with numbers and text with text, and never match a blank; begins, ends, contains and their negations are wildcard matches with `*` added.
+- top: the largest or smallest N items or N percent of the numbers in the column, ties kept.
+- avg: numbers above or below the column's mean.
+- fill and font: the cell's fill or text colour as a paint (`ffff00`, `t:accent1:-25`), with conditional formatting colours on top; `none` and `auto` for no fill and automatic text.
+
+The text form is `area\tr0,c0,r1,c1`, then `col\tC\tkind\t...` lines (fields escaped as on the wire), then `hidden\t1,4-9`. The value list for a column comes from the rows the other columns' criteria let through, sorted as Sort sorts, and stops at 10,000 different entries (MS-FILTER: the first 10,000 unique entries); `m` says it stopped. Reapply also takes in rows added directly below the rectangle. Inserting or deleting rows and columns moves the filter, its columns and its hidden rows; deleting the last column with a criterion shows every row. Setting, clearing and reapplying are undo steps. Filtering 100,000 rows on a condition takes about 0.1 seconds.

@@ -5,6 +5,7 @@ use std::fmt;
 pub mod cf;
 pub mod eval;
 pub mod link;
+pub mod filter;
 pub mod formula;
 mod graph;
 pub mod fmtcode;
@@ -197,11 +198,12 @@ pub struct Sheet {
     cells: Store,
     merges: Vec<Area>,
     rules: Vec<cf::Rule>,
+    filter: Option<filter::Filter>,
 }
 
 impl Sheet {
     pub fn new(name: &str) -> Self {
-        Sheet { name: name.to_string(), cells: Store::default(), merges: Vec::new(), rules: Vec::new() }
+        Sheet { name: name.to_string(), cells: Store::default(), merges: Vec::new(), rules: Vec::new(), filter: None }
     }
 
     pub fn len(&self) -> usize {
@@ -294,6 +296,7 @@ struct Lost {
     styles: Vec<(Key, Option<String>, Option<String>)>,
     merges: Vec<Area>,
     rules: Vec<cf::Rule>,
+    filter: Option<filter::Filter>,
     links: Vec<(Key, Option<String>, Option<String>)>,
 }
 
@@ -317,11 +320,13 @@ pub struct Effect {
     pub theme: bool,
     pub named: bool,
     pub rules: Option<usize>,
+    pub filter: Option<usize>,
 }
 
 impl Effect {
     fn join(mut self, o: Effect) -> Effect {
         self.rules = o.rules.or(self.rules);
+        self.filter = o.filter.or(self.filter);
         self.theme |= o.theme;
         self.named |= o.named;
         self.cells.extend(o.cells);
@@ -349,6 +354,7 @@ enum Tx {
     Theme { before: Box<theme::Theme>, after: Box<theme::Theme> },
     Named { before: Vec<theme::NamedStyle>, after: Vec<theme::NamedStyle> },
     Rules { sheet: usize, before: Vec<cf::Rule>, after: Vec<cf::Rule> },
+    Filter { sheet: usize, before: Option<filter::Filter>, after: Option<filter::Filter> },
     Links(Vec<FormatChange>),
 }
 
@@ -1381,7 +1387,7 @@ impl Workbook {
     }
 
     fn do_shift(&mut self, s: Shift) -> (Dropped, Rewritten, Lost) {
-        let mut lost_fmt = Lost { merges: self.sheets[s.sheet].merges.clone(), rules: self.sheets[s.sheet].rules.clone(), ..Lost::default() };
+        let mut lost_fmt = Lost { merges: self.sheets[s.sheet].merges.clone(), rules: self.sheets[s.sheet].rules.clone(), filter: self.sheets[s.sheet].filter.clone(), ..Lost::default() };
         let merges = std::mem::take(&mut self.sheets[s.sheet].merges);
         self.sheets[s.sheet].merges = merges.into_iter().filter_map(|m| shift_area(m, s)).collect();
         let rules = std::mem::take(&mut self.sheets[s.sheet].rules);
@@ -1404,6 +1410,10 @@ impl Workbook {
             }
             Some(if s.rows { Addr { row: n as u32, ..a } } else { Addr { col: n as u32, ..a } })
         };
+        if let Some(f) = self.sheets[s.sheet].filter.take() {
+            let index = |i: u32| moved(if s.rows { Addr { row: i, col: 0 } } else { Addr { row: 0, col: i } }).map(|a| if s.rows { a.row } else { a.col });
+            self.sheets[s.sheet].filter = shift_span(f.area, s).map(|area| f.shifted(area, s.rows, &index));
+        }
         self.unspill_all();
         let lost: HashMap<Addr, String> = self.formulas.iter().filter(|((sh, a), _)| *sh == s.sheet && moved(*a).is_none()).map(|((_, a), f)| (*a, f.text())).collect();
         let target = self.sheets[s.sheet].name.clone();
@@ -1754,6 +1764,10 @@ impl Workbook {
                 self.sheets[*sheet].rules = if forward { after.clone() } else { before.clone() };
                 Effect { rules: Some(*sheet), ..Effect::default() }
             }
+            Tx::Filter { sheet, before, after } => {
+                self.sheets[*sheet].filter = if forward { after.clone() } else { before.clone() };
+                Effect { filter: Some(*sheet), ..Effect::default() }
+            }
             Tx::Theme { before, after } => {
                 self.theme = if forward { (**after).clone() } else { (**before).clone() };
                 Effect { theme: true, ..Effect::default() }
@@ -1787,6 +1801,7 @@ impl Workbook {
                 self.do_shift(back);
                 self.sheets[shift.sheet].merges = lost.merges.clone();
                 self.sheets[shift.sheet].rules = lost.rules.clone();
+                self.sheets[shift.sheet].filter = lost.filter.clone();
                 self.apply_links(&lost.links, false);
                 let restored = self.apply_formats(&lost.codes, false).join(self.apply_styles(&lost.styles, false));
                 for (s, a, raw) in rewritten {
@@ -1797,7 +1812,7 @@ impl Workbook {
                 }
                 self.recalc_all();
                 let cells = dropped.iter().map(|(a, _)| (shift.sheet, *a, self.sheets[shift.sheet].cells.get(*a).cloned().unwrap_or(Value::Empty))).collect();
-                Effect { cells, shift: Some(back), merges: Some(shift.sheet), rules: Some(shift.sheet), formats: restored.formats, styles: restored.styles, ..Effect::default() }
+                Effect { cells, shift: Some(back), merges: Some(shift.sheet), rules: Some(shift.sheet), filter: Some(shift.sheet), formats: restored.formats, styles: restored.styles, ..Effect::default() }
             }
         }
     }

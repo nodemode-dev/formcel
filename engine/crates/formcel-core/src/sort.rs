@@ -18,7 +18,7 @@ fn rank(v: &Value) -> u8 {
     }
 }
 
-fn order(a: &Value, b: &Value, descending: bool, case: bool) -> Ordering {
+pub(crate) fn order(a: &Value, b: &Value, descending: bool, case: bool) -> Ordering {
     let (ra, rb) = (rank(a), rank(b));
     if ra == 4 || rb == 4 {
         return ra.cmp(&rb);
