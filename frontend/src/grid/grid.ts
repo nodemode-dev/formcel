@@ -1,5 +1,5 @@
 import type { Area, Cell, Changed, Dir, Effect, EngineClient, FormatChange, FormatItem, LinkChange, MergeMode, Shift, StyleChange, StyleOp } from '../engine';
-import { light, parseStyle, PLAIN, themeOf, type CellStyle, type Look } from './style';
+import { light, parseStyle, PLAIN, themeOf, tint, type CellStyle, type Look } from './style';
 
 interface Mark {
   style?: CellStyle;
@@ -707,7 +707,9 @@ export class Grid {
     const mark = this.cfs.get(k);
     const pad = 5 + st.indent * INDENT_PX + (mark?.icon && ha === 'left' ? 16 : 0);
     const lh = Math.round(px * 1.3);
-    const auto = (c: string) => (c === '#000000' ? pal.fg : c);
+    const dark = /^#[0-9a-f]{6}$/i.test(pal.bg) && !light(pal.bg);
+    const peak = (c: string) => Math.max(...[1, 3, 5].map((i) => parseInt(c.slice(i, i + 2), 16)));
+    const auto = (c: string) => (c === '#000000' ? pal.fg : !st.bg && /^#[0-9a-f]{6}$/i.test(c) && (dark ? peak(c) < 128 : light(c)) ? tint(c, dark ? 60 : -60) : c);
     ctx.save();
     ctx.beginPath();
     ctx.rect(left + 1, yy, right - left - 2, rh);

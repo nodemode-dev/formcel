@@ -372,3 +372,10 @@ The grid asks the engine what rules paint in each data window it reads and again
 - logged: v0.23.0 · 2026-10-21
 
 Linked cells paint in the `--cell-link` colour and underlined, unless the cell has its own text colour (MS-HYPERLINK: the friendly name is shown blue and underlined). A plain click selects a linked cell; Ctrl+click (Cmd+click) opens it, and selecting one shows a small chip under the cell with the target and Open, Edit and Remove. This is FormCel's choice between Excel desktop's click-to-open and Excel for the web's pointer rule (MS-HYPERLINK remarks), so selecting never navigates by accident. The chip and the link box are built once in the overlay root and only shown, moved and hidden; the chip hides on scroll. Ctrl+K opens the link box (MS-LINKS, GS-LINKS); on a HYPERLINK cell it says to edit the formula instead, as MS-LINKS does. Web links open in a new tab without an opener; `#` links switch sheet if needed and select the cell or name.
+
+### Dark text on the dark grid
+- refers-to: src/grid/grid.ts :: cellText
+- kind: explainer
+- logged: v0.24.0 · 2026-10-21
+
+Styles made for a white sheet set dark text colours, for example the headings and Title use the theme's dark 2. On the dark grid such text was unreadable. A cell with no fill whose text colour is dark (no channel above 127) on a dark grid, or light on a light grid, is painted 60 percent toward the other end; black still paints as the grid's text colour. Text on a fill keeps its colour, since the fill is what it was chosen against. The stored colour does not change.
