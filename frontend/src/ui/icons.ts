@@ -20,6 +20,7 @@ export const icons = {
   freezeCol: svg('<rect x="3.5" y="4.5" width="17" height="15" rx="2"/><path d="M9 4.5v15" stroke-width="3"/>'),
   freezePanes: svg('<rect x="3.5" y="4.5" width="17" height="15" rx="2"/><path d="M3.5 10h17M10 4.5v15" stroke-width="3"/>'),
   unfreeze: svg('<rect x="3.5" y="4.5" width="17" height="15" rx="2"/><path d="M3.5 10h17M10 4.5v15" stroke-dasharray="2 2.5"/>'),
+  split: svg('<rect x="3.5" y="4.5" width="17" height="15" rx="2"/><path d="M3.5 12h17M12 4.5v15"/><path d="M12 9.5v5M9.5 12h5" stroke-width="3"/>'),
 } as const;
 
 export type IconName = keyof typeof icons;

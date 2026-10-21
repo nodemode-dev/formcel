@@ -121,7 +121,7 @@ Alignment is guessed from the display text (numbers right, TRUE and FALSE centre
 - kind: todo
 - logged: v0.2.0 · 2026-10-21
 
-Text overflow into empty neighbours, wrapped display and row autofit (Phase 3); split panes (later in Phase 1); touch input. Done in v0.5.0: grouping and outlines. Done in v0.4.0: the fill handle, insert and delete shifting cells, hide and unhide, zoom, Go To (F5 and Ctrl+G focus the Name Box, as Excel's Go To box does for a reference).
+Text overflow into empty neighbours, wrapped display and row autofit (Phase 3); touch input; saving each pane's scroll position with the view. Done in v0.5.0: grouping and outlines. Done in v0.6.0: split panes. Done in v0.4.0: the fill handle, insert and delete shifting cells, hide and unhide, zoom, Go To (F5 and Ctrl+G focus the Name Box, as Excel's Go To box does for a reference).
 
 ### Zoom
 - refers-to: src/grid/grid.ts :: Grid.setZoom, local, placeEditor
@@ -159,6 +159,22 @@ axis.ts was replaced whole with the Write tool in v0.4.0 rather than edited regi
 Each axis keeps an outline level per row or column (1 to 7, `MAX_LEVEL`) and, per summary row, a bit for each level that is collapsed. Microsoft's outline page (MS-OUTLINE in the research kit) allows "an outline of up to eight levels"; FormCel reads that as 8 level buttons, the first showing only ungrouped rows, which leaves 7 nested groups. If Excel turns out to nest 8 groups, raise `MAX_LEVEL`. A group is a run of neighbours at a level or deeper; its button sits on the row below the run (or the column to its right), because "by default, Excel looks for summary rows below the details they summarize" (same page). Summary rows above detail are not offered yet. Collapsing hides the run through the same hidden set as Ctrl+9, so arrow keys, paint and saving need nothing new; expanding shows the run again except rows inside an inner group that is still collapsed. The level buttons show every row whose level is below the number pressed. Levels and collapsed bits move with inserted and deleted rows (`Axis.shift`) and are saved in the sheet view as `levels` and `folded`.
 
 The gutters are a second canvas (`.fc-outline`) behind the grid canvas, which is moved right and down by the gutter sizes; all cell and header maths keep their header-relative coordinates. A gutter appears when the first group is made and goes when the last is removed, as Excel's outline symbols do; on open the grid is laid out with its gutters before the first frame (checked at 4x CPU and a slow network: one canvas position seen, layout shift 0). Grouping is a view change, like hiding, and is not on the undo stack yet.
+
+### Split panes
+- refers-to: src/grid/grid.ts :: toggleSplit, y, x, hit, reveal, bands, splitBar
+- kind: explainer
+- logged: v0.6.0 · 2026-10-21
+
+A split keeps two scroll positions per axis: `syT` and `sy` for the top and bottom panes, `sxL` and `sx` for the left and right. Panes in the same row share a vertical scroll and panes in the same column share a horizontal one. `y(r, pane)` and `x(c, pane)` take the pane, because under a split one row can be on screen twice; painting sets the pane for each band it draws, and everything else uses the active pane (the one last clicked), which is where keys move, `reveal` scrolls and the cell editor opens. The wheel scrolls the pane under the pointer.
+
+Splitting at the active cell puts the bars above and left of it, at its current screen position, and moves no cell on screen (the bottom pane's scroll is set to the old scroll plus the split height); Microsoft's split page (MS-SPLIT in the research kit) describes the same rule: select the cell below and to the right of where the split goes, and select Split again to remove it. At A1, or with the active cell off screen, the split goes through the middle of the sheet; that case is FormCel's choice, not checked against Excel. Dragging a bar moves it; double-clicking removes it; removing keeps the top-left pane's position. Split and freeze turn each other off. The split sizes are saved in the view (`split`, `null` when off: the engine process merges a view PATCH into what it holds, so a field left out would never be cleared); the panes' scroll positions are not saved, like the unsplit scroll.
+
+### One cache window per pane
+- refers-to: src/grid/grid.ts :: ensureData, dropWindows, wins
+- kind: rationale
+- logged: v0.6.0 · 2026-10-21
+
+The viewport cache read one window around the visible cells and cleared everything else on each read. With panes on rows 1 to 10 and 900,000 onwards, one window would have to cover both. There are now up to four windows, one per pane (frozen bands count as panes, which replaces the old stretch of the window up to row 1); a new read for a pane drops only the cells of that pane's old window that no other window covers. When a read lands that covers the active cell, the Name Box and formula bar are refreshed: before, a jump to a cell outside the cache showed an empty formula bar until the next move (found by the Phase 1 exit check: A5000 read blank after reopening, though the cell held 5000). Measured with 1,000,000 filled rows at 4x CPU: p95 frame 16.7 ms unsplit and split, max 33.3 and 16.8 ms.
 
 ### Pointer input joins the key queue
 - refers-to: src/grid/grid.ts :: bind (pointerdown, pointermove, outline pointerdown)

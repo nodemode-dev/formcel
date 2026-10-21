@@ -97,6 +97,7 @@ export class App {
     cmd('view.freeze-first-column', 'Freeze first column', 'Keep column A visible while scrolling.', false, () => g.freeze(0, 1));
     cmd('view.freeze-panes', 'Freeze panes', 'Keep the rows above and the columns left of the active cell visible.', false, () => g.freezeAtActive());
     cmd('view.unfreeze', 'Unfreeze panes', 'Scroll every row and column again.', false, () => g.freeze(0, 0));
+    cmd('view.split', 'Split panes', 'Split the sheet above and left of the active cell into panes that scroll on their own, or remove the split. Drag a split bar to move it, double-click it to remove it.', false, () => g.toggleSplit());
     cmd('file.home', 'Home', 'Save and go to the home screen.', false, () => { location.hash = ''; });
     cmd('file.new', 'New blank workbook', 'Create an empty workbook and open it.', true, () => this.create());
     cmd('sheet.add', 'Add a sheet', 'Add a sheet after the last one and show it.', true, () => this.addSheet());

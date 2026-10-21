@@ -38,7 +38,7 @@ export function mountShell(root: HTMLElement): ShellParts {
       <div class="fc-toolbar" role="toolbar" aria-label="Sheet">
         ${tool('edit.undo', 'undo', 'Undo (Ctrl+Z)')}${tool('edit.redo', 'redo', 'Redo (Ctrl+Y)')}
         <span class="fc-tool-sep" aria-hidden="true"></span>
-        ${tool('view.freeze-top-row', 'freezeRow', 'Freeze top row')}${tool('view.freeze-first-column', 'freezeCol', 'Freeze first column')}${tool('view.freeze-panes', 'freezePanes', 'Freeze panes above and left of the active cell')}${tool('view.unfreeze', 'unfreeze', 'Unfreeze panes')}
+        ${tool('view.freeze-top-row', 'freezeRow', 'Freeze top row')}${tool('view.freeze-first-column', 'freezeCol', 'Freeze first column')}${tool('view.freeze-panes', 'freezePanes', 'Freeze panes above and left of the active cell')}${tool('view.unfreeze', 'unfreeze', 'Unfreeze panes')}${tool('view.split', 'split', 'Split into panes at the active cell')}
       </div>
       <div class="fc-formula">
         <input class="fc-namebox" aria-label="Name Box" spellcheck="false" autocomplete="off">
