@@ -135,6 +135,23 @@ impl Workbook {
         self.inner.names()
     }
 
+    fn name_tool(&mut self, op: &str, args: &str) -> String {
+        self.inner.name_tool_wire(op, args)
+    }
+
+    fn set_name_comment(&mut self, name: &str, comment: &str) -> PyResult<()> {
+        self.inner.set_name_comment(name, comment).map_err(|e| PyValueError::new_err(e.to_string()))
+    }
+
+    fn name_notes(&self) -> Vec<(String, String)> {
+        self.inner.name_notes()
+    }
+
+    #[pyo3(signature = (folder, name))]
+    fn set_file_name(&mut self, folder: &str, name: &str) {
+        self.inner.set_file_name(folder, name);
+    }
+
     fn host_pending(&self) -> Vec<String> {
         self.inner.host_pending()
     }

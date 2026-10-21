@@ -172,6 +172,69 @@ impl Workbook {
         rows
     }
 
+    pub fn name_tool_wire(&mut self, op: &str, line: &str) -> String {
+        let args: Vec<String> = line.split('\t').map(crate::wire::unescape).collect();
+        match self.name_tool(op, &args) {
+            Ok(s) => format!("o{s}"),
+            Err(m) => format!("e{m}"),
+        }
+    }
+
+    pub fn name_tool(&mut self, op: &str, args: &[String]) -> Result<String, String> {
+        let num = |i: usize| args.get(i).and_then(|s| s.parse::<u32>().ok()).ok_or_else(|| "bad argument".to_string());
+        let arg = |i: usize| args.get(i).cloned().unwrap_or_default();
+        let e = |x: EngineError| x.to_string();
+        let mut out = String::new();
+        match op {
+            "rows" => {
+                for r in self.name_rows() {
+                    for (i, f) in [&r.name, &r.scope, &r.refers, &r.comment, &r.value].into_iter().enumerate() {
+                        if i > 0 {
+                            out.push('\t');
+                        }
+                        crate::wire::escape(f, &mut out);
+                    }
+                    out.push('\n');
+                }
+            }
+            "comment" => self.set_name_comment(&arg(0), &arg(1)).map_err(e)?,
+            "rename" => {
+                let c = self.rename_name(&arg(0), &arg(1)).map_err(e)?;
+                out = crate::wire::encode_changed(&c, &|s, a| self.meta(s, a));
+            }
+            "select" => {
+                let area = Area { r0: num(1)?, c0: num(2)?, r1: num(3)?, c1: num(4)? };
+                let flags = arg(5);
+                let on = |i: usize| flags.as_bytes().get(i) == Some(&b'1');
+                let (made, skipped) = self.names_from_selection(num(0)? as usize, area, on(0), on(1), on(2), on(3), on(4)).map_err(e)?;
+                for m in made {
+                    out.push_str(&format!("+\t{m}\n"));
+                }
+                for s in skipped {
+                    out.push_str("-\t");
+                    crate::wire::escape(&s, &mut out);
+                    out.push('\n');
+                }
+            }
+            "apply" => {
+                let region = (arg(1) == "1").then(|| Ok::<_, String>((num(0)? as usize, Area { r0: num(2)?, c0: num(3)?, r1: num(4)?, c1: num(5)? }))).transpose()?;
+                let names: Vec<String> = args.iter().skip(7).cloned().collect();
+                out = self.apply_names(region, &names, arg(6) != "0").map_err(e)?.to_string();
+            }
+            "file" => self.set_file_name(&arg(0), &arg(1)),
+            "notes" => {
+                for (n, c) in self.name_notes() {
+                    crate::wire::escape(&n, &mut out);
+                    out.push('\t');
+                    crate::wire::escape(&c, &mut out);
+                    out.push('\n');
+                }
+            }
+            _ => return Err("unknown name operation".to_string()),
+        }
+        Ok(out)
+    }
+
     pub fn name_notes(&self) -> Vec<(String, String)> {
         let mut out: Vec<(String, String)> = self.name_notes.iter().filter_map(|(k, n)| self.names.get(k).map(|(d, _)| (d.clone(), n.clone()))).collect();
         out.sort();

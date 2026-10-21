@@ -1018,6 +1018,19 @@ pub extern "C" fn fc_formats_in(id: u32, sheet: u32, r0: u32, c0: u32, r1: u32, 
     }
 }
 
+/// Runs a Name Manager operation (list, comment, rename, create from selection, apply, file); the out buffer starts with `o` for a result or `e` for a message.
+///
+/// # Safety
+/// `op` and `args` must point at `op_len` and `args_len` readable bytes.
+#[no_mangle]
+pub unsafe extern "C" fn fc_name_tool(id: u32, op: *const u8, op_len: u32, args: *const u8, args_len: u32) -> i32 {
+    let (op, args) = (text(op, op_len).to_string(), text(args, args_len).to_string());
+    match with_book(id, |wb| wb.name_tool_wire(&op, &args)) {
+        Some(s) => emit(&s) as i32,
+        None => -1,
+    }
+}
+
 /// Lists workbook names as `name\t=formula` lines.
 #[no_mangle]
 pub extern "C" fn fc_names(id: u32) -> i32 {
