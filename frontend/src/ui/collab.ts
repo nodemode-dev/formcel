@@ -560,6 +560,21 @@ export class Collab {
     await this.apply(call<Snapshot>('PATCH', `/api/workbooks/${this.id}/threads/${t.id}`, body));
   }
 
+  async pasteNotes(src: { sheet: number; r0: number; c0: number; r1: number; c1: number }, dr: number, dc: number, transpose: boolean): Promise<number> {
+    if (!this.id) return 0;
+    const sheet = this.host.grid.sheetIndex;
+    let n = 0;
+    for (const [key, note] of Object.entries(this.snap.notes)) {
+      const [s, r, c] = key.split(':').map(Number);
+      if (s !== src.sheet || r < src.r0 || r > src.r1 || c < src.c0 || c > src.c1) continue;
+      const row = transpose ? dr + (c - src.c0) : dr + (r - src.r0);
+      const col = transpose ? dc + (r - src.r0) : dc + (c - src.c0);
+      await this.apply(call<Snapshot>('PUT', `/api/workbooks/${this.id}/notes`, { sheet, row, col, text: note.text }));
+      n++;
+    }
+    return n;
+  }
+
   private noteBox(): void {
     if (!this.id) return;
     const d = (this.noteDlg ??= dialog('Note', '<label class="fc-fmt-label">Note<textarea class="fc-text" data-k="text" spellcheck="true"></textarea></label><button type="button" class="fc-btn" data-a="delete">Delete note</button>', () => this.host.grid.focus()));

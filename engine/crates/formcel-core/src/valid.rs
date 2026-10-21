@@ -140,7 +140,7 @@ fn hit(area: Area, a: Addr) -> bool {
     a.row >= area.r0 && a.row <= area.r1 && a.col >= area.c0 && a.col <= area.c1
 }
 
-fn carve(m: Area, cut: Area) -> Vec<Area> {
+pub(crate) fn carve(m: Area, cut: Area) -> Vec<Area> {
     if cut.r0 > m.r1 || cut.r1 < m.r0 || cut.c0 > m.c1 || cut.c1 < m.c0 {
         return vec![m];
     }

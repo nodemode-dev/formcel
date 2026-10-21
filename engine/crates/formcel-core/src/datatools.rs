@@ -4,6 +4,9 @@ use crate::wire::{escape, unescape};
 use crate::{col_name, Addr, Effect, EngineError, Shift, Tx, Value, Workbook};
 use std::collections::{HashMap, HashSet};
 
+mod pastex;
+mod series;
+
 type Out = Result<(Effect, String), EngineError>;
 
 fn bad<T>(s: &str) -> Result<T, EngineError> {
@@ -292,6 +295,8 @@ impl Workbook {
             "typecheck" => self.t_typecheck(sheet, &p),
             "complete" => self.t_complete(sheet, &p),
             "mirror" => self.t_mirror(sheet, &p),
+            "series" => self.t_series(sheet, &p),
+            "pastelayers" => self.t_pastelayers(sheet, &p),
             _ => bad("unknown tool"),
         };
         self.undo_group(mark);

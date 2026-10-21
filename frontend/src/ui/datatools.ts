@@ -1,4 +1,4 @@
-import type { Grid, SheetView } from '../grid/grid';
+import type { Grid, PasteKind, SheetView } from '../grid/grid';
 import { colName, parseRef, rangeText, type Range } from '../grid/a1';
 import type { Menu, MenuItem } from './menu';
 
@@ -38,6 +38,7 @@ export interface DataCtx {
   headers(range: Range): Promise<string[]>;
   filterValues(col: number): Promise<{ values: string[]; blanks: boolean }>;
   goTo(sheet: number, row: number, col: number): void;
+  pasteNotes(src: { sheet: number; r0: number; c0: number; r1: number; c1: number }, dr: number, dc: number, transpose: boolean): Promise<number>;
   tableAt(): { name: string; area: [number, number, number, number]; cols: string[]; types: string[] } | null;
 }
 
@@ -111,11 +112,43 @@ const SPECS: Spec[] = [
     id: 'pasteops',
     title: 'Paste special',
     ok: 'Paste',
+    extra: [['link', 'Paste link']],
     fields: [
-      { k: 'what', label: 'Paste', kind: 'select', options: [['all', 'All'], ['values', 'Values'], ['formulas', 'Formulas'], ['formats', 'Formats']] },
+      {
+        k: 'what',
+        label: 'Paste',
+        kind: 'select',
+        options: [
+          ['all', 'All'],
+          ['formulas', 'Formulas'],
+          ['values', 'Values'],
+          ['formats', 'Formats'],
+          ['comments', 'Comments and notes'],
+          ['validation', 'Validation'],
+          ['theme', 'All using source theme'],
+          ['no-borders', 'All except borders'],
+          ['widths', 'Column widths'],
+          ['formulas-formats', 'Formulas and number formats'],
+          ['values-formats', 'Values and number formats'],
+          ['all-cf', 'All merging conditional formats'],
+        ],
+      },
       { k: 'op', label: 'Operation', kind: 'select', options: [['none', 'None'], ['add', 'Add'], ['subtract', 'Subtract'], ['multiply', 'Multiply'], ['divide', 'Divide']] },
       { k: 'skip', label: 'Skip blanks', kind: 'check' },
       { k: 'transpose', label: 'Transpose', kind: 'check' },
+    ],
+  },
+  {
+    id: 'series',
+    title: 'Series',
+    ok: 'OK',
+    fields: [
+      { k: 'dir', label: 'Series in', kind: 'select', options: [['cols', 'Columns'], ['rows', 'Rows']] },
+      { k: 'type', label: 'Type', kind: 'select', options: [['linear', 'Linear'], ['growth', 'Growth'], ['date', 'Date'], ['auto', 'AutoFill']] },
+      { k: 'unit', label: 'Date unit', kind: 'select', options: [['day', 'Day'], ['weekday', 'Weekday'], ['month', 'Month'], ['year', 'Year']] },
+      { k: 'trend', label: 'Trend (fit the numbers already selected)', kind: 'check' },
+      { k: 'step', label: 'Step value', kind: 'text' },
+      { k: 'stop', label: 'Stop value', kind: 'text' },
     ],
   },
   { id: 'inscells', title: 'Insert', ok: 'OK', fields: [{ k: 'how', label: 'Insert', kind: 'select', options: [['right', 'Shift cells right'], ['down', 'Shift cells down'], ['row', 'Entire row'], ['col', 'Entire column']] }] },
@@ -492,7 +525,47 @@ export class DataTools {
     this.put('pasteops', 'op', 'none');
     this.put('pasteops', 'skip', false);
     this.put('pasteops', 'transpose', false);
-    this.show('pasteops', async (v) => this.line(await this.c.grid.pasteWith(v.what as string, v.op as string, v.skip as boolean, v.transpose as boolean)));
+    this.show('pasteops', async (v, button) => {
+      const g = this.c.grid;
+      const t = v.transpose as boolean;
+      const op = v.op as string;
+      const skip = v.skip as boolean;
+      const done = () => g.focus();
+      if (button === 'link') return this.line(await g.pasteLayers('link', t));
+      const what = v.what as string;
+      if (what === 'comments') {
+        const s = g.copiedSource();
+        const [row, col] = g.activeCell();
+        const n = s ? await this.c.pasteNotes(s, row, col, t) : 0;
+        done();
+        return `Pasted ${n} notes.`;
+      }
+      if (what === 'validation') return this.line(await g.pasteLayers('validation', t));
+      if (what === 'all-cf') {
+        await g.pasteWith('all', op, skip, t);
+        return this.line(await g.pasteLayers('cf', t));
+      }
+      if (['all', 'formulas', 'values', 'formats', 'theme'].includes(what)) return this.line(await g.pasteWith(what === 'theme' ? 'all' : what, op, skip, t));
+      if (op !== 'none' || skip) throw new Error('Operations and skip blanks work with All, Formulas, Values and Formats.');
+      await g.pasteSpecial(what as PasteKind, t);
+      return '';
+    });
+  }
+
+  series(): void {
+    const s = this.c.grid.selection();
+    const single = s.r0 === s.r1 && s.c0 === s.c1;
+    this.prepare('series');
+    this.put('series', 'dir', s.c1 - s.c0 > s.r1 - s.r0 ? 'rows' : 'cols');
+    this.put('series', 'type', 'linear');
+    this.put('series', 'unit', 'day');
+    this.put('series', 'trend', false);
+    this.put('series', 'step', '1');
+    this.put('series', 'stop', '');
+    this.show('series', async (v) => {
+      if (single && !(v.stop as string).trim()) throw new Error('Select the cells to fill, or type a stop value.');
+      return this.line(await this.c.grid.runTool('series', this.area(s), v.dir as string, v.type as string, v.unit as string, (v.step as string).trim(), (v.stop as string).trim(), v.trend ? '1' : '0'));
+    });
   }
 
   cellsDialog(insert: boolean): void {

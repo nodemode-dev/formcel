@@ -1512,6 +1512,17 @@ export class Grid {
     return this.runTool('pastespecial', area, String(this.ar), String(this.ac), what, op, skip ? '1' : '0', transpose ? '1' : '0', String(src.sheet));
   }
 
+  copiedSource(): { sheet: number; r0: number; c0: number; r1: number; c1: number } | null {
+    const s = this.copied;
+    return s ? { sheet: s.sheet, r0: s.r0, c0: s.c0, r1: s.r0 + s.h - 1, c1: s.c0 + s.w - 1 } : null;
+  }
+
+  async pasteLayers(layers: string, transpose: boolean): Promise<string> {
+    const s = this.copiedSource();
+    if (!s || this.book < 0) return '';
+    return this.runTool('pastelayers', `${s.r0},${s.c0},${s.r1},${s.c1}`, String(this.ar), String(this.ac), transpose ? '1' : '0', String(s.sheet), layers);
+  }
+
   outlineRows(groups: [number, number][], clear: [number, number] | null): void {
     if (clear) for (let n = 0; n < 7; n++) if (!this.rows.group(clear[0], clear[1], -1)) break;
     for (const [a, b] of groups) this.rows.group(a, b, 1);

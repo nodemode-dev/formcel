@@ -364,6 +364,7 @@ export class App {
         const l = o ? await engine().filterValues(o.book, this.grid.sheetIndex, col) : { values: [], blanks: false };
         return { values: l.values, blanks: l.blanks };
       },
+      pasteNotes: (src, dr, dc, t) => this.collab.pasteNotes(src, dr, dc, t),
       goTo: (s, r, c) => {
         if (s !== this.grid.sheetIndex) this.showSheet(s);
         this.grid.goTo(`${colName(c)}${r + 1}`);
@@ -576,6 +577,7 @@ export class App {
     cmd('edit.replace', 'Find and replace', 'Replace text or numbers in the sheet or the workbook as one undo step.', true, () => T().openFind(true), 'Mod+H');
     cmd('edit.paste-ops', 'Paste special options', 'Paste values, formulas or formats with add, subtract, multiply or divide, skipping blanks or transposing.', true, () => T().pasteOps());
     cmd('edit.autocomplete', 'AutoComplete', 'Turn on or off suggesting a completion from other text in the same column while you type.', false, () => this.toggleAutoComplete());
+    cmd('edit.series', 'Fill series', 'Fill the selection with a linear, growth, date or AutoFill series with a step and stop value, or fit a linear or growth trend to the numbers already there.', true, () => T().series());
     cmd('edit.insert-cells', 'Insert cells', 'Insert blank cells in the selection and shift the cells below them down or the cells to their right over.', true, () => this.cellsMenu(true));
     cmd('edit.delete-cells', 'Delete cells', 'Delete the selected cells and shift the cells below up or the cells to the right left.', true, () => this.cellsMenu(false));
     cmd('file.save-template', 'Save as template', 'Save a copy of this workbook in your personal templates.', false, () => this.saveTemplate());
@@ -2555,7 +2557,8 @@ export class App {
       { label: 'Transpose', run: run('all', true) },
       { label: 'Values, transposed', run: run('values', true) },
       { sep: true },
-      { label: 'Operations and skip blanks', run: () => void runCommand('edit.paste-ops') },
+      { label: 'Paste link', run: () => void g.pasteLayers('link', false).then(done) },
+      { label: 'Paste special dialog (validation, notes, operations, skip blanks)', run: () => void runCommand('edit.paste-ops') },
     ], done);
   }
 
@@ -2834,6 +2837,7 @@ export class App {
       { label: 'Find and replace', keys: 'Ctrl+H', run: run('edit.replace') },
       { label: 'Insert cells', run: run('edit.insert-cells') },
       { label: 'Delete cells', run: run('edit.delete-cells') },
+      { label: 'Fill series', run: run('edit.series') },
       { label: 'Paste special options', run: run('edit.paste-ops') },
       { label: auto ? 'AutoComplete: on' : 'AutoComplete: off', run: run('edit.autocomplete') },
       { sep: true },
