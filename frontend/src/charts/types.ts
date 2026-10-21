@@ -1,15 +1,19 @@
 export type ChartType =
-  | 'column' | 'column-stacked' | 'bar' | 'bar-stacked' | 'line' | 'area' | 'pie' | 'doughnut'
+  | 'column' | 'column-stacked' | 'column-100' | 'bar' | 'bar-stacked' | 'bar-100' | 'line' | 'area' | 'area-stacked' | 'area-100' | 'pie' | 'doughnut'
   | 'scatter' | 'bubble' | 'combo' | 'histogram' | 'box' | 'waterfall' | 'candlestick'
   | 'treemap' | 'sunburst' | 'funnel' | 'gauge' | 'scorecard' | 'radar' | 'timeline' | 'org' | 'map';
 
 export const CHART_TYPES: { id: ChartType; label: string; group: string }[] = [
   { id: 'column', label: 'Column', group: 'Column and bar' },
   { id: 'column-stacked', label: 'Stacked column', group: 'Column and bar' },
+  { id: 'column-100', label: '100% stacked column', group: 'Column and bar' },
   { id: 'bar', label: 'Bar', group: 'Column and bar' },
   { id: 'bar-stacked', label: 'Stacked bar', group: 'Column and bar' },
+  { id: 'bar-100', label: '100% stacked bar', group: 'Column and bar' },
   { id: 'line', label: 'Line', group: 'Line and area' },
   { id: 'area', label: 'Area', group: 'Line and area' },
+  { id: 'area-stacked', label: 'Stacked area', group: 'Line and area' },
+  { id: 'area-100', label: '100% stacked area', group: 'Line and area' },
   { id: 'pie', label: 'Pie', group: 'Pie' },
   { id: 'doughnut', label: 'Doughnut', group: 'Pie' },
   { id: 'scatter', label: 'Scatter', group: 'Scatter' },
@@ -86,6 +90,7 @@ export interface ChartSpec {
   pivot?: string;
   bins?: number;
   totals?: number[];
+  bands?: [number, number];
 }
 
 export type ObjectKind = 'chart' | 'picture' | 'shape' | 'text';

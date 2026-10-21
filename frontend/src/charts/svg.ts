@@ -223,11 +223,18 @@ function labelWidth(ticks: string[]): number {
   return Math.max(...ticks.map((t) => t.length)) * 6.4 + 10;
 }
 
-function cartesian(spec: ChartSpec, d: ChartData, b: Box): string {
+function percentOf(d: ChartData): ChartData {
+  const totals = d.cats.map((_, k) => d.series.reduce((a, s) => a + (num(s.vals[k]) ? Math.abs(s.vals[k] as number) : 0), 0));
+  return { ...d, series: d.series.map((s) => ({ ...s, vals: s.vals.map((v, k) => (num(v) ? (totals[k] ? (v / totals[k]) * 100 : 0) : null)) })) };
+}
+
+function cartesian(spec: ChartSpec, d0: ChartData, b: Box): string {
   const t = spec.type;
-  const horizontal = t === 'bar' || t === 'bar-stacked';
-  const stacked = t === 'column-stacked' || t === 'bar-stacked';
-  const area = t === 'area';
+  const pct = t.endsWith('-100');
+  const d = pct ? percentOf(d0) : d0;
+  const horizontal = t.startsWith('bar');
+  const stacked = t.endsWith('-stacked') || pct;
+  const area = t.startsWith('area');
   const isLine = t === 'line' || area;
   const combo = t === 'combo';
   const n = d.cats.length;
@@ -270,7 +277,7 @@ function cartesian(spec: ChartSpec, d: ChartData, b: Box): string {
   const [lo, hi] = range(left, stacked, zero || combo);
   const linear = (r: [number, number]): Axis => ({ ...nice(r[0], r[1]), log: false });
   const scale: Axis = spec.logY && !stacked ? logAxis(lo, hi) : linear([lo, hi]);
-  const tickText = scale.ticks.map((v) => shown(spec.yFmt, v));
+  const tickText = scale.ticks.map((v) => (pct && !spec.yFmt ? `${fmt(v)}%` : shown(spec.yFmt, v)));
   const sscale = sec.length ? linear(range(sec, false, false)) : null;
   const catLabels = d.cats.map((c, k) => ellipsis(spec.xFmt && num(d.catNums[k]) ? shown(spec.xFmt, d.catNums[k] as number) : c, 14));
   const lw = horizontal ? Math.min(100, labelWidth(catLabels)) : labelWidth(tickText);
@@ -339,16 +346,23 @@ function cartesian(spec: ChartSpec, d: ChartData, b: Box): string {
     });
   }
   const lineSeries = isLine ? d.series.map((s, i) => ({ s, i })) : sec;
+  const cum = new Array<number>(n).fill(0);
   lineSeries.forEach(({ s, i }) => {
     const pts: [number, number, number][] = [];
+    const lower: [number, number][] = [];
     s.vals.forEach((v, k) => {
-      if (num(v)) pts.push([p.x + band * (k + 0.5), secIdx.has(i) && sscale ? toSec(v) : toPx(v), v]);
+      if (!num(v)) return;
+      const x = p.x + band * (k + 0.5);
+      const below = area && stacked ? cum[k] : 0;
+      if (area && stacked) cum[k] += v;
+      pts.push([x, secIdx.has(i) && sscale ? toSec(v) : toPx(area && stacked ? cum[k] : v), v]);
+      lower.push([x, area && stacked ? toPx(below) : baseV]);
     });
     if (!pts.length) return;
     const path = pts.map(([x, y], k) => `${k ? 'L' : 'M'}${r1(x)} ${r1(y)}`).join('');
-    if (area) out.push(`<path d="${path}L${r1(pts[pts.length - 1][0])} ${r1(baseV)}L${r1(pts[0][0])} ${r1(baseV)}Z" fill="${color(i)}" fill-opacity="0.35"/>`);
+    if (area) out.push(`<path d="${path}${lower.reverse().map(([x, y]) => `L${r1(x)} ${r1(y)}`).join('')}Z" fill="${color(i)}" fill-opacity="${stacked ? 0.7 : 0.35}"/>`);
     out.push(`<path d="${path}" fill="none" stroke="${color(i)}" stroke-width="2" stroke-linejoin="round"/>`);
-    const eb = (spec.errBars ?? []).find((e) => e.series === i || e.series < 0);
+    const eb = stacked ? undefined : (spec.errBars ?? []).find((e) => e.series === i || e.series < 0);
     const yOf = (v: number) => (secIdx.has(i) && sscale ? toSec(v) : toPx(v));
     const all = eb ? s.vals.filter(num) : [];
     for (const [x, y, v] of pts) {
@@ -766,7 +780,14 @@ function gauge(spec: ChartSpec, d: ChartData, b: Box): string {
   const cy = b.y + b.h / 2 + R / 2 - 6;
   const out: string[] = [];
   out.push(`<path d="${arc(cx, cy, R * 0.68, R, Math.PI, Math.PI * 2)}" fill="currentColor" fill-opacity="0.12"/>`);
-  if (frac > 0) out.push(`<path d="${arc(cx, cy, R * 0.68, R, Math.PI, Math.PI + Math.PI * frac)}" fill="${frac > 0.66 ? '#59a14f' : frac > 0.33 ? '#edc948' : '#e15759'}"/>`);
+  const [t1, t2] = spec.bands ? spec.bands.map((x) => Math.max(0, Math.min(1, (x - lo) / (hi - lo || 1)))) : [0.33, 0.66];
+  if (spec.bands) {
+    const edges = [0, t1, t2, 1];
+    ['#e15759', '#edc948', '#59a14f'].forEach((c, i) => {
+      if (edges[i + 1] > edges[i]) out.push(`<path d="${arc(cx, cy, R * 0.68, R, Math.PI + Math.PI * edges[i], Math.PI + Math.PI * edges[i + 1])}" fill="${c}" fill-opacity="0.28"/>`);
+    });
+  }
+  if (frac > 0) out.push(`<path d="${arc(cx, cy, R * 0.68, R, Math.PI, Math.PI + Math.PI * frac)}" fill="${frac > t2 ? '#59a14f' : frac > t1 ? '#edc948' : '#e15759'}"/>`);
   out.push(text(cx, cy - R * 0.18, fmt(v), { size: Math.max(14, R / 3), bold: true, base: 'central' }));
   out.push(text(cx - R * 0.84, cy + 13, fmt(lo), { size: 10, op: 0.7 }), text(cx + R * 0.84, cy + 13, fmt(hi), { size: 10, op: 0.7 }));
   return out.join('');

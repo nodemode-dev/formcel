@@ -22,7 +22,7 @@ COL_PX = 100
 ROW_PX = 24
 LEGEND = {"right": "r", "left": "l", "top": "t", "bottom": "b"}
 LEGEND_IN = {"r": "right", "l": "left", "t": "top", "b": "bottom", "tr": "right"}
-EXPORTED = {"column", "column-stacked", "bar", "bar-stacked", "line", "area", "pie", "doughnut", "scatter", "bubble", "combo", "radar", "candlestick"} | chartex.CHARTEX | chartex.TAGGED
+EXPORTED = {"column", "column-stacked", "column-100", "bar", "bar-stacked", "bar-100", "line", "area", "area-stacked", "area-100", "pie", "doughnut", "scatter", "bubble", "combo", "radar", "candlestick"} | chartex.CHARTEX | chartex.TAGGED
 LIST = "\x1f"
 
 
@@ -193,11 +193,11 @@ def chart_out(wb, host, obj: dict, view: dict, pivots: dict | None = None) -> bo
         if cats is not None and not scatter:
             chart.set_categories(cats)
 
-    if kind in ("column", "column-stacked", "bar", "bar-stacked", "combo"):
+    if kind in ("column", "column-stacked", "column-100", "bar", "bar-stacked", "bar-100", "combo"):
         chart = BarChart()
         chart.type = "bar" if kind.startswith("bar") else "col"
-        if kind.endswith("stacked"):
-            chart.grouping = "stacked"
+        if kind.endswith("stacked") or kind.endswith("-100"):
+            chart.grouping = "percentStacked" if kind.endswith("-100") else "stacked"
             chart.overlap = 100
         main = [j for j in range(nser) if j not in secondary] if kind == "combo" else list(range(nser))
         attach(chart, main)
@@ -211,8 +211,10 @@ def chart_out(wb, host, obj: dict, view: dict, pivots: dict | None = None) -> bo
     elif kind == "line":
         chart = LineChart()
         attach(chart, range(nser))
-    elif kind == "area":
+    elif kind in ("area", "area-stacked", "area-100"):
         chart = AreaChart()
+        if kind != "area":
+            chart.grouping = "percentStacked" if kind == "area-100" else "stacked"
         attach(chart, range(nser))
     elif kind in ("pie", "doughnut"):
         chart = PieChart() if kind == "pie" else DoughnutChart()
@@ -361,9 +363,11 @@ def chart_in(ch, ws_title: str, view: dict, found: dict | None = None) -> dict |
         return None
     kind = ch.tagname
     if kind == "barChart":
-        spec_type = ("bar" if ch.type == "bar" else "column") + ("-stacked" if ch.grouping in ("stacked", "percentStacked") else "")
+        spec_type = ("bar" if ch.type == "bar" else "column") + {"stacked": "-stacked", "percentStacked": "-100"}.get(ch.grouping, "")
+    elif kind == "areaChart":
+        spec_type = {"stacked": "area-stacked", "percentStacked": "area-100"}.get(ch.grouping, "area")
     else:
-        spec_type = {"lineChart": "line", "line3DChart": "line", "areaChart": "area", "pieChart": "pie", "pie3DChart": "pie", "doughnutChart": "doughnut", "scatterChart": "scatter", "bubbleChart": "bubble", "radarChart": "radar", "stockChart": "candlestick"}.get(kind)
+        spec_type = {"lineChart": "line", "line3DChart": "line", "pieChart": "pie", "pie3DChart": "pie", "doughnutChart": "doughnut", "scatterChart": "scatter", "bubbleChart": "bubble", "radarChart": "radar", "stockChart": "candlestick"}.get(kind)
     if not spec_type:
         return None
     second = [c for c in charts[1:] if c.tagname == "lineChart"] if kind == "barChart" else []

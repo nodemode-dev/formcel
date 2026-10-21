@@ -178,6 +178,8 @@ export function recommendRanked(m: Matrix): Recommendation[] {
   add('area', dateLike ? 58 : labels && nSeries > 1 ? 44 : 0, 'Totals over time or categories');
   add('column', labels ? (nSeries === 1 ? 82 : 80) : !labels && rows <= 12 ? 70 : 30, 'Compares values across categories');
   add('column-stacked', labels && nSeries >= 2 && nSeries <= 6 && !negatives ? 56 : 0, 'Parts that add up within each category');
+  add('column-100', labels && nSeries >= 2 && nSeries <= 6 && !negatives ? 46 : 0, 'Share of each category taken by every series');
+  add('area-stacked', (dateLike || labels) && nSeries >= 2 && nSeries <= 6 && !negatives ? 40 : 0, 'Totals over time split by series');
   add('bar', labels && (rows > 6 || first.some((s) => s.length > 12)) ? 62 : labels ? 40 : 0, 'Long or many category names read better sideways');
   add('pie', labels && nSeries === 1 && positive && rows >= 2 && rows <= 7 ? 88 : 0, 'A few positive parts of one whole');
   add('doughnut', labels && nSeries === 1 && positive && rows >= 2 && rows <= 7 ? 52 : 0, 'A few positive parts of one whole');

@@ -50,6 +50,7 @@ export class ChartEditor {
 <label class="fc-fmt-label">Secondary axis series (combo, for example 2,3)<input class="fc-fmt-input" data-k="secondary" autocomplete="off"></label>
 <label class="fc-fmt-label">Axis minimum (blank for automatic)<input class="fc-fmt-input" data-k="min" inputmode="decimal" autocomplete="off"></label>
 <label class="fc-fmt-label">Axis maximum, or gauge top (blank for automatic)<input class="fc-fmt-input" data-k="max" inputmode="decimal" autocomplete="off"></label>
+<label class="fc-fmt-label">Gauge bands, two thresholds (for example 30,70)<input class="fc-fmt-input" data-k="bands" autocomplete="off" placeholder="30,70"></label>
 <label class="fc-sort-check"><input type="checkbox" data-k="labels"> Data labels</label>
 <label class="fc-fmt-label">Data label number format (for example 0.0% or $#,##0)<input class="fc-fmt-input" data-k="labelFmt" spellcheck="false" autocomplete="off"></label>
 <label class="fc-fmt-label" data-k="binsRow">Histogram bins (blank for automatic)<input class="fc-fmt-input" data-k="bins" inputmode="numeric" autocomplete="off"></label>
@@ -143,6 +144,8 @@ export class ChartEditor {
     s.secondary = v('secondary').split(/[,\s]+/).map((x) => Number(x) - 1).filter((x) => Number.isInteger(x) && x >= 0);
     s.min = num('min');
     s.max = num('max');
+    const bn = v('bands').split(/[,\s]+/).map(Number).filter((x) => Number.isFinite(x));
+    s.bands = bn.length === 2 && bn[0] < bn[1] ? [bn[0], bn[1]] : undefined;
     const text = (k: string) => v(k).trim() || undefined;
     const check = (k: string) => this.q<HTMLInputElement>(k).checked;
     s.yFmt = text('yFmt');
@@ -208,6 +211,7 @@ export class ChartEditor {
     set('secondary', spec.secondary.map((i) => i + 1).join(','));
     set('min', spec.min === undefined ? '' : String(spec.min));
     set('max', spec.max === undefined ? '' : String(spec.max));
+    set('bands', spec.bands ? spec.bands.join(',') : '');
     this.q<HTMLInputElement>('labels').checked = spec.labels;
     this.q('hint').textContent = '';
     this.form.dataset.state = '';
