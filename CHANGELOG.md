@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.9.0 · 2026-10-21
+
+- Conformance with Microsoft's function pages: every example table on the page of each function FormCel has was run through the engine as published. 123 cases pass; the 6 that fail need array constants, references returned by functions, multi-area references or INDEX with row 0, all still to come; 8 are skipped (dates, or data only in a picture). The report is in the planning sidecar.
+- Typing `$1,234.50`, `-$5` or `50%` stores a number (1234.5, -5, 0.5); typing an error such as `#N/A` stores that error. Number formats that show the `$` or `%` again come with formatting.
+- New: ISNA, ISERR, ISLOGICAL, ISREF, ISNONTEXT (60 functions in all).
+
 ## 0.8.0 · 2026-10-21
 
 - Faster recalculation: the engine keeps its dependency graph between edits. Changing one value in a sheet of 100,000 formulas recalculates in 2.5 to 7 ms in the window (it took about 45 ms before). A single 100,000-step chain still takes about 300 ms.
