@@ -187,3 +187,10 @@ Each sheet gains `merges`, a list of `[r0, c0, r1, c1]`. `PUT /api/workbooks/{id
 - logged: v0.21.0 · 2026-10-21
 
 `workbook.json` gains `theme` (the theme text) and `cellStyles` (one line per named style). They are loaded before the sheets so number formats from styles apply as cells load. `PUT /api/workbooks/{id}/look` replaces either or both. A file from before v0.21.0 opens with the FormCel theme and the built-in styles.
+
+### Conditional formatting rules in the file
+- refers-to: app/services/store.py :: _write, _load, get, set_rules; app/routers/workbooks.py :: set_rules, RulesIn
+- kind: explainer
+- logged: v0.22.0 · 2026-10-21
+
+Each sheet gains `rules`, one line per rule in precedence order. `PUT /api/workbooks/{id}/rules` replaces a sheet's list; lines that do not parse are dropped on load rather than failing the workbook.

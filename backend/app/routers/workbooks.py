@@ -142,6 +142,21 @@ def set_look(wid: str, body: LookIn) -> dict:
         raise HTTPException(422, f"That theme or cell style could not be saved: {e}")
 
 
+class RulesIn(BaseModel):
+    sheet: int = 0
+    lines: list[str] = Field(default_factory=list, max_length=5000)
+
+
+@router.put("/workbooks/{wid}/rules")
+def set_rules(wid: str, body: RulesIn) -> dict:
+    try:
+        return store().set_rules(wid, body.sheet, body.lines)
+    except (KeyError, FileNotFoundError):
+        raise missing(wid)
+    except (IndexError, ValueError) as e:
+        raise HTTPException(422, f"Those conditional formatting rules could not be saved: {e}")
+
+
 @router.put("/workbooks/{wid}/merges")
 def set_merges(wid: str, body: MergesIn) -> dict:
     try:
