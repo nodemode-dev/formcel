@@ -133,7 +133,7 @@ export interface WhatIfReply {
   effect: Effect;
 }
 export type Arrow = [fromSheet: number, r0: number, c0: number, r1: number, c1: number, toSheet: number, row: number, col: number, level: number];
-export type EvalStep = [before: string, evaluating: string, after: string];
+export type EvalStep = [before: string, evaluating: string, after: string, into: string];
 export type Value = WhatIfReply | Arrow[] | EvalStep[] | string | number | boolean | number[] | string[] | Cell[] | Changed[] | Name[] | Edit[] | Area[] | CfCell[] | LinkChange[] | [number, number] | Shift | Effect | FilterList | null;
 
 export type Response =

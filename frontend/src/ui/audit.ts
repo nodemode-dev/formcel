@@ -57,7 +57,9 @@ export class Audit {
   private evalForm: HTMLFormElement | null = null;
   private steps: EvalStep[] = [];
   private stepAt = 0;
-  private evalParts: { ref: HTMLElement; before: Text; now: HTMLElement; after: Text; count: HTMLElement; go: HTMLButtonElement; restart: HTMLButtonElement } | null = null;
+  private refText = '';
+  private stack: { steps: EvalStep[]; stepAt: number; refText: string }[] = [];
+  private evalParts: { ref: HTMLElement; before: Text; now: HTMLElement; after: Text; count: HTMLElement; go: HTMLButtonElement; restart: HTMLButtonElement; into: HTMLButtonElement; out: HTMLButtonElement } | null = null;
   private panel: HTMLElement | null = null;
   private watches: Watch[] = [];
   private rows = new Map<string, { tr: HTMLTableRowElement; cells: HTMLTableCellElement[] }>();
@@ -197,7 +199,8 @@ export class Audit {
     const f = (this.evalForm ??= this.makeEval());
     this.steps = steps;
     this.stepAt = 0;
-    this.evalParts!.ref.textContent = `${quoted(this.host.sheets()[g.sheetIndex] ?? '')}!$${colName(col)}$${row + 1}`;
+    this.stack = [];
+    this.refText = `${quoted(this.host.sheets()[g.sheetIndex] ?? '')}!$${colName(col)}$${row + 1}`;
     this.showStep();
     f.hidden = false;
     this.evalParts!.go.focus();
@@ -205,14 +208,40 @@ export class Audit {
 
   private showStep(): void {
     const p = this.evalParts!;
-    const [before, now, after] = this.steps[this.stepAt];
+    const [before, now, after, into] = this.steps[this.stepAt];
     p.before.nodeValue = before;
     p.now.textContent = now;
     p.after.nodeValue = after;
     const last = this.stepAt >= this.steps.length - 1;
     p.go.disabled = last;
+    p.ref.textContent = this.refText;
     p.count.textContent = `Step ${this.stepAt + 1} of ${this.steps.length}`;
-    p.restart.disabled = this.stepAt === 0;
+    p.restart.disabled = this.stepAt === 0 && this.stack.length === 0;
+    p.into.disabled = !into;
+    p.out.disabled = this.stack.length === 0;
+  }
+
+  private async stepIn(): Promise<void> {
+    const into = this.steps[this.stepAt]?.[3];
+    const book = this.host.book();
+    if (!into || book === null) return;
+    const [sheet, row, col] = into.split(':').map(Number);
+    const steps = await this.host.engine.evalSteps(book, row, col, sheet);
+    if (!steps.length) return;
+    this.stack.push({ steps: this.steps, stepAt: this.stepAt, refText: this.refText });
+    this.steps = steps;
+    this.stepAt = 0;
+    this.refText = `${quoted(this.host.sheets()[sheet] ?? '')}!$${colName(col)}$${row + 1}`;
+    this.showStep();
+  }
+
+  private stepOut(): void {
+    const parent = this.stack.pop();
+    if (!parent) return;
+    this.steps = parent.steps;
+    this.stepAt = Math.min(parent.stepAt + 1, parent.steps.length - 1);
+    this.refText = parent.refText;
+    this.showStep();
   }
 
   private makeEval(): HTMLFormElement {
@@ -222,7 +251,7 @@ export class Audit {
     form.setAttribute('role', 'dialog');
     form.setAttribute('aria-label', 'Evaluate Formula');
     form.innerHTML =
-      '<span class="fc-fmt-title">Evaluate Formula</span><div class="fc-eval-ref" data-k="ref"></div><div class="fc-eval-box" data-k="box" aria-live="polite"></div><span class="fc-eval-count" data-k="count"></span><div class="fc-csv-actions"><button type="button" class="fc-btn" data-a="restart">Restart</button><button type="submit" class="fc-btn fc-btn-primary" data-a="go">Evaluate</button><button type="button" class="fc-btn" data-a="close">Close</button></div>';
+      '<span class="fc-fmt-title">Evaluate Formula</span><div class="fc-eval-ref" data-k="ref"></div><div class="fc-eval-box" data-k="box" aria-live="polite"></div><span class="fc-eval-count" data-k="count"></span><div class="fc-csv-actions"><button type="button" class="fc-btn" data-a="restart">Restart</button><button type="button" class="fc-btn" data-a="into">Step In</button><button type="button" class="fc-btn" data-a="out">Step Out</button><button type="submit" class="fc-btn fc-btn-primary" data-a="go">Evaluate</button><button type="button" class="fc-btn" data-a="close">Close</button></div>';
     document.getElementById('overlay-root')!.appendChild(form);
     const box = form.querySelector<HTMLElement>('[data-k="box"]')!;
     const before = document.createTextNode('');
@@ -238,6 +267,8 @@ export class Audit {
       count: form.querySelector<HTMLElement>('[data-k="count"]')!,
       go: form.querySelector<HTMLButtonElement>('[data-a="go"]')!,
       restart: form.querySelector<HTMLButtonElement>('[data-a="restart"]')!,
+      into: form.querySelector<HTMLButtonElement>('[data-a="into"]')!,
+      out: form.querySelector<HTMLButtonElement>('[data-a="out"]')!,
     };
     const close = () => {
       form.hidden = true;
@@ -247,9 +278,17 @@ export class Audit {
       const a = (e.target as HTMLElement).closest<HTMLElement>('[data-a]')?.dataset.a;
       if (a === 'close') close();
       if (a === 'restart') {
+        const first = this.stack[0];
+        if (first) {
+          this.steps = first.steps;
+          this.refText = first.refText;
+          this.stack = [];
+        }
         this.stepAt = 0;
         this.showStep();
       }
+      if (a === 'into') void this.stepIn();
+      if (a === 'out') this.stepOut();
     });
     form.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') close();

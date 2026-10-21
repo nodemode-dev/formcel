@@ -418,7 +418,7 @@ function run(x: Exports, req: Request): Value {
     case 'audit.trace':
       return lines(out(x, x.fc_trace(req.book, req.sheet, req.row, req.col, req.dependents ? 1 : 0, req.levels))).map((l) => l.map(Number) as Arrow);
     case 'audit.eval':
-      return lines(out(x, x.fc_eval_steps(req.book, req.sheet, req.row, req.col))).map(([b, c, a]) => [unescape(b ?? ''), unescape(c ?? ''), unescape(a ?? '')] as EvalStep);
+      return lines(out(x, x.fc_eval_steps(req.book, req.sheet, req.row, req.col))).map(([b, c, a, t]) => [unescape(b ?? ''), unescape(c ?? ''), unescape(a ?? ''), t ?? ''] as EvalStep);
     case 'values.read':
       return lines(out(x, x.fc_values_in(req.book, req.sheet, req.r0, req.c0, req.r1, req.c1))).map(([r, c, v]) => [Number(r), Number(c), unescape(v ?? '')] as [number, number, string]);
     case 'link.at':

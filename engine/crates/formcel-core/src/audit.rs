@@ -199,6 +199,24 @@ impl Workbook {
     }
 
     pub fn evaluate_steps(&self, sheet: usize, a: Addr) -> Vec<[String; 3]> {
+        self.step_walk(sheet, a).into_iter().map(|s| s.0).collect()
+    }
+
+    pub fn evaluate_step_in(&self, sheet: usize, a: Addr) -> Vec<Option<(usize, Addr)>> {
+        self.step_walk(sheet, a).into_iter().map(|s| s.1).collect()
+    }
+
+    fn step_in_target(&self, sheet: usize, target: &Expr) -> Option<(usize, Addr)> {
+        let Expr::Ref(s, formula::RefKind::Cell(c)) = target else { return None };
+        let idx = match s {
+            None => sheet,
+            Some(n) => self.sheets.iter().position(|x| x.name.eq_ignore_ascii_case(n))?,
+        };
+        let at = Addr { row: c.row, col: c.col };
+        self.formulas.get(&(idx, at)).filter(|f| f.ast.is_some()).map(|_| (idx, at))
+    }
+
+    fn step_walk(&self, sheet: usize, a: Addr) -> Vec<([String; 3], Option<(usize, Addr)>)> {
         let Some(mut e) = self.formulas.get(&(sheet, a)).and_then(|f| f.ast.clone()) else { return Vec::new() };
         let ev = Eval::new(self, sheet).placed(a);
         let mut states = Vec::new();
@@ -206,11 +224,11 @@ impl Workbook {
             let mut hit = None;
             reduce(&mut e, &ev, &mut hit);
             let Some(target) = hit else {
-                states.push([formula::to_text(&e), String::new(), String::new()]);
+                states.push(([formula::to_text(&e), String::new(), String::new()], None));
                 break;
             };
             let (before, after) = split(&e);
-            states.push([before, formula::to_text(&target), after]);
+            states.push(([before, formula::to_text(&target), after], self.step_in_target(sheet, &target)));
             let value = lifted(ev.formula(&target));
             let mut done = false;
             formula::walk_mut(&mut e, &mut |x| {
@@ -220,7 +238,7 @@ impl Workbook {
                 }
             });
             if atom(&e) || matches!(e, Expr::Array(_)) {
-                states.push([formula::to_text(&e), String::new(), String::new()]);
+                states.push(([formula::to_text(&e), String::new(), String::new()], None));
                 break;
             }
         }

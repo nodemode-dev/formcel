@@ -1125,12 +1125,17 @@ pub extern "C" fn fc_trace(id: u32, sheet: u32, row: u32, col: u32, dependents: 
 pub extern "C" fn fc_eval_steps(id: u32, sheet: u32, row: u32, col: u32) -> i32 {
     match with_book(id, |wb| {
         let mut out = String::new();
-        for [b, c, a] in wb.evaluate_steps(sheet as usize, Addr { row, col }) {
+        let at = Addr { row, col };
+        for ([b, c, a], into) in wb.evaluate_steps(sheet as usize, at).into_iter().zip(wb.evaluate_step_in(sheet as usize, at)) {
             wire::escape(&b, &mut out);
             out.push('\t');
             wire::escape(&c, &mut out);
             out.push('\t');
             wire::escape(&a, &mut out);
+            out.push('\t');
+            if let Some((s, t)) = into {
+                out.push_str(&format!("{s}:{}:{}", t.row, t.col));
+            }
             out.push('\n');
         }
         out
