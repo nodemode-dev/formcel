@@ -1,8 +1,8 @@
 import { defineConfig } from 'vite';
 
-const FRONTEND_PORT = 5199;
+const FRONTEND_PORT = Number(process.env.FORMCEL_WEB_PORT ?? 5199);
 const PREVIEW_PORT = 5299;
-const BACKEND_PORT = 8199;
+const BACKEND_PORT = Number(process.env.FORMCEL_PORT ?? 8199);
 const engine = { target: `http://127.0.0.1:${BACKEND_PORT}`, changeOrigin: true, ws: true };
 
 export default defineConfig({
