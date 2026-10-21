@@ -23,6 +23,7 @@ from .overlay import finish as overlay_finish
 from .pivots import finish as pivots_finish
 from .pivots import pivots_out
 from .props import app_xml, core_out, patch_app
+from .slicers import finish as slicers_finish
 from .protect import book_out, notes_out, sheet_out
 from .review import finish as review_finish, placeholders, ranges_out
 from .styles import apply_out
@@ -195,4 +196,5 @@ def write(eng, views: list[dict], vba: dict[str, bytes] | None = None, objects: 
     data = pivots_finish(data, shows)
     data = patch_app(data, app_xml(props or {}, eng.sheet_names(), VERSION)) if stamps else data
     data = overlay_finish(inject(review_finish(data, threads, ranges), wb, views, COL_PX, ROW_PX), plans, eng.sheet_names(), views)
-    return sheets_finish(data, [wb.worksheets[i].title for i, plan in plans.items() if plan["alts"]["charts"] and i < len(views) and views[i].get("chartSheet")])
+    data = slicers_finish(data, views, eng.tables(), eng.pivots())
+    return sheets_finish(data,[wb.worksheets[i].title for i, plan in plans.items() if plan["alts"]["charts"] and i < len(views) and views[i].get("chartSheet")])

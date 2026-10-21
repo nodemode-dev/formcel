@@ -28,6 +28,7 @@ from .whatif import whatif_in
 from .tables import tables_in
 from .theme import theme_in
 from .props import read_props
+from .slicers import slicers_in
 from .validation import validations_in
 
 ZOOMS = [0.5, 0.67, 0.75, 0.9, 1, 1.1, 1.25, 1.5, 1.75, 2]
@@ -242,6 +243,7 @@ def read(data: bytes) -> dict:
                 name_notes.append((scoped, dn.comment))
     tables = tables_in(wb, order, notes)
     pivots = pivots_in(wb, data, order, notes)
+    slicers_in(wb, data, order, pivots, {i: s["view"] for i, s in enumerate(sheets)}, notes)
     what, filled = whatif_in(wb, data, order, notes)
     for i, r, c, v in filled:
         if i < len(sheets):
