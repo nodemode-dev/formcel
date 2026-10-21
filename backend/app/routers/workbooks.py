@@ -272,6 +272,18 @@ def set_rules(wid: str, body: RulesIn) -> dict:
         raise HTTPException(422, f"Those conditional formatting rules could not be saved: {e}")
 
 
+class WatchIn(BaseModel):
+    watches: list[list[int]] = Field(default_factory=list, max_length=500)
+
+
+@router.put("/workbooks/{wid}/watches")
+def set_watches(wid: str, body: WatchIn) -> dict:
+    try:
+        return store().set_watches(wid, body.watches)
+    except (KeyError, FileNotFoundError):
+        raise missing(wid)
+
+
 @router.put("/workbooks/{wid}/tables")
 def set_tables(wid: str, body: RulesIn) -> dict:
     try:

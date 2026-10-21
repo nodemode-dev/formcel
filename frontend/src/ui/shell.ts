@@ -49,6 +49,8 @@ export function mountShell(root: HTMLElement): ShellParts {
         <span class="fc-tool-sep" aria-hidden="true"></span>
         ${tool('data.sort-asc', 'sortAsc', 'Sort A to Z by the active column')}${tool('data.sort-desc', 'sortDesc', 'Sort Z to A by the active column')}${tool('data.sort', 'sort', 'Sort by several columns')}${tool('data.filter', 'filter', 'Filter (Ctrl+Shift+L)')}${tool('table.create', 'table', 'Table (Ctrl+T)')}${tool('data.validation', 'validation', 'Data validation')}
         <span class="fc-tool-sep" aria-hidden="true"></span>
+        ${tool('audit.precedents', 'tracePrec', 'Trace precedents')}${tool('audit.dependents', 'traceDep', 'Trace dependents')}${tool('audit.remove-arrows', 'removeArrows', 'Remove arrows')}${tool('audit.evaluate', 'evalFormula', 'Evaluate formula')}${tool('audit.watch', 'watch', 'Watch window')}
+        <span class="fc-tool-sep" aria-hidden="true"></span>
         ${tool('file.download', 'download', 'Download as .xlsx, .csv or .tsv')}
       </div>
       <div class="fc-formula">

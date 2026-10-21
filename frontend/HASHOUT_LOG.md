@@ -440,3 +440,14 @@ The grid asks the engine for the rule under the active cell whenever the selecti
 The Table button (and Ctrl+T, which a browser may keep for itself) asks for the range, prefilled with the data around the active cell, and My table has headers. Inside a table the same button opens Table design: name, style, a resize range that keeps the top-left cell, Total row, Banded rows, Banded columns, First column, Last column, Filter button, and Convert to range. Converting keeps the table's colours by writing them as cell formatting in the same undo step (MS-TOCONVERT keeps the style).
 
 Table styles are drawn under cell formatting: a cell's own fill, text colour and bold win. Each style takes a theme colour (Medium 2 accent 1, Medium 4 accent 3, Medium 9 accent 1 deeper bands, Medium 14 accent 6, Light 1, Light 9, Light 15, Dark 1) for a filled or plain bold header and tinted bands. These are FormCel's drawings under Excel's style names, which files carry; Excel shows its own versions. In the total row the list arrow offers None, Average, Count, Count Numbers, Max, Min, Sum, StdDev and Var, which enter `=SUBTOTAL(n,[Column])` with 101, 103, 102, 104, 105, 109, 107 and 110. After each typed entry in a sheet with tables the window reads the tables again, so growth from typing below or beside a table shows at once, with the filter range.
+
+### Formula auditing and the Watch Window
+- refers-to: src/ui/audit.ts :: Audit, parseCells; src/grid/grid.ts :: setOverlay, overlay, paintNow; src/styles/audit.css; src/app.ts :: audit commands, openWorkbook; src/engine :: trace, evalSteps
+- kind: explainer
+- logged: v0.34.0 · 2026-10-21
+
+Trace precedents and Trace dependents draw arrows over the grid through one overlay hook in the grid's paint: a dot at the source, an arrowhead at the target, a box round a range source, and a dashed line to a small sheet icon when the other end is on another sheet. Clicking the same button again on the same cell asks the engine for one more level. Arrows stay while the selection moves and go when a cell changes or Remove arrows is pressed (MS-TRACEPREC, MS-TRACEDEP).
+
+Evaluate Formula is built once in the overlay root and shows the cell reference, the formula with the part about to be evaluated underlined, and Step n of m. Evaluate moves one step, Restart goes back, Close or Escape closes. Only the text nodes change between steps (MS-EVALFORMULA).
+
+The Watch Window is a panel the person can drag by its header and resize. Add watch takes a cell, a range or Sheet!Cell, or the active cell when the box is empty. Rows are kept and only their value and formula text nodes change after each edit. Click selects a row, Ctrl+click adds, Delete or Delete watch removes, double-click goes to the cell. The list is saved with PUT /api/workbooks/{id}/watches.

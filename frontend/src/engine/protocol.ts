@@ -63,6 +63,8 @@ export type Request =
   | { id: number; op: 'read'; book: number; sheet: number; r0: number; c0: number; r1: number; c1: number }
   | { id: number; op: 'extent'; book: number; sheet: number }
   | { id: number; op: 'edge'; book: number; sheet: number; row: number; col: number; dir: Dir }
+  | { id: number; op: 'audit.trace'; book: number; sheet: number; row: number; col: number; dependents: boolean; levels: number }
+  | { id: number; op: 'audit.eval'; book: number; sheet: number; row: number; col: number }
   | { id: number; op: 'offset'; items: [src: string, dr: number, dc: number][] };
 
 export type Dir = 'up' | 'down' | 'left' | 'right';
@@ -104,7 +106,9 @@ export interface FilterList {
 export type CfCell = [row: number, col: number, style: string, bar: string, icon: string];
 export type StyleChange = [sheet: number, row: number, col: number, raw: string, shown: string];
 export type Name = [name: string, refers: string];
-export type Value = string | number | boolean | number[] | string[] | Cell[] | Changed[] | Name[] | Edit[] | Area[] | CfCell[] | LinkChange[] | [number, number] | Shift | Effect | FilterList | null;
+export type Arrow = [fromSheet: number, r0: number, c0: number, r1: number, c1: number, toSheet: number, row: number, col: number, level: number];
+export type EvalStep = [before: string, evaluating: string, after: string];
+export type Value = Arrow[] | EvalStep[] | string | number | boolean | number[] | string[] | Cell[] | Changed[] | Name[] | Edit[] | Area[] | CfCell[] | LinkChange[] | [number, number] | Shift | Effect | FilterList | null;
 
 export type Response =
   | { id: number; ok: true; value: Value }

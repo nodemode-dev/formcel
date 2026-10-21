@@ -337,3 +337,10 @@ The .fcel file keeps each sheet's rules under `validations`; GET returns them as
 - logged: v0.33.0 · 2026-10-21
 
 Tables are workbook-wide in the .fcel file (`tables`, the engine's lines) and PUT /api/workbooks/{id}/tables stores the window's. In .xlsx each table is a table part: displayName and ref, headerRowCount, totalsRowCount, tableStyleInfo with its four stripes and column options, one tableColumn per column with calculatedColumnFormula and, in the total row, totalsRowLabel or a custom totalsRowFormula. Formulas with structured references are written in the long qualified form (`Table1[[#This Row],[Qty]]`) from the engine's `file_formula`. A sheet filter over the table's header and data rows is written as the table's own autoFilter, since a sheet autoFilter on the same range is not valid; on reading, a table's autoFilter becomes the sheet filter when the sheet has none. Tables without a header row and table styles FormCel does not draw come in with a note. LibreOffice 24.2 opens a written table and computes `SUBTOTAL(109,Table1[Total])` and the calculated column. .ods has no tables here: formulas with structured references are written with plain absolute references (`plain_formula`).
+
+### Watch list in the .fcel file
+- refers-to: app/services/store.py :: Book.watches, set_watches, _write, _load, get; app/routers/workbooks.py :: WatchIn; PUT /api/workbooks/{id}/watches
+- kind: explainer
+- logged: v0.34.0 · 2026-10-21
+
+The Watch Window's cells are kept in `workbook.json` under `watches`, a list of [sheet, row, col] triples (zero based). GET returns them as `watches` and PUT /api/workbooks/{id}/watches stores the window's list. Entries that are not three numbers long are dropped when the file is read. .xlsx and .ods files do not carry the list.

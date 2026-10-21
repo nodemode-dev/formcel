@@ -33,3 +33,4 @@ FormCel ports code from two sibling repositories by the same owner, both Apache-
 | msoffcrypto-tool 5.4.2 | MIT | engine process: password-protected files (`backend/app/services/crypto.py`) |
 | cryptography | Apache-2.0 or BSD-3-Clause | engine process: used by msoffcrypto-tool |
 | olefile | BSD-2-Clause | engine process: used by msoffcrypto-tool |
+| regex 1.13.1 | MIT or Apache-2.0 | engine: REGEXMATCH, REGEXEXTRACT, REGEXREPLACE, REGEXTEST (`engine/crates/formcel-core/src/fx_regex.rs`); with regex-automata 0.4.18, regex-syntax 0.8.11, aho-corasick 1.1.5 and memchr 2.8.3 |
