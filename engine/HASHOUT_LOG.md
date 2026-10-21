@@ -116,9 +116,34 @@ Kept in source bc clippy requires a Safety section on public unsafe functions; t
 
 ## crates/formcel-py/src/lib.rs {#py}
 
-### abi3-py312 and unsendable
+### abi3-py312, and why Workbook is sendable
 - refers-to: crates/formcel-py/Cargo.toml, src/lib.rs :: Workbook
 - kind: rationale
-- logged: v0.1.0 · 2026-10-21
+- logged: v0.1.0 · 2026-10-21 · revised v0.4.0
 
-abi3 for Python 3.12 builds one wheel that loads on 3.12 and later. The class is unsendable: the engine process will own each open workbook on one thread and hand work to it, rather than locking the core.
+abi3 for Python 3.12 builds one wheel that loads on 3.12 and later. Through v0.3.0 the class was `unsendable`. FastAPI runs plain `def` routes on a thread pool, so a workbook created on one thread was used from another, and PyO3 panics on that. The backend already serialises every call to a workbook with its own lock (`Book.lock` in backend/app/services/store.py), so the class is now an ordinary sendable pyclass and PyO3 holds a borrow flag on each call.
+
+### No panic = "abort"
+- refers-to: Cargo.toml :: profile.release
+- kind: warning-context
+- logged: v0.4.0 · 2026-10-21
+
+The release profile used to set `panic = "abort"` to shrink the wasm. In the Python build, abort turns any panic into the death of the whole engine process, which is how the unsendable panic above surfaced: the window saw health time out with no error. With the default unwind, PyO3 turns a panic into a Python `PanicException` and the request fails on its own. The wasm grows by a few KB.
+
+---
+
+## crates/formcel-core/src/lib.rs · shifting rows and columns {#shift}
+
+### Insert and delete are one history step each
+- refers-to: src/lib.rs :: Workbook::insert, Workbook::delete, Tx, Effect
+- kind: rationale
+- logged: v0.4.0 · 2026-10-21
+
+History holds `Tx` entries: either a list of cell changes or a shift. A delete records the cells it dropped, so undo replays the reverse shift and puts those cells back; the effect it returns names both, so the window can move its row and column sizes before it repaints the cells. Deleting, moving or renaming a sheet clears history, because the stored sheet indices would point at the wrong sheet.
+
+### Store::shift reinserts filled cells
+- refers-to: src/store.rs :: Store::shift
+- kind: rationale
+- logged: v0.4.0 · 2026-10-21
+
+The shift drains the store and reinserts each cell at its new address. That costs one pass over filled cells, not over the 1,048,576-row grid: inserting a row into a 1,000,000-cell column took 0.10 s and its undo 0.09 s in the Python build (release, opt-level s).
