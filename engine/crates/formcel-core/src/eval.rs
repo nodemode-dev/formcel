@@ -3,7 +3,30 @@ use crate::{numfmt, Addr, Value};
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
+#[path = "fx_date.rs"]
+mod fx_date;
+#[path = "fx_eng.rs"]
+mod fx_eng;
+#[path = "fx_hub.rs"]
+mod fx_hub;
+#[path = "fx_info.rs"]
+mod fx_info;
+#[path = "fx_lookup.rs"]
+mod fx_lookup;
+#[path = "fx_query.rs"]
+mod fx_query;
+#[path = "fx_regex.rs"]
+mod fx_regex;
+#[path = "fx_text.rs"]
+mod fx_text;
+
 pub trait Ctx {
+    fn formula_at(&self, _sheet: usize, _a: Addr) -> Option<String> {
+        None
+    }
+    fn sheet_total(&self) -> usize {
+        1
+    }
     fn sheet_index(&self, name: &str) -> Option<usize>;
     fn cell(&self, sheet: usize, a: Addr) -> Value;
     fn each(&self, sheet: usize, area: Area, f: &mut dyn FnMut(Addr, &Value));
@@ -252,7 +275,7 @@ impl<'a> Eval<'a> {
     }
 
     fn routed(&self, name: &str) -> bool {
-        ARRAY_FNS.contains(&name) || SCOPED_FNS.contains(&name) || self.user(name)
+        ARRAY_FNS.contains(&name) || fx_hub::ARRAY_MORE.contains(&name) || SCOPED_FNS.contains(&name) || self.user(name)
     }
 
     fn deeper<T>(&self, f: impl FnOnce() -> Result<T, ErrKind>) -> Result<T, ErrKind> {
@@ -1179,7 +1202,7 @@ impl<'a> Eval<'a> {
                         None => return Err(ErrKind::Na),
                     }
                 }
-                _ => return Err(ErrKind::Name),
+                _ => return self.call_more(name, a),
             })
         })();
         r.unwrap_or_else(err)
@@ -1715,7 +1738,7 @@ impl Eval<'_> {
                 }
                 Ok(Arg::A(Array { rows: cells.len(), cols, data }))
             }
-            _ => Err(ErrKind::Name),
+            _ => self.call_arg_more(name, a),
         }
     }
 

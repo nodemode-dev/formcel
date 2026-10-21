@@ -99,6 +99,19 @@ impl Workbook {
         self.inner.names()
     }
 
+    #[pyo3(signature = (a1, levels = 1, dependents = false, sheet = 0))]
+    fn trace(&self, a1: &str, levels: u32, dependents: bool, sheet: usize) -> PyResult<Vec<(usize, u32, u32, u32, u32, usize, u32, u32, u32)>> {
+        let at = parse_a1(a1).map_err(|e| PyValueError::new_err(e.to_string()))?;
+        let list = if dependents { self.inner.dependent_arrows(sheet, at, levels) } else { self.inner.precedent_arrows(sheet, at, levels) };
+        Ok(list.into_iter().map(|a| (a.from_sheet, a.from.r0, a.from.c0, a.from.r1, a.from.c1, a.to_sheet, a.to.row, a.to.col, a.level)).collect())
+    }
+
+    #[pyo3(signature = (a1, sheet = 0))]
+    fn evaluate_steps(&self, a1: &str, sheet: usize) -> PyResult<Vec<(String, String, String)>> {
+        let at = parse_a1(a1).map_err(|e| PyValueError::new_err(e.to_string()))?;
+        Ok(self.inner.evaluate_steps(sheet, at).into_iter().map(|[b, c, a]| (b, c, a)).collect())
+    }
+
     #[pyo3(signature = (top, bottom, code, sheet = 0))]
     fn set_format(&mut self, top: &str, bottom: &str, code: &str, sheet: usize) -> PyResult<Vec<(String, String)>> {
         let t = parse_a1(top).map_err(|e| PyValueError::new_err(e.to_string()))?;

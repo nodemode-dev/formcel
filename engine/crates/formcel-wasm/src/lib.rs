@@ -919,6 +919,36 @@ pub extern "C" fn fc_extent(id: u32, sheet: u32) -> i32 {
     }
 }
 
+/// Trace Precedents (`dependents` 0) or Trace Dependents (1) arrows for one cell, as `fromSheet\tr0\tc0\tr1\tc1\ttoSheet\trow\tcol\tlevel` lines.
+#[no_mangle]
+pub extern "C" fn fc_trace(id: u32, sheet: u32, row: u32, col: u32, dependents: u32, levels: u32) -> i32 {
+    let at = Addr { row, col };
+    match with_book(id, |wb| formcel_core::audit::encode_arrows(&if dependents == 0 { wb.precedent_arrows(sheet as usize, at, levels) } else { wb.dependent_arrows(sheet as usize, at, levels) })) {
+        Some(s) => emit(&s) as i32,
+        None => -1,
+    }
+}
+
+/// The Evaluate Formula states of a formula cell as `before\tevaluating\tafter` lines.
+#[no_mangle]
+pub extern "C" fn fc_eval_steps(id: u32, sheet: u32, row: u32, col: u32) -> i32 {
+    match with_book(id, |wb| {
+        let mut out = String::new();
+        for [b, c, a] in wb.evaluate_steps(sheet as usize, Addr { row, col }) {
+            wire::escape(&b, &mut out);
+            out.push('\t');
+            wire::escape(&c, &mut out);
+            out.push('\t');
+            wire::escape(&a, &mut out);
+            out.push('\n');
+        }
+        out
+    }) {
+        Some(s) => emit(&s) as i32,
+        None => -1,
+    }
+}
+
 #[no_mangle]
 pub extern "C" fn fc_edge(id: u32, sheet: u32, row: u32, col: u32, dir: u32) -> i32 {
     let d = match dir {

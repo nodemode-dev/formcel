@@ -2,6 +2,7 @@ use graph::{FastMap, FastSet};
 use std::collections::{HashMap, VecDeque};
 use std::fmt;
 
+pub mod audit;
 pub mod cf;
 pub mod eval;
 pub mod link;
@@ -430,6 +431,14 @@ impl eval::Ctx for Workbook {
 
     fn filtered(&self, sheet: usize, row: u32) -> bool {
         self.sheets.get(sheet).and_then(|s| s.filter.as_ref()).is_some_and(|f| f.hidden.binary_search(&row).is_ok())
+    }
+
+    fn formula_at(&self, sheet: usize, a: Addr) -> Option<String> {
+        self.formulas.get(&(sheet, a)).map(Formula::text)
+    }
+
+    fn sheet_total(&self) -> usize {
+        self.sheets.len()
     }
 
     fn subtotal_at(&self, sheet: usize, a: Addr) -> bool {
