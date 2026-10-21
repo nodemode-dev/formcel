@@ -1451,7 +1451,7 @@ export class Grid {
     const parsed = lines.map((l) => l.split('\t').map(unescapeField));
     const box = (p: string[]) => p[0].split(',').map(Number) as [number, number, number, number];
     this.checks = parsed.filter((p) => p[1] === 'checkbox').map((p) => ({ area: box(p), on: p[3]?.trim() || 'TRUE', off: p[4]?.trim() || 'FALSE' }));
-    this.chips = parsed.filter((p) => p[1] === 'list' && (p[5] ?? '').includes('c')).map((p) => ({
+    this.chips = parsed.filter((p) => (p[1] === 'list' || p[1] === 'custom') && (p[5] ?? '').includes('c')).map((p) => ({
       area: box(p),
       multi: (p[5] ?? '').includes('m'),
       colors: new Map((p[11] ?? '').split(';').map((s) => s.split('=')).filter((kv) => kv.length === 2 && kv[0].trim() && kv[1].trim()).map(([k, v]) => [k.trim().toLowerCase(), v.trim()] as [string, string])),

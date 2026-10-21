@@ -1056,6 +1056,7 @@ impl Workbook {
         let rule = match base {
             "checkbox" => Some("checkbox\t\t\t\tb\tstop".to_string()),
             "dropdown" => Some(format!("list\t\t{}\t\tbd\tstop", rest.replace('|', ","))),
+            "people" => Some(format!("custom\t\t=ISNUMBER(FIND(\"@\",{}{}))\t\tbec\twarning\t\t\tThat is not a person\tUse an email address such as name@example.com.", col_name(ca.c0), d0 + 1)),
             "" | "text" | "number" | "date" => Some(String::new()),
             _ => None,
         };
@@ -1094,6 +1095,7 @@ impl Workbook {
             "number" => matches!(v, Value::Number(_)) && !fmt.is_some_and(|f| f.is_date()),
             "date" => matches!(v, Value::Number(_)) && fmt.is_some_and(|f| f.is_date()),
             "checkbox" => matches!(v, Value::Bool(_)),
+            "people" => matches!(&v, Value::Text(s) if s.contains('@')),
             _ => true,
         };
         let msg = if fits { String::new() } else { format!("Column {head} expects a {} value.", kind.split(':').next().unwrap_or("")) };
