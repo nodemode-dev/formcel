@@ -1,4 +1,4 @@
-import type { Cell, Changed, Dir, Effect, EngineClient, Shift } from '../engine';
+import type { Cell, Changed, Dir, Effect, EngineClient, FormatChange, Shift } from '../engine';
 import { Axis, type AxisState } from './axis';
 import { MAX_COLS, MAX_ROWS, a1, colName, parseRef, rangeText, type Range } from './a1';
 import { fillSeries } from './fill';
@@ -23,7 +23,6 @@ export const ZOOMS = [0.5, 0.67, 0.75, 0.9, 1, 1.1, 1.25, 1.5, 1.75, 2];
 const HEAD_H = 24;
 const HEAD_W = 60;
 const KEY = (r: number, c: number) => r * MAX_COLS + c;
-const NUMERIC = /^-?\$?-?(\d[\d,]*\.?\d*|\.\d+)(e[+-]?\d+)?%?$|^\d{1,2}\/\d{1,2}\/\d{4}( \d{1,2}:\d{2}(:\d{2})?( [AP]M)?)?$|^\d{1,2}:\d{2}(:\d{2})?( [AP]M)?$/i;
 const ERRORS = new Set(['#DIV/0!', '#VALUE!', '#REF!', '#NAME?', '#N/A', '#NUM!', '#NULL!', '#ERROR!']);
 const OUTLINE_PAD = 3;
 const OUTLINE_STEP = 16;
@@ -46,6 +45,7 @@ export interface GridEvents {
   onChanged(changes: Changed[]): void;
   onSheet(sheet: number): SheetView;
   onShift(shift: Shift): void;
+  onFormats(formats: FormatChange[]): void;
   onView(sheet: number, view: SheetView): void;
   onMenu(kind: MenuKind, x: number, y: number): void;
   onGoto(): void;
@@ -65,6 +65,7 @@ export class Grid {
   editorHook: ((e: KeyboardEvent) => boolean) | null = null;
   private readonly cache = new Map<number, string>();
   private readonly fx = new Map<number, string>();
+  private readonly nums = new Set<number>();
   private wins: (Range | null)[] = [null, null, null, null];
   private pendingWins: (Range | null)[] = [null, null, null, null];
   private sh = 0;
@@ -244,6 +245,7 @@ export class Grid {
   private dropWindows(): void {
     this.cache.clear();
     this.fx.clear();
+    this.nums.clear();
     this.wins = [null, null, null, null];
     this.pendingWins = [null, null, null, null];
   }
@@ -276,6 +278,7 @@ export class Grid {
           if (r >= old.r0 && r <= old.r1 && c >= old.c0 && c <= old.c1 && !keep(r, c)) {
             this.cache.delete(k);
             this.fx.delete(k);
+            this.nums.delete(k);
           }
         }
       }
@@ -285,11 +288,13 @@ export class Grid {
         if (r >= want.r0 && r <= want.r1 && c >= want.c0 && c <= want.c1) {
           this.cache.delete(k);
           this.fx.delete(k);
+          this.nums.delete(k);
         }
       }
-      for (const [r, c, t, f] of cells) {
+      for (const [r, c, t, f, n] of cells) {
         this.cache.set(KEY(r, c), t);
         if (f !== undefined) this.fx.set(KEY(r, c), f);
+        if (n) this.nums.add(KEY(r, c));
       }
       if (!this.editing && this.ar >= want.r0 && this.ar <= want.r1 && this.ac >= want.c0 && this.ac <= want.c1) this.announce();
       this.paint();
@@ -549,7 +554,7 @@ export class Grid {
         ctx.beginPath();
         ctx.rect(xx + 1, yy, cw - 2, rh);
         ctx.clip();
-        if (NUMERIC.test(text)) {
+        if (this.nums.has(KEY(r, c))) {
           ctx.textAlign = 'right';
           ctx.fillText(text, xx + cw - 5, yy + rh / 2);
         } else if (text === 'TRUE' || text === 'FALSE' || ERRORS.has(text)) {
@@ -859,31 +864,43 @@ export class Grid {
 
   patch(changed: Changed[]): void {
     let hit = false;
-    for (const [s, r, c, t, f] of changed) {
+    for (const [s, r, c, t, f, n] of changed) {
       if (s !== this.sheet) continue;
       const k = KEY(r, c);
-      if (this.cache.get(k) === t && this.fx.get(k) === f) continue;
+      if (this.cache.get(k) === t && this.fx.get(k) === f && this.nums.has(k) === !!n) continue;
       hit = true;
-      if (t || f !== undefined) this.cache.set(k, t);
-      else this.cache.delete(k);
-      if (f !== undefined) this.fx.set(k, f);
-      else this.fx.delete(k);
+      this.store(k, t, f, n);
     }
     if (!hit) return;
     this.announce();
     this.paint();
   }
 
+  private store(k: number, t: string, f: string | undefined, n: boolean | undefined): void {
+    if (t || f !== undefined) this.cache.set(k, t);
+    else this.cache.delete(k);
+    if (f !== undefined) this.fx.set(k, f);
+    else this.fx.delete(k);
+    if (n) this.nums.add(k);
+    else this.nums.delete(k);
+  }
+
+  async setFormat(code: string): Promise<void> {
+    const s = this.sel();
+    const e = await this.engine.setFormat(this.book, this.sheet, s.r0, s.c0, s.r1, s.c1, code);
+    await this.applyEffect(e);
+  }
+
+  async formatAtActive(): Promise<string> {
+    return this.engine.formatAt(this.book, this.sheet, this.ar, this.ac);
+  }
+
   private async commitEdits(changed: Changed[]): Promise<void> {
     if (changed.length && changed.every(([s]) => s !== this.sheet)) {
       this.show(this.book, changed[0][0], this.events.onSheet(changed[0][0]));
     }
-    for (const [s, r, c, t, f] of changed) {
-      if (s !== this.sheet) continue;
-      if (t || f !== undefined) this.cache.set(KEY(r, c), t);
-      else this.cache.delete(KEY(r, c));
-      if (f !== undefined) this.fx.set(KEY(r, c), f);
-      else this.fx.delete(KEY(r, c));
+    for (const [s, r, c, t, f, n] of changed) {
+      if (s === this.sheet) this.store(KEY(r, c), t, f, n);
     }
     if (changed.length) this.events.onChanged(changed);
     const hst = await this.engine.history(this.book);
@@ -919,6 +936,7 @@ export class Grid {
 
   private async applyEffect(e: Effect): Promise<void> {
     if (e.shift) this.afterShift(e.shift);
+    if (e.formats.length) this.events.onFormats(e.formats);
     await this.commitEdits(e.changes);
   }
 
@@ -1502,6 +1520,7 @@ export class Grid {
       if (k === '-' || k === '_') return this.removeAuto();
       if (e.code === 'Digit9') return this.hide(true, !e.shiftKey);
       if (e.code === 'Digit0') return this.hide(false, !e.shiftKey);
+      if (e.shiftKey && e.code in SHORT_FORMATS) return this.setFormat(SHORT_FORMATS[e.code]);
       if (k === 'g') return this.events.onGoto();
       if (k === 'z' && !e.shiftKey) return this.undo();
       if (k === 'y' || k === 'z') return this.redo();
@@ -1549,10 +1568,20 @@ export class Grid {
 
 const ARROWS: Record<string, Dir> = { ArrowUp: 'up', ArrowDown: 'down', ArrowLeft: 'left', ArrowRight: 'right' };
 
+export const SHORT_FORMATS: Record<string, string> = {
+  Backquote: '',
+  Digit1: '#,##0.00',
+  Digit2: 'h:mm AM/PM',
+  Digit3: 'd-mmm-yy',
+  Digit4: '$#,##0.00_);($#,##0.00)',
+  Digit5: '0%',
+  Digit6: '0.00E+00',
+};
+
 function wants(e: KeyboardEvent): boolean {
   if (ARROWS[e.key]) return true;
   const mod = e.ctrlKey || e.metaKey;
-  if (mod) return !e.altKey && (['z', 'y', 'a', 'home', 'end', '+', '=', '-', '_', 'g'].includes(e.key.toLowerCase()) || e.code === 'Digit9' || e.code === 'Digit0');
+  if (mod) return !e.altKey && (['z', 'y', 'a', 'home', 'end', '+', '=', '-', '_', 'g'].includes(e.key.toLowerCase()) || e.code === 'Digit9' || e.code === 'Digit0' || (e.shiftKey && e.code in SHORT_FORMATS));
   if (['Enter', 'Tab', 'Escape', 'Home', 'PageDown', 'PageUp', 'F2', 'F5', 'Delete', 'Backspace'].includes(e.key)) return true;
   return e.key.length === 1 && !e.altKey;
 }

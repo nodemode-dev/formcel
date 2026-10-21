@@ -1,4 +1,4 @@
-import type { Cell, Changed, Effect, Request, Response, Shift, Value } from './protocol';
+import type { Cell, Changed, Effect, FormatChange, Request, Response, Shift, Value } from './protocol';
 
 interface Exports {
   memory: WebAssembly.Memory;
@@ -19,6 +19,9 @@ interface Exports {
   fc_rename_sheet(book: number, sheet: number, name: number, len: number): number;
   fc_define_name(book: number, name: number, nameLen: number, refers: number, refersLen: number): number;
   fc_names(book: number): number;
+  fc_set_format(book: number, sheet: number, r0: number, c0: number, r1: number, c1: number, code: number, len: number): number;
+  fc_format_at(book: number, sheet: number, row: number, col: number): number;
+  fc_load_formats(book: number, sheet: number, lines: number, len: number): number;
   fc_undo(book: number): number;
   fc_redo(book: number): number;
   fc_history(book: number): number;
@@ -49,19 +52,15 @@ function lines(s: string): string[][] {
 }
 
 function cells(s: string): Cell[] {
-  return lines(s).map(([r, c, t, f]) => {
-    const cell: Cell = [Number(r), Number(c), unescape(t ?? '')];
-    if (f !== undefined) cell.push(unescape(f));
-    return cell;
-  });
+  return lines(s).map(([r, c, fl, t, f]) => [Number(r), Number(c), unescape(t ?? ''), f === undefined ? undefined : unescape(f), fl === 'n']);
 }
 
 function changed(s: string): Changed[] {
-  return lines(s).map(([sh, r, c, t, f]) => {
-    const ch: Changed = [Number(sh), Number(r), Number(c), unescape(t ?? '')];
-    if (f !== undefined) ch.push(unescape(f));
-    return ch;
-  });
+  return lines(s).filter((l) => l[0] !== '%' && l[0] !== '#').map(([sh, r, c, fl, t, f]) => [Number(sh), Number(r), Number(c), unescape(t ?? ''), f === undefined ? undefined : unescape(f), fl === 'n']);
+}
+
+function formatsOf(s: string): FormatChange[] {
+  return lines(s).filter((l) => l[0] === '%').map(([, sh, r, c, code]) => [Number(sh), Number(r), Number(c), unescape(code ?? '')]);
 }
 
 function shiftOf(line: string): Shift {
@@ -70,9 +69,8 @@ function shiftOf(line: string): Shift {
 }
 
 function effect(s: string): Effect {
-  if (!s.startsWith('#')) return { changes: changed(s), shift: null };
-  const nl = s.indexOf('\n');
-  return { shift: shiftOf(s.slice(0, nl)), changes: changed(s.slice(nl + 1)) };
+  const shift = s.startsWith('#') ? shiftOf(s.slice(0, s.indexOf('\n'))) : null;
+  return { shift, changes: changed(s), formats: formatsOf(s) };
 }
 
 function ok(n: number, what: string): number {
@@ -145,7 +143,7 @@ function run(x: Exports, req: Request): Value {
     case 'undo':
     case 'redo': {
       const n = req.op === 'undo' ? x.fc_undo(req.book) : x.fc_redo(req.book);
-      return n === -2 ? { changes: [], shift: null } : effect(out(x, n));
+      return n === -2 ? { changes: [], shift: null, formats: [] } : effect(out(x, n));
     }
     case 'shift':
       return shiftOf(out(x, x.fc_shift(req.book, req.sheet, req.rows ? 1 : 0, req.at, req.n, req.insert ? 1 : 0)).trim());
@@ -155,6 +153,18 @@ function run(x: Exports, req: Request): Value {
       return ok(x.fc_move_sheet(req.book, req.sheet, req.to), 'That sheet cannot move there.');
     case 'sheet.rename':
       return withStrings(x, [req.name], ([p, l]) => ok(x.fc_rename_sheet(req.book, req.sheet, p, l), 'That sheet cannot be renamed.'));
+    case 'format.set':
+      return withStrings(x, [req.code], ([p, l]) => {
+        const n = x.fc_set_format(req.book, req.sheet, req.r0, req.c0, req.r1, req.c1, p, l);
+        if (n === -3) throw new Error('That is not a number format FormCel can read.');
+        return effect(out(x, n));
+      });
+    case 'format.at':
+      return out(x, x.fc_format_at(req.book, req.sheet, req.row, req.col));
+    case 'format.load': {
+      const body = req.cells.map(([r, c, code]) => `${r}\t${c}\t${escape(code)}`).join('\n');
+      return withStrings(x, [body], ([p, l]) => ok(x.fc_load_formats(req.book, req.sheet, p, l), 'The engine refused those formats.'));
+    }
     case 'name.define':
       return withStrings(x, [req.name, req.refers], ([n, nl, r, rl]) => {
         const len = x.fc_define_name(req.book, n, nl, r, rl);

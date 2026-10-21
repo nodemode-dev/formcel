@@ -326,3 +326,12 @@ Each sheet's view (sizes, hidden, frozen, zoom, tab colour) is saved 500 ms afte
 - logged: v0.1.0 · 2026-10-21
 
 8.3.0 (the family pin) pulls a launch-editor with three advisories, one rated high; 8.3.4 clears them and `npm audit` reports 0. formdeck still pins 8.3.0.
+
+## src/app.ts {#number-formats}
+
+### Number format menu, shortcuts and decimals
+- refers-to: src/app.ts :: NUMBER_FORMATS, bumpCode, formatMenu, customFormat, sendFormats; src/grid/grid.ts :: SHORT_FORMATS, nums, setFormat, store
+- kind: explainer
+- logged: v0.18.0 · 2026-10-21
+
+The shortcuts follow Microsoft's keyboard shortcuts page: Ctrl+Shift+~ General, ! Number, @ Time, # Date, $ Currency, % Percent, ^ Scientific. The page describes each format in words; the exact codes (`#,##0.00`, `h:mm AM/PM`, `d-mmm-yy`, `$#,##0.00_);($#,##0.00)`, `0%`, `0.00E+00`) and the menu's other entries are FormCel's choice. Keys match by `KeyboardEvent.code` so they work on any layout. Increase and decrease decimals read the active cell's code: General starts from the decimals shown, and a code gains or loses one place in each section, before any exponent. The custom box is built once into the overlay root and only shown and hidden; its hint line keeps its height so an error does not move the box. The grid keeps `nums`, the cells the engine flagged as numbers, and right-aligns those, so `007` under Text sits left like any text.

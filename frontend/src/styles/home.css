@@ -300,6 +300,36 @@
 .fc-menu-item:hover:not(:disabled), .fc-menu-item:focus-visible { background: var(--accent-color-dim); outline: none; }
 .fc-menu-item:disabled { color: var(--text-muted); cursor: default; }
 .fc-menu-item.is-danger { color: var(--bad); }
+
+.fc-fmt-custom {
+  position: fixed;
+  z-index: var(--z-dropdown);
+  display: grid;
+  gap: var(--space-2);
+  width: 320px;
+  padding: var(--space-3);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-md);
+  background: var(--bg-secondary);
+  box-shadow: var(--shadow-md);
+}
+
+.fc-fmt-label { display: grid; gap: var(--space-1); font-size: var(--text-sm); color: var(--text-secondary); }
+
+.fc-fmt-input {
+  height: 30px;
+  padding: 0 var(--space-2);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-sm);
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: var(--text-md);
+}
+
+.fc-fmt-input:focus { outline: none; border-color: var(--accent-color); }
+.fc-fmt-hint { min-height: calc(var(--text-xs) * 2.8); font-size: var(--text-xs); line-height: 1.4; color: var(--text-muted); }
+.fc-fmt-custom[data-state="error"] .fc-fmt-hint { color: var(--bad); }
 .fc-menu-keys { font-family: var(--font-mono); font-size: var(--text-xs); color: var(--text-muted); }
 .fc-menu-sep { height: 1px; margin: var(--space-1) 0; background: var(--border-color); }
 .fc-menu-swatches { display: flex; flex-wrap: wrap; gap: 6px; padding: var(--space-1) var(--space-2); }

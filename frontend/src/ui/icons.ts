@@ -21,6 +21,9 @@ export const icons = {
   freezePanes: svg('<rect x="3.5" y="4.5" width="17" height="15" rx="2"/><path d="M3.5 10h17M10 4.5v15" stroke-width="3"/>'),
   unfreeze: svg('<rect x="3.5" y="4.5" width="17" height="15" rx="2"/><path d="M3.5 10h17M10 4.5v15" stroke-dasharray="2 2.5"/>'),
   split: svg('<rect x="3.5" y="4.5" width="17" height="15" rx="2"/><path d="M3.5 12h17M12 4.5v15"/><path d="M12 9.5v5M9.5 12h5" stroke-width="3"/>'),
+  numFormat: svg('<path d="M10 4l-2 16M16 4l-2 16M4.5 9h15M4 15h15"/>'),
+  decMore: svg('<circle cx="4.5" cy="18" r="1" fill="currentColor" stroke="none"/><rect x="8" y="11" width="4.5" height="8" rx="2.25"/><rect x="15" y="11" width="4.5" height="8" rx="2.25"/><path d="M12 5.5H4M6.5 3L4 5.5 6.5 8"/>'),
+  decLess: svg('<circle cx="4.5" cy="18" r="1" fill="currentColor" stroke="none"/><rect x="8" y="11" width="4.5" height="8" rx="2.25"/><path d="M12 5.5h8M17.5 3L20 5.5 17.5 8"/>'),
 } as const;
 
 export type IconName = keyof typeof icons;

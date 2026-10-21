@@ -1,6 +1,6 @@
 import type { Cell, Changed, Dir, Edit, Effect, Name, RequestBody, Response, Shift, Value } from './protocol';
 
-export type { Cell, Changed, Dir, Edit, Effect, Name, Shift } from './protocol';
+export type { Cell, Changed, Dir, Edit, Effect, FormatChange, Name, Shift } from './protocol';
 
 type Pending = { resolve: (v: Value) => void; reject: (e: Error) => void };
 
@@ -82,6 +82,18 @@ export class EngineClient {
 
   async renameSheet(book: number, sheet: number, name: string): Promise<void> {
     await this.call({ op: 'sheet.rename', book, sheet, name });
+  }
+
+  async setFormat(book: number, sheet: number, r0: number, c0: number, r1: number, c1: number, code: string): Promise<Effect> {
+    return (await this.call({ op: 'format.set', book, sheet, r0, c0, r1, c1, code })) as Effect;
+  }
+
+  async formatAt(book: number, sheet: number, row: number, col: number): Promise<string> {
+    return (await this.call({ op: 'format.at', book, sheet, row, col })) as string;
+  }
+
+  async loadFormats(book: number, sheet: number, cells: Edit[]): Promise<void> {
+    if (cells.length) await this.call({ op: 'format.load', book, sheet, cells });
   }
 
   async defineName(book: number, name: string, refers: string): Promise<Changed[]> {

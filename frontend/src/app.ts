@@ -1,4 +1,4 @@
-import { engine, type Changed, type Name, type Shift } from './engine';
+import { engine, type Changed, type FormatChange, type Name, type Shift } from './engine';
 import { colName, type Range } from './grid/a1';
 import { Autocomplete, FUNCTIONS, type Suggestion } from './ui/autocomplete';
 import { Grid, type MenuKind, type SheetView } from './grid/grid';
@@ -25,7 +25,43 @@ function absRange(r: Range): string {
   return r.r0 === r.r1 && r.c0 === r.c1 ? cell(r.r0, r.c0) : `${cell(r.r0, r.c0)}:${cell(r.r1, r.c1)}`;
 }
 
-const TAB_COLOURS = ['', '#ef4444', '#f97316', '#eab308', '#22c55e', '#14b8a6', '#3b82f6', '#8b5cf6', '#ec4899', '#94a3b8'];
+const NUMBER_FORMATS: { id: string; label: string; description: string; code: string; keys?: string }[] = [
+  { id: 'general', label: 'General', description: 'Show numbers as typed, with no set format.', code: '', keys: 'Mod+Shift+~' },
+  { id: 'number', label: 'Number', description: 'Two decimal places, a thousands separator and a minus sign for negatives.', code: '#,##0.00', keys: 'Mod+Shift+!' },
+  { id: 'currency', label: 'Currency', description: 'Dollars with two decimal places, negatives in parentheses.', code: '$#,##0.00_);($#,##0.00)', keys: 'Mod+Shift+$' },
+  { id: 'accounting', label: 'Accounting', description: 'Dollar signs lined up at the left edge, zero as a dash.', code: '_($* #,##0.00_);_($* (#,##0.00);_($* "-"??_);_(@_)' },
+  { id: 'percent', label: 'Percent', description: 'Multiply by 100 and show a percent sign, no decimal places.', code: '0%', keys: 'Mod+Shift+%' },
+  { id: 'scientific', label: 'Scientific', description: 'Exponent notation with two decimal places.', code: '0.00E+00', keys: 'Mod+Shift+^' },
+  { id: 'fraction', label: 'Fraction', description: 'A whole number and a fraction of up to one digit.', code: '# ?/?' },
+  { id: 'date-short', label: 'Short date', description: 'Month, day and four-digit year.', code: 'm/d/yyyy' },
+  { id: 'date-day', label: 'Day, month, year', description: 'Day, short month name and two-digit year.', code: 'd-mmm-yy', keys: 'Mod+Shift+#' },
+  { id: 'date-long', label: 'Long date', description: 'Weekday, month name, day and year.', code: 'dddd, mmmm d, yyyy' },
+  { id: 'time', label: 'Time', description: 'Hour and minute with AM or PM.', code: 'h:mm AM/PM', keys: 'Mod+Shift+@' },
+  { id: 'time-long', label: 'Time with seconds', description: 'Hour, minute and second with AM or PM.', code: 'h:mm:ss AM/PM' },
+  { id: 'text', label: 'Text', description: 'Keep what is typed as text, even numbers and formulas.', code: '@' },
+];
+
+function bumpCode(code: string, shown: string, dir: 1 | -1): string {
+  if (!code || code.toLowerCase() === 'general') {
+    const d = Math.max(0, (/\.(\d+)/.exec(shown)?.[1].length ?? 0) + dir);
+    return d ? `0.${'0'.repeat(d)}` : '0';
+  }
+  return code.split(';').map((sec) => {
+    const e = sec.search(/[Ee][+-]/);
+    const head = e < 0 ? sec : sec.slice(0, e);
+    const tail = e < 0 ? '' : sec.slice(e);
+    const m = /\.([0#?]+)/.exec(head);
+    if (m) {
+      const n = m[1].length + dir;
+      return head.slice(0, m.index) + (n > 0 ? `.${'0'.repeat(n)}` : '') + head.slice(m.index + m[0].length) + tail;
+    }
+    if (dir < 0) return sec;
+    const last = Math.max(head.lastIndexOf('0'), head.lastIndexOf('#'), head.lastIndexOf('?'));
+    return last < 0 ? sec : head.slice(0, last + 1) + '.0' + head.slice(last + 1) + tail;
+  }).join(';');
+}
+
+const TAB_COLOURS =['', '#ef4444', '#f97316', '#eab308', '#22c55e', '#14b8a6', '#3b82f6', '#8b5cf6', '#ec4899', '#94a3b8'];
 
 async function api<T>(method: string, url: string, body?: unknown): Promise<T> {
   const r = await fetch(url, {
@@ -80,6 +116,7 @@ export class App {
         return this.open?.views[sheet] ?? {};
       },
       onShift: (s) => this.sendShift(s),
+      onFormats: (f) => this.sendFormats(f),
       onView: (sheet, view) => this.saveView(sheet, view),
       onMenu: (kind, x, y) => this.cellMenu(kind, x, y),
       onGoto: () => {
@@ -137,6 +174,11 @@ export class App {
     cmd('view.zoom-out', 'Zoom out', 'Make the sheet smaller, down to 50%.', false, () => g.zoomStep(-1));
     cmd('view.zoom-reset', 'Zoom to 100%', 'Show the sheet at its normal size.', false, () => g.setZoom(1));
     cmd('nav.goto', 'Go to', 'Type a cell or range to jump to it.', false, () => { this.p.nameBox.focus(); this.p.nameBox.select(); }, 'F5');
+    cmd('format.menu', 'Number format', 'Choose how the selected cells show numbers, dates and times.', true, () => this.formatMenu());
+    cmd('format.decimals-more', 'Increase decimal places', 'Show one more decimal place in the selected cells.', true, () => this.bumpDecimals(1));
+    cmd('format.decimals-less', 'Decrease decimal places', 'Show one fewer decimal place in the selected cells.', true, () => this.bumpDecimals(-1));
+    cmd('format.custom', 'Custom number format', 'Type a number format code for the selected cells.', true, () => this.customFormat());
+    for (const f of NUMBER_FORMATS) cmd(`format.${f.id}`, f.label, f.description, true, () => g.setFormat(f.code), f.keys);
     void api('PUT', '/api/commands', listCommands()).catch(() => undefined);
   }
 
@@ -253,7 +295,7 @@ export class App {
   private async openWorkbook(id: string, setHash = true): Promise<void> {
     this.flush();
     await this.saving;
-    let doc: WorkbookMeta & { cells: [number, number, string][][]; views?: SheetView[]; names?: Name[] };
+    let doc: WorkbookMeta & { cells: [number, number, string][][]; formats?: [number, number, string][][]; views?: SheetView[]; names?: Name[] };
     try {
       doc = await api('GET', `/api/workbooks/${id}`);
     } catch {
@@ -264,6 +306,7 @@ export class App {
     const book = await e.newWorkbook();
     for (let i = 0; i < doc.sheets.length; i++) {
       if (i) await e.addSheet(book, doc.sheets[i]);
+      await e.loadFormats(book, i, doc.formats?.[i] ?? []);
       if (doc.cells[i]?.length) await e.load(book, doc.cells[i], i);
     }
     for (const [n, f] of doc.names ?? []) await e.defineName(book, n, f).catch(() => []);
@@ -395,6 +438,98 @@ export class App {
         this.p.save.title = err instanceof Error ? err.message : '';
       }
     });
+  }
+
+  private sendFormats(formats: FormatChange[]): void {
+    const o = this.open;
+    if (!o) return;
+    const bySheet = new Map<number, [number, number, string][]>();
+    for (const [s, r, c, code] of formats) {
+      let list = bySheet.get(s);
+      if (!list) bySheet.set(s, (list = []));
+      list.push([r, c, code]);
+    }
+    this.flush();
+    this.status('Saving');
+    this.saving = this.saving.then(async () => {
+      try {
+        for (const [sheet, cells] of bySheet) await api('POST', `/api/workbooks/${o.id}/formats`, { sheet, cells });
+        if (!this.pending.size) this.status('Saved');
+      } catch (err) {
+        this.status('Not saved', true);
+        this.p.save.title = err instanceof Error ? err.message : '';
+      }
+    });
+  }
+
+  private formatMenu(): void {
+    const g = this.grid;
+    const b = this.button('format.menu').getBoundingClientRect();
+    const run = (id: string) => () => runCommand(id).then(() => g.focus());
+    void g.formatAtActive().then((now) => {
+      const items: MenuItem[] = NUMBER_FORMATS.map((f) => ({
+        label: f.code === now ? `${f.label} (current)` : f.label,
+        keys: f.keys?.replace('Mod', 'Ctrl'),
+        run: run(`format.${f.id}`),
+      }));
+      items.push({ sep: true }, { label: 'Custom format...', run: run('format.custom') });
+      this.menu.show(b.left, b.bottom + 4, items, () => g.focus());
+    });
+  }
+
+  private async bumpDecimals(dir: 1 | -1): Promise<void> {
+    const g = this.grid;
+    const code = await g.formatAtActive();
+    const next = bumpCode(code, this.current, dir);
+    if (next !== code) await g.setFormat(next);
+  }
+
+  private customFormat(): void {
+    const box = this.customBox ??= this.makeCustomBox();
+    const b = this.button('format.menu').getBoundingClientRect();
+    box.form.style.left = `${Math.round(b.left)}px`;
+    box.form.style.top = `${Math.round(b.bottom + 4)}px`;
+    box.hint.textContent = 'Sections split by ; are positive, negative, zero and text.';
+    box.form.dataset.state = '';
+    box.form.hidden = false;
+    void this.grid.formatAtActive().then((code) => {
+      box.input.value = code;
+      box.input.focus();
+      box.input.select();
+    });
+  }
+
+  private customBox: { form: HTMLFormElement; input: HTMLInputElement; hint: HTMLElement } | null = null;
+
+  private makeCustomBox(): { form: HTMLFormElement; input: HTMLInputElement; hint: HTMLElement } {
+    const form = document.createElement('form');
+    form.className = 'fc-fmt-custom';
+    form.hidden = true;
+    form.innerHTML = '<label class="fc-fmt-label">Number format code<input class="fc-fmt-input" spellcheck="false" autocomplete="off"></label><span class="fc-fmt-hint" aria-live="polite"></span>';
+    document.getElementById('overlay-root')!.appendChild(form);
+    const input = form.querySelector<HTMLInputElement>('.fc-fmt-input')!;
+    const hint = form.querySelector<HTMLElement>('.fc-fmt-hint')!;
+    const close = () => {
+      form.hidden = true;
+      this.grid.focus();
+    };
+    form.addEventListener('submit', (e) => {
+      e.preventDefault();
+      void this.grid.setFormat(input.value).then(close, (err: unknown) => {
+        form.dataset.state = 'error';
+        hint.textContent = err instanceof Error ? err.message : String(err);
+      });
+    });
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        close();
+      }
+    });
+    document.addEventListener('pointerdown', (e) => {
+      if (!form.hidden && !form.contains(e.target as Node)) form.hidden = true;
+    }, true);
+    return { form, input, hint };
   }
 
   private cellMenu(kind: MenuKind, x: number, y: number): void {
