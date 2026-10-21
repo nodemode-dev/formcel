@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.34.0 · 2026-10-21
+
+- Functions: 421 in all (was 112). Financial, math and trigonometry, statistical and every distribution, the D database functions, engineering and complex numbers, more text, date, lookup and information functions, REGEXMATCH and friends, QUERY, GROUPBY and PIVOTBY, FORECAST and FORECAST.ETS, LINEST and TREND, SPARKLINE, the web functions and AI. 632 of 669 judged examples on Microsoft's pages give the page's result (CONFORMANCE.md in the planning docs).
+- Charts: insert a chart from the selection and edit it (type, range, titles, axes, legend, labels): column, bar, line, area, pie, scatter, combo, histogram, box, waterfall, stock, treemap, sunburst, funnel, gauge, scorecard, radar, org and timeline. Common kinds are saved in .xlsx. Pictures, shapes and text boxes float over the grid.
+- PivotTables with Rows, Columns, Values and Filters, summaries, percent of totals, calculated fields, suggested layouts and refresh as the source changes.
+- What-if: Goal Seek, Data Table, Scenario Manager, Solver, Forecast Sheet, Descriptive Statistics, Regression and Analyze Data.
+- Data tools: remove duplicates, text to columns, trim and cleanup, checkboxes, consolidate, subtotals, advanced filter, Flash Fill (Ctrl+E), filter views, slicers, table column types, grouped sheets, hidden sheets, find and replace (Ctrl+F, Ctrl+H), AutoComplete, personal templates and a zoom slider.
+- Review: notes, threaded comments with mentions, sheet, range and workbook protection, hidden formulas, Mark as final, version history, a change log per cell, share and publish links, and live editing between windows on this computer.
+- Formula auditing: trace precedents and dependents, Evaluate Formula and the Watch Window.
+- Automation: a script editor with a sandboxed workbook API, recorded macros, custom functions, triggers, script buttons, a REST API at /api/v1, data connections and queries, and an assistant that works with a model endpoint you set up.
+- Print and access: Page Setup (orientation, paper, margins, print area, titles, scaling, headers and footers, breaks, gridlines) in PDF and .xlsx, web page export, an accessibility checker, light and high-contrast themes, a shortcuts reference, larger text and five spreadsheet locales. A Tauri 2 desktop shell is in `src-tauri/`, not yet built on Windows or macOS.
+
 ## 0.33.0 · 2026-10-21
 
 - Tables: the Table button (or Ctrl+T) turns the data around the active cell into a table with a header row, filter buttons and banded rows. Inside a table the same button opens Table design: name, style (eight to choose from), resize, Total row, banded rows and columns, first and last column, filter button, and Convert to range.

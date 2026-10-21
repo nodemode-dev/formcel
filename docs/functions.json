@@ -20,6 +20,138 @@
    }
   },
   {
+   "name": "ACOS",
+   "args": [
+    "number"
+   ],
+   "summary": "Arccosine of a number, in radians.",
+   "category": "Math and trigonometry",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/acos-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Math",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "ACOSH",
+   "args": [
+    "number"
+   ],
+   "summary": "Inverse hyperbolic cosine.",
+   "category": "Math and trigonometry",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/acosh-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Math",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "ACOT",
+   "args": [
+    "number"
+   ],
+   "summary": "Arccotangent of a number, in radians.",
+   "category": "Math and trigonometry",
+   "excel": {
+    "listed": true,
+    "since": "2013",
+    "source": "https://support.microsoft.com/en-us/excel/functions/acot-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Math",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "ACOTH",
+   "args": [
+    "number"
+   ],
+   "summary": "Inverse hyperbolic cotangent.",
+   "category": "Math and trigonometry",
+   "excel": {
+    "listed": true,
+    "since": "2013",
+    "source": "https://support.microsoft.com/en-us/excel/functions/acoth-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Math",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "ADDRESS",
+   "args": [
+    "row_num",
+    "column_num",
+    "[abs_num]",
+    "[a1]",
+    "[sheet_text]"
+   ],
+   "summary": "A cell reference as text from a row and column number, A1 or R1C1.",
+   "category": "Lookup and reference",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/address-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Lookup",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "AGGREGATE",
+   "args": [
+    "function_num",
+    "options",
+    "ref1",
+    "[ref2]",
+    "..."
+   ],
+   "summary": "SUM, MAX, LARGE, PERCENTILE and other functions with options to skip errors, hidden rows or nested subtotals.",
+   "category": "Math and trigonometry",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/aggregate-function"
+   },
+   "sheets": {
+    "listed": false,
+    "category": null,
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "AI",
+   "args": [],
+   "summary": "Sends a prompt, with an optional range, to the model endpoint set up in FormCel and returns its text answer.",
+   "category": null,
+   "excel": {
+    "listed": false,
+    "since": null,
+    "source": null
+   },
+   "sheets": {
+    "listed": false,
+    "category": null,
+    "source": null
+   }
+  },
+  {
    "name": "AND",
    "args": [
     "logical1",
@@ -36,6 +168,42 @@
    "sheets": {
     "listed": true,
     "category": "Logical",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "ARABIC",
+   "args": [
+    "text"
+   ],
+   "summary": "A Roman numeral as a number.",
+   "category": "Math and trigonometry",
+   "excel": {
+    "listed": true,
+    "since": "2013",
+    "source": "https://support.microsoft.com/en-us/excel/functions/arabic-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Text",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "AREAS",
+   "args": [
+    "reference"
+   ],
+   "summary": "Number of areas in a reference.",
+   "category": "Lookup and reference",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/areas-function"
+   },
+   "sheets": {
+    "listed": false,
+    "category": null,
     "source": "https://support.google.com/docs/table/25273?hl=en"
    }
   },
@@ -58,6 +226,136 @@
    }
   },
   {
+   "name": "ARRAYTOTEXT",
+   "args": [
+    "array",
+    "[format]"
+   ],
+   "summary": "An array as text.",
+   "category": "Text",
+   "excel": {
+    "listed": true,
+    "since": "2021",
+    "source": "https://support.microsoft.com/en-us/excel/functions/arraytotext-function"
+   },
+   "sheets": {
+    "listed": false,
+    "category": null,
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "ASIN",
+   "args": [
+    "number"
+   ],
+   "summary": "Arcsine of a number, in radians.",
+   "category": "Math and trigonometry",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/asin-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Math",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "ASINH",
+   "args": [
+    "number"
+   ],
+   "summary": "Inverse hyperbolic sine.",
+   "category": "Math and trigonometry",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/asinh-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Math",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "ATAN",
+   "args": [
+    "number"
+   ],
+   "summary": "Arctangent of a number, in radians.",
+   "category": "Math and trigonometry",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/atan-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Math",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "ATAN2",
+   "args": [
+    "x_num",
+    "y_num"
+   ],
+   "summary": "Arctangent from x and y coordinates.",
+   "category": "Math and trigonometry",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/atan2-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Math",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "ATANH",
+   "args": [
+    "number"
+   ],
+   "summary": "Inverse hyperbolic tangent.",
+   "category": "Math and trigonometry",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/atanh-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Math",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "AVEDEV",
+   "args": [
+    "number1",
+    "[number2]",
+    "..."
+   ],
+   "summary": "Average of the absolute deviations from the mean.",
+   "category": "Statistical",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/avedev-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Statistical",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
    "name": "AVERAGE",
    "args": [
     "number1",
@@ -70,6 +368,26 @@
     "listed": true,
     "since": null,
     "source": "https://support.microsoft.com/en-us/excel/functions/average-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Statistical",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "AVERAGEA",
+   "args": [
+    "value1",
+    "[value2]",
+    "..."
+   ],
+   "summary": "Average counting text as 0 and TRUE as 1.",
+   "category": "Statistical",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/averagea-function"
    },
    "sheets": {
     "listed": true,
@@ -120,6 +438,281 @@
    }
   },
   {
+   "name": "BASE",
+   "args": [
+    "Number",
+    "Radix [Min_length]"
+   ],
+   "summary": "A number as text in another base.",
+   "category": "Math and trigonometry",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/base-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Math",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "BESSELJ",
+   "args": [
+    "X",
+    "N"
+   ],
+   "summary": "Bessel function of the first kind.",
+   "category": "Engineering",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/besselj-function"
+   },
+   "sheets": {
+    "listed": false,
+    "category": null,
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "BETA.DIST",
+   "args": [
+    "x",
+    "alpha",
+    "beta",
+    "cumulative",
+    "[A]",
+    "[B]"
+   ],
+   "summary": "Beta distribution.",
+   "category": "Statistical",
+   "excel": {
+    "listed": true,
+    "since": "2010",
+    "source": "https://support.microsoft.com/en-us/excel/functions/beta-dist-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Statistical",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "BETA.INV",
+   "args": [
+    "probability",
+    "alpha",
+    "beta",
+    "[A]",
+    "[B]"
+   ],
+   "summary": "Inverse of the beta distribution.",
+   "category": null,
+   "excel": {
+    "listed": false,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/beta-inv-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Statistical",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "BIN2DEC",
+   "args": [
+    "number"
+   ],
+   "summary": "Binary to decimal.",
+   "category": "Engineering",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/bin2dec-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Engineering",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "BIN2HEX",
+   "args": [
+    "number",
+    "[places]"
+   ],
+   "summary": "Binary to hexadecimal.",
+   "category": "Engineering",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/bin2hex-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Engineering",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "BIN2OCT",
+   "args": [
+    "number",
+    "[places]"
+   ],
+   "summary": "Binary to octal.",
+   "category": "Engineering",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/bin2oct-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Engineering",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "BINOM.DIST",
+   "args": [
+    "number_s",
+    "trials",
+    "probability_s",
+    "cumulative"
+   ],
+   "summary": "Binomial distribution.",
+   "category": "Statistical",
+   "excel": {
+    "listed": true,
+    "since": "2010",
+    "source": "https://support.microsoft.com/en-us/excel/functions/binom-dist-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Statistical",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "BINOM.INV",
+   "args": [
+    "trials",
+    "probability_s",
+    "alpha"
+   ],
+   "summary": "Smallest number of successes whose cumulative binomial probability reaches a level.",
+   "category": "Statistical",
+   "excel": {
+    "listed": true,
+    "since": "2010",
+    "source": "https://support.microsoft.com/en-us/excel/functions/binom-inv-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Statistical",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "BITAND",
+   "args": [
+    "number1",
+    "number2"
+   ],
+   "summary": "Bitwise AND of two numbers.",
+   "category": "Engineering",
+   "excel": {
+    "listed": true,
+    "since": "2013",
+    "source": "https://support.microsoft.com/en-us/excel/functions/bitand-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Engineering",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "BITLSHIFT",
+   "args": [
+    "number",
+    "shift_amount"
+   ],
+   "summary": "A number shifted left by bits.",
+   "category": "Engineering",
+   "excel": {
+    "listed": true,
+    "since": "2013",
+    "source": "https://support.microsoft.com/en-us/excel/functions/bitlshift-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Engineering",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "BITOR",
+   "args": [
+    "number1",
+    "number2"
+   ],
+   "summary": "Bitwise OR of two numbers.",
+   "category": "Engineering",
+   "excel": {
+    "listed": true,
+    "since": "2013",
+    "source": "https://support.microsoft.com/en-us/excel/functions/bitor-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Engineering",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "BITRSHIFT",
+   "args": [
+    "number",
+    "shift_amount"
+   ],
+   "summary": "A number shifted right by bits.",
+   "category": "Engineering",
+   "excel": {
+    "listed": true,
+    "since": "2013",
+    "source": "https://support.microsoft.com/en-us/excel/functions/bitrshift-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Engineering",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "BITXOR",
+   "args": [
+    "number1",
+    "number2"
+   ],
+   "summary": "Bitwise exclusive OR of two numbers.",
+   "category": "Engineering",
+   "excel": {
+    "listed": true,
+    "since": "2013",
+    "source": "https://support.microsoft.com/en-us/excel/functions/bitxor-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Engineering",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
    "name": "BYCOL",
    "args": [
     "array",
@@ -154,6 +747,197 @@
    "sheets": {
     "listed": true,
     "category": "Array",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "CEILING",
+   "args": [
+    "number",
+    "significance"
+   ],
+   "summary": "Rounds up to a multiple.",
+   "category": "Compatibility",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/ceiling-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Math",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "CEILING.MATH",
+   "args": [
+    "number",
+    "[ significance ]",
+    "[ mode ]"
+   ],
+   "summary": "Rounds up to a multiple, with a mode for negative numbers.",
+   "category": "Math and trigonometry",
+   "excel": {
+    "listed": true,
+    "since": "2013",
+    "source": "https://support.microsoft.com/en-us/excel/functions/ceiling-math-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Math",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "CEILING.PRECISE",
+   "args": [
+    "number",
+    "[significance]"
+   ],
+   "summary": "Rounds up to a multiple whatever its sign.",
+   "category": "Math and trigonometry",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/ceiling-precise-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Math",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "CELL",
+   "args": [
+    "info_type",
+    "[reference]"
+   ],
+   "summary": "Information about a cell: address, row, column, contents, type, format and more.",
+   "category": "Information",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/cell-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Info",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "CHAR",
+   "args": [
+    "number"
+   ],
+   "summary": "The character for a code.",
+   "category": "Text",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/char-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Text",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "CHISQ.DIST",
+   "args": [
+    "x",
+    "deg_freedom",
+    "cumulative"
+   ],
+   "summary": "Chi-squared distribution.",
+   "category": "Statistical",
+   "excel": {
+    "listed": true,
+    "since": "2010",
+    "source": "https://support.microsoft.com/en-us/excel/functions/chisq-dist-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Statistical",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "CHISQ.DIST.RT",
+   "args": [
+    "x",
+    "deg_freedom"
+   ],
+   "summary": "Right-tailed chi-squared distribution.",
+   "category": "Statistical",
+   "excel": {
+    "listed": true,
+    "since": "2010",
+    "source": "https://support.microsoft.com/en-us/excel/functions/chisq-dist-rt-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Statistical",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "CHISQ.INV",
+   "args": [
+    "probability",
+    "deg_freedom"
+   ],
+   "summary": "Inverse of the chi-squared distribution.",
+   "category": "Statistical",
+   "excel": {
+    "listed": true,
+    "since": "2010",
+    "source": "https://support.microsoft.com/en-us/excel/functions/chisq-inv-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Statistical",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "CHISQ.INV.RT",
+   "args": [
+    "probability",
+    "deg_freedom"
+   ],
+   "summary": "Inverse of the right-tailed chi-squared distribution.",
+   "category": "Statistical",
+   "excel": {
+    "listed": true,
+    "since": "2010",
+    "source": "https://support.microsoft.com/en-us/excel/functions/chisq-inv-rt-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Statistical",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "CHISQ.TEST",
+   "args": [
+    "actual_range",
+    "expected_range"
+   ],
+   "summary": "Chi-squared test of independence.",
+   "category": "Statistical",
+   "excel": {
+    "listed": true,
+    "since": "2010",
+    "source": "https://support.microsoft.com/en-us/excel/functions/chisq-test-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Statistical",
     "source": "https://support.google.com/docs/table/25273?hl=en"
    }
   },
@@ -221,6 +1005,136 @@
    }
   },
   {
+   "name": "CLEAN",
+   "args": [
+    "text"
+   ],
+   "summary": "Text without non-printing characters.",
+   "category": "Text",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/clean-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Text",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "CODE",
+   "args": [
+    "text"
+   ],
+   "summary": "Code of the first character of text.",
+   "category": "Text",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/code-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Text",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "COLUMN",
+   "args": [
+    "[reference]"
+   ],
+   "summary": "Column number of a reference.",
+   "category": "Lookup and reference",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/column-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Lookup",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "COLUMNS",
+   "args": [
+    "array"
+   ],
+   "summary": "Number of columns in a reference or array.",
+   "category": "Lookup and reference",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/columns-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Lookup",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "COMBIN",
+   "args": [
+    "number",
+    "number_chosen"
+   ],
+   "summary": "Number of combinations.",
+   "category": "Math and trigonometry",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/combin-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Math",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "COMBINA",
+   "args": [
+    "number",
+    "number_chosen"
+   ],
+   "summary": "Number of combinations with repetition.",
+   "category": "Math and trigonometry",
+   "excel": {
+    "listed": true,
+    "since": "2013",
+    "source": "https://support.microsoft.com/en-us/excel/functions/combina-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Math",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "COMPLEX",
+   "args": [
+    "real_num",
+    "i_num",
+    "[suffix]"
+   ],
+   "summary": "A complex number from its real and imaginary parts.",
+   "category": "Engineering",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/complex-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Engineering",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
    "name": "CONCAT",
    "args": [
     "text1",
@@ -257,6 +1171,157 @@
    "sheets": {
     "listed": true,
     "category": "Text",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "CONFIDENCE.NORM",
+   "args": [
+    "alpha",
+    "standard_dev",
+    "size"
+   ],
+   "summary": "Confidence interval half-width using the normal distribution.",
+   "category": "Statistical",
+   "excel": {
+    "listed": true,
+    "since": "2010",
+    "source": "https://support.microsoft.com/en-us/excel/functions/confidence-norm-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Statistical",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "CONFIDENCE.T",
+   "args": [
+    "alpha",
+    "standard_dev",
+    "size"
+   ],
+   "summary": "Confidence interval half-width using Student's t.",
+   "category": "Statistical",
+   "excel": {
+    "listed": true,
+    "since": "2010",
+    "source": "https://support.microsoft.com/en-us/excel/functions/confidence-t-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Statistical",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "CONVERT",
+   "args": [
+    "number",
+    "from_unit",
+    "to_unit"
+   ],
+   "summary": "A number converted between measurement units.",
+   "category": "Engineering",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/convert-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Parser",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "CORREL",
+   "args": [
+    "array1",
+    "array2"
+   ],
+   "summary": "Correlation coefficient of two ranges.",
+   "category": "Statistical",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/correl-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Statistical",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "COS",
+   "args": [
+    "number"
+   ],
+   "summary": "Cosine of an angle in radians.",
+   "category": "Math and trigonometry",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/cos-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Math",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "COSH",
+   "args": [
+    "number"
+   ],
+   "summary": "Hyperbolic cosine.",
+   "category": "Math and trigonometry",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/cosh-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Math",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "COT",
+   "args": [
+    "number"
+   ],
+   "summary": "Cotangent of an angle.",
+   "category": "Math and trigonometry",
+   "excel": {
+    "listed": true,
+    "since": "2013",
+    "source": "https://support.microsoft.com/en-us/excel/functions/cot-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Math",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "COTH",
+   "args": [
+    "number"
+   ],
+   "summary": "Hyperbolic cotangent.",
+   "category": "Math and trigonometry",
+   "excel": {
+    "listed": true,
+    "since": "2013",
+    "source": "https://support.microsoft.com/en-us/excel/functions/coth-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Math",
     "source": "https://support.google.com/docs/table/25273?hl=en"
    }
   },
@@ -358,6 +1423,145 @@
    }
   },
   {
+   "name": "COVAR",
+   "args": [
+    "array1",
+    "array2"
+   ],
+   "summary": "Population covariance.",
+   "category": "Compatibility",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/covar-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Statistical",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "COVARIANCE.P",
+   "args": [
+    "array1",
+    "array2"
+   ],
+   "summary": "Population covariance.",
+   "category": "Statistical",
+   "excel": {
+    "listed": true,
+    "since": "2010",
+    "source": "https://support.microsoft.com/en-us/excel/functions/covariance-p-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Statistical",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "COVARIANCE.S",
+   "args": [
+    "array1",
+    "array2"
+   ],
+   "summary": "Sample covariance.",
+   "category": "Statistical",
+   "excel": {
+    "listed": true,
+    "since": "2010",
+    "source": "https://support.microsoft.com/en-us/excel/functions/covariance-s-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Statistical",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "CSC",
+   "args": [
+    "number"
+   ],
+   "summary": "Cosecant of an angle.",
+   "category": "Math and trigonometry",
+   "excel": {
+    "listed": true,
+    "since": "2013",
+    "source": "https://support.microsoft.com/en-us/excel/functions/csc-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Math",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "CSCH",
+   "args": [
+    "number"
+   ],
+   "summary": "Hyperbolic cosecant.",
+   "category": "Math and trigonometry",
+   "excel": {
+    "listed": true,
+    "since": "2013",
+    "source": "https://support.microsoft.com/en-us/excel/functions/csch-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Math",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "CUMIPMT",
+   "args": [
+    "rate",
+    "nper",
+    "pv",
+    "start_period",
+    "end_period",
+    "type"
+   ],
+   "summary": "Interest paid between two periods of a loan.",
+   "category": "Financial",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/cumipmt-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Financial",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "CUMPRINC",
+   "args": [
+    "rate",
+    "nper",
+    "pv",
+    "start_period",
+    "end_period",
+    "type"
+   ],
+   "summary": "Principal paid between two periods of a loan.",
+   "category": "Financial",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/cumprinc-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Financial",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
    "name": "DATE",
    "args": [
     "year",
@@ -370,6 +1574,26 @@
     "listed": true,
     "since": null,
     "source": "https://support.microsoft.com/en-us/excel/functions/date-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Date",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "DATEDIF",
+   "args": [
+    "start_date",
+    "end_date",
+    "unit"
+   ],
+   "summary": "Difference between two dates in years, months or days.",
+   "category": "Date and time",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/datedif-function"
    },
    "sheets": {
     "listed": true,
@@ -392,6 +1616,26 @@
    "sheets": {
     "listed": true,
     "category": "Date",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "DAVERAGE",
+   "args": [
+    "database",
+    "field",
+    "criteria"
+   ],
+   "summary": "Average of matching records in a database.",
+   "category": "Database",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/daverage-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Database",
     "source": "https://support.google.com/docs/table/25273?hl=en"
    }
   },
@@ -433,6 +1677,380 @@
    }
   },
   {
+   "name": "DAYS360",
+   "args": [
+    "start_date",
+    "end_date",
+    "[method]"
+   ],
+   "summary": "Days between two dates on a 360-day year.",
+   "category": "Date and time",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/days360-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Date",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "DB",
+   "args": [
+    "cost",
+    "salvage",
+    "life",
+    "period",
+    "[month]"
+   ],
+   "summary": "Depreciation by the fixed-declining-balance method.",
+   "category": "Financial",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/db-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Financial",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "DCOUNT",
+   "args": [
+    "database",
+    "field",
+    "criteria"
+   ],
+   "summary": "Count of numbers in matching records.",
+   "category": "Database",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/dcount-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Database",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "DCOUNTA",
+   "args": [
+    "database",
+    "field",
+    "criteria"
+   ],
+   "summary": "Count of non-blank cells in matching records.",
+   "category": "Database",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/dcounta-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Database",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "DDB",
+   "args": [
+    "cost",
+    "salvage",
+    "life",
+    "period",
+    "[factor]"
+   ],
+   "summary": "Depreciation by the double-declining-balance method.",
+   "category": "Financial",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/ddb-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Financial",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "DEC2BIN",
+   "args": [
+    "number",
+    "[places]"
+   ],
+   "summary": "Decimal to binary.",
+   "category": "Engineering",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/dec2bin-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Engineering",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "DEC2HEX",
+   "args": [
+    "number",
+    "[places]"
+   ],
+   "summary": "Decimal to hexadecimal.",
+   "category": "Engineering",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/dec2hex-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Engineering",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "DEC2OCT",
+   "args": [
+    "number",
+    "[places]"
+   ],
+   "summary": "Decimal to octal.",
+   "category": "Engineering",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/dec2oct-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Engineering",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "DECIMAL",
+   "args": [
+    "text",
+    "radix"
+   ],
+   "summary": "Text in a given base as a decimal number.",
+   "category": "Math and trigonometry",
+   "excel": {
+    "listed": true,
+    "since": "2013",
+    "source": "https://support.microsoft.com/en-us/excel/functions/decimal-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Math",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "DEGREES",
+   "args": [
+    "angle"
+   ],
+   "summary": "Radians to degrees.",
+   "category": "Math and trigonometry",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/degrees-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Math",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "DELTA",
+   "args": [
+    "number1",
+    "[number2]"
+   ],
+   "summary": "1 when two numbers are equal, else 0.",
+   "category": "Engineering",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/delta-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Engineering",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "DEVSQ",
+   "args": [
+    "number1",
+    "[number2]",
+    "..."
+   ],
+   "summary": "Sum of squared deviations from the mean.",
+   "category": "Statistical",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/devsq-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Statistical",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "DGET",
+   "args": [
+    "database",
+    "field",
+    "criteria"
+   ],
+   "summary": "The single value from a matching record.",
+   "category": "Database",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/dget-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Database",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "DMAX",
+   "args": [
+    "database",
+    "field",
+    "criteria"
+   ],
+   "summary": "Largest value in matching records.",
+   "category": "Database",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/dmax-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Database",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "DMIN",
+   "args": [
+    "database",
+    "field",
+    "criteria"
+   ],
+   "summary": "Smallest value in matching records.",
+   "category": "Database",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/dmin-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Database",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "DOLLAR",
+   "args": [
+    "number",
+    "[decimals]"
+   ],
+   "summary": "A number as currency text.",
+   "category": "Text",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/dollar-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Text",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "DOLLARDE",
+   "args": [
+    "fractional_dollar",
+    "fraction"
+   ],
+   "summary": "A fractional dollar price as a decimal.",
+   "category": "Financial",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/dollarde-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Financial",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "DOLLARFR",
+   "args": [
+    "decimal_dollar",
+    "fraction"
+   ],
+   "summary": "A decimal dollar price as a fraction.",
+   "category": "Financial",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/dollarfr-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Financial",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "DPRODUCT",
+   "args": [
+    "database",
+    "field",
+    "criteria"
+   ],
+   "summary": "Product of values in matching records.",
+   "category": "Database",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/dproduct-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Database",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
    "name": "DROP",
    "args": [
     "array",
@@ -449,6 +2067,106 @@
    "sheets": {
     "listed": false,
     "category": null,
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "DSTDEV",
+   "args": [
+    "database",
+    "field",
+    "criteria"
+   ],
+   "summary": "Sample standard deviation of matching records.",
+   "category": "Database",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/dstdev-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Database",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "DSTDEVP",
+   "args": [
+    "database",
+    "field",
+    "criteria"
+   ],
+   "summary": "Population standard deviation of matching records.",
+   "category": "Database",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/dstdevp-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Database",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "DSUM",
+   "args": [
+    "database",
+    "field",
+    "criteria"
+   ],
+   "summary": "Sum of values in matching records.",
+   "category": "Database",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/dsum-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Database",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "DVAR",
+   "args": [
+    "database",
+    "field",
+    "criteria"
+   ],
+   "summary": "Sample variance of matching records.",
+   "category": "Database",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/dvar-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Database",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "DVARP",
+   "args": [
+    "database",
+    "field",
+    "criteria"
+   ],
+   "summary": "Population variance of matching records.",
+   "category": "Database",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/dvarp-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Database",
     "source": "https://support.google.com/docs/table/25273?hl=en"
    }
   },
@@ -472,6 +2190,25 @@
    }
   },
   {
+   "name": "EFFECT",
+   "args": [
+    "nominal_rate",
+    "npery"
+   ],
+   "summary": "Effective annual interest rate.",
+   "category": "Financial",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/effect-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Financial",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
    "name": "EOMONTH",
    "args": [
     "start_date",
@@ -491,6 +2228,98 @@
    }
   },
   {
+   "name": "EPOCHTODATE",
+   "args": [
+    "timestamp",
+    "[unit]"
+   ],
+   "summary": "A Unix timestamp as a date and time.",
+   "category": "Date",
+   "excel": {
+    "listed": false,
+    "since": null,
+    "source": null
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Date",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "ERF",
+   "args": [
+    "lower_limit",
+    "[upper_limit]"
+   ],
+   "summary": "Error function.",
+   "category": "Engineering",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/erf-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Engineering",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "ERF.PRECISE",
+   "args": [
+    "x"
+   ],
+   "summary": "Error function from 0 to a limit.",
+   "category": "Engineering",
+   "excel": {
+    "listed": true,
+    "since": "2010",
+    "source": "https://support.microsoft.com/en-us/excel/functions/erf-precise-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Engineering",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "ERFC",
+   "args": [
+    "x"
+   ],
+   "summary": "Complementary error function.",
+   "category": "Engineering",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/erfc-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Math",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "ERFC.PRECISE",
+   "args": [
+    "x"
+   ],
+   "summary": "Complementary error function.",
+   "category": "Engineering",
+   "excel": {
+    "listed": true,
+    "since": "2010",
+    "source": "https://support.microsoft.com/en-us/excel/functions/erfc-precise-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Math",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
    "name": "ERROR.TYPE",
    "args": [
     "error_val"
@@ -505,6 +2334,24 @@
    "sheets": {
     "listed": true,
     "category": "Info",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "EVEN",
+   "args": [
+    "number"
+   ],
+   "summary": "Rounds away from zero to an even integer.",
+   "category": "Math and trigonometry",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/even-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Math",
     "source": "https://support.google.com/docs/table/25273?hl=en"
    }
   },
@@ -528,6 +2375,24 @@
    }
   },
   {
+   "name": "EXP",
+   "args": [
+    "number"
+   ],
+   "summary": "e raised to a power.",
+   "category": "Math and trigonometry",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/exp-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Math",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
    "name": "EXPAND",
    "args": [
     "array",
@@ -545,6 +2410,162 @@
    "sheets": {
     "listed": false,
     "category": null,
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "EXPON.DIST",
+   "args": [
+    "x",
+    "lambda",
+    "cumulative"
+   ],
+   "summary": "Exponential distribution.",
+   "category": "Statistical",
+   "excel": {
+    "listed": true,
+    "since": "2010",
+    "source": "https://support.microsoft.com/en-us/excel/functions/expon-dist-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Statistical",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "F.DIST",
+   "args": [
+    "x",
+    "deg_freedom1",
+    "deg_freedom2",
+    "cumulative"
+   ],
+   "summary": "F distribution.",
+   "category": "Statistical",
+   "excel": {
+    "listed": true,
+    "since": "2010",
+    "source": "https://support.microsoft.com/en-us/excel/functions/f-dist-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Statistical",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "F.DIST.RT",
+   "args": [
+    "x",
+    "deg_freedom1",
+    "deg_freedom2"
+   ],
+   "summary": "Right-tailed F distribution.",
+   "category": "Statistical",
+   "excel": {
+    "listed": true,
+    "since": "2010",
+    "source": "https://support.microsoft.com/en-us/excel/functions/f-dist-rt-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Statistical",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "F.INV",
+   "args": [
+    "probability",
+    "deg_freedom1",
+    "deg_freedom2"
+   ],
+   "summary": "Inverse of the F distribution.",
+   "category": "Statistical",
+   "excel": {
+    "listed": true,
+    "since": "2010",
+    "source": "https://support.microsoft.com/en-us/excel/functions/f-inv-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Statistical",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "F.INV.RT",
+   "args": [
+    "probability",
+    "deg_freedom1",
+    "deg_freedom2"
+   ],
+   "summary": "Inverse of the right-tailed F distribution.",
+   "category": "Statistical",
+   "excel": {
+    "listed": true,
+    "since": "2010",
+    "source": "https://support.microsoft.com/en-us/excel/functions/f-inv-rt-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Statistical",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "F.TEST",
+   "args": [
+    "array1",
+    "array2"
+   ],
+   "summary": "Two-tailed F-test probability.",
+   "category": "Statistical",
+   "excel": {
+    "listed": true,
+    "since": "2010",
+    "source": "https://support.microsoft.com/en-us/excel/functions/f-test-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Statistical",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "FACT",
+   "args": [
+    "number"
+   ],
+   "summary": "Factorial.",
+   "category": "Math and trigonometry",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/fact-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Math",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "FACTDOUBLE",
+   "args": [
+    "number"
+   ],
+   "summary": "Double factorial.",
+   "category": "Math and trigonometry",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/factdouble-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Math",
     "source": "https://support.google.com/docs/table/25273?hl=en"
    }
   },
@@ -585,6 +2606,25 @@
    }
   },
   {
+   "name": "FILTERXML",
+   "args": [
+    "xml",
+    "xpath"
+   ],
+   "summary": "Values from XML text picked out by an XPath query.",
+   "category": "Web",
+   "excel": {
+    "listed": true,
+    "since": "2013",
+    "source": "https://support.microsoft.com/en-us/excel/functions/filterxml-function"
+   },
+   "sheets": {
+    "listed": false,
+    "category": null,
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
    "name": "FIND",
    "args": [
     "find_text",
@@ -601,6 +2641,602 @@
    "sheets": {
     "listed": true,
     "category": "Text",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "FISHER",
+   "args": [
+    "x"
+   ],
+   "summary": "Fisher transformation.",
+   "category": "Statistical",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/fisher-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Statistical",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "FISHERINV",
+   "args": [
+    "y"
+   ],
+   "summary": "Inverse of the Fisher transformation.",
+   "category": "Statistical",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/fisherinv-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Statistical",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "FIXED",
+   "args": [
+    "number",
+    "[decimals]",
+    "[no_commas]"
+   ],
+   "summary": "A number as text with fixed decimals.",
+   "category": "Text",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/fixed-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Text",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "FLOOR",
+   "args": [
+    "number",
+    "significance"
+   ],
+   "summary": "Rounds down to a multiple.",
+   "category": "Compatibility",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/floor-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Math",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "FLOOR.MATH",
+   "args": [
+    "number",
+    "significance",
+    "mode"
+   ],
+   "summary": "Rounds down to a multiple, with a mode for negative numbers.",
+   "category": "Math and trigonometry",
+   "excel": {
+    "listed": true,
+    "since": "2013",
+    "source": "https://support.microsoft.com/en-us/excel/functions/floor-math-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Math",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "FLOOR.PRECISE",
+   "args": [
+    "number",
+    "[significance]"
+   ],
+   "summary": "Rounds down to a multiple whatever its sign.",
+   "category": "Math and trigonometry",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/floor-precise-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Math",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "FORECAST",
+   "args": [
+    "x",
+    "known_y's",
+    "known_x's"
+   ],
+   "summary": "A value predicted on the least-squares line.",
+   "category": "Statistical",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/office/forecast-and-forecast-linear-functions-50ca49c9-7b40-4892-94e4-7ad38bbeda99"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Statistical",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "FORECAST.ETS",
+   "args": [
+    "target_date",
+    "values",
+    "timeline",
+    "[seasonality]",
+    "[data_completion]",
+    "[aggregation]"
+   ],
+   "summary": "A future value by exponential triple smoothing.",
+   "category": "Statistical",
+   "excel": {
+    "listed": true,
+    "since": "2016",
+    "source": "https://support.microsoft.com/en-us/excel/functions/forecast-ets-function"
+   },
+   "sheets": {
+    "listed": false,
+    "category": null,
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "FORECAST.ETS.CONFINT",
+   "args": [
+    "target_date",
+    "values",
+    "timeline",
+    "[confidence_level]",
+    "[seasonality]",
+    "[data_completion]",
+    "[aggregation]"
+   ],
+   "summary": "Confidence interval for a FORECAST.ETS value.",
+   "category": "Statistical",
+   "excel": {
+    "listed": true,
+    "since": "2016",
+    "source": "https://support.microsoft.com/en-us/excel/functions/forecast-ets-confint-function"
+   },
+   "sheets": {
+    "listed": false,
+    "category": null,
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "FORECAST.ETS.SEASONALITY",
+   "args": [
+    "values",
+    "timeline",
+    "[data_completion]",
+    "[aggregation]"
+   ],
+   "summary": "Length of the seasonal pattern FORECAST.ETS detects.",
+   "category": "Statistical",
+   "excel": {
+    "listed": true,
+    "since": "2016",
+    "source": "https://support.microsoft.com/en-us/excel/functions/forecast-ets-seasonality-function"
+   },
+   "sheets": {
+    "listed": false,
+    "category": null,
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "FORECAST.ETS.STAT",
+   "args": [
+    "values",
+    "timeline",
+    "statistic_type",
+    "[seasonality]",
+    "[data_completion]",
+    "[aggregation]"
+   ],
+   "summary": "A statistic of the FORECAST.ETS model, such as alpha or MASE.",
+   "category": "Statistical",
+   "excel": {
+    "listed": true,
+    "since": "2016",
+    "source": "https://support.microsoft.com/en-us/excel/functions/forecast-ets-stat-function"
+   },
+   "sheets": {
+    "listed": false,
+    "category": null,
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "FORECAST.LINEAR",
+   "args": [
+    "x",
+    "known_y's",
+    "known_x's"
+   ],
+   "summary": "A value predicted on the least-squares line.",
+   "category": "Statistical",
+   "excel": {
+    "listed": true,
+    "since": "2016",
+    "source": "https://support.microsoft.com/en-us/office/forecast-and-forecast-linear-functions-50ca49c9-7b40-4892-94e4-7ad38bbeda99"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Statistical",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "FORMULATEXT",
+   "args": [
+    "reference"
+   ],
+   "summary": "A cell's formula as text.",
+   "category": "Lookup and reference",
+   "excel": {
+    "listed": true,
+    "since": "2013",
+    "source": "https://support.microsoft.com/en-us/excel/functions/formulatext-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Lookup",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "FREQUENCY",
+   "args": [
+    "data_array",
+    "bins_array"
+   ],
+   "summary": "How many values fall in each bin, as a vertical array.",
+   "category": "Statistical",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/frequency-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Array",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "FV",
+   "args": [
+    "rate",
+    "nper",
+    "pmt",
+    "[pv]",
+    "[type]"
+   ],
+   "summary": "Future value of an investment.",
+   "category": "Financial",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/fv-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Financial",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "FVSCHEDULE",
+   "args": [
+    "principal",
+    "schedule"
+   ],
+   "summary": "Future value after a series of rates.",
+   "category": "Financial",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/fvschedule-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Financial",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "GAMMA",
+   "args": [
+    "number"
+   ],
+   "summary": "Gamma function.",
+   "category": "Statistical",
+   "excel": {
+    "listed": true,
+    "since": "2013",
+    "source": "https://support.microsoft.com/en-us/excel/functions/gamma-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Statistical",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "GAMMA.DIST",
+   "args": [
+    "x",
+    "alpha",
+    "beta",
+    "cumulative"
+   ],
+   "summary": "Gamma distribution.",
+   "category": "Statistical",
+   "excel": {
+    "listed": true,
+    "since": "2010",
+    "source": "https://support.microsoft.com/en-us/excel/functions/gamma-dist-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Statistical",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "GAMMA.INV",
+   "args": [
+    "probability",
+    "alpha",
+    "beta"
+   ],
+   "summary": "Inverse of the gamma distribution.",
+   "category": "Statistical",
+   "excel": {
+    "listed": true,
+    "since": "2010",
+    "source": "https://support.microsoft.com/en-us/excel/functions/gamma-inv-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Statistical",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "GAMMALN",
+   "args": [
+    "x"
+   ],
+   "summary": "Natural log of the gamma function.",
+   "category": "Statistical",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/gammaln-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Math",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "GAMMALN.PRECISE",
+   "args": [
+    "x"
+   ],
+   "summary": "Natural log of the gamma function.",
+   "category": "Statistical",
+   "excel": {
+    "listed": true,
+    "since": "2010",
+    "source": "https://support.microsoft.com/en-us/excel/functions/gammaln-precise-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Math",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "GAUSS",
+   "args": [
+    "z"
+   ],
+   "summary": "Probability that a standard normal value lies between the mean and z.",
+   "category": "Statistical",
+   "excel": {
+    "listed": true,
+    "since": "2013",
+    "source": "https://support.microsoft.com/en-us/excel/functions/gauss-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Statistical",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "GCD",
+   "args": [
+    "number1",
+    "[number2]",
+    "..."
+   ],
+   "summary": "Greatest common divisor.",
+   "category": "Math and trigonometry",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/gcd-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Math",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "GEOMEAN",
+   "args": [
+    "number1",
+    "[number2]",
+    "..."
+   ],
+   "summary": "Geometric mean.",
+   "category": "Statistical",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/geomean-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Statistical",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "GESTEP",
+   "args": [
+    "number",
+    "[step]"
+   ],
+   "summary": "1 when a number is at least a step, else 0.",
+   "category": "Engineering",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/gestep-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Engineering",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "GROUPBY",
+   "args": [
+    "row_fields",
+    "values",
+    "function",
+    "[field_headers]",
+    "[total_depth]",
+    "[sort_order]",
+    "[filter_array]",
+    "[field_relationship]"
+   ],
+   "summary": "Groups rows by fields and aggregates values into a spilled summary.",
+   "category": null,
+   "excel": {
+    "listed": false,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/groupby-function"
+   },
+   "sheets": {
+    "listed": false,
+    "category": null,
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "HARMEAN",
+   "args": [
+    "number1",
+    "[number2]",
+    "..."
+   ],
+   "summary": "Harmonic mean.",
+   "category": "Statistical",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/harmean-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Statistical",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "HEX2BIN",
+   "args": [
+    "number",
+    "[places]"
+   ],
+   "summary": "Hexadecimal to binary.",
+   "category": "Engineering",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/hex2bin-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Engineering",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "HEX2DEC",
+   "args": [
+    "number"
+   ],
+   "summary": "Hexadecimal to decimal.",
+   "category": "Engineering",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/hex2dec-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Engineering",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "HEX2OCT",
+   "args": [
+    "number",
+    "[places]"
+   ],
+   "summary": "Hexadecimal to octal.",
+   "category": "Engineering",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/hex2oct-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Engineering",
     "source": "https://support.google.com/docs/table/25273?hl=en"
    }
   },
@@ -763,6 +3399,214 @@
    }
   },
   {
+   "name": "IMABS",
+   "args": [
+    "inumber"
+   ],
+   "summary": "Modulus of a complex number.",
+   "category": "Engineering",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/imabs-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Engineering",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "IMAGINARY",
+   "args": [
+    "inumber"
+   ],
+   "summary": "Imaginary part of a complex number.",
+   "category": "Engineering",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/imaginary-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Engineering",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "IMDIV",
+   "args": [
+    "inumber1",
+    "inumber2"
+   ],
+   "summary": "Quotient of two complex numbers.",
+   "category": "Engineering",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/imdiv-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Engineering",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "IMPORTDATA",
+   "args": [
+    "url"
+   ],
+   "summary": "CSV or TSV fetched from a URL by the engine process, spilled into cells.",
+   "category": "Web",
+   "excel": {
+    "listed": false,
+    "since": null,
+    "source": null
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Web",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "IMPORTHTML",
+   "args": [
+    "url",
+    "query",
+    "index"
+   ],
+   "summary": "A table or list from a web page fetched by the engine process.",
+   "category": "Web",
+   "excel": {
+    "listed": false,
+    "since": null,
+    "source": null
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Web",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "IMPORTRANGE",
+   "args": [
+    "spreadsheet_url",
+    "range_string"
+   ],
+   "summary": "A range from another FormCel workbook, by workbook id.",
+   "category": "Web",
+   "excel": {
+    "listed": false,
+    "since": null,
+    "source": null
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Web",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "IMPORTXML",
+   "args": [
+    "url",
+    "xpath_query"
+   ],
+   "summary": "Values from a web page picked out by an XPath query.",
+   "category": "Web",
+   "excel": {
+    "listed": false,
+    "since": null,
+    "source": null
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Web",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "IMPRODUCT",
+   "args": [
+    "inumber1",
+    "[inumber2]",
+    "..."
+   ],
+   "summary": "Product of complex numbers.",
+   "category": "Engineering",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/improduct-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Engineering",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "IMREAL",
+   "args": [
+    "inumber"
+   ],
+   "summary": "Real part of a complex number.",
+   "category": "Engineering",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/imreal-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Engineering",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "IMSUB",
+   "args": [
+    "inumber1",
+    "inumber2"
+   ],
+   "summary": "Difference of two complex numbers.",
+   "category": "Engineering",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/imsub-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Engineering",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "IMSUM",
+   "args": [
+    "inumber1",
+    "[inumber2]",
+    "..."
+   ],
+   "summary": "Sum of complex numbers.",
+   "category": "Engineering",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/imsum-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Engineering",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
    "name": "INDEX",
    "args": [
     "array",
@@ -783,6 +3627,43 @@
    }
   },
   {
+   "name": "INDIRECT",
+   "args": [
+    "ref_text",
+    "[a1]"
+   ],
+   "summary": "The reference named by text.",
+   "category": "Lookup and reference",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/indirect-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Lookup",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "INFO",
+   "args": [
+    "type_text"
+   ],
+   "summary": "Information about the environment.",
+   "category": "Information",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/info-function"
+   },
+   "sheets": {
+    "listed": false,
+    "category": null,
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
    "name": "INT",
    "args": [
     "number"
@@ -797,6 +3678,67 @@
    "sheets": {
     "listed": true,
     "category": "Math",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "INTERCEPT",
+   "args": [
+    "known_y's",
+    "known_x's"
+   ],
+   "summary": "Where the least-squares line crosses the y axis.",
+   "category": "Statistical",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/intercept-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Statistical",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "IPMT",
+   "args": [
+    "rate",
+    "per",
+    "nper",
+    "pv",
+    "[fv]",
+    "[type]"
+   ],
+   "summary": "Interest part of a loan payment.",
+   "category": "Financial",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/ipmt-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Financial",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "IRR",
+   "args": [
+    "values",
+    "[guess]"
+   ],
+   "summary": "Internal rate of return of cash flows.",
+   "category": "Financial",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/irr-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Financial",
     "source": "https://support.google.com/docs/table/25273?hl=en"
    }
   },
@@ -847,6 +3789,42 @@
     "listed": true,
     "since": null,
     "source": "https://support.microsoft.com/en-us/excel/is-functions"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Info",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "ISEVEN",
+   "args": [
+    "number"
+   ],
+   "summary": "TRUE for an even number.",
+   "category": "Information",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/iseven-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Math",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "ISFORMULA",
+   "args": [
+    "reference"
+   ],
+   "summary": "TRUE when a cell holds a formula.",
+   "category": "Information",
+   "excel": {
+    "listed": true,
+    "since": "2013",
+    "source": "https://support.microsoft.com/en-us/excel/functions/isformula-function"
    },
    "sheets": {
     "listed": true,
@@ -927,6 +3905,63 @@
    }
   },
   {
+   "name": "ISODD",
+   "args": [
+    "number"
+   ],
+   "summary": "TRUE for an odd number.",
+   "category": "Information",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/isodd-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Math",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "ISOWEEKNUM",
+   "args": [
+    "date"
+   ],
+   "summary": "ISO week number of a date.",
+   "category": "Date and time",
+   "excel": {
+    "listed": true,
+    "since": "2013",
+    "source": "https://support.microsoft.com/en-us/excel/functions/isoweeknum-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Date",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "ISPMT",
+   "args": [
+    "rate",
+    "per",
+    "nper",
+    "pv"
+   ],
+   "summary": "Interest paid in a period of a straight-principal loan.",
+   "category": "Financial",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/ispmt-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Financial",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
    "name": "ISREF",
    "args": [
     "value"
@@ -963,6 +3998,26 @@
    }
   },
   {
+   "name": "KURT",
+   "args": [
+    "number1",
+    "[number2]",
+    "..."
+   ],
+   "summary": "Kurtosis.",
+   "category": "Statistical",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/kurt-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Statistical",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
    "name": "LAMBDA",
    "args": [
     "[parameter1, ...]",
@@ -978,6 +4033,45 @@
    "sheets": {
     "listed": true,
     "category": "Logical",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "LARGE",
+   "args": [
+    "array",
+    "k"
+   ],
+   "summary": "The k-th largest value.",
+   "category": "Statistical",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/large-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Statistical",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "LCM",
+   "args": [
+    "number1",
+    "[number2]",
+    "..."
+   ],
+   "summary": "Least common multiple.",
+   "category": "Math and trigonometry",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/lcm-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Math",
     "source": "https://support.google.com/docs/table/25273?hl=en"
    }
   },
@@ -1036,6 +4130,143 @@
    "sheets": {
     "listed": true,
     "category": "Logical",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "LINEST",
+   "args": [
+    "known_y's",
+    "[known_x's]",
+    "[const]",
+    "[stats]"
+   ],
+   "summary": "Statistics of the least-squares line, as an array.",
+   "category": "Statistical",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/linest-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Array",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "LN",
+   "args": [
+    "number"
+   ],
+   "summary": "Natural logarithm.",
+   "category": "Math and trigonometry",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/ln-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Math",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "LOG",
+   "args": [
+    "number",
+    "[base]"
+   ],
+   "summary": "Logarithm to a base.",
+   "category": "Math and trigonometry",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/log-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Math",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "LOG10",
+   "args": [
+    "number"
+   ],
+   "summary": "Base-10 logarithm.",
+   "category": "Math and trigonometry",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/log10-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Math",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "LOGNORM.DIST",
+   "args": [
+    "x",
+    "mean",
+    "standard_dev",
+    "cumulative"
+   ],
+   "summary": "Lognormal distribution.",
+   "category": "Statistical",
+   "excel": {
+    "listed": true,
+    "since": "2010",
+    "source": "https://support.microsoft.com/en-us/excel/functions/lognorm-dist-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Statistical",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "LOGNORM.INV",
+   "args": [
+    "probability",
+    "mean",
+    "standard_dev"
+   ],
+   "summary": "Inverse of the lognormal distribution.",
+   "category": "Statistical",
+   "excel": {
+    "listed": true,
+    "since": "2010",
+    "source": "https://support.microsoft.com/en-us/excel/functions/lognorm-inv-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Statistical",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "LOOKUP",
+   "args": [
+    "lookup_value",
+    "lookup_vector",
+    "[result_vector]"
+   ],
+   "summary": "Looks up a value in a vector or array.",
+   "category": "Lookup and reference",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/lookup-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Lookup",
     "source": "https://support.google.com/docs/table/25273?hl=en"
    }
   },
@@ -1137,6 +4368,86 @@
    }
   },
   {
+   "name": "MAXA",
+   "args": [
+    "value1",
+    "[value2]",
+    "..."
+   ],
+   "summary": "Largest value counting text as 0 and TRUE as 1.",
+   "category": "Statistical",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/maxa-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Statistical",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "MAXIFS",
+   "args": [
+    "max_range",
+    "criteria_range1",
+    "criteria1",
+    "[criteria_range2, criteria2]",
+    "..."
+   ],
+   "summary": "Largest value among cells that meet criteria.",
+   "category": "Statistical",
+   "excel": {
+    "listed": true,
+    "since": "2019",
+    "source": "https://support.microsoft.com/en-us/excel/functions/maxifs-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Statistical",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "MDETERM",
+   "args": [
+    "array"
+   ],
+   "summary": "Determinant of a matrix.",
+   "category": "Math and trigonometry",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/mdeterm-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Array",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "MEDIAN",
+   "args": [
+    "number1",
+    "[number2]",
+    "..."
+   ],
+   "summary": "Median.",
+   "category": "Statistical",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/median-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Statistical",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
    "name": "MID",
    "args": [
     "text",
@@ -1177,6 +4488,48 @@
    }
   },
   {
+   "name": "MINA",
+   "args": [
+    "value1",
+    "[value2]",
+    "..."
+   ],
+   "summary": "Smallest value counting text as 0 and TRUE as 1.",
+   "category": "Statistical",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/mina-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Statistical",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "MINIFS",
+   "args": [
+    "min_range",
+    "criteria_range1",
+    "criteria1",
+    "[criteria_range2, criteria2]",
+    "..."
+   ],
+   "summary": "Smallest value among cells that meet criteria.",
+   "category": "Statistical",
+   "excel": {
+    "listed": true,
+    "since": "2019",
+    "source": "https://support.microsoft.com/en-us/excel/functions/minifs-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Statistical",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
    "name": "MINUTE",
    "args": [
     "serial_number"
@@ -1191,6 +4544,63 @@
    "sheets": {
     "listed": true,
     "category": "Date",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "MINVERSE",
+   "args": [
+    "array"
+   ],
+   "summary": "Inverse of a matrix.",
+   "category": "Math and trigonometry",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/minverse-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Array",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "MIRR",
+   "args": [
+    "values",
+    "finance_rate",
+    "reinvest_rate"
+   ],
+   "summary": "Modified internal rate of return.",
+   "category": "Financial",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/mirr-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Financial",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "MMULT",
+   "args": [
+    "array1",
+    "array2"
+   ],
+   "summary": "Product of two matrices.",
+   "category": "Math and trigonometry",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/mmult-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Array",
     "source": "https://support.google.com/docs/table/25273?hl=en"
    }
   },
@@ -1214,6 +4624,64 @@
    }
   },
   {
+   "name": "MODE",
+   "args": [
+    "number1",
+    "[number2]",
+    "..."
+   ],
+   "summary": "Most frequent value.",
+   "category": "Compatibility",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/mode-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Statistical",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "MODE.MULT",
+   "args": [
+    "A2:A13"
+   ],
+   "summary": "Every most frequent value, as a vertical array.",
+   "category": "Statistical",
+   "excel": {
+    "listed": true,
+    "since": "2010",
+    "source": "https://support.microsoft.com/en-us/excel/functions/mode-mult-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Statistical",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "MODE.SNGL",
+   "args": [
+    "number1",
+    "[number2]",
+    "..."
+   ],
+   "summary": "Most frequent value.",
+   "category": "Statistical",
+   "excel": {
+    "listed": true,
+    "since": "2010",
+    "source": "https://support.microsoft.com/en-us/excel/functions/mode-sngl-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Statistical",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
    "name": "MONTH",
    "args": [
     "serial_number"
@@ -1232,6 +4700,81 @@
    }
   },
   {
+   "name": "MROUND",
+   "args": [
+    "number",
+    "multiple"
+   ],
+   "summary": "Rounds to the nearest multiple.",
+   "category": "Math and trigonometry",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/mround-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Math",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "MULTINOMIAL",
+   "args": [
+    "number1",
+    "[number2]",
+    "..."
+   ],
+   "summary": "Multinomial coefficient.",
+   "category": "Math and trigonometry",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/multinomial-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Math",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "MUNIT",
+   "args": [
+    "dimension"
+   ],
+   "summary": "Identity matrix.",
+   "category": "Math and trigonometry",
+   "excel": {
+    "listed": true,
+    "since": "2013",
+    "source": "https://support.microsoft.com/en-us/excel/functions/munit-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Math",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "N",
+   "args": [
+    "value"
+   ],
+   "summary": "A value as a number.",
+   "category": "Information",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/n-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Info",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
    "name": "NA",
    "args": [],
    "summary": "The #N/A error.",
@@ -1244,6 +4787,221 @@
    "sheets": {
     "listed": true,
     "category": "Info",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "NETWORKDAYS",
+   "args": [
+    "start_date",
+    "end_date",
+    "[holidays]"
+   ],
+   "summary": "Working days between two dates.",
+   "category": "Date and time",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/networkdays-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Date",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "NETWORKDAYS.INTL",
+   "args": [
+    "start_date",
+    "end_date",
+    "[weekend]",
+    "[holidays]"
+   ],
+   "summary": "Working days between two dates with a chosen weekend.",
+   "category": "Date and time",
+   "excel": {
+    "listed": true,
+    "since": "2010",
+    "source": "https://support.microsoft.com/en-us/excel/functions/networkdays-intl-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Date",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "NOMINAL",
+   "args": [
+    "effect_rate",
+    "npery"
+   ],
+   "summary": "Nominal annual interest rate.",
+   "category": "Financial",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/nominal-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Financial",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "NORM.DIST",
+   "args": [
+    "x",
+    "mean",
+    "standard_dev",
+    "cumulative"
+   ],
+   "summary": "Normal distribution.",
+   "category": "Statistical",
+   "excel": {
+    "listed": true,
+    "since": "2010",
+    "source": "https://support.microsoft.com/en-us/excel/functions/norm-dist-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Statistical",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "NORM.INV",
+   "args": [
+    "probability",
+    "mean",
+    "standard_dev"
+   ],
+   "summary": "Inverse of the normal distribution.",
+   "category": "Compatibility",
+   "excel": {
+    "listed": true,
+    "since": "2010",
+    "source": "https://support.microsoft.com/en-us/excel/functions/norm-inv-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Statistical",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "NORM.S.DIST",
+   "args": [
+    "z",
+    "cumulative"
+   ],
+   "summary": "Standard normal distribution.",
+   "category": "Statistical",
+   "excel": {
+    "listed": true,
+    "since": "2010",
+    "source": "https://support.microsoft.com/en-us/excel/functions/norm-s-dist-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Statistical",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "NORM.S.INV",
+   "args": [
+    "probability"
+   ],
+   "summary": "Inverse of the standard normal distribution.",
+   "category": "Statistical",
+   "excel": {
+    "listed": true,
+    "since": "2010",
+    "source": "https://support.microsoft.com/en-us/excel/functions/norm-s-inv-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Statistical",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "NORMDIST",
+   "args": [
+    "x",
+    "mean",
+    "standard_dev",
+    "cumulative"
+   ],
+   "summary": "Normal distribution.",
+   "category": "Compatibility",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/normdist-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Statistical",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "NORMINV",
+   "args": [
+    "probability",
+    "mean",
+    "standard_dev"
+   ],
+   "summary": "Inverse of the normal distribution.",
+   "category": "Statistical",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/norminv-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Statistical",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "NORMSDIST",
+   "args": [
+    "z"
+   ],
+   "summary": "Standard normal cumulative distribution.",
+   "category": "Compatibility",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/normsdist-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Statistical",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "NORMSINV",
+   "args": [
+    "probability"
+   ],
+   "summary": "Inverse of the standard normal distribution.",
+   "category": "Compatibility",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/normsinv-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Statistical",
     "source": "https://support.google.com/docs/table/25273?hl=en"
    }
   },
@@ -1282,6 +5040,165 @@
    }
   },
   {
+   "name": "NPER",
+   "args": [
+    "rate",
+    "pmt",
+    "pv",
+    "[fv]",
+    "[type]"
+   ],
+   "summary": "Number of periods of an investment.",
+   "category": "Financial",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/nper-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Financial",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "NPV",
+   "args": [
+    "rate",
+    "value1",
+    "[value2]",
+    "..."
+   ],
+   "summary": "Net present value of periodic cash flows.",
+   "category": "Financial",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/npv-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Financial",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "NUMBERVALUE",
+   "args": [
+    "Text",
+    "[Decimal_separator]",
+    "[Group_separator ]"
+   ],
+   "summary": "Text as a number, with chosen separators.",
+   "category": "Text",
+   "excel": {
+    "listed": true,
+    "since": "2013",
+    "source": "https://support.microsoft.com/en-us/excel/functions/numbervalue-function"
+   },
+   "sheets": {
+    "listed": false,
+    "category": null,
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "OCT2BIN",
+   "args": [
+    "number",
+    "[places]"
+   ],
+   "summary": "Octal to binary.",
+   "category": "Engineering",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/oct2bin-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Engineering",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "OCT2DEC",
+   "args": [
+    "number"
+   ],
+   "summary": "Octal to decimal.",
+   "category": "Engineering",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/oct2dec-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Engineering",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "OCT2HEX",
+   "args": [
+    "number",
+    "[places]"
+   ],
+   "summary": "Octal to hexadecimal.",
+   "category": "Engineering",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/oct2hex-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Engineering",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "ODD",
+   "args": [
+    "number"
+   ],
+   "summary": "Rounds away from zero to an odd integer.",
+   "category": "Math and trigonometry",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/odd-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Math",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "OFFSET",
+   "args": [
+    "reference",
+    "rows",
+    "cols",
+    "[height]",
+    "[width]"
+   ],
+   "summary": "A reference shifted from a starting cell.",
+   "category": "Lookup and reference",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/offset-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Lookup",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
    "name": "OR",
    "args": [
     "logical1",
@@ -1302,6 +5219,237 @@
    }
   },
   {
+   "name": "PDURATION",
+   "args": [
+    "rate",
+    "pv",
+    "fv"
+   ],
+   "summary": "Periods needed to reach a value.",
+   "category": "Financial",
+   "excel": {
+    "listed": true,
+    "since": "2013",
+    "source": "https://support.microsoft.com/en-us/excel/functions/pduration-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Financial",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "PEARSON",
+   "args": [
+    "array1",
+    "array2"
+   ],
+   "summary": "Pearson correlation coefficient.",
+   "category": "Statistical",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/pearson-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Statistical",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "PERCENTILE",
+   "args": [
+    "array",
+    "k"
+   ],
+   "summary": "The k-th percentile.",
+   "category": "Compatibility",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/percentile-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Statistical",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "PERCENTILE.EXC",
+   "args": [
+    "array",
+    "k"
+   ],
+   "summary": "The k-th percentile, exclusive.",
+   "category": "Statistical",
+   "excel": {
+    "listed": true,
+    "since": "2010",
+    "source": "https://support.microsoft.com/en-us/excel/functions/percentile-exc-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Statistical",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "PERCENTILE.INC",
+   "args": [
+    "array",
+    "k"
+   ],
+   "summary": "The k-th percentile, inclusive.",
+   "category": "Statistical",
+   "excel": {
+    "listed": true,
+    "since": "2010",
+    "source": "https://support.microsoft.com/en-us/excel/functions/percentile-inc-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Statistical",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "PERCENTOF",
+   "args": [
+    "data_subset",
+    "data_all"
+   ],
+   "summary": "Sum of a subset as a share of the sum of all.",
+   "category": null,
+   "excel": {
+    "listed": false,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/percentof-function"
+   },
+   "sheets": {
+    "listed": false,
+    "category": null,
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "PERCENTRANK",
+   "args": [
+    "array",
+    "x",
+    "[significance]"
+   ],
+   "summary": "Rank of a value as a percentage.",
+   "category": "Compatibility",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/percentrank-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Statistical",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "PERCENTRANK.EXC",
+   "args": [
+    "array",
+    "x",
+    "[significance]"
+   ],
+   "summary": "Rank of a value as a percentage, exclusive.",
+   "category": "Statistical",
+   "excel": {
+    "listed": true,
+    "since": "2010",
+    "source": "https://support.microsoft.com/en-us/excel/functions/percentrank-exc-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Statistical",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "PERCENTRANK.INC",
+   "args": [
+    "array",
+    "x",
+    "[significance]"
+   ],
+   "summary": "Rank of a value as a percentage, inclusive.",
+   "category": "Statistical",
+   "excel": {
+    "listed": true,
+    "since": "2010",
+    "source": "https://support.microsoft.com/en-us/excel/functions/percentrank-inc-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Statistical",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "PERMUT",
+   "args": [
+    "number",
+    "number_chosen"
+   ],
+   "summary": "Number of permutations.",
+   "category": "Statistical",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/permut-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Statistical",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "PERMUTATIONA",
+   "args": [
+    "number",
+    "number-chosen"
+   ],
+   "summary": "Number of permutations with repetition.",
+   "category": "Statistical",
+   "excel": {
+    "listed": true,
+    "since": "2013",
+    "source": "https://support.microsoft.com/en-us/excel/functions/permutationa-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Statistical",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "PHI",
+   "args": [
+    "x"
+   ],
+   "summary": "Standard normal density.",
+   "category": "Statistical",
+   "excel": {
+    "listed": true,
+    "since": "2013",
+    "source": "https://support.microsoft.com/en-us/excel/functions/phi-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Statistical",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
    "name": "PI",
    "args": [],
    "summary": "The number pi.",
@@ -1314,6 +5462,76 @@
    "sheets": {
     "listed": true,
     "category": "Math",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "PIVOTBY",
+   "args": [
+    "row_fields",
+    "col_fields",
+    "values",
+    "function",
+    "[field_headers]",
+    "[row_total_depth]",
+    "[row_sort_order]",
+    "[col_total_depth]",
+    "[col_sort_order]",
+    "[filter_array]",
+    "[relative_to]"
+   ],
+   "summary": "Groups by row and column fields and aggregates into a spilled grid.",
+   "category": null,
+   "excel": {
+    "listed": false,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/pivotby-function"
+   },
+   "sheets": {
+    "listed": false,
+    "category": null,
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "PMT",
+   "args": [
+    "rate",
+    "nper",
+    "pv",
+    "[fv]",
+    "[type]"
+   ],
+   "summary": "Payment of a loan.",
+   "category": "Financial",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/pmt-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Financial",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "POISSON.DIST",
+   "args": [
+    "x",
+    "mean",
+    "cumulative"
+   ],
+   "summary": "Poisson distribution.",
+   "category": "Statistical",
+   "excel": {
+    "listed": true,
+    "since": "2010",
+    "source": "https://support.microsoft.com/en-us/excel/functions/poisson-dist-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Statistical",
     "source": "https://support.google.com/docs/table/25273?hl=en"
    }
   },
@@ -1333,6 +5551,50 @@
    "sheets": {
     "listed": true,
     "category": "Math",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "PPMT",
+   "args": [
+    "rate",
+    "per",
+    "nper",
+    "pv",
+    "[fv]",
+    "[type]"
+   ],
+   "summary": "Principal part of a loan payment.",
+   "category": "Financial",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/ppmt-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Financial",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "PROB",
+   "args": [
+    "x_range",
+    "prob_range",
+    "[lower_limit]",
+    "[upper_limit]"
+   ],
+   "summary": "Probability that values lie between limits.",
+   "category": "Statistical",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/prob-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Statistical",
     "source": "https://support.google.com/docs/table/25273?hl=en"
    }
   },
@@ -1357,6 +5619,300 @@
    }
   },
   {
+   "name": "PROPER",
+   "args": [
+    "text"
+   ],
+   "summary": "Text with each word capitalized.",
+   "category": "Text",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/proper-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Text",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "PV",
+   "args": [
+    "rate",
+    "nper",
+    "pmt",
+    "[fv]",
+    "[type]"
+   ],
+   "summary": "Present value of an investment.",
+   "category": "Financial",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/pv-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Financial",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "QUARTILE",
+   "args": [
+    "array",
+    "quart"
+   ],
+   "summary": "Quartile.",
+   "category": "Compatibility",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/quartile-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Statistical",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "QUARTILE.EXC",
+   "args": [
+    "array",
+    "quart"
+   ],
+   "summary": "Quartile, exclusive.",
+   "category": "Statistical",
+   "excel": {
+    "listed": true,
+    "since": "2010",
+    "source": "https://support.microsoft.com/en-us/excel/functions/quartile-exc-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Statistical",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "QUARTILE.INC",
+   "args": [
+    "array",
+    "quart"
+   ],
+   "summary": "Quartile, inclusive.",
+   "category": "Statistical",
+   "excel": {
+    "listed": true,
+    "since": "2010",
+    "source": "https://support.microsoft.com/en-us/excel/functions/quartile-inc-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Statistical",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "QUERY",
+   "args": [
+    "data",
+    "query",
+    "[headers]"
+   ],
+   "summary": "Runs a query in Google's query language over a range.",
+   "category": "Google",
+   "excel": {
+    "listed": false,
+    "since": null,
+    "source": null
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Google",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "QUOTIENT",
+   "args": [
+    "numerator",
+    "denominator"
+   ],
+   "summary": "Integer part of a division.",
+   "category": "Math and trigonometry",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/quotient-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Math",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "RADIANS",
+   "args": [
+    "angle"
+   ],
+   "summary": "Degrees to radians.",
+   "category": "Math and trigonometry",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/radians-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Math",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "RAND",
+   "args": [],
+   "summary": "Random number from 0 to 1.",
+   "category": "Math and trigonometry",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/rand-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Math",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "RANDARRAY",
+   "args": [
+    "[rows]",
+    "[columns]",
+    "[min]",
+    "[max]",
+    "[whole_number]"
+   ],
+   "summary": "An array of random numbers.",
+   "category": "Math and trigonometry",
+   "excel": {
+    "listed": true,
+    "since": "2021",
+    "source": "https://support.microsoft.com/en-us/excel/functions/randarray-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Math",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "RANDBETWEEN",
+   "args": [
+    "bottom",
+    "top"
+   ],
+   "summary": "Random integer between two numbers.",
+   "category": "Math and trigonometry",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/randbetween-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Math",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "RANK",
+   "args": [
+    "number",
+    "ref",
+    "[order]"
+   ],
+   "summary": "Rank of a number in a list.",
+   "category": "Compatibility",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/rank-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Statistical",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "RANK.AVG",
+   "args": [
+    "number",
+    "ref",
+    "[order]"
+   ],
+   "summary": "Rank of a number, averaged for ties.",
+   "category": "Statistical",
+   "excel": {
+    "listed": true,
+    "since": "2010",
+    "source": "https://support.microsoft.com/en-us/excel/functions/rank-avg-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Statistical",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "RANK.EQ",
+   "args": [
+    "number",
+    "ref",
+    "[order]"
+   ],
+   "summary": "Rank of a number in a list.",
+   "category": "Statistical",
+   "excel": {
+    "listed": true,
+    "since": "2010",
+    "source": "https://support.microsoft.com/en-us/excel/functions/rank-eq-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Statistical",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "RATE",
+   "args": [
+    "nper",
+    "pmt",
+    "pv",
+    "[fv]",
+    "[type]",
+    "[guess]"
+   ],
+   "summary": "Interest rate per period.",
+   "category": "Financial",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/rate-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Financial",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
    "name": "REDUCE",
    "args": [
     "[initial_value]",
@@ -1377,6 +5933,128 @@
    }
   },
   {
+   "name": "REGEXEXTRACT",
+   "args": [
+    "text",
+    "pattern",
+    "[return_mode]",
+    "[case_sensitivity]"
+   ],
+   "summary": "Text that matches a regular expression.",
+   "category": null,
+   "excel": {
+    "listed": false,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/regexextract-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Text",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "REGEXMATCH",
+   "args": [
+    "text",
+    "regular_expression"
+   ],
+   "summary": "TRUE when text matches a regular expression.",
+   "category": "Text",
+   "excel": {
+    "listed": false,
+    "since": null,
+    "source": null
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Text",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "REGEXREPLACE",
+   "args": [
+    "text",
+    "pattern",
+    "replacement",
+    "[occurrence]",
+    "[case_sensitivity]"
+   ],
+   "summary": "Text with matches of a regular expression replaced.",
+   "category": null,
+   "excel": {
+    "listed": false,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/regexreplace-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Text",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "REGEXTEST",
+   "args": [
+    "text",
+    "pattern",
+    "[case_sensitivity]"
+   ],
+   "summary": "TRUE when text matches a regular expression.",
+   "category": null,
+   "excel": {
+    "listed": false,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/regextest-function"
+   },
+   "sheets": {
+    "listed": false,
+    "category": null,
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "REPLACE",
+   "args": [
+    "old_text",
+    "start_num",
+    "num_chars",
+    "new_text"
+   ],
+   "summary": "Text with part of it replaced by position.",
+   "category": "Text",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/replace-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Text",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "REPT",
+   "args": [
+    "text",
+    "number_times"
+   ],
+   "summary": "Text repeated a number of times.",
+   "category": "Text",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/rept-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Text",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
    "name": "RIGHT",
    "args": [
     "text",
@@ -1388,6 +6066,25 @@
     "listed": true,
     "since": null,
     "source": "https://support.microsoft.com/en-us/excel/functions/right-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Text",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "ROMAN",
+   "args": [
+    "number",
+    "[form]"
+   ],
+   "summary": "A number as a Roman numeral.",
+   "category": "Math and trigonometry",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/roman-function"
    },
    "sheets": {
     "listed": true,
@@ -1453,6 +6150,81 @@
    }
   },
   {
+   "name": "ROW",
+   "args": [
+    "[reference]"
+   ],
+   "summary": "Row number of a reference.",
+   "category": "Lookup and reference",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/row-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Lookup",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "ROWS",
+   "args": [
+    "array"
+   ],
+   "summary": "Number of rows in a reference or array.",
+   "category": "Lookup and reference",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/rows-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Lookup",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "RRI",
+   "args": [
+    "nper",
+    "pv",
+    "fv"
+   ],
+   "summary": "Equivalent interest rate for growth.",
+   "category": "Financial",
+   "excel": {
+    "listed": true,
+    "since": "2013",
+    "source": "https://support.microsoft.com/en-us/excel/functions/rri-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Financial",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "RSQ",
+   "args": [
+    "known_y's",
+    "known_x's"
+   ],
+   "summary": "Square of the Pearson correlation.",
+   "category": "Statistical",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/rsq-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Statistical",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
    "name": "SCAN",
    "args": [
     "[initial_value]",
@@ -1493,6 +6265,42 @@
    }
   },
   {
+   "name": "SEC",
+   "args": [
+    "number"
+   ],
+   "summary": "Secant of an angle.",
+   "category": "Math and trigonometry",
+   "excel": {
+    "listed": true,
+    "since": "2013",
+    "source": "https://support.microsoft.com/en-us/excel/functions/sec-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Math",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "SECH",
+   "args": [
+    "number"
+   ],
+   "summary": "Hyperbolic secant.",
+   "category": "Math and trigonometry",
+   "excel": {
+    "listed": true,
+    "since": "2013",
+    "source": "https://support.microsoft.com/en-us/excel/functions/sech-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Math",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
    "name": "SECOND",
    "args": [
     "serial_number"
@@ -1528,6 +6336,215 @@
    "sheets": {
     "listed": true,
     "category": "Math",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "SERIESSUM",
+   "args": [
+    "x",
+    "n",
+    "m",
+    "coefficients"
+   ],
+   "summary": "Sum of a power series.",
+   "category": "Math and trigonometry",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/seriessum-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Math",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "SHEET",
+   "args": [
+    "value"
+   ],
+   "summary": "Sheet number of a reference.",
+   "category": "Information",
+   "excel": {
+    "listed": true,
+    "since": "2013",
+    "source": "https://support.microsoft.com/en-us/excel/functions/sheet-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Lookup",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "SHEETS",
+   "args": [
+    "reference"
+   ],
+   "summary": "Number of sheets.",
+   "category": "Information",
+   "excel": {
+    "listed": true,
+    "since": "2013",
+    "source": "https://support.microsoft.com/en-us/excel/functions/sheets-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Info",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "SIGN",
+   "args": [
+    "number"
+   ],
+   "summary": "Sign of a number.",
+   "category": "Math and trigonometry",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/sign-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Math",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "SIN",
+   "args": [
+    "number"
+   ],
+   "summary": "Sine of an angle in radians.",
+   "category": "Math and trigonometry",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/sin-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Math",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "SINH",
+   "args": [
+    "number"
+   ],
+   "summary": "Hyperbolic sine.",
+   "category": "Math and trigonometry",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/sinh-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Math",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "SKEW",
+   "args": [
+    "number1",
+    "[number2]",
+    "..."
+   ],
+   "summary": "Skewness of a sample.",
+   "category": "Statistical",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/skew-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Statistical",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "SKEW.P",
+   "args": [
+    "number 1",
+    "[number 2]",
+    "..."
+   ],
+   "summary": "Skewness of a population.",
+   "category": "Statistical",
+   "excel": {
+    "listed": true,
+    "since": "2013",
+    "source": "https://support.microsoft.com/en-us/excel/functions/skew-p-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Statistical",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "SLN",
+   "args": [
+    "cost",
+    "salvage",
+    "life"
+   ],
+   "summary": "Straight-line depreciation.",
+   "category": "Financial",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/sln-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Financial",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "SLOPE",
+   "args": [
+    "known_y's",
+    "known_x's"
+   ],
+   "summary": "Slope of the least-squares line.",
+   "category": "Statistical",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/slope-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Statistical",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "SMALL",
+   "args": [
+    "array",
+    "k"
+   ],
+   "summary": "The k-th smallest value.",
+   "category": "Statistical",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/small-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Statistical",
     "source": "https://support.google.com/docs/table/25273?hl=en"
    }
   },
@@ -1575,6 +6592,68 @@
    }
   },
   {
+   "name": "SORTN",
+   "args": [
+    "range",
+    "[n]",
+    "[display_ties_mode]",
+    "[sort_column1, is_ascending1]",
+    "..."
+   ],
+   "summary": "The first n rows of a range after sorting.",
+   "category": "Filter",
+   "excel": {
+    "listed": false,
+    "since": null,
+    "source": null
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Filter",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "SPARKLINE",
+   "args": [
+    "data",
+    "[options]"
+   ],
+   "summary": "A small line, column, bar or win-loss chart drawn in the cell.",
+   "category": "Google",
+   "excel": {
+    "listed": false,
+    "since": null,
+    "source": null
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Google",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "SPLIT",
+   "args": [
+    "text",
+    "delimiter",
+    "[split_by_each]",
+    "[remove_empty_text]"
+   ],
+   "summary": "Text split into cells by delimiters.",
+   "category": "Text",
+   "excel": {
+    "listed": false,
+    "since": null,
+    "source": null
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Text",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
    "name": "SQRT",
    "args": [
     "number"
@@ -1589,6 +6668,163 @@
    "sheets": {
     "listed": true,
     "category": "Math",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "SQRTPI",
+   "args": [
+    "number"
+   ],
+   "summary": "Square root of a number times pi.",
+   "category": "Math and trigonometry",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/sqrtpi-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Math",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "STANDARDIZE",
+   "args": [
+    "x",
+    "mean",
+    "standard_dev"
+   ],
+   "summary": "A normalized value (z-score).",
+   "category": "Statistical",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/standardize-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Statistical",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "STDEV",
+   "args": [
+    "number1",
+    "[number2]",
+    "..."
+   ],
+   "summary": "Sample standard deviation.",
+   "category": "Compatibility",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/stdev-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Statistical",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "STDEV.P",
+   "args": [
+    "number1",
+    "[number2]",
+    "..."
+   ],
+   "summary": "Population standard deviation.",
+   "category": "Statistical",
+   "excel": {
+    "listed": true,
+    "since": "2010",
+    "source": "https://support.microsoft.com/en-us/excel/functions/stdev-p-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Statistical",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "STDEV.S",
+   "args": [
+    "number1",
+    "[number2]",
+    "..."
+   ],
+   "summary": "Sample standard deviation.",
+   "category": "Statistical",
+   "excel": {
+    "listed": true,
+    "since": "2010",
+    "source": "https://support.microsoft.com/en-us/excel/functions/stdev-s-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Statistical",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "STDEVA",
+   "args": [
+    "value1",
+    "[value2]",
+    "..."
+   ],
+   "summary": "Sample standard deviation counting text and logical values.",
+   "category": "Statistical",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/stdeva-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Statistical",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "STDEVPA",
+   "args": [
+    "value1",
+    "[value2]",
+    "..."
+   ],
+   "summary": "Population standard deviation counting text and logical values.",
+   "category": "Statistical",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/stdevpa-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Statistical",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "STEYX",
+   "args": [
+    "known_y's",
+    "known_x's"
+   ],
+   "summary": "Standard error of the predicted y values.",
+   "category": "Statistical",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/steyx-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Statistical",
     "source": "https://support.google.com/docs/table/25273?hl=en"
    }
   },
@@ -1697,6 +6933,27 @@
    }
   },
   {
+   "name": "SUMPRODUCT",
+   "args": [
+    "array1",
+    "[array2]",
+    "[array3]",
+    "..."
+   ],
+   "summary": "Sum of the products of matching items.",
+   "category": "Math and trigonometry",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/sumproduct-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Array",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
    "name": "SUMSQ",
    "args": [
     "number1",
@@ -1713,6 +6970,63 @@
    "sheets": {
     "listed": true,
     "category": "Math",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "SUMX2MY2",
+   "args": [
+    "array_x",
+    "array_y"
+   ],
+   "summary": "Sum of the differences of squares.",
+   "category": "Math and trigonometry",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/sumx2my2-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Array",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "SUMX2PY2",
+   "args": [
+    "array_x",
+    "array_y"
+   ],
+   "summary": "Sum of the sums of squares.",
+   "category": "Math and trigonometry",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/sumx2py2-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Array",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "SUMXMY2",
+   "args": [
+    "array_x",
+    "array_y"
+   ],
+   "summary": "Sum of squared differences.",
+   "category": "Math and trigonometry",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/sumxmy2-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Array",
     "source": "https://support.google.com/docs/table/25273?hl=en"
    }
   },
@@ -1739,6 +7053,162 @@
    }
   },
   {
+   "name": "SYD",
+   "args": [
+    "cost",
+    "salvage",
+    "life",
+    "per"
+   ],
+   "summary": "Sum-of-years'-digits depreciation.",
+   "category": "Financial",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/syd-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Financial",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "T",
+   "args": [
+    "value"
+   ],
+   "summary": "Text values as text, other values as empty.",
+   "category": "Text",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/t-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Text",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "T.DIST",
+   "args": [
+    "x",
+    "deg_freedom",
+    "cumulative"
+   ],
+   "summary": "Student's t distribution.",
+   "category": "Statistical",
+   "excel": {
+    "listed": true,
+    "since": "2010",
+    "source": "https://support.microsoft.com/en-us/excel/functions/t-dist-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Statistical",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "T.DIST.2T",
+   "args": [
+    "x",
+    "deg_freedom"
+   ],
+   "summary": "Two-tailed Student's t distribution.",
+   "category": "Statistical",
+   "excel": {
+    "listed": true,
+    "since": "2010",
+    "source": "https://support.microsoft.com/en-us/excel/functions/t-dist-2t-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Statistical",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "T.DIST.RT",
+   "args": [
+    "x",
+    "deg_freedom"
+   ],
+   "summary": "Right-tailed Student's t distribution.",
+   "category": "Statistical",
+   "excel": {
+    "listed": true,
+    "since": "2010",
+    "source": "https://support.microsoft.com/en-us/excel/functions/t-dist-rt-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Statistical",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "T.INV",
+   "args": [
+    "probability",
+    "deg_freedom"
+   ],
+   "summary": "Inverse of Student's t distribution.",
+   "category": "Statistical",
+   "excel": {
+    "listed": true,
+    "since": "2010",
+    "source": "https://support.microsoft.com/en-us/excel/functions/t-inv-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Statistical",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "T.INV.2T",
+   "args": [
+    "probability",
+    "deg_freedom"
+   ],
+   "summary": "Two-tailed inverse of Student's t distribution.",
+   "category": "Statistical",
+   "excel": {
+    "listed": true,
+    "since": "2010",
+    "source": "https://support.microsoft.com/en-us/excel/functions/t-inv-2t-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Statistical",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "T.TEST",
+   "args": [
+    "array1",
+    "array2",
+    "tails",
+    "type"
+   ],
+   "summary": "Probability from Student's t-test.",
+   "category": "Statistical",
+   "excel": {
+    "listed": true,
+    "since": "2010",
+    "source": "https://support.microsoft.com/en-us/excel/functions/t-test-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Statistical",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
    "name": "TAKE",
    "args": [
     "array",
@@ -1759,6 +7229,42 @@
    }
   },
   {
+   "name": "TAN",
+   "args": [
+    "number"
+   ],
+   "summary": "Tangent of an angle in radians.",
+   "category": "Math and trigonometry",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/tan-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Math",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "TANH",
+   "args": [
+    "number"
+   ],
+   "summary": "Hyperbolic tangent.",
+   "category": "Math and trigonometry",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/tanh-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Math",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
    "name": "TEXT",
    "args": [
     "value",
@@ -1770,6 +7276,74 @@
     "listed": true,
     "since": null,
     "source": "https://support.microsoft.com/en-us/excel/functions/text-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Text",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "TEXTAFTER",
+   "args": [
+    "text",
+    "delimiter",
+    "[instance_num]",
+    "[match_mode]",
+    "[match_end]",
+    "[if_not_found]"
+   ],
+   "summary": "Text after a delimiter.",
+   "category": "Text",
+   "excel": {
+    "listed": true,
+    "since": "2024",
+    "source": "https://support.microsoft.com/en-us/excel/functions/textafter-function"
+   },
+   "sheets": {
+    "listed": false,
+    "category": null,
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "TEXTBEFORE",
+   "args": [
+    "text",
+    "delimiter",
+    "[instance_num]",
+    "[match_mode]",
+    "[match_end]",
+    "[if_not_found]"
+   ],
+   "summary": "Text before a delimiter.",
+   "category": "Text",
+   "excel": {
+    "listed": true,
+    "since": "2024",
+    "source": "https://support.microsoft.com/en-us/excel/functions/textbefore-function"
+   },
+   "sheets": {
+    "listed": false,
+    "category": null,
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "TEXTJOIN",
+   "args": [
+    "delimiter",
+    "ignore_empty",
+    "text1",
+    "[text2]",
+    "..."
+   ],
+   "summary": "Values joined with a delimiter, optionally skipping blanks.",
+   "category": "Text",
+   "excel": {
+    "listed": true,
+    "since": "2019",
+    "source": "https://support.microsoft.com/en-us/excel/functions/textjoin-function"
    },
    "sheets": {
     "listed": true,
@@ -1913,6 +7487,27 @@
    }
   },
   {
+   "name": "TREND",
+   "args": [
+    "known_y's",
+    "[known_x's]",
+    "[new_x's]",
+    "[const]"
+   ],
+   "summary": "Values along the least-squares line.",
+   "category": "Statistical",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/trend-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Array",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
    "name": "TRIM",
    "args": [
     "text"
@@ -1931,6 +7526,25 @@
    }
   },
   {
+   "name": "TRIMMEAN",
+   "args": [
+    "array",
+    "percent"
+   ],
+   "summary": "Mean of the interior of a data set.",
+   "category": "Statistical",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/trimmean-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Statistical",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
    "name": "TRUE",
    "args": [],
    "summary": "The logical value TRUE.",
@@ -1943,6 +7557,79 @@
    "sheets": {
     "listed": true,
     "category": "Logical",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "TRUNC",
+   "args": [
+    "number",
+    "[num_digits]"
+   ],
+   "summary": "Truncates a number to digits.",
+   "category": "Math and trigonometry",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/trunc-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Math",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "TYPE",
+   "args": [
+    "value"
+   ],
+   "summary": "Type code of a value.",
+   "category": "Information",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/type-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Info",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "UNICHAR",
+   "args": [
+    "number"
+   ],
+   "summary": "The character for a Unicode code point.",
+   "category": "Text",
+   "excel": {
+    "listed": true,
+    "since": "2013",
+    "source": "https://support.microsoft.com/en-us/excel/functions/unichar-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Text",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "UNICODE",
+   "args": [
+    "text"
+   ],
+   "summary": "Code point of the first character.",
+   "category": "Text",
+   "excel": {
+    "listed": true,
+    "since": "2013",
+    "source": "https://support.microsoft.com/en-us/excel/functions/unicode-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Text",
     "source": "https://support.google.com/docs/table/25273?hl=en"
    }
   },
@@ -1981,6 +7668,167 @@
    "sheets": {
     "listed": true,
     "category": "Text",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "VALUE",
+   "args": [
+    "text"
+   ],
+   "summary": "Text as a number.",
+   "category": "Text",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/value-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Text",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "VALUETOTEXT",
+   "args": [
+    "value",
+    "[format]"
+   ],
+   "summary": "A value as text.",
+   "category": "Text",
+   "excel": {
+    "listed": true,
+    "since": "2021",
+    "source": "https://support.microsoft.com/en-us/excel/functions/valuetotext-function"
+   },
+   "sheets": {
+    "listed": false,
+    "category": null,
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "VAR",
+   "args": [
+    "number1",
+    "[number2]",
+    "..."
+   ],
+   "summary": "Sample variance.",
+   "category": "Compatibility",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/var-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Statistical",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "VAR.P",
+   "args": [
+    "number1",
+    "[number2]",
+    "..."
+   ],
+   "summary": "Population variance.",
+   "category": "Statistical",
+   "excel": {
+    "listed": true,
+    "since": "2010",
+    "source": "https://support.microsoft.com/en-us/excel/functions/var-p-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Statistical",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "VAR.S",
+   "args": [
+    "number1",
+    "[number2]",
+    "..."
+   ],
+   "summary": "Sample variance.",
+   "category": "Statistical",
+   "excel": {
+    "listed": true,
+    "since": "2010",
+    "source": "https://support.microsoft.com/en-us/excel/functions/var-s-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Statistical",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "VARA",
+   "args": [
+    "value1",
+    "[value2]",
+    "..."
+   ],
+   "summary": "Sample variance counting text and logical values.",
+   "category": "Statistical",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/vara-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Statistical",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "VARPA",
+   "args": [
+    "value1",
+    "[value2]",
+    "..."
+   ],
+   "summary": "Population variance counting text and logical values.",
+   "category": "Statistical",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/varpa-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Statistical",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "VDB",
+   "args": [
+    "cost",
+    "salvage",
+    "life",
+    "start_period",
+    "end_period",
+    "[factor]",
+    "[no_switch]"
+   ],
+   "summary": "Depreciation by declining balance for any period.",
+   "category": "Financial",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/vdb-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Financial",
     "source": "https://support.google.com/docs/table/25273?hl=en"
    }
   },
@@ -2026,6 +7874,24 @@
    }
   },
   {
+   "name": "WEBSERVICE",
+   "args": [
+    "url"
+   ],
+   "summary": "Text returned by a URL, fetched by the engine process.",
+   "category": "Web",
+   "excel": {
+    "listed": true,
+    "since": "2013",
+    "source": "https://support.microsoft.com/en-us/excel/functions/webservice-function"
+   },
+   "sheets": {
+    "listed": false,
+    "category": null,
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
    "name": "WEEKDAY",
    "args": [
     "serial_number",
@@ -2037,6 +7903,87 @@
     "listed": true,
     "since": null,
     "source": "https://support.microsoft.com/en-us/excel/functions/weekday-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Date",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "WEEKNUM",
+   "args": [
+    "serial_number",
+    "[return_type]"
+   ],
+   "summary": "Week number of a date.",
+   "category": "Date and time",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/weeknum-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Date",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "WEIBULL.DIST",
+   "args": [
+    "x",
+    "alpha",
+    "beta",
+    "cumulative"
+   ],
+   "summary": "Weibull distribution.",
+   "category": "Statistical",
+   "excel": {
+    "listed": true,
+    "since": "2010",
+    "source": "https://support.microsoft.com/en-us/excel/functions/weibull-dist-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Statistical",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "WORKDAY",
+   "args": [
+    "start_date",
+    "days",
+    "[holidays]"
+   ],
+   "summary": "Date a number of working days away.",
+   "category": "Date and time",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/workday-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Date",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "WORKDAY.INTL",
+   "args": [
+    "start_date",
+    "days",
+    "[weekend]",
+    "[holidays]"
+   ],
+   "summary": "Date a number of working days away with a chosen weekend.",
+   "category": "Date and time",
+   "excel": {
+    "listed": true,
+    "since": "2010",
+    "source": "https://support.microsoft.com/en-us/excel/functions/workday-intl-function"
    },
    "sheets": {
     "listed": true,
@@ -2085,6 +8032,26 @@
    }
   },
   {
+   "name": "XIRR",
+   "args": [
+    "values",
+    "dates",
+    "[guess]"
+   ],
+   "summary": "Internal rate of return for dated cash flows.",
+   "category": "Financial",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/xirr-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Financial",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
    "name": "XLOOKUP",
    "args": [
     "lookup_value",
@@ -2129,6 +8096,26 @@
    }
   },
   {
+   "name": "XNPV",
+   "args": [
+    "rate",
+    "values",
+    "dates"
+   ],
+   "summary": "Net present value for dated cash flows.",
+   "category": "Financial",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/xnpv-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Financial",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
    "name": "XOR",
    "args": [
     "logical1",
@@ -2163,6 +8150,46 @@
    "sheets": {
     "listed": true,
     "category": "Date",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "YEARFRAC",
+   "args": [
+    "start_date",
+    "end_date",
+    "[basis]"
+   ],
+   "summary": "Fraction of a year between two dates.",
+   "category": "Date and time",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/yearfrac-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Date",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "Z.TEST",
+   "args": [
+    "array",
+    "x",
+    "[sigma]"
+   ],
+   "summary": "One-tailed probability of a z-test.",
+   "category": "Statistical",
+   "excel": {
+    "listed": true,
+    "since": "2010",
+    "source": "https://support.microsoft.com/en-us/excel/functions/z-test-function"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Statistical",
     "source": "https://support.google.com/docs/table/25273?hl=en"
    }
   }
