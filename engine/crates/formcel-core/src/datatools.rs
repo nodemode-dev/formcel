@@ -247,6 +247,26 @@ impl Workbook {
         Ok(out)
     }
 
+    fn rewrite_block_refs(&mut self, sheet: usize, b: crate::cellshift::Block) -> Result<Effect, EngineError> {
+        let names = self.sheet_names();
+        let target = names[sheet].clone();
+        let mut per: Vec<Vec<(Addr, String)>> = vec![Vec::new(); names.len()];
+        for ((sh, ad), f) in &self.formulas {
+            if let Some(mut ast) = f.ast.clone() {
+                if crate::cellshift::remap(&mut ast, &names[*sh], &target, b) {
+                    per[*sh].push((*ad, format!("={}", crate::formula::to_text(&ast))));
+                }
+            }
+        }
+        let mut out = Effect::default();
+        for (sh, edits) in per.into_iter().enumerate() {
+            if !edits.is_empty() {
+                out.cells.extend(self.apply(sh, &edits)?);
+            }
+        }
+        Ok(out)
+    }
+
     pub fn tool(&mut self, sheet: usize, cmd: &str) -> Out {
         if sheet >= self.sheets.len() {
             return Err(EngineError::NoSheet(sheet));
@@ -864,7 +884,8 @@ impl Workbook {
                 }
             }
         }
-        let e = self.relocate(sheet, &moves, &clears, false)?;
+        let mut e = self.relocate(sheet, &moves, &clears, false)?;
+        e = e.join(self.rewrite_block_refs(sheet, crate::cellshift::Block { area, vertical, insert })?);
         Ok((e, say(&format!("Shifted {} cells.", moves.len()))))
     }
 

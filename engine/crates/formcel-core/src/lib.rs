@@ -17,6 +17,7 @@ pub mod protect;
 pub mod sort;
 pub mod stats;
 pub mod whatif;
+mod cellshift;
 mod datatools;
 mod flash;
 pub use numfmt::Fmt;
