@@ -626,6 +626,25 @@
    }
   },
   {
+   "name": "HYPERLINK",
+   "args": [
+    "link_location",
+    "[friendly_name]"
+   ],
+   "summary": "A link to a web page, an email address or a place in the workbook, shown with a friendly name.",
+   "category": "Lookup and reference",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/office/hyperlink-function-333c7ce6-c5ae-4164-9c47-7de9b76f577f"
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Web",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
    "name": "IF",
    "args": [
     "logical_test",
