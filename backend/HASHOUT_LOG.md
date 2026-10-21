@@ -173,3 +173,10 @@ Each sheet in `workbook.json` gains `formats`, a list of `[row, col, code]`. Loa
 - logged: v0.19.0 · 2026-10-21
 
 Each sheet also gains `styles`, a list of `[row, col, style]` in the engine's canonical style text. `POST /api/workbooks/{id}/styles` takes the same body as `/formats` and shares its handler; an empty style clears the cell. Row heights grown for wrapped or large text are saved through the sheet's view like any other row height.
+
+### Merges in the file
+- refers-to: app/services/store.py :: _write, _load, get, set_merges; app/routers/workbooks.py :: set_merges, MergesIn
+- kind: explainer
+- logged: v0.20.0 · 2026-10-21
+
+Each sheet gains `merges`, a list of `[r0, c0, r1, c1]`. `PUT /api/workbooks/{id}/merges` replaces a sheet's whole list; the window sends it after any change that touched merges, including undo, because the engine process only replays inserts and deletes and would otherwise keep merges an undo restored.

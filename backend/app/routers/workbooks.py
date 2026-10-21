@@ -122,6 +122,21 @@ def set_styles(wid: str, body: EditIn) -> dict:
         raise HTTPException(422, f"Those styles could not be saved: {e}")
 
 
+class MergesIn(BaseModel):
+    sheet: int = 0
+    areas: list[tuple[int, int, int, int]] = Field(default_factory=list)
+
+
+@router.put("/workbooks/{wid}/merges")
+def set_merges(wid: str, body: MergesIn) -> dict:
+    try:
+        return store().set_merges(wid, body.sheet, body.areas)
+    except (KeyError, FileNotFoundError):
+        raise missing(wid)
+    except (IndexError, ValueError) as e:
+        raise HTTPException(422, f"Those merged cells could not be saved: {e}")
+
+
 @router.put("/workbooks/{wid}/names")
 def set_name(wid: str, body: NameIn) -> dict:
     try:
