@@ -13,6 +13,7 @@ export default defineConfig({
     host: false,
     strictPort: true,
     proxy: { '/api': engine, '/mcp': engine },
+    fs: { allow: ['.', '../docs'] },
   },
   preview: {
     port: PREVIEW_PORT,

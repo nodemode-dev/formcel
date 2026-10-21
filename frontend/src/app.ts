@@ -1,5 +1,6 @@
 import { engine, type Changed, type Name, type Shift } from './engine';
 import { colName, type Range } from './grid/a1';
+import { Autocomplete, FUNCTIONS, type Suggestion } from './ui/autocomplete';
 import { Grid, type MenuKind, type SheetView } from './grid/grid';
 import { listCommands, registerCommand, runCommand } from './ui/commands';
 import { Home, type TemplateMeta, type WorkbookMeta } from './ui/home';
@@ -86,6 +87,9 @@ export class App {
         p.nameBox.select();
       },
     });
+    const suggestions = (): Suggestion[] => [...FUNCTIONS, ...(this.open?.names ?? []).map(([name, refers]): Suggestion => ({ name, kind: 'name', summary: refers }))];
+    new Autocomplete(p.formulaBar, suggestions);
+    new Autocomplete(this.grid.editor, suggestions);
     this.button('edit.undo').disabled = true;
     this.button('edit.redo').disabled = true;
     this.commands();

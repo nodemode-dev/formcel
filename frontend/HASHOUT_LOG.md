@@ -2,10 +2,30 @@
 
 Living log of comment content and rationale for the window. Source stays comment-free; it lives here.
 
-Current build version: v0.13.0
-Last updated: 2026-10-21 · Tab then Enter
+Current build version: v0.14.0
+Last updated: 2026-10-21 · formula autocomplete
 
 ---
+
+## Formula autocomplete and argument help · v0.14.0 (2026-10-21)
+
+- refers-to: src/ui/autocomplete.ts :: scan, Autocomplete, FUNCTIONS; src/styles/autocomplete.css; src/app.ts (two instances, cell editor and formula bar); src/grid/grid.ts :: editor (now readonly public); vite.config.ts :: server.fs.allow; tsconfig.json :: resolveJsonModule; ../docs/functions.json
+- kind: explainer
+
+Both the cell editor and the formula bar get an `Autocomplete`. The rules come from Microsoft's "Use Formula AutoComplete" page:
+- After `=`, the word being typed before the caret lists matching built-in functions and workbook names, alphabetically, with the first one selected. This works anywhere in a formula, and text after the caret is left alone.
+- Up and Down, Home and End, and Page Up and Page Down move the selection. Tab or a double-click inserts the item and puts the caret after it, adding `(` after a function name. Escape closes the list; a second Escape cancels the edit as before. Alt+Down turns the list on or off.
+- Enter is not taken over, so it still commits the formula.
+
+Google's "Add formulas & functions" page describes a help box with the function's syntax while editing. That is the argument tip, shown when no list is open: the innermost open call's signature, with the current argument in the accent colour, and the function's one-line summary.
+
+`scan` reads only the text before the caret and skips strings and quoted sheet names, so nothing is offered inside `"..."`. A word right after `$`, `!`, `:` or a digit is part of a reference and offers nothing.
+
+The key listener is a capture listener on the field. At the target, capture listeners run before the grid's and the formula bar's own handlers, and it stops the event only for the keys it uses while its list is open.
+
+Both popups are `position: fixed` in `#overlay-root` at `--z-popover`, placed with a transform before they are unhidden. Their heights are fixed in CSS (26 px rows, at most 8 visible; the tip is 52 px), so no measuring is needed and they never move the page. Rows and signature parts come from pools that only grow and are patched by `textContent`. At 4x CPU throttle with slow network: no layout shifts while typing, moving and inserting, and 7 elements created after the first list (the tip's span pool, once). A first run showed small shifts as the summary column moved with each name's width; the name column is now a fixed 12ch.
+
+The function list is `docs/functions.json`, imported at build time. `server.fs.allow` adds `../docs` so the dev server may read it.
 
 ## Tab then Enter · v0.13.0 (2026-10-21)
 

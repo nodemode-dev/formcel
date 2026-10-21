@@ -9,6 +9,7 @@
     "noEmit": true,
     "skipLibCheck": true,
     "isolatedModules": true,
+    "resolveJsonModule": true,
     "useDefineForClassFields": true,
     "noFallthroughCasesInSwitch": true,
     "noUnusedLocals": true,

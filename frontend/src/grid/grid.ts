@@ -61,7 +61,7 @@ export class Grid {
   private readonly octx: CanvasRenderingContext2D;
   private gw = 0;
   private gh = 0;
-  private readonly editor: HTMLTextAreaElement;
+  readonly editor: HTMLTextAreaElement;
   private readonly cache = new Map<number, string>();
   private readonly fx = new Map<number, string>();
   private wins: (Range | null)[] = [null, null, null, null];
