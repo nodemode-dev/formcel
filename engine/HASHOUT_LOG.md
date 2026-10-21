@@ -2,8 +2,8 @@
 
 Living log of comment content and rationale for the Rust engine. Source stays near comment-free; it lives here.
 
-Current build version: v0.1.0
-Last updated: 2026-10-21 · scaffold
+Current build version: v0.2.0
+Last updated: 2026-10-21 · chunked store, history, reads, edges
 
 ---
 
@@ -14,14 +14,17 @@ engine/
 ├── Cargo.toml                       workspace, release profile sized for wasm
 ├── build_wasm(.bat)                 builds formcel-wasm, copies it to frontend/public/engine/formcel.wasm
 └── crates/
-    ├── formcel-core/src/lib.rs      Value, Addr, A1 parsing, Sheet, Workbook
+    ├── formcel-core/src/lib.rs      Value, Addr, A1 parsing, Sheet, Workbook, history
+    ├── formcel-core/src/store.rs    chunked cell store, Dir, data-edge search
+    ├── formcel-core/src/wire.rs     text format for cell lists shared by both wrappers
     ├── formcel-wasm/src/lib.rs      C ABI exports for the window worker
     └── formcel-py/                  PyO3 module formcel_engine (pyproject.toml for maturin)
 ```
 
 ## Table of contents
 
-- [crates/formcel-core/src/lib.rs](#core)
+- [crates/formcel-core/src/lib.rs and store.rs](#core)
+- [crates/formcel-core/src/wire.rs](#wire)
 - [crates/formcel-wasm/src/lib.rs](#wasm)
 - [crates/formcel-py/src/lib.rs](#py)
 
@@ -42,6 +45,40 @@ The owner chose option (c) for DEV_PLAN Q1: the calculation engine is written on
 - logged: v0.1.0 · 2026-10-21
 
 A HashMap keyed by Addr. Setting a cell to empty input removes the key, so the store only holds filled cells. Phase 1 replaces it with chunked blocks for scroll-order iteration; the public API stays.
+
+Replaced in v0.2.0 by `store.rs` (next entry); the HashMap import was removed from lib.rs.
+
+### Store · 32 by 32 blocks
+- refers-to: crates/formcel-core/src/store.rs :: Store
+- kind: rationale
+- logged: v0.2.0 · 2026-10-21
+
+A BTreeMap keyed by (row block, column block), each block a sorted Vec of (index in block, Value). A viewport read walks only the blocks it overlaps, in row order, and an empty block is removed, so sparse sheets cost nothing and a 61 by 26 read takes about 0.07 ms with a million rows filled. Measured from Python: 1,000,000 cells written in 1.3 s.
+
+### Store::edge · Excel's Ctrl+arrow rule
+- refers-to: crates/formcel-core/src/store.rs :: edge, next_filled
+- kind: explainer
+- logged: v0.2.0 · 2026-10-21
+
+From a filled cell whose neighbour is filled, walk to the last filled cell of the run. Otherwise jump to the next filled cell in that direction, or to the sheet's edge when there is none. next_filled skips whole empty blocks, so a jump across a million empty rows checks at most 32,768 block keys.
+
+### Workbook history
+- refers-to: crates/formcel-core/src/lib.rs :: Workbook::apply, undo, redo, replay
+- kind: explainer
+- logged: v0.2.0 · 2026-10-21
+
+Every apply is one undoable step holding each changed cell's before and after values; cells that did not change are left out of the step but still reported, so the window repaints them. A new edit clears redo. The undo stack keeps the last HISTORY_LIMIT (500) steps. Undo replays a step backwards, redo forwards.
+
+---
+
+## crates/formcel-core/src/wire.rs {#wire}
+
+### Text lines instead of JSON
+- refers-to: crates/formcel-core/src/wire.rs :: whole file
+- kind: rationale
+- logged: v0.2.0 · 2026-10-21
+
+Cell lists cross the WebAssembly boundary as `row\tcol\ttext` lines (changes add a leading sheet), with backslash, tab, newline and carriage return escaped. No serde, no JSON parser in the module, and the window decodes it with one split per line. Defined once here so the wrappers cannot drift.
 
 ### Value::parse_input
 - refers-to: crates/formcel-core/src/lib.rs :: Value::parse_input

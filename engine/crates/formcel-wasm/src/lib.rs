@@ -1,4 +1,4 @@
-use formcel_core::{parse_a1, Workbook, VERSION};
+use formcel_core::{parse_a1, wire, Addr, Dir, Workbook, VERSION};
 use std::cell::RefCell;
 
 thread_local! {
@@ -88,6 +88,74 @@ pub unsafe extern "C" fn fc_get(id: u32, sheet: u32, a1: *const u8, a1_len: u32)
     let Ok(addr) = parse_a1(text(a1, a1_len)) else { return -1 };
     match with_book(id, |wb| wb.get(sheet as usize, addr)) {
         Some(Ok(v)) => emit(&v.to_string()) as i32,
+        _ => -1,
+    }
+}
+
+/// Applies `row\tcol\traw` lines as one undoable step; the out buffer gets the changed cells.
+///
+/// # Safety
+/// `edits` must point at `len` readable bytes.
+#[no_mangle]
+pub unsafe extern "C" fn fc_apply(id: u32, sheet: u32, edits: *const u8, len: u32) -> i32 {
+    let Some(edits) = wire::decode_edits(text(edits, len)) else { return -1 };
+    match with_book(id, |wb| wb.apply(sheet as usize, &edits)) {
+        Some(Ok(c)) => emit(&wire::encode_changed(&c)) as i32,
+        _ => -1,
+    }
+}
+
+fn history(id: u32, forward: bool) -> i32 {
+    match with_book(id, |wb| if forward { wb.redo() } else { wb.undo() }) {
+        Some(Some(c)) => emit(&wire::encode_changed(&c)) as i32,
+        Some(None) => -2,
+        None => -1,
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn fc_undo(id: u32) -> i32 {
+    history(id, false)
+}
+
+#[no_mangle]
+pub extern "C" fn fc_redo(id: u32) -> i32 {
+    history(id, true)
+}
+
+#[no_mangle]
+pub extern "C" fn fc_history(id: u32) -> i32 {
+    with_book(id, |wb| i32::from(wb.can_undo()) | (i32::from(wb.can_redo()) << 1)).unwrap_or(-1)
+}
+
+#[no_mangle]
+pub extern "C" fn fc_read(id: u32, sheet: u32, r0: u32, c0: u32, r1: u32, c1: u32) -> i32 {
+    let (top, bottom) = (Addr { row: r0, col: c0 }, Addr { row: r1, col: c1 });
+    match with_book(id, |wb| wb.read(sheet as usize, top, bottom)) {
+        Some(Ok(cells)) => emit(&wire::encode_cells(&cells)) as i32,
+        _ => -1,
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn fc_extent(id: u32, sheet: u32) -> i32 {
+    match with_book(id, |wb| wb.extent(sheet as usize)) {
+        Some(Ok(Some(a))) => emit(&format!("{}\t{}", a.row, a.col)) as i32,
+        Some(Ok(None)) => emit("") as i32,
+        _ => -1,
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn fc_edge(id: u32, sheet: u32, row: u32, col: u32, dir: u32) -> i32 {
+    let d = match dir {
+        0 => Dir::Up,
+        1 => Dir::Down,
+        2 => Dir::Left,
+        _ => Dir::Right,
+    };
+    match with_book(id, |wb| wb.edge(sheet as usize, Addr { row, col }, d)) {
+        Some(Ok(a)) => emit(&format!("{}\t{}", a.row, a.col)) as i32,
         _ => -1,
     }
 }

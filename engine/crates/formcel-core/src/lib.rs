@@ -1,5 +1,10 @@
-use std::collections::HashMap;
 use std::fmt;
+
+mod store;
+pub mod wire;
+pub use store::{Dir, Store};
+
+pub const HISTORY_LIMIT: usize = 500;
 
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 pub const MAX_ROWS: u32 = 1_048_576;
@@ -113,12 +118,12 @@ pub fn to_a1(addr: Addr) -> String {
 #[derive(Default, Debug)]
 pub struct Sheet {
     pub name: String,
-    cells: HashMap<Addr, Value>,
+    cells: Store,
 }
 
 impl Sheet {
     pub fn new(name: &str) -> Self {
-        Sheet { name: name.to_string(), cells: HashMap::new() }
+        Sheet { name: name.to_string(), cells: Store::default() }
     }
 
     pub fn len(&self) -> usize {
@@ -130,9 +135,21 @@ impl Sheet {
     }
 }
 
+#[derive(Clone, Debug)]
+struct Change {
+    sheet: usize,
+    addr: Addr,
+    before: Value,
+    after: Value,
+}
+
+pub type Changed = Vec<(usize, Addr, Value)>;
+
 #[derive(Debug)]
 pub struct Workbook {
     sheets: Vec<Sheet>,
+    undo: Vec<Vec<Change>>,
+    redo: Vec<Vec<Change>>,
 }
 
 impl Default for Workbook {
@@ -143,7 +160,7 @@ impl Default for Workbook {
 
 impl Workbook {
     pub fn new() -> Self {
-        Workbook { sheets: vec![Sheet::new("Sheet1")] }
+        Workbook { sheets: vec![Sheet::new("Sheet1")], undo: Vec::new(), redo: Vec::new() }
     }
 
     pub fn sheet_count(&self) -> usize {
@@ -170,20 +187,87 @@ impl Workbook {
     }
 
     pub fn set_input(&mut self, sheet: usize, addr: Addr, raw: &str) -> Result<Value, EngineError> {
-        self.check(sheet, addr)?;
-        let v = Value::parse_input(raw);
-        let cells = &mut self.sheets[sheet].cells;
-        if v == Value::Empty {
-            cells.remove(&addr);
-        } else {
-            cells.insert(addr, v.clone());
+        let changed = self.apply(sheet, &[(addr, raw.to_string())])?;
+        Ok(changed.into_iter().next().map(|c| c.2).unwrap_or(Value::Empty))
+    }
+
+    pub fn apply(&mut self, sheet: usize, edits: &[(Addr, String)]) -> Result<Changed, EngineError> {
+        for (a, _) in edits {
+            self.check(sheet, *a)?;
         }
-        Ok(v)
+        let mut tx = Vec::with_capacity(edits.len());
+        let mut out = Vec::with_capacity(edits.len());
+        for (a, raw) in edits {
+            let after = Value::parse_input(raw);
+            let before = self.sheets[sheet].cells.set(*a, after.clone());
+            if before != after {
+                tx.push(Change { sheet, addr: *a, before, after: after.clone() });
+            }
+            out.push((sheet, *a, after));
+        }
+        if !tx.is_empty() {
+            self.undo.push(tx);
+            if self.undo.len() > HISTORY_LIMIT {
+                self.undo.remove(0);
+            }
+            self.redo.clear();
+        }
+        Ok(out)
+    }
+
+    fn replay(&mut self, tx: &[Change], forward: bool) -> Changed {
+        let mut out = Vec::with_capacity(tx.len());
+        let steps: Box<dyn Iterator<Item = &Change>> = if forward { Box::new(tx.iter()) } else { Box::new(tx.iter().rev()) };
+        for c in steps {
+            let v = if forward { c.after.clone() } else { c.before.clone() };
+            self.sheets[c.sheet].cells.set(c.addr, v.clone());
+            out.push((c.sheet, c.addr, v));
+        }
+        out
+    }
+
+    pub fn undo(&mut self) -> Option<Changed> {
+        let tx = self.undo.pop()?;
+        let out = self.replay(&tx, false);
+        self.redo.push(tx);
+        Some(out)
+    }
+
+    pub fn redo(&mut self) -> Option<Changed> {
+        let tx = self.redo.pop()?;
+        let out = self.replay(&tx, true);
+        self.undo.push(tx);
+        Some(out)
+    }
+
+    pub fn can_undo(&self) -> bool {
+        !self.undo.is_empty()
+    }
+
+    pub fn can_redo(&self) -> bool {
+        !self.redo.is_empty()
     }
 
     pub fn get(&self, sheet: usize, addr: Addr) -> Result<Value, EngineError> {
         self.check(sheet, addr)?;
-        Ok(self.sheets[sheet].cells.get(&addr).cloned().unwrap_or(Value::Empty))
+        Ok(self.sheets[sheet].cells.get(addr).cloned().unwrap_or(Value::Empty))
+    }
+
+    pub fn read(&self, sheet: usize, top: Addr, bottom: Addr) -> Result<Vec<(Addr, Value)>, EngineError> {
+        self.check(sheet, top)?;
+        self.check(sheet, bottom)?;
+        let mut out = Vec::new();
+        self.sheets[sheet].cells.for_each_in(top, bottom, |a, v| out.push((a, v.clone())));
+        Ok(out)
+    }
+
+    pub fn extent(&self, sheet: usize) -> Result<Option<Addr>, EngineError> {
+        self.sheets.get(sheet).map(|s| s.cells.extent()).ok_or(EngineError::NoSheet(sheet))
+    }
+
+    pub fn edge(&self, sheet: usize, from: Addr, dir: Dir) -> Result<Addr, EngineError> {
+        self.check(sheet, from)?;
+        Ok(self.sheets[sheet].cells.edge(from, dir))
     }
 
     pub fn cell_count(&self, sheet: usize) -> Result<usize, EngineError> {
