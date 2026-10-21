@@ -13,6 +13,7 @@ from .cf import rules_in
 from .formulas import from_file
 from .styles import tokens_in
 from .theme import theme_in
+from .validation import validations_in
 
 ZOOMS = [0.5, 0.67, 0.75, 0.9, 1, 1.1, 1.25, 1.5, 1.75, 2]
 BUILTIN_DATE = {"mm-dd-yy": "m/d/yyyy"}
@@ -167,8 +168,7 @@ def read(data: bytes) -> dict:
             view["color"] = "#" + tab.rgb[-6:].lower()
         rules = rules_in(ws, notes)
         autofilter = filter_in(ws, wb, view, notes)
-        if ws.data_validations and ws.data_validations.dataValidation:
-            notes["data validation rules left out"] += len(ws.data_validations.dataValidation)
+        valid = validations_in(ws, notes)
         if getattr(ws, "_images", None):
             notes["pictures left out"] += len(ws._images)
         if getattr(ws, "_charts", None):
@@ -182,7 +182,7 @@ def read(data: bytes) -> dict:
             notes["comments and notes left out"] += comments
         if ws.defined_names:
             notes["names scoped to one sheet left out"] += len(ws.defined_names)
-        sheets.append({"name": ws.title[:31], "cells": cells, "formats": formats, "styles": styles, "merges": merges, "links": links, "rules": rules, "filter": autofilter, "view": view})
+        sheets.append({"name": ws.title[:31], "cells": cells, "formats": formats, "styles": styles, "merges": merges, "links": links, "rules": rules, "filter": autofilter, "validations": valid, "view": view})
     for cs in wb.chartsheets:
         notes["chart sheets left out"] += 1
     names = []

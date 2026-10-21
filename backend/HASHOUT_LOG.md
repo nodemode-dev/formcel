@@ -323,3 +323,10 @@ The .fcel file keeps each sheet's filter as its engine text under `filter`; GET 
 In .xlsx (MS-XLSX autoFilter) the filter is the sheet's autoFilter ref with a filterColumn per criterion: filters (values, blank), customFilters (and), top10, dynamicFilter aboveAverage and belowAverage, and colorFilter with a differential style holding the colour (cellColor 0 for text colour). Begins with, ends with and contains are written as equal or notEqual with `*` around the text, as Excel writes them, and read back the same way. Rows the filter hides are written hidden; on reading, hidden rows inside a filter that has criteria become the filter's rows and the rest stay hidden by hand. Date group filters, icon filters and saved sort states are left out with a note.
 
 PDF leaves out rows a filter hides, as it does hand-hidden rows, and .ods writes them hidden. A filter in an .ods file is left out with a note; .ods files written by FormCel carry no filter.
+
+### Data validation in files
+- refers-to: app/services/xlsx/validation.py :: validations_in, validations_out, _list_in, _serial; app/services/store.py :: set_validations, _write, import_xlsx; app/routers/workbooks.py :: PUT /api/workbooks/{id}/validations; app/services/ods/__init__.py
+- kind: explainer
+- logged: v0.32.0 · 2026-10-21
+
+The .fcel file keeps each sheet's rules under `validations`; GET returns them as `validations` and PUT /api/workbooks/{id}/validations stores the window's. In .xlsx each rule is a dataValidation: type whole, decimal, list, date, time, textLength or custom, the operator, formula1 and formula2, allowBlank, showInputMessage with promptTitle and prompt, showErrorMessage with errorStyle (stop, warning, information), errorTitle and error. A list of typed items is written as one quoted string (`"Low,Average,High"`) and a range as its reference. showDropDown is written only for lists and means the opposite of its name: 1 hides the arrow. Dates and times typed as text are written as serial numbers, so they come back as numbers. A rule with several ranges in its sqref becomes one FormCel rule per range. Rules in .ods files are left out with a note.

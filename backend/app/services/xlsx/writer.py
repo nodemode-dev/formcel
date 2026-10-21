@@ -12,6 +12,7 @@ from .cf import rules_out
 from .formulas import to_file
 from .styles import apply_out
 from .theme import theme_out
+from .validation import validations_out
 
 COL_PX = 100
 ROW_PX = 24
@@ -91,6 +92,7 @@ def write(eng, views: list[dict], vba: dict[str, bytes] | None = None) -> bytes:
                 cell.hyperlink = target
         rules_out(ws, eng.rules(i))
         filtered = filter_out(ws, wb, eng.filter(i))
+        validations_out(ws, eng.validations(i))
         for r1, c1, r2, c2 in eng.merges(i):
             ws.merge_cells(start_row=r1 + 1, start_column=c1 + 1, end_row=r2 + 1, end_column=c2 + 1)
         ws.sheet_format.defaultColWidth = round(COL_PX / 7, 4)

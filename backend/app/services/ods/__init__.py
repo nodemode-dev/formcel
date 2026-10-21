@@ -267,6 +267,9 @@ def read(data: bytes) -> dict:
         names.append((ne.get(f"{T}name"), from_file(ne.get(f"{T}expression") or "")))
     if any(True for _ in root.iter(f"{O}annotation")):
         notes["comments left out"] += sum(1 for _ in root.iter(f"{O}annotation"))
+    checks = sum(1 for _ in root.iter(f"{T}content-validation"))
+    if checks:
+        notes["data validation rules left out"] += checks
     filters = sum(1 for _ in root.iter(f"{T}filter"))
     if filters:
         notes["filters left out"] += filters
