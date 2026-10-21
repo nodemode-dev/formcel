@@ -4,6 +4,7 @@ use crate::wire::{escape, unescape};
 use crate::{col_name, Addr, Effect, EngineError, Shift, Tx, Value, Workbook};
 use std::collections::{HashMap, HashSet};
 
+mod fmtdialog;
 mod gotospecial;
 mod pastex;
 mod series;
@@ -299,6 +300,8 @@ impl Workbook {
             "series" => self.t_series(sheet, &p),
             "pastelayers" => self.t_pastelayers(sheet, &p),
             "gotospecial" => self.t_gotospecial(sheet, &p),
+            "fmtpreview" => self.t_fmtpreview(sheet, &p),
+            "fmtspecials" => self.t_fmtspecials(sheet, &p),
             _ => bad("unknown tool"),
         };
         self.undo_group(mark);

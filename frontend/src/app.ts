@@ -20,6 +20,7 @@ import { Audit } from './ui/audit';
 import { DATE_PERIODS, describe, parseRule, PRESETS, rangeText, ruleLine, withStop } from './ui/rules';
 import { bindShortcuts, Checker, initPrefs, liveRegion, setTextSize, setTheme, Shortcuts, textSize, theme, type TextSize, type ThemeName } from './ui/a11y';
 import { cleanPage, layoutOf, PageSetupDialog, type PageSetup } from './ui/pagesetup';
+import { NumberFormatDialog } from './ui/numberformat';
 
 const LOCALES: [string, string][] = [['en-US', 'English (United States)'], ['en-GB', 'English (United Kingdom)'], ['de-DE', 'Deutsch (Deutschland)'], ['fr-FR', 'Francais (France)'], ['ja-JP', 'Japanese (Japan)']];
 
@@ -520,6 +521,7 @@ export class App {
     cmd('format.menu', 'Number format', 'Choose how the selected cells show numbers, dates and times.', true, () => this.formatMenu());
     cmd('format.decimals-more', 'Increase decimal places', 'Show one more decimal place in the selected cells.', true, () => this.bumpDecimals(1));
     cmd('format.decimals-less', 'Decrease decimal places', 'Show one fewer decimal place in the selected cells.', true, () => this.bumpDecimals(-1));
+    cmd('format.number-dialog', 'Format Cells: Number', 'Open the Number tab with every category (General, Number, Currency, Accounting, Date, Time, Percentage, Fraction, Scientific, Text, Special, Custom), a live sample and formats that follow the workbook locale.', true, () => this.numberDialog(), 'Mod+1');
     cmd('format.custom', 'Custom number format', 'Type a number format code for the selected cells.', true, () => this.customFormat());
     for (const f of NUMBER_FORMATS) cmd(`format.${f.id}`, f.label, f.description, true, () => g.setFormat(f.code), f.keys);
     cmd('format.bold', 'Bold', 'Make the selected cells bold, or not bold.', true, () => g.toggle('b'), 'Mod+B');
@@ -2821,7 +2823,7 @@ export class App {
         keys: f.keys?.replace('Mod', 'Ctrl'),
         run: run(`format.${f.id}`),
       }));
-      items.push({ sep: true }, { label: 'Custom format...', run: run('format.custom') });
+      items.push({ sep: true }, { label: 'More number formats...', keys: 'Ctrl+1', run: run('format.number-dialog') }, { label: 'Custom format...', run: run('format.custom') });
       this.menu.show(b.left, b.bottom + 4, items, () => g.focus());
     });
   }
@@ -2831,6 +2833,29 @@ export class App {
     const code = await g.formatAtActive();
     const next = bumpCode(code, this.current, dir);
     if (next !== code) await g.setFormat(next);
+  }
+
+  private numberBox: NumberFormatDialog | null = null;
+
+  private numberDialog(): void {
+    const box = this.numberBox ??= new NumberFormatDialog({
+      current: async () => {
+        const raw = this.current.trim();
+        return { code: await this.grid.formatAtActive(), sample: raw && !raw.startsWith('=') && !Number.isNaN(Number(raw.replace(/,/g, ''))) ? raw : '1234.5678' };
+      },
+      preview: async (code, sample) => {
+        const o = this.open;
+        return o ? (await engine().tool(o.book, this.grid.sheetIndex, 'fmtpreview', code, sample)).message ?? '' : '';
+      },
+      specials: async () => {
+        const o = this.open;
+        const text = o ? (await engine().tool(o.book, this.grid.sheetIndex, 'fmtspecials')).message ?? '' : '';
+        return text.split('\n').filter(Boolean).map((l) => l.split('\t') as [string, string]);
+      },
+      apply: (code) => this.grid.setFormat(code),
+      locale: () => this.open?.locale ?? 'en-US',
+    });
+    void box.open();
   }
 
   private customFormat(): void {
