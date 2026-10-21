@@ -574,3 +574,5 @@
 .fc-tabled-type { display: grid; grid-template-columns: 1fr 110px; gap: var(--space-1); align-items: center; }
 .fc-tabled-type input { grid-column: 1 / -1; }
 .fc-tabled-tools { display: flex; flex-wrap: wrap; gap: var(--space-1); }
+.fc-tabled-custom { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-1); align-items: center; }
+.fc-tabled-custom label { display: flex; gap: var(--space-1); align-items: center; }

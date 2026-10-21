@@ -2,7 +2,17 @@ use crate::formula::{self, Area, ErrKind, Expr, TableSpec, ITEM_ALL, ITEM_DATA, 
 use crate::wire::{escape, unescape};
 use crate::{Addr, Effect, EngineError, Shift, Tx, Value, Workbook};
 
-pub const STYLES: [&str; 8] = ["TableStyleLight1", "TableStyleLight9", "TableStyleLight15", "TableStyleMedium2", "TableStyleMedium4", "TableStyleMedium9", "TableStyleMedium14", "TableStyleDark1"];
+pub fn valid_style(s: &str) -> bool {
+    for (kind, top) in [("Light", 21), ("Medium", 28), ("Dark", 11)] {
+        if let Some(n) = s.strip_prefix("TableStyle").and_then(|r| r.strip_prefix(kind)) {
+            return n.parse::<u32>().is_ok_and(|v| (1..=top).contains(&v) && v.to_string() == n);
+        }
+    }
+    let Some(rest) = s.strip_prefix("Custom:") else { return false };
+    let p: Vec<&str> = rest.split(':').collect();
+    let hex = |h: &str| h.len() == 6 && h.bytes().all(|b| b.is_ascii_hexdigit());
+    p.len() == 4 && !p[0].is_empty() && p[0].len() <= 40 && !p[0].contains(['\t', '\n']) && p[1..].iter().all(|h| hex(h))
+}
 pub const DEFAULT_STYLE: &str = "TableStyleMedium2";
 
 #[derive(Clone, Debug, PartialEq)]
@@ -346,7 +356,7 @@ impl Workbook {
         let mut out = Effect::default();
         let mut t = old.clone();
         t.name = want.name.clone();
-        t.style = if crate::table::STYLES.contains(&want.style.as_str()) { want.style.clone() } else { old.style.clone() };
+        t.style = if valid_style(&want.style) || want.style == "None" { want.style.clone() } else { old.style.clone() };
         t.banded_rows = want.banded_rows;
         t.banded_cols = want.banded_cols;
         t.first_col = want.first_col;

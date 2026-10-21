@@ -8,7 +8,7 @@ import type { FloatObject } from './charts/types';
 import { Automation } from './automation';
 import { Grid, type BorderKind, type MenuKind, type PasteKind, type SheetView } from './grid/grid';
 import { paint } from './grid/style';
-import { TABLE_STYLES } from './grid/tables';
+import { TABLE_STYLES, customId, parseCustom } from './grid/tables';
 import { listCommands, registerCommand, runCommand } from './ui/commands';
 import { Home, type TemplateMeta, type WorkbookMeta } from './ui/home';
 import { Menu, type MenuItem } from './ui/menu';
@@ -975,7 +975,15 @@ export class App {
     const q = <T extends HTMLElement>(k: string) => f.querySelector<T>(`[data-k="${k}"]`)!;
     f.dataset.table = t.name;
     q<HTMLInputElement>('name').value = t.name;
+    const parsed = parseCustom(t.style);
+    if (parsed) this.useCustomStyle(q<HTMLSelectElement>('style'), t.style);
     q<HTMLSelectElement>('style').value = t.style;
+    if (parsed) {
+      q<HTMLInputElement>('cname').value = parsed.name;
+      q<HTMLInputElement>('chead').value = `#${parsed.head}`;
+      q<HTMLInputElement>('cband').value = `#${parsed.band}`;
+      q<HTMLInputElement>('ctext').value = `#${parsed.text}`;
+    }
     const [r0, c0, r1, c1] = t.area;
     q<HTMLInputElement>('range').value = `${colName(c0)}${r0 + 1}:${colName(c1)}${r1 + 1}`;
     for (const [k, ch] of [['totals', 't'], ['rows', 'r'], ['cols', 'c'], ['first', 'f'], ['last', 'l'], ['button', 'b']]) q<HTMLInputElement>(k).checked = t.flags.includes(ch);
@@ -1009,14 +1017,25 @@ export class App {
     q<HTMLInputElement>('name').select();
   }
 
+  private useCustomStyle(sel: HTMLSelectElement, id: string): void {
+    const group = sel.querySelector<HTMLElement>('[data-k="customgroup"]')!;
+    let opt = Array.from(group.querySelectorAll('option')).find((o) => o.value === id);
+    if (!opt) {
+      opt = new Option(parseCustom(id)?.name ?? id, id);
+      group.appendChild(opt);
+    }
+    sel.value = id;
+  }
+
   private makeDesignForm(): HTMLFormElement {
     const form = document.createElement('form');
     form.className = 'fc-fmt-custom fc-pw fc-tabled';
     form.hidden = true;
     form.setAttribute('role', 'dialog');
-    const styles = TABLE_STYLES.map(([id, label]) => `<option value="${id}">${label}</option>`).join('');
+    const group = (k: string) => `<optgroup label="${k}">${TABLE_STYLES.filter(([id]) => id.startsWith(`TableStyle${k}`)).map(([id, label]) => `<option value="${id}">${label}</option>`).join('')}</optgroup>`;
+    const styles = `<option value="None">None</option>${group('Light')}${group('Medium')}${group('Dark')}<optgroup label="Custom" data-k="customgroup"></optgroup>`;
     const box = (k: string, label: string) => `<label class="fc-sort-check"><input type="checkbox" data-k="${k}"> ${label}</label>`;
-    form.innerHTML = `<span class="fc-fmt-title">Table design</span><label class="fc-fmt-label">Table name<input class="fc-fmt-input" data-k="name" spellcheck="false" autocomplete="off"></label><label class="fc-fmt-label">Table style<select class="fc-fmt-input" data-k="style">${styles}</select></label><label class="fc-fmt-label">Resize table (keep the top-left cell)<input class="fc-fmt-input" data-k="range" spellcheck="false" autocomplete="off"></label><div class="fc-tabled-opts">${box('totals', 'Total row')}${box('rows', 'Banded rows')}${box('cols', 'Banded columns')}${box('first', 'First column')}${box('last', 'Last column')}${box('button', 'Filter button')}</div><span class="fc-fmt-title">Column types</span><div class="fc-tabled-types" data-k="types"></div><div class="fc-tabled-tools"><button type="button" class="fc-btn" data-a="dedupe">Remove duplicates</button><button type="button" class="fc-btn" data-a="pivot">Summarize with PivotTable</button><button type="button" class="fc-btn" data-a="slicer">Insert slicer</button></div><span class="fc-fmt-hint" aria-live="polite"></span><div class="fc-csv-actions"><button type="button" class="fc-btn" data-a="convert">Convert to range</button><button type="button" class="fc-btn" data-a="cancel">Cancel</button><button type="submit" class="fc-btn fc-btn-primary">OK</button></div>`;
+    form.innerHTML = `<span class="fc-fmt-title">Table design</span><label class="fc-fmt-label">Table name<input class="fc-fmt-input" data-k="name" spellcheck="false" autocomplete="off"></label><label class="fc-fmt-label">Table style<select class="fc-fmt-input" data-k="style">${styles}</select></label><label class="fc-fmt-label">Resize table (keep the top-left cell)<input class="fc-fmt-input" data-k="range" spellcheck="false" autocomplete="off"></label><div class="fc-tabled-opts">${box('totals', 'Total row')}${box('rows', 'Banded rows')}${box('cols', 'Banded columns')}${box('first', 'First column')}${box('last', 'Last column')}${box('button', 'Filter button')}</div><div class="fc-tabled-custom"><input class="fc-fmt-input" data-k="cname" placeholder="Custom style name" spellcheck="false" autocomplete="off"><label>Header <input type="color" data-k="chead" value="#1f6feb"></label><label>Bands <input type="color" data-k="cband" value="#dbe7fb"></label><label>Header text <input type="color" data-k="ctext" value="#ffffff"></label><button type="button" class="fc-btn" data-a="customstyle">Use custom style</button></div><span class="fc-fmt-title">Column types</span><div class="fc-tabled-types" data-k="types"></div><div class="fc-tabled-tools"><button type="button" class="fc-btn" data-a="dedupe">Remove duplicates</button><button type="button" class="fc-btn" data-a="pivot">Summarize with PivotTable</button><button type="button" class="fc-btn" data-a="slicer">Insert slicer</button></div><span class="fc-fmt-hint" aria-live="polite"></span><div class="fc-csv-actions"><button type="button" class="fc-btn" data-a="convert">Convert to range</button><button type="button" class="fc-btn" data-a="cancel">Cancel</button><button type="submit" class="fc-btn fc-btn-primary">OK</button></div>`;
     document.getElementById('overlay-root')!.appendChild(form);
     const q = <T extends HTMLElement>(k: string) => form.querySelector<T>(`[data-k="${k}"]`)!;
     const hint = form.querySelector<HTMLElement>('.fc-fmt-hint')!;
@@ -1028,6 +1047,12 @@ export class App {
     form.addEventListener('click', (e) => {
       const a = (e.target as HTMLElement).closest<HTMLElement>('[data-a]')?.dataset.a;
       if (a === 'cancel') close();
+      if (a === 'customstyle') {
+        const hex = (k: string) => q<HTMLInputElement>(k).value.slice(1);
+        const name = q<HTMLInputElement>('cname').value.trim();
+        if (!name) return fail(new Error('Name the custom style.'));
+        this.useCustomStyle(q<HTMLSelectElement>('style'), customId({ name, head: hex('chead'), band: hex('cband'), text: hex('ctext') }));
+      }
       if (a === 'dedupe' || a === 'pivot' || a === 'slicer') {
         close();
         void runCommand(a === 'dedupe' ? 'data.dedupe' : a === 'pivot' ? 'pivot.create' : 'data.slicer');

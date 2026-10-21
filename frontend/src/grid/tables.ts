@@ -20,16 +20,40 @@ interface Scheme {
   dark?: boolean;
 }
 
-export const TABLE_STYLES: [string, string, Scheme][] = [
-  ['TableStyleLight1', 'Light 1', { slot: 'dk1', head: 'line', band: 85 }],
-  ['TableStyleLight9', 'Light 9', { slot: 'accent1', head: 'fill', band: 0 }],
-  ['TableStyleLight15', 'Light 15', { slot: 'accent5', head: 'line', band: 80 }],
-  ['TableStyleMedium2', 'Medium 2', { slot: 'accent1', head: 'fill', band: 80 }],
-  ['TableStyleMedium4', 'Medium 4', { slot: 'accent3', head: 'fill', band: 80 }],
-  ['TableStyleMedium9', 'Medium 9', { slot: 'accent1', head: 'fill', band: 60 }],
-  ['TableStyleMedium14', 'Medium 14', { slot: 'accent6', head: 'fill', band: 60 }],
-  ['TableStyleDark1', 'Dark 1', { slot: 'dk1', head: 'fill', band: 25, dark: true }],
-];
+const SLOT_NAMES = ['dk1', 'accent1', 'accent2', 'accent3', 'accent4', 'accent5', 'accent6'];
+
+function builtin(): [string, string, Scheme][] {
+  const out: [string, string, Scheme][] = [];
+  const add = (kind: string, n: number, slot: number, s: Omit<Scheme, 'slot'>) => out.push([`TableStyle${kind}${n}`, `${kind} ${n}`, { slot: SLOT_NAMES[slot], ...s }]);
+  for (let n = 1; n <= 21; n++) {
+    if (n <= 7) add('Light', n, n - 1, { head: 'line', band: 85 });
+    else if (n <= 14) add('Light', n, n - 8, { head: 'fill', band: 0 });
+    else add('Light', n, n - 15, { head: 'line', band: 80 });
+  }
+  for (let n = 1; n <= 28; n++) {
+    const slot = (n - 1) % 7;
+    const band = n <= 7 ? 80 : n <= 14 ? 60 : n <= 21 ? 70 : 80;
+    add('Medium', n, slot, { head: 'fill', band });
+  }
+  for (let n = 1; n <= 11; n++) add('Dark', n, n <= 7 ? n - 1 : n - 8, { head: 'fill', band: 25, dark: true });
+  return out;
+}
+
+export const TABLE_STYLES: [string, string, Scheme][] = builtin();
+
+export interface CustomStyle {
+  name: string;
+  head: string;
+  band: string;
+  text: string;
+}
+
+export const customId = (c: CustomStyle) => `Custom:${c.name.replace(/[:\t\n]/g, ' ').trim().slice(0, 40)}:${c.head}:${c.band}:${c.text}`;
+
+export function parseCustom(id: string): CustomStyle | null {
+  const m = /^Custom:([^:]+):([0-9a-fA-F]{6}):([0-9a-fA-F]{6}):([0-9a-fA-F]{6})$/.exec(id);
+  return m ? { name: m[1], head: m[2], band: m[3], text: m[4] } : null;
+}
 
 const unesc = (s: string) => s.replace(/\\(.)/g, (_, ch: string) => (ch === 't' ? '\t' : ch === 'n' ? '\n' : ch === 'r' ? '\r' : ch));
 
@@ -50,7 +74,16 @@ export interface TablePaint {
 export function tablePaint(t: TableInfo, r: number, c: number, look: Look): TablePaint | null {
   const [r0, c0, r1, c1] = t.area;
   if (r < r0 || r > r1 || c < c0 || c > c1) return null;
-  const scheme = (TABLE_STYLES.find(([id]) => id === t.style) ?? TABLE_STYLES[3])[2];
+  if (t.style === 'None') return { b: t.flags.includes('f') && c === c0 ? true : r === r0 };
+  const custom = parseCustom(t.style);
+  if (custom) {
+    const totals = t.flags.includes('t');
+    if (r === r0) return { bg: `#${custom.head}`, fc: `#${custom.text}`, b: true };
+    if (totals && r === r1) return { b: true };
+    const odd = (r - r0 - 1) % 2 === 0;
+    return { bg: t.flags.includes('r') && odd ? `#${custom.band}` : undefined, b: (t.flags.includes('f') && c === c0) || (t.flags.includes('l') && c === c1) };
+  }
+  const scheme = (TABLE_STYLES.find(([id]) => id === t.style) ?? TABLE_STYLES.find(([id]) => id === 'TableStyleMedium2')!)[2];
   const base = paint(`t:${scheme.slot}`, look);
   const totals = t.flags.includes('t');
   if (r === r0) return scheme.head === 'fill' ? { bg: base, fc: '#ffffff', b: true } : { b: true };
