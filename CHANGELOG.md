@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.20.0 · 2026-10-21
+
+- Merged cells: Merge and center, Merge across, Merge cells and Unmerge cells. As in Excel, only the upper-left value is kept. A merged cell selects, moves and edits as one cell, and merges follow inserted and deleted rows and columns.
+- Text rotation: angle counterclockwise or clockwise, rotate text up or down, and vertical text. Rows grow to fit.
+- Format painter: copies the formatting of the selection onto the next cells you select. Double-click it to paint several times, and press Escape to stop.
+- The fill handle and paste of cells copied in FormCel now carry fonts, colours, borders and number formats, in one undo step.
+- Inserted rows and columns take the formatting of the row above or the column to the left.
+- Fixed: undoing a row or column delete brought back the values but not their formatting.
+- Clear formats now undoes in one step.
+- Not yet: named cell styles and workbook themes; the format painter does not copy merges.
+
 ## 0.19.0 · 2026-10-21
 
 - Cell styles from the toolbar: font and size, bold, italic, underline, strikethrough, text colour, fill colour, borders, left, center and right alignment, top, middle and bottom alignment, indent, wrap text, and Clear formats.
