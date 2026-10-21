@@ -2,10 +2,17 @@
 
 Living log of comment content and rationale for the window. Source stays comment-free; it lives here.
 
-Current build version: v0.12.0
-Last updated: 2026-10-21 · names
+Current build version: v0.13.0
+Last updated: 2026-10-21 · Tab then Enter
 
 ---
+
+## Tab then Enter · v0.13.0 (2026-10-21)
+
+- refers-to: src/grid/grid.ts :: tabStart, step, endEdit, editorKey, gridKey, select
+- kind: explainer
+
+Pressing Tab remembers the column where a run of Tabs began, and Enter then goes to the next row in that column instead of straight down. This holds whether or not a cell is being edited. Any other selection change (a click, an arrow key, the Name Box) clears the run, because `select` resets `tabStart`; `endEdit` keeps it across the commit, which reselects nothing. Shift+Enter and Shift+Tab move as before. This is FormCel's own rule for typing a table row by row: the only Microsoft page found for it is retired, and other write-ups are not vendor pages, so no Excel behaviour is claimed. Found while checking FILTER in the window, where rows typed with Tab drifted one column right on every line. Verified with the earlier typing-race and slice-three checks, and at 4x CPU throttle (no layout shifts).
 
 ## Names in the Name Box · v0.12.0 (2026-10-21)
 

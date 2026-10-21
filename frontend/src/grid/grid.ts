@@ -86,6 +86,7 @@ export class Grid {
   private fr2 = 0;
   private fc2 = 0;
   private editing = false;
+  private tabStart = -1;
   private raf = 0;
   private queue: Promise<void> = Promise.resolve();
   private sheet = 0;
@@ -716,6 +717,7 @@ export class Grid {
   }
 
   select(r0: number, c0: number, r1 = r0, c1 = c0, reveal = true): void {
+    this.tabStart = -1;
     this.ar = clampR(r0);
     this.ac = clampC(c0);
     this.fr2 = clampR(r1);
@@ -1169,15 +1171,29 @@ export class Grid {
     st.lineHeight = `${16 * z}px`;
   }
 
-  private async endEdit(commit: boolean, move?: Dir): Promise<void> {
+  private async endEdit(commit: boolean, move?: Dir, key?: 'Tab' | 'Enter'): Promise<void> {
     if (!this.editing) return;
     this.editing = false;
     const value = this.editor.value;
     this.editor.hidden = true;
     this.focus();
+    const start = this.tabStart;
     if (commit) await this.setActive(value);
-    if (move) this.move(move, false);
+    this.tabStart = start;
+    if (move && key) this.step(key, move);
+    else if (move) this.move(move, false);
     this.paint();
+  }
+
+  private step(key: 'Tab' | 'Enter', dir: Dir): void {
+    const start = this.tabStart;
+    if (key === 'Enter' && dir === 'down' && start >= 0) {
+      this.select(this.rows.nextVisible(clampR(this.ar + 1), 1), start);
+      return;
+    }
+    const from = this.ac;
+    this.move(dir, false);
+    if (key === 'Tab') this.tabStart = start >= 0 ? start : from;
   }
 
   private move(dir: Dir, extend: boolean): void {
@@ -1437,7 +1453,7 @@ export class Grid {
     if (e.key === 'Enter' && !e.altKey) {
       e.preventDefault();
       const dir = e.shiftKey ? 'up' : 'down';
-      this.enqueue(() => this.endEdit(true, dir));
+      this.enqueue(() => this.endEdit(true, dir, 'Enter'));
     } else if (e.key === 'Enter' && e.altKey) {
       e.preventDefault();
       const t = this.editor;
@@ -1446,7 +1462,7 @@ export class Grid {
     } else if (e.key === 'Tab') {
       e.preventDefault();
       const dir = e.shiftKey ? 'left' : 'right';
-      this.enqueue(() => this.endEdit(true, dir));
+      this.enqueue(() => this.endEdit(true, dir, 'Tab'));
     } else if (e.key === 'Escape') {
       e.preventDefault();
       this.enqueue(() => this.endEdit(false));
@@ -1458,8 +1474,8 @@ export class Grid {
     const dir = ARROWS[e.key];
     if (this.editing) {
       if (e.key === 'Enter' && e.altKey) this.editor.value += '\n';
-      else if (e.key === 'Enter') await this.endEdit(true, e.shiftKey ? 'up' : 'down');
-      else if (e.key === 'Tab') await this.endEdit(true, e.shiftKey ? 'left' : 'right');
+      else if (e.key === 'Enter') await this.endEdit(true, e.shiftKey ? 'up' : 'down', 'Enter');
+      else if (e.key === 'Tab') await this.endEdit(true, e.shiftKey ? 'left' : 'right', 'Tab');
       else if (e.key === 'Escape') await this.endEdit(false);
       else if (dir && !mod) await this.endEdit(true, dir);
       else if (e.key === 'Backspace') this.editor.value = this.editor.value.slice(0, -1);
@@ -1494,9 +1510,9 @@ export class Grid {
     }
     switch (e.key) {
       case 'Enter':
-        return this.move(e.shiftKey ? 'up' : 'down', false);
+        return this.step('Enter', e.shiftKey ? 'up' : 'down');
       case 'Tab':
-        return this.move(e.shiftKey ? 'left' : 'right', false);
+        return this.step('Tab', e.shiftKey ? 'left' : 'right');
       case 'Home':
         return this.select(this.ar, 0);
       case 'PageDown':
