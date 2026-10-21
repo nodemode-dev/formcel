@@ -61,6 +61,12 @@ impl Workbook {
     }
 
     #[pyo3(signature = (sheet = 0))]
+    fn results(&self, sheet: usize) -> PyResult<Vec<(u32, u32, char, String)>> {
+        let cells = self.inner.results(sheet).map_err(|e| PyValueError::new_err(e.to_string()))?;
+        Ok(cells.into_iter().map(|(a, k, t)| (a.row, a.col, k, t)).collect())
+    }
+
+    #[pyo3(signature = (sheet = 0))]
     fn typed(&self, sheet: usize) -> PyResult<Vec<(u32, u32, char, String)>> {
         let cells = self.inner.typed(sheet).map_err(|e| PyValueError::new_err(e.to_string()))?;
         Ok(cells.into_iter().map(|(a, k, t)| (a.row, a.col, k, t)).collect())

@@ -387,3 +387,10 @@ A number in a cell with a date or time code is saved and edited as date or time 
 - logged: v0.26.0 · 2026-10-21
 
 Text that starts with `=` (typed as `'=1+1`, or from a CSV file) was saved and shown in the edit bar without its apostrophe, so reopening the workbook turned it into a formula. Such text now gets the apostrophe back, like text that would read as a number.
+
+### Formula results for file writers
+- refers-to: src/lib.rs :: results; crates/formcel-py/src/lib.rs :: results
+- kind: explainer
+- logged: v0.27.0 · 2026-10-21
+
+`results` lists each formula's current value with its kind, the way `typed` lists stored cells, so the .ods writer can store a formula's result next to it.

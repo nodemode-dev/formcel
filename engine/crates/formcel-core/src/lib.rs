@@ -980,6 +980,27 @@ impl Workbook {
         Ok(out)
     }
 
+    pub fn results(&self, sheet: usize) -> Result<Vec<(Addr, char, String)>, EngineError> {
+        let s = self.sheets.get(sheet).ok_or(EngineError::NoSheet(sheet))?;
+        let mut out: Vec<(Addr, char, String)> = self
+            .formulas
+            .keys()
+            .filter(|(sh, _)| *sh == sheet)
+            .map(|(_, a)| {
+                let v = s.cells.get(*a).cloned().unwrap_or(Value::Empty);
+                match v {
+                    Value::Number(n) => (*a, 'n', format!("{n}")),
+                    Value::Bool(b) => (*a, 'b', if b { "TRUE" } else { "FALSE" }.to_string()),
+                    Value::Error(_) => (*a, 'e', v.to_string()),
+                    Value::Text(t) => (*a, 't', t),
+                    Value::Empty => (*a, 't', String::new()),
+                }
+            })
+            .collect();
+        out.sort_by_key(|(a, _, _)| (a.row, a.col));
+        Ok(out)
+    }
+
     pub fn typed(&self, sheet: usize) -> Result<Vec<(Addr, char, String)>, EngineError> {
         let s = self.sheets.get(sheet).ok_or(EngineError::NoSheet(sheet))?;
         let mut out = Vec::with_capacity(s.len());
