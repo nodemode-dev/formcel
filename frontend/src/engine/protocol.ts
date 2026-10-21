@@ -63,6 +63,10 @@ export type Request =
   | { id: number; op: 'read'; book: number; sheet: number; r0: number; c0: number; r1: number; c1: number }
   | { id: number; op: 'extent'; book: number; sheet: number }
   | { id: number; op: 'edge'; book: number; sheet: number; row: number; col: number; dir: Dir }
+  | { id: number; op: 'host.keys'; book: number; all: boolean }
+  | { id: number; op: 'host.set'; book: number; key: string; data: string | null }
+  | { id: number; op: 'host.custom'; book: number; names: string[] }
+  | { id: number; op: 'host.clear'; book: number }
   | { id: number; op: 'offset'; items: [src: string, dr: number, dc: number][] };
 
 export type Dir = 'up' | 'down' | 'left' | 'right';

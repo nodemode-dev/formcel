@@ -1,0 +1,73 @@
+.fc-auto {
+  position: fixed;
+  top: calc(var(--bar-h) + var(--space-8) * 2);
+  right: max(var(--space-4), env(safe-area-inset-right, 0px));
+  z-index: var(--z-dropdown);
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  width: min(460px, calc(100vw - var(--space-8)));
+  height: min(640px, calc(100vh - var(--bar-h) - var(--space-8) * 3));
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-md);
+  background: var(--bg-secondary);
+  box-shadow: var(--shadow-md);
+  overflow: hidden;
+}
+
+.fc-auto[hidden] { display: none; }
+
+.fc-auto-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2); padding: var(--space-2) var(--space-3); border-bottom: 1px solid var(--border-color); }
+.fc-auto-tabs { display: flex; gap: var(--space-1); }
+.fc-auto-tab { height: 28px; padding: 0 var(--space-3); border: 1px solid transparent; border-radius: var(--radius); background: transparent; color: var(--text-secondary); cursor: pointer; }
+.fc-auto-tab:hover { background: var(--bg-tertiary); }
+.fc-auto-tab[aria-selected="true"] { color: var(--text-primary); border-color: var(--accent-color); background: var(--accent-color-dim); }
+.fc-auto-body { min-height: 0; overflow-y: auto; }
+.fc-auto-pane { display: grid; gap: var(--space-2); padding: var(--space-3); align-content: start; }
+.fc-auto-pane[hidden] { display: none; }
+.fc-auto-row { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-2); }
+.fc-auto-small { font-size: var(--text-sm); color: var(--text-secondary); }
+.fc-auto-small label { display: inline-flex; align-items: center; gap: var(--space-1); }
+.fc-grow { flex: 1 1 140px; min-width: 0; }
+.fc-auto-h { margin: var(--space-2) 0 0; font-size: var(--text-md); font-weight: 600; }
+.fc-auto-hint { margin: 0; font-size: var(--text-xs); color: var(--text-muted); min-height: 16px; }
+.fc-auto-hint code { font-family: var(--font-mono); }
+.fc-auto-input { min-width: 0; height: 30px; padding: 0 var(--space-2); border: 1px solid var(--border-color); border-radius: var(--radius); background: var(--bg-primary); color: var(--text-primary); font: inherit; font-size: var(--text-sm); }
+textarea.fc-auto-input { height: auto; padding: var(--space-2); resize: vertical; }
+.fc-auto-num { width: 64px; height: 26px; padding: 0 var(--space-1); border: 1px solid var(--border-color); border-radius: var(--radius); background: var(--bg-primary); color: var(--text-primary); }
+.fc-auto-short { width: 110px; }
+a.fc-btn { text-decoration: none; }
+
+.fc-code { display: grid; grid-template-columns: 40px minmax(0, 1fr); height: 240px; border: 1px solid var(--border-color); border-radius: var(--radius); background: var(--bg-primary); overflow: hidden; }
+.fc-code-lines, .fc-code-text { margin: 0; padding: var(--space-2); font-family: var(--font-mono); font-size: 12px; line-height: 18px; }
+.fc-code-lines { overflow: hidden; text-align: right; color: var(--text-muted); border-right: 1px solid var(--border-color); user-select: none; }
+.fc-code-text { border: 0; outline: none; resize: none; background: transparent; color: var(--text-primary); white-space: pre; overflow: auto; tab-size: 2; }
+.fc-code:focus-within { border-color: var(--accent-color); }
+
+.fc-auto-console { margin: 0; min-height: 90px; max-height: 160px; padding: var(--space-2); overflow: auto; border: 1px solid var(--border-color); border-radius: var(--radius); background: var(--bg-primary); color: var(--text-secondary); font-family: var(--font-mono); font-size: 12px; white-space: pre-wrap; }
+
+.fc-auto-list { display: grid; gap: var(--space-1); }
+.fc-auto-item { display: flex; align-items: center; gap: var(--space-2); padding: var(--space-1) var(--space-2); border: 1px solid var(--border-color); border-radius: var(--radius); background: var(--bg-primary); font-size: var(--text-sm); }
+.fc-auto-item small { display: block; color: var(--text-muted); font-size: var(--text-xs); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.fc-qed { display: grid; gap: var(--space-2); padding: var(--space-2); border: 1px solid var(--border-light); border-radius: var(--radius); }
+.fc-qed[hidden], .fc-qsrc[hidden], .fc-ai-settings[hidden] { display: none; }
+.fc-qed label, .fc-ai-settings label { display: grid; gap: var(--space-1); font-size: var(--text-sm); color: var(--text-secondary); }
+.fc-step { display: grid; gap: var(--space-1); padding: var(--space-2); border: 1px solid var(--border-color); border-radius: var(--radius); font-size: var(--text-sm); }
+.fc-step label { display: flex; align-items: center; gap: var(--space-2); }
+.fc-qprev { overflow: auto; max-height: 220px; }
+.fc-qprev table, .fc-ai-proposal table { border-collapse: collapse; font-size: var(--text-xs); }
+.fc-qprev th, .fc-qprev td, .fc-ai-proposal td { padding: 2px var(--space-2); border: 1px solid var(--border-color); white-space: nowrap; }
+
+.fc-ai-log { display: grid; gap: var(--space-2); max-height: 260px; min-height: 80px; overflow-y: auto; padding: var(--space-2); border: 1px solid var(--border-color); border-radius: var(--radius); background: var(--bg-primary); font-size: var(--text-sm); }
+.fc-ai-msg-user { justify-self: end; max-width: 90%; padding: var(--space-1) var(--space-2); border-radius: var(--radius); background: var(--accent-color-dim); white-space: pre-wrap; }
+.fc-ai-msg-bot { max-width: 95%; white-space: pre-wrap; }
+.fc-ai-msg-err { max-width: 95%; color: var(--bad); white-space: pre-wrap; }
+.fc-ai-proposal { display: grid; gap: var(--space-1); padding: var(--space-2); border: 1px solid var(--border-light); border-radius: var(--radius); overflow-x: auto; }
+.fc-ai-ptitle { font-size: var(--text-xs); color: var(--text-muted); }
+.fc-ai-input { width: 100%; box-sizing: border-box; }
+.fc-ai-settings { display: grid; gap: var(--space-2); }
+
+.fc-btnlayer { position: fixed; inset: 0; z-index: var(--z-raised); pointer-events: none; }
+.fc-btnlayer[hidden] { display: none; }
+.fc-auto-button { position: fixed; pointer-events: auto; touch-action: none; box-shadow: var(--shadow-md); background: var(--accent-color); border-color: var(--accent-color); color: #fff; cursor: pointer; }
+.fc-auto-button:hover { background: var(--accent-color-hover); }

@@ -56,6 +56,12 @@ interface Palette {
   link: string;
 }
 
+export type Recorded =
+  | { k: 'edit'; sheet: number; r: number; c: number; raw: string }
+  | { k: 'style'; sheet: number; ops: [number, number, number, number, string][] }
+  | { k: 'format'; sheet: number; r0: number; c0: number; r1: number; c1: number; code: string }
+  | { k: 'sort'; sheet: number; r0: number; c0: number; r1: number; c1: number; keys: [number, boolean][]; header: boolean };
+
 export interface GridEvents {
   onActive(text: string, ref: string, range: Range): void;
   onHistory(undo: boolean, redo: boolean): void;
@@ -98,6 +104,7 @@ export class Grid {
   private gh = 0;
   readonly editor: HTMLTextAreaElement;
   editorHook: ((e: KeyboardEvent) => boolean) | null = null;
+  recorder: ((a: Recorded) => void) | null = null;
   private readonly cache = new Map<number, string>();
   private readonly fx = new Map<number, string>();
   private readonly nums = new Set<number>();
@@ -921,6 +928,7 @@ export class Grid {
   }
 
   async sortRange(range: Range, keys: [number, boolean][], header: boolean, caseSensitive = false): Promise<void> {
+    this.recorder?.({ k: 'sort', sheet: this.sheet, r0: range.r0, c0: range.c0, r1: range.r1, c1: range.c1, keys, header });
     await this.applyEffect(await this.engine.sort(this.book, this.sheet, range.r0, range.c0, range.r1, range.c1, keys, header, caseSensitive));
     this.select(range.r0, range.c0, range.r1, range.c1, false);
   }
@@ -1581,6 +1589,7 @@ export class Grid {
 
   async setStyles(ops: StyleOp[]): Promise<void> {
     if (this.book < 0 || !ops.length) return;
+    this.recorder?.({ k: 'style', sheet: this.sheet, ops });
     await this.applyEffect(await this.engine.setStyles(this.book, this.sheet, ops));
   }
 
@@ -1713,6 +1722,7 @@ export class Grid {
 
   async setFormat(code: string): Promise<void> {
     const s = this.sel();
+    this.recorder?.({ k: 'format', sheet: this.sheet, r0: s.r0, c0: s.c0, r1: s.r1, c1: s.c1, code });
     const e = await this.engine.setFormat(this.book, this.sheet, s.r0, s.c0, s.r1, s.c1, code);
     await this.applyEffect(e);
   }
@@ -1721,7 +1731,7 @@ export class Grid {
     return this.engine.formatAt(this.book, this.sheet, this.ar, this.ac);
   }
 
-  private async commitEdits(changed: Changed[]): Promise<void> {
+  async commitEdits(changed: Changed[]): Promise<void> {
     if (changed.length && changed.every(([s]) => s !== this.sheet)) {
       this.show(this.book, changed[0][0], this.events.onSheet(changed[0][0]));
     }
@@ -1759,6 +1769,7 @@ export class Grid {
         }
       }
     }
+    this.recorder?.({ k: 'edit', sheet: this.sheet, r: this.ar, c: this.ac, raw });
     await this.commitEdits(await this.engine.apply(this.book, [[this.ar, this.ac, raw]], this.sheet));
     if (this.tableList.length) await this.tablesMoved();
     return true;
@@ -1774,7 +1785,10 @@ export class Grid {
     } else {
       edits = (await this.engine.read(this.book, s.r0, s.c0, s.r1, s.c1, this.sheet)).map(([r, c]) => [r, c, '']);
     }
-    if (edits.length) await this.commitEdits(await this.engine.apply(this.book, edits, this.sheet));
+    if (edits.length) {
+      if (this.recorder) for (const [r, c, raw] of edits) this.recorder({ k: 'edit', sheet: this.sheet, r, c, raw });
+      await this.commitEdits(await this.engine.apply(this.book, edits, this.sheet));
+    }
   }
 
   async undo(): Promise<void> {
@@ -1785,7 +1799,7 @@ export class Grid {
     await this.applyEffect(await this.engine.redo(this.book));
   }
 
-  private async applyEffect(e: Effect): Promise<void> {
+  async applyEffect(e: Effect): Promise<void> {
     if (e.shift) this.afterShift(e.shift);
     if (e.formats.length) this.events.onFormats(e.formats);
     if (e.styles.length) {

@@ -99,6 +99,23 @@ impl Workbook {
         self.inner.names()
     }
 
+    fn host_pending(&self) -> Vec<String> {
+        self.inner.host_pending()
+    }
+
+    fn host_keys(&self) -> Vec<String> {
+        self.inner.host_keys()
+    }
+
+    #[pyo3(signature = (key, data = None))]
+    fn host_set(&mut self, key: &str, data: Option<&str>) -> Vec<(String, String)> {
+        pairs(self.inner.host_set(key, data))
+    }
+
+    fn host_custom(&mut self, names: Vec<String>) -> Vec<(String, String)> {
+        pairs(self.inner.host_custom(&names))
+    }
+
     #[pyo3(signature = (top, bottom, code, sheet = 0))]
     fn set_format(&mut self, top: &str, bottom: &str, code: &str, sheet: usize) -> PyResult<Vec<(String, String)>> {
         let t = parse_a1(top).map_err(|e| PyValueError::new_err(e.to_string()))?;

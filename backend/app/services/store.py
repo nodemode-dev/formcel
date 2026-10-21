@@ -34,6 +34,7 @@ class Book:
     views: list[dict] = field(default_factory=list)
     lock: threading.Lock = field(default_factory=threading.Lock)
     vba: dict[str, bytes] | None = None
+    auto: dict = field(default_factory=dict)
 
     def fit_views(self) -> None:
         n = len(self.sheet_names())
@@ -80,7 +81,24 @@ class Store:
             z.writestr("workbook.json", json.dumps(doc, ensure_ascii=False, separators=(",", ":")))
             for name, blob in (b.vba or {}).items():
                 z.writestr(f"macros/{name}", blob)
+            if b.auto:
+                scripts = b.auto.get("scripts") or []
+                for s in scripts:
+                    z.writestr(f"scripts/{s['id']}.ts", s.get("code", ""))
+                z.writestr("automation.json", json.dumps({**b.auto, "scripts": [{k: v for k, v in s.items() if k != "code"} for s in scripts]}, ensure_ascii=False, separators=(",", ":")))
         os.replace(tmp, target)
+
+    @staticmethod
+    def _automation(p: Path) -> dict:
+        with zipfile.ZipFile(p) as z:
+            names = set(z.namelist())
+            if "automation.json" not in names:
+                return {}
+            auto = json.loads(z.read("automation.json"))
+            for s in auto.get("scripts") or []:
+                part = f"scripts/{s['id']}.ts"
+                s["code"] = z.read(part).decode("utf-8") if part in names else ""
+        return auto
 
     @staticmethod
     def _read(p: Path) -> dict:
@@ -128,6 +146,10 @@ class Store:
                 eng.load_tables(doc["tables"])
             b = Book(wid, doc["title"], doc["created"], doc["modified"], eng, doc.get("template"), [s.get("view") or {} for s in doc["sheets"]])
             b.vba = self._macros(self.path(wid))
+            try:
+                b.auto = self._automation(self.path(wid))
+            except (KeyError, ValueError, zipfile.BadZipFile):
+                b.auto = {}
             self.open[wid] = b
             return b
 
@@ -288,7 +310,18 @@ class Store:
         b = self._load(wid)
         with b.lock:
             n = len(b.sheet_names())
-            return {**b.meta(), "names": [list(x) for x in b.engine.names()], "theme": b.engine.theme(), "cellStyles": b.engine.cell_styles(), "cells": [b.engine.cells(i) for i in range(n)], "formats": [b.engine.formats(i) for i in range(n)], "styles": [b.engine.styles(i) for i in range(n)], "merges": [[list(m) for m in b.engine.merges(i)] for i in range(n)], "rules": [b.engine.rules(i) for i in range(n)], "filters": [b.engine.filter(i) for i in range(n)], "validations": [b.engine.validations(i) for i in range(n)], "tables": b.engine.tables(), "links": [b.engine.links(i) for i in range(n)]}
+            return {**b.meta(), "names": [list(x) for x in b.engine.names()], "theme": b.engine.theme(), "cellStyles": b.engine.cell_styles(), "cells": [b.engine.cells(i) for i in range(n)], "formats": [b.engine.formats(i) for i in range(n)], "styles": [b.engine.styles(i) for i in range(n)], "merges": [[list(m) for m in b.engine.merges(i)] for i in range(n)], "rules": [b.engine.rules(i) for i in range(n)], "filters": [b.engine.filter(i) for i in range(n)], "validations": [b.engine.validations(i) for i in range(n)], "tables": b.engine.tables(), "links": [b.engine.links(i) for i in range(n)], "automation": b.auto}
+
+    def book(self, wid: str) -> Book:
+        return self._load(wid)
+
+    def set_automation(self, wid: str, auto: dict) -> dict:
+        b = self._load(wid)
+        with b.lock:
+            b.auto = auto
+            b.modified = now()
+            self._write(b)
+            return {"id": b.id, "modified": b.modified}
 
     def set_links(self, wid: str, sheet: int, cells: list[tuple[int, int, str]]) -> dict:
         b = self._load(wid)

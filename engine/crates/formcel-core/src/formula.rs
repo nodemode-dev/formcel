@@ -360,13 +360,13 @@ pub fn has_table(e: &Expr) -> bool {
     any
 }
 
-pub const FUNCTIONS: [&str; 112] = [
-    "ABS", "AND", "ARRAYFORMULA", "AVERAGE", "AVERAGEIF", "AVERAGEIFS", "BYCOL", "BYROW", "CHOOSE", "CHOOSECOLS", "CHOOSEROWS", "CONCAT", "CONCATENATE", "COUNT", "COUNTA", "COUNTBLANK", "COUNTIF",
-    "COUNTIFS", "DATE", "DATEVALUE", "DAY", "DAYS", "DROP", "EDATE", "EOMONTH", "ERROR.TYPE", "EXACT", "EXPAND", "FALSE", "FILTER", "FIND", "HLOOKUP", "HOUR", "HSTACK", "HYPERLINK", "IF", "IFERROR", "IFNA", "IFS", "INDEX", "INT",
+pub const FUNCTIONS: [&str; 119] = [
+    "ABS", "AI", "AND", "ARRAYFORMULA", "AVERAGE", "AVERAGEIF", "AVERAGEIFS", "BYCOL", "BYROW", "CHOOSE", "CHOOSECOLS", "CHOOSEROWS", "CONCAT", "CONCATENATE", "COUNT", "COUNTA", "COUNTBLANK", "COUNTIF",
+    "COUNTIFS", "DATE", "DATEVALUE", "DAY", "DAYS", "DROP", "EDATE", "EOMONTH", "ERROR.TYPE", "EXACT", "EXPAND", "FALSE", "FILTER", "FILTERXML", "FIND", "HLOOKUP", "HOUR", "HSTACK", "HYPERLINK", "IF", "IFERROR", "IFNA", "IFS", "IMPORTDATA", "IMPORTHTML", "IMPORTRANGE", "IMPORTXML", "INDEX", "INT",
     "ISBLANK", "ISERR", "ISERROR", "ISLOGICAL", "ISNA", "ISNONTEXT", "ISNUMBER", "ISREF", "ISTEXT", "LAMBDA", "LEFT", "LEN", "LET", "LOWER", "MAKEARRAY", "MAP", "MATCH", "MAX", "MID", "MIN",
     "MINUTE", "MOD", "MONTH", "NA", "NOT", "NOW", "OR", "PI", "POWER", "PRODUCT", "REDUCE", "RIGHT", "ROUND", "ROUNDDOWN", "ROUNDUP", "SCAN", "SEARCH", "SECOND", "SEQUENCE", "SORT", "SORTBY", "SQRT",
     "SUBSTITUTE", "SUBTOTAL", "SUM", "SUMIF", "SUMIFS", "SUMSQ", "SWITCH", "TAKE", "TEXT", "TEXTSPLIT", "TIME", "TIMEVALUE", "TOCOL", "TODAY", "TOROW", "TRANSPOSE", "TRIM", "TRUE", "UNIQUE", "UPPER", "VLOOKUP",
-    "VSTACK", "WEEKDAY", "WRAPCOLS", "WRAPROWS", "XLOOKUP", "XMATCH", "XOR", "YEAR",
+    "VSTACK", "WEBSERVICE", "WEEKDAY", "WRAPCOLS", "WRAPROWS", "XLOOKUP", "XMATCH", "XOR", "YEAR",
 ];
 
 #[derive(Clone, Debug, PartialEq)]
@@ -973,7 +973,7 @@ fn print_args(args: &[Expr], out: &mut String) {
     out.push(')');
 }
 
-fn children(e: &Expr) -> Vec<&Expr> {
+pub(crate) fn children(e: &Expr) -> Vec<&Expr> {
     match e {
         Expr::Neg(x) | Expr::Pos(x) | Expr::Pct(x) | Expr::Paren(x) | Expr::Spill(x) | Expr::Single(x) => vec![x],
         Expr::Bin(_, a, b) | Expr::Range(a, b) => vec![a, b],
