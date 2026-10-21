@@ -15,6 +15,7 @@ from .autofilter import filter_out
 from .calcio import calc_out, finish as calc_finish
 from .cf import rules_out
 from .chartex import inject
+from .chartsheets import finish as sheets_finish
 from .drawings import objects_out, pivot_ranges
 from .extlinks import links_out
 from .formulas import EXT_OUT, EXT_SHEETS, to_file
@@ -193,4 +194,5 @@ def write(eng, views: list[dict], vba: dict[str, bytes] | None = None, objects: 
     data = calc_finish(out.getvalue(), dynamic, ignored)
     data = pivots_finish(data, shows)
     data = patch_app(data, app_xml(props or {}, eng.sheet_names(), VERSION)) if stamps else data
-    return overlay_finish(inject(review_finish(data, threads, ranges), wb, views, COL_PX, ROW_PX), plans, eng.sheet_names(), views)
+    data = overlay_finish(inject(review_finish(data, threads, ranges), wb, views, COL_PX, ROW_PX), plans, eng.sheet_names(), views)
+    return sheets_finish(data, [wb.worksheets[i].title for i, plan in plans.items() if plan["alts"]["charts"] and i < len(views) and views[i].get("chartSheet")])
