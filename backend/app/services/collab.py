@@ -121,6 +121,12 @@ def add_thread(c: dict, sheet: int, row: int, col: int, text: str, author: str) 
     return t
 
 
+def import_thread(c: dict, sheet: int, t: dict) -> None:
+    msgs = [{"id": uuid.uuid4().hex[:8], "author": m["author"], "time": m["time"] or stamp(), "text": m["text"][:8000]} for m in t["messages"]]
+    if msgs:
+        c["threads"].append({"id": uuid.uuid4().hex[:10], "sheet": sheet, "row": t["row"], "col": t["col"], "status": t["status"], "assignee": "", "messages": msgs})
+
+
 def find_thread(c: dict, tid: str) -> dict:
     for t in c["threads"]:
         if t["id"] == tid:

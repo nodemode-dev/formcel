@@ -14,6 +14,7 @@ from .cf import rules_in
 from .drawings import objects_in
 from .formulas import from_file
 from .protect import book_in, flags_in, notes_in, sheet_in
+from .review import ranges_in, threads_in
 from .styles import tokens_in
 from .tables import tables_in
 from .theme import theme_in
@@ -130,6 +131,10 @@ def read(data: bytes) -> dict:
     except (AttributeError, IndexError, TypeError):
         pass
     known, custom = _named(wb, default_font)
+    threads = threads_in(data)
+    kept_ranges, skipped_ranges = ranges_in(data, wb)
+    if skipped_ranges:
+        notes["protected ranges without FormCel person names left out"] += skipped_ranges
     sheets = []
     for ws in wb.worksheets:
         cells, formats, styles, links = [], [], [], []
@@ -192,7 +197,7 @@ def read(data: bytes) -> dict:
                     break
         if ws.defined_names:
             notes["names scoped to one sheet left out"] += len(ws.defined_names)
-        sheets.append({"name": ws.title[:31], "cells": cells, "formats": formats, "styles": styles, "merges": merges, "links": links, "rules": rules, "filter": autofilter, "validations": valid, "view": view, "objects": objects, "notes": notes_in(ws), "protection": sheet_in(ws, flagged)})
+        sheets.append({"name": ws.title[:31], "cells": cells, "formats": formats, "styles": styles, "merges": merges, "links": links, "rules": rules, "filter": autofilter, "validations": valid, "view": view, "objects": objects, "notes": notes_in(ws), "threads": threads[len(sheets)] if len(sheets) < len(threads) else [], "protection": sheet_in(ws, flagged) + (kept_ranges[len(sheets)] if len(sheets) < len(kept_ranges) else [])})
     for cs in wb.chartsheets:
         notes["chart sheets left out"] += 1
     names = []

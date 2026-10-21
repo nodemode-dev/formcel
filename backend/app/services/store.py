@@ -372,6 +372,8 @@ class Store:
         for i, s in enumerate(book["sheets"]):
             for r, c, text, author in s.get("notes", []):
                 cb.set_note(b.collab, i, r, c, text, author)
+            for t in s.get("threads", []):
+                cb.import_thread(b.collab, i, t)
             if s.get("protection"):
                 eng.load_protection(s["protection"], i)
         if book.get("protection"):
@@ -440,7 +442,7 @@ class Store:
             b.fit_views()
             if macros and not b.vba:
                 raise LookupError(wid)
-            return b.title, xlsx.write(b.engine, b.views, b.vba if macros else None, b.fit_objects(), b.collab["notes"])
+            return b.title, xlsx.write(b.engine, b.views, b.vba if macros else None, b.fit_objects(), b.collab["notes"], b.collab["threads"])
 
     def get(self, wid: str) -> dict:
         b = self._load(wid)
