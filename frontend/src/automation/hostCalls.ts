@@ -119,6 +119,7 @@ export class HostCalls {
           }
         }
         for (const [k, data] of answers) this.h.patch(await engine().hostSet(this.h.book(), k, data));
+        if (answers.size) document.dispatchEvent(new Event('fc-hosted'));
       }
     } finally {
       this.running = false;

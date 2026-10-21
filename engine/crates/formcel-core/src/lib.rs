@@ -3,7 +3,12 @@ use std::collections::{HashMap, VecDeque};
 use std::fmt;
 
 pub mod audit;
+pub mod calc;
+mod carray;
 pub mod cf;
+pub mod errcheck;
+pub mod r1c1;
+pub mod xref;
 pub mod eval;
 pub mod link;
 pub mod filter;
@@ -434,6 +439,7 @@ enum Tx {
     Pivots { before: Vec<pivot::Pivot>, after: Vec<pivot::Pivot> },
     Links(Vec<FormatChange>),
     WhatIf { before: Vec<String>, after: Vec<String> },
+    Arrays { before: Vec<(Key, (u32, u32))>, after: Vec<(Key, (u32, u32))> },
 }
 
 #[derive(Debug)]
@@ -463,6 +469,9 @@ pub struct Workbook {
     whatif: whatif::State,
     file: String,
     name_notes: FastMap<String, String>,
+    calc: calc::State,
+    arrays: FastMap<Key, (u32, u32)>,
+    ext: xref::Links,
 }
 
 const SPILL_PASSES: usize = 8;
@@ -536,6 +545,22 @@ impl eval::Ctx for Workbook {
     fn host_want(&self, key: &str) {
         self.host.ask(key);
     }
+
+    fn ext_cells(&self, sheet: &str, area: Area) -> Option<eval::Array> {
+        self.ext_values(sheet, area)
+    }
+
+    fn calc_mode(&self) -> &'static str {
+        if self.calc.set.mode == calc::Mode::Manual {
+            "Manual"
+        } else {
+            "Automatic"
+        }
+    }
+
+    fn r1c1(&self) -> bool {
+        self.calc.set.r1c1
+    }
 }
 
 impl Default for Workbook {
@@ -572,6 +597,9 @@ impl Workbook {
             whatif: whatif::State::default(),
             file: String::new(),
             name_notes: FastMap::default(),
+            calc: calc::State::default(),
+            arrays: FastMap::default(),
+            ext: xref::Links::default(),
         }
         .with_named_codes()
     }
@@ -793,7 +821,7 @@ impl Workbook {
             self.check(sheet, *a)?;
         }
         let spots: Vec<(u32, u32)> = edits.iter().map(|(a, _)| (a.row, a.col)).collect();
-        if let Err(m) = self.guard_cells(sheet, &spots) {
+        if let Err(m) = self.guard_cells(sheet, &spots).and_then(|()| self.guard_arrays(sheet, edits)) {
             self.wprot.refusal.clone_from(&m);
             return Err(EngineError::Protected(m));
         }
@@ -813,11 +841,15 @@ impl Workbook {
         if !tx.is_empty() {
             self.record(Tx::Cells(tx));
         }
+        self.flush_array_tx();
         if !self.tables.is_empty() && !self.table_quiet {
             let more = self.table_hook(sheet, edits);
             seeds.extend(more);
         }
-        let changed = self.recalc(&seeds);
+        let mut changed = self.recalc(&seeds);
+        if self.calc.set.mode == calc::Mode::Auto && !self.whatif.tables.is_empty() {
+            changed.extend(self.refresh_tables());
+        }
         self.auto_links(sheet, &edited);
         self.group_since(mark);
         Ok(self.present(changed))
@@ -1123,6 +1155,9 @@ impl Workbook {
     }
 
     pub fn formula_text(&self, sheet: usize, a: Addr) -> Option<String> {
+        if let Some(t) = self.array_formula(sheet, a) {
+            return Some(t);
+        }
         if self.spilled.contains_key(&(sheet, a)) {
             return Some(String::new());
         }
@@ -1337,6 +1372,9 @@ impl Workbook {
 
     fn recalc_with(&mut self, seeds: &[Key], everything: bool) -> Changed {
         self.touched.clear();
+        if everything {
+            self.calc.stale.clear();
+        }
         let mut out = self.recalc_pass(seeds, everything, true);
         for _ in 0..SPILL_PASSES {
             let touched = std::mem::take(&mut self.touched);
@@ -1372,7 +1410,7 @@ impl Workbook {
                 }
             }
             for (k, f) in &self.formulas {
-                if volatile && f.volatile && dirty.insert(*k) {
+                if volatile && f.volatile && !self.calc.hold() && dirty.insert(*k) {
                     queue.push_back(*k);
                 }
             }
@@ -1385,6 +1423,9 @@ impl Workbook {
                     }
                 }
             }
+            if self.calc.hold() {
+                dirty = self.hold_dirty(seeds, &anchors, dirty);
+            }
         }
         let mut out: Changed = seeds.iter().filter(|k| !self.formulas.contains_key(k)).map(|k| (k.0, k.1, self.sheets[k.0].cells.get(k.1).cloned().unwrap_or(Value::Empty))).collect();
         out.extend(self.evaluate(dirty));
@@ -1392,79 +1433,7 @@ impl Workbook {
     }
 
     fn evaluate(&mut self, dirty: FastSet<Key>) -> Changed {
-        let ids: Vec<Key> = dirty.into_iter().collect();
-        let id_of: FastMap<Key, usize> = ids.iter().enumerate().map(|(i, k)| (*k, i)).collect();
-        let mut by_sheet: FastMap<usize, Vec<usize>> = FastMap::default();
-        for (i, k) in ids.iter().enumerate() {
-            by_sheet.entry(k.0).or_default().push(i);
-        }
-        let mut indeg = vec![0u32; ids.len()];
-        let mut users: Vec<Vec<usize>> = vec![Vec::new(); ids.len()];
-        let mut pre: Vec<usize> = Vec::new();
-        for i in 0..ids.len() {
-            pre.clear();
-            for (s, ar) in self.graph.areas(&ids[i]) {
-                let cells = u64::from(ar.r1 - ar.r0 + 1) * u64::from(ar.c1 - ar.c0 + 1);
-                let on_sheet = by_sheet.get(s).map(Vec::as_slice).unwrap_or(&[]);
-                if cells <= on_sheet.len() as u64 {
-                    for r in ar.r0..=ar.r1 {
-                        for c in ar.c0..=ar.c1 {
-                            if let Some(&j) = id_of.get(&(*s, Addr { row: r, col: c })) {
-                                pre.push(j);
-                            }
-                        }
-                    }
-                } else {
-                    pre.extend(on_sheet.iter().copied().filter(|&j| ar.contains(ids[j].1.row, ids[j].1.col)));
-                }
-            }
-            pre.sort_unstable();
-            pre.dedup();
-            for &j in &pre {
-                if j != i {
-                    indeg[i] += 1;
-                    users[j].push(i);
-                }
-            }
-        }
-        let mut ready: VecDeque<usize> = (0..ids.len()).filter(|&i| indeg[i] == 0).collect();
-        let mut done = vec![false; ids.len()];
-        let mut out = Vec::with_capacity(ids.len());
-        while let Some(i) = ready.pop_front() {
-            done[i] = true;
-            let (s, a) = ids[i];
-            let (o, f) = match &self.formulas[&(s, a)].ast {
-                None => (eval::Out::V(Value::Error(ErrKind::Error)), None),
-                Some(e) => (eval::Eval::new(&*self, s).placed(a).formula(e), self.infer(s, e)),
-            };
-            let v = match o {
-                eval::Out::V(v) => {
-                    self.unspill((s, a));
-                    v
-                }
-                eval::Out::A(x) => self.spill((s, a), x),
-            };
-            match f {
-                Some(f) if matches!(v, Value::Number(_)) => self.fmts.insert((s, a), f),
-                _ => self.fmts.remove(&(s, a)),
-            };
-            self.sheets[s].cells.set(a, v.clone());
-            out.push((s, a, v));
-            for &u in &users[i] {
-                indeg[u] -= 1;
-                if indeg[u] == 0 {
-                    ready.push_back(u);
-                }
-            }
-        }
-        for (i, &(s, a)) in ids.iter().enumerate() {
-            if !done[i] {
-                let v = Value::Error(ErrKind::Ref);
-                self.sheets[s].cells.set(a, v.clone());
-                out.push((s, a, v));
-            }
-        }
-        out
+        self.evaluate_levels(dirty)
     }
 
     fn spill(&mut self, k: Key, x: eval::Array) -> Value {
@@ -1473,6 +1442,7 @@ impl Workbook {
         let prev = self.spills.insert(k, (h, w));
         let fits = a.row + h <= MAX_ROWS && a.col + w <= MAX_COLS;
         let blocked = !fits
+            || self.spill_hits_area(s, a, h, w)
             || (a.row..a.row + h).any(|r| {
                 (a.col..a.col + w).any(|c| {
                     let p = (s, Addr { row: r, col: c });
@@ -1609,6 +1579,7 @@ impl Workbook {
                 self.formulas.insert((s.sheet, b), f);
             }
         }
+        self.shift_arrays(s);
         let dropped = values.into_iter().map(|(a, v)| (a, lost.get(&a).cloned().unwrap_or_else(|| self.const_text(s.sheet, a, &v)))).collect();
         let fmts: Vec<(Key, Fmt)> = self.fmts.iter().filter(|((sh, _), _)| *sh == s.sheet).map(|(k, f)| (*k, *f)).collect();
         for (k, _) in &fmts {
@@ -1825,6 +1796,7 @@ impl Workbook {
                 self.links.insert((n, a), t);
             }
         }
+        self.rekey_arrays(&map);
     }
 
     pub fn insert(&mut self, sheet: usize, rows: bool, at: u32, n: u32) -> Result<Shift, EngineError> {
@@ -1837,6 +1809,7 @@ impl Workbook {
         }
         self.guard(if rows { "insert_rows" } else { "insert_cols" }, sheet, formula::Area::default()).map_err(EngineError::Protected)?;
         let shift = Shift { sheet, rows, at, delta: i64::from(n) };
+        self.check_shift_arrays(shift).map_err(EngineError::Protected)?;
         let (dropped, rewritten, lost) = self.do_shift(shift);
         self.record(Tx::Shift { shift, dropped, rewritten, lost: Box::new(lost) });
         Ok(shift)
@@ -1854,6 +1827,7 @@ impl Workbook {
         let span = if rows { formula::Area { r0: at, c0: 0, r1: at + n - 1, c1: 0 } } else { formula::Area { r0: 0, c0: at, r1: 0, c1: at + n - 1 } };
         self.guard(if rows { "delete_rows" } else { "delete_cols" }, sheet, span).map_err(EngineError::Protected)?;
         let shift = Shift { sheet, rows, at, delta: -i64::from(n) };
+        self.check_shift_arrays(shift).map_err(EngineError::Protected)?;
         let (dropped, rewritten, lost) = self.do_shift(shift);
         self.record(Tx::Shift { shift, dropped, rewritten, lost: Box::new(lost) });
         Ok(shift)
@@ -1952,6 +1926,7 @@ impl Workbook {
                 self.whatif_replay(if forward { after } else { before });
                 Effect::default()
             }
+            Tx::Arrays { before, after } => self.replay_arrays(before, after, forward),
             Tx::Tables { before, after } => {
                 self.tables = if forward { after.clone() } else { before.clone() };
                 self.graph.built = false;

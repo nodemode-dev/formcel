@@ -9,10 +9,13 @@ from openpyxl.utils.datetime import to_excel
 from openpyxl.worksheet.formula import ArrayFormula, DataTableFormula
 
 from .. import page
+from .arrays import members
 from .autofilter import filter_in
+from .calcio import calc_in, render, scan
 from .cf import rules_in
-from .chartex import scan
+from .chartex import scan as scan_charts
 from .drawings import objects_in
+from .extlinks import books_in, lines_in
 from .formulas import from_file
 from .overlay import Package
 from .protect import book_in, flags_in, notes_in, sheet_in
@@ -39,8 +42,6 @@ def _value(cell, epoch, notes: Counter) -> str | None:
     if v is None:
         return None
     if isinstance(v, ArrayFormula):
-        if v.ref and ":" in str(v.ref):
-            notes["array formulas brought in as single formulas that spill"] += 1
         return from_file(v.text or "")
     if isinstance(v, DataTableFormula):
         return None
@@ -122,7 +123,9 @@ def _named(wb, default_font) -> tuple[dict[str, tuple[set[str], str]], list[str]
 
 
 def read(data: bytes) -> dict:
-    wb = load_workbook(io.BytesIO(data), data_only=False, rich_text=False, keep_links=False, keep_vba=True)
+    wb = load_workbook(io.BytesIO(data), data_only=False, rich_text=False, keep_links=True, keep_vba=True)
+    books_in(wb)
+    scanned = scan(data)
     vba = macro_parts(wb.vba_archive)
     if wb.vba_archive is not None:
         wb.vba_archive.close()
@@ -140,15 +143,17 @@ def read(data: bytes) -> dict:
     if skipped_ranges:
         notes["protected ranges without FormCel person names left out"] += skipped_ranges
     package = Package(data)
-    drawn = scan(data)
+    drawn = scan_charts(data)
     sheets = []
-    for ws in wb.worksheets:
+    for si, ws in enumerate(wb.worksheets):
         cells, formats, styles, links = [], [], [], []
         flagged: dict[tuple[int, int], int] = {}
         max_c = 0
+        found, skip = members(ws)
+        dynamic = scanned[si]["dynamic"] if si < len(scanned) else set()
         for (r, c), cell in list(ws._cells.items()):
             r0, c0 = r - 1, c - 1
-            v = _value(cell, wb.epoch, notes)
+            v = None if (r, c) in skip else _value(cell, wb.epoch, notes)
             if v is not None and v != "'":
                 cells.append((r0, c0, v))
                 max_c = max(max_c, c)
@@ -207,7 +212,7 @@ def read(data: bytes) -> dict:
                 if t.autoFilter is not None and t.autoFilter.filterColumn:
                     autofilter = filter_in(ws, wb, view, notes, af=t.autoFilter)
                     break
-        sheets.append({"name": ws.title[:31], "cells": cells, "formats": formats, "styles": styles, "merges": merges, "links": links, "rules": rules, "filter": autofilter, "validations": valid, "view": view, "objects": objects, "notes": notes_in(ws), "threads": threads[len(sheets)] if len(sheets) < len(threads) else [], "protection": sheet_in(ws, flagged) + (kept_ranges[len(sheets)] if len(sheets) < len(kept_ranges) else [])})
+        sheets.append({"name": ws.title[:31], "cells": cells, "formats": formats, "styles": styles, "merges": merges, "links": links, "rules": rules, "filter": autofilter, "validations": valid, "view": view, "objects": objects, "notes": notes_in(ws), "threads": threads[len(sheets)] if len(sheets) < len(threads) else [], "protection": sheet_in(ws, flagged) + (kept_ranges[len(sheets)] if len(sheets) < len(kept_ranges) else []), "arrays": [a[:4] for a in found if a[4] not in dynamic]})
     for cs in wb.chartsheets:
         notes["chart sheets left out"] += 1
     names = []
@@ -238,4 +243,5 @@ def read(data: bytes) -> dict:
     for i, r, c, v in filled:
         if i < len(sheets):
             sheets[i]["cells"].append((r, c, v))
-    return {"sheets": sheets, "names": names, "nameNotes": name_notes, "tables": tables, "pivots": pivots, "whatif": what, "theme": theme_in(wb.loaded_theme), "cellStyles": custom, "vba": vba, "props": read_props(wb, data), "protection": book_in(wb), "notes": [f"{n} {what}" for what, n in sorted(notes.items())]}
+    settings = render(calc_in(wb), [e for s in scanned for e in s["ignored"]])
+    return {"calc": settings, "externals": lines_in(wb), "sheets": sheets, "names": names, "nameNotes": name_notes, "tables": tables, "pivots": pivots, "whatif": what, "theme": theme_in(wb.loaded_theme), "cellStyles": custom, "vba": vba, "props": read_props(wb, data), "protection": book_in(wb), "notes": [f"{n} {what}" for what, n in sorted(notes.items())]}

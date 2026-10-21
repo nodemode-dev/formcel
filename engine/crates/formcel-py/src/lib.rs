@@ -18,6 +18,10 @@ impl Workbook {
         self.inner.sheet_names()
     }
 
+    fn calc(&mut self, cmd: &str) -> String {
+        self.inner.calc_run(cmd).0
+    }
+
     #[pyo3(signature = (sheet = None))]
     fn protection(&self, sheet: Option<usize>) -> Vec<String> {
         self.inner.protection_lines(sheet)

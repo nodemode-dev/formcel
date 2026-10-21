@@ -7,6 +7,10 @@ license.workspace = true
 authors.workspace = true
 repository.workspace = true
 
+[features]
+parallel = ["dep:rayon"]
+
 [dependencies]
 regex = { version = "1.11.1", default-features = false, features = ["std", "unicode", "perf"] }
 fancy-regex = { version = "0.14", default-features = false, features = ["unicode"] }
+rayon = { version = "1.10.0", optional = true }

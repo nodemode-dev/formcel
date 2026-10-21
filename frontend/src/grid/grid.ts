@@ -196,6 +196,9 @@ export class Grid {
     sheet: number;
   } | null = null;
   private overlay: ((ctx: CanvasRenderingContext2D, box: (r0: number, c0: number, r1: number, c1: number) => [number, number, number, number]) => void) | null = null;
+  private calcDraw: ((ctx: CanvasRenderingContext2D, box: (r0: number, c0: number, r1: number, c1: number) => [number, number, number, number], view: { z: number; ox: number; oy: number }) => void) | null = null;
+  colLabel: (c: number) => string = colName;
+  arrayHook: ((raw: string, area: Range) => Promise<boolean>) | null = null;
   private wins: (Range | null)[] = [null, null, null, null];
   private pendingWins: (Range | null)[] = [null, null, null, null];
   private sh = 0;
@@ -490,6 +493,11 @@ export class Grid {
     if (this.overlay) {
       ctx.save();
       this.overlay(ctx, (r0, c0, r1, c1) => this.areaRect(r0, c0, r1, c1));
+      ctx.restore();
+    }
+    if (this.calcDraw) {
+      ctx.save();
+      this.calcDraw(ctx, (r0, c0, r1, c1) => this.areaRect(r0, c0, r1, c1), { z: this.z, ox: this.gw, oy: this.gh });
       ctx.restore();
     }
     ctx.strokeStyle = pal.frozen;
@@ -1378,7 +1386,7 @@ export class Grid {
           ctx.fillRect(xx, 0, cw, HEAD_H);
         }
         ctx.fillStyle = pal.headFg;
-        ctx.fillText(colName(c), xx + cw / 2, HEAD_H / 2);
+        ctx.fillText(this.colLabel(c), xx + cw / 2, HEAD_H / 2);
         ctx.strokeStyle = pal.grid;
         ctx.lineWidth = 1;
         this.line(Math.round(xx + cw) + 0.5, 0, Math.round(xx + cw) + 0.5, HEAD_H);
@@ -2100,6 +2108,32 @@ export class Grid {
 
   setOverlay(fn: ((ctx: CanvasRenderingContext2D, box: (r0: number, c0: number, r1: number, c1: number) => [number, number, number, number]) => void) | null): void {
     this.overlay = fn;
+    this.paint();
+  }
+
+  setDecor(fn: typeof this.calcDraw): void {
+    this.calcDraw = fn;
+    this.paint();
+  }
+
+  reloadData(): void {
+    this.dropWindows();
+    this.paint();
+  }
+
+  loadedRanges(): Range[] {
+    return this.wins.filter((w): w is Range => !!w);
+  }
+
+  private async endArray(): Promise<void> {
+    if (!this.editing || !this.arrayHook) return;
+    this.editing = false;
+    const value = this.editor.value;
+    this.editor.hidden = true;
+    this.focus();
+    const area = this.sel();
+    const done = await this.arrayHook(value, area);
+    if (!done) this.startEdit(value);
     this.paint();
   }
 
@@ -3235,6 +3269,11 @@ export class Grid {
   }
 
   private editorKey(e: KeyboardEvent): void {
+    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey) && e.shiftKey && this.arrayHook) {
+      e.preventDefault();
+      this.enqueue(() => this.endArray());
+      return;
+    }
     if (e.key === 'Enter' && !e.altKey) {
       e.preventDefault();
       const dir = e.shiftKey ? 'up' : 'down';
@@ -3268,6 +3307,7 @@ export class Grid {
     if (this.editing) {
       if (this.editorHook?.(e)) return;
       const before = this.editor.value;
+      if (e.key === 'Enter' && mod && e.shiftKey && this.arrayHook) return this.endArray();
       if (e.key === 'Enter' && e.altKey) this.editor.value += '\n';
       else if (e.key === 'Enter') await this.endEdit(true, e.shiftKey ? 'up' : 'down', 'Enter');
       else if (e.key === 'Tab') await this.endEdit(true, e.shiftKey ? 'left' : 'right', 'Tab');

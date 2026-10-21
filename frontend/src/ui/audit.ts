@@ -108,6 +108,11 @@ export class Audit {
     this.host.grid.setOverlay((ctx, box) => this.draw(ctx, box));
   }
 
+  showArrows(row: number, col: number, arrows: Arrow[]): void {
+    this.traced.push({ sheet: this.host.grid.sheetIndex, row, col, kind: 'p', levels: 1, arrows });
+    this.host.grid.setOverlay((ctx, box) => this.draw(ctx, box));
+  }
+
   invalidate(): void {
     if (this.traced.length) this.removeArrows();
   }

@@ -12,5 +12,5 @@ name = "formcel_engine"
 crate-type = ["cdylib"]
 
 [dependencies]
-formcel-core = { path = "../formcel-core" }
+formcel-core = { path = "../formcel-core", features = ["parallel"] }
 pyo3 = { version = "0.30.1", features = ["extension-module", "abi3-py312"] }

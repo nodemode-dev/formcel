@@ -60,6 +60,7 @@ export type Request =
   | { id: number; op: 'whatif.load'; book: number; lines: string[] }
   | { id: number; op: 'objects.list'; book: number; sheet: number }
   | { id: number; op: 'objects.load' | 'objects.set'; book: number; sheet: number; lines: string[] }
+  | { id: number; op: 'calc.run'; book: number; cmd: string }
   | { id: number; op: 'valid.list'; book: number; sheet: number }
   | { id: number; op: 'valid.load'; book: number; sheet: number; lines: string[] }
   | { id: number; op: 'valid.set'; book: number; sheet: number; r0: number; c0: number; r1: number; c1: number; line: string }
@@ -152,6 +153,7 @@ export interface WhatIfReply {
   text: string;
   effect: Effect;
 }
+export type CalcReply = WhatIfReply;
 export type Arrow = [fromSheet: number, r0: number, c0: number, r1: number, c1: number, toSheet: number, row: number, col: number, level: number];
 export type EvalStep = [before: string, evaluating: string, after: string, into: string];
 export type Value = WhatIfReply | Arrow[] | EvalStep[] | string | number | boolean | number[] | string[] | Cell[] | Changed[] | Name[] | Edit[] | Area[] | CfCell[] | LinkChange[] | [number, number] | Shift | Effect | FilterList | DataValue | null;

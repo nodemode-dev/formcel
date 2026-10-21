@@ -1181,6 +1181,22 @@ pub unsafe extern "C" fn fc_load_whatif(id: u32, lines: *const u8, len: u32) -> 
     .unwrap_or(-1)
 }
 
+/// Runs one calculation command (settings, recalculation scope, reference style, array formulas, error checks, external links); the out buffer gets the reply text, a unit separator, then the encoded effect.
+///
+/// # Safety
+/// `cmd` must point at `len` readable bytes.
+#[no_mangle]
+pub unsafe extern "C" fn fc_calc(id: u32, cmd: *const u8, len: u32) -> i32 {
+    let cmd = text(cmd, len).to_string();
+    match with_book(id, |wb| {
+        let (reply, fx) = wb.calc_run(&cmd);
+        format!("{reply}\u{1f}{}", wb.encode(&fx))
+    }) {
+        Some(s) => emit(&s) as i32,
+        None => -1,
+    }
+}
+
 #[no_mangle]
 pub extern "C" fn fc_extent(id: u32, sheet: u32) -> i32 {
     match with_book(id, |wb| wb.extent(sheet as usize)) {

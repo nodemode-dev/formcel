@@ -10,11 +10,14 @@ from openpyxl.worksheet.properties import Outline
 
 from ...version import VERSION
 from .. import page
+from .arrays import write_out
 from .autofilter import filter_out
+from .calcio import calc_out, finish as calc_finish
 from .cf import rules_out
 from .chartex import inject
 from .drawings import objects_out, pivot_ranges
-from .formulas import to_file
+from .extlinks import links_out
+from .formulas import EXT_OUT, EXT_SHEETS, to_file
 from .overlay import finish as overlay_finish
 from .pivots import finish as pivots_finish
 from .pivots import pivots_out
@@ -46,6 +49,9 @@ def write(eng, views: list[dict], vba: dict[str, bytes] | None = None, objects: 
     wb = Workbook()
     if stamps:
         core_out(wb, props or {}, *stamps)
+    EXT_OUT.set({})
+    EXT_SHEETS.set({})
+    dynamic: list[list[str]] = []
     xml, body, heading = theme_out(eng.theme())
     wb.loaded_theme = xml
     wb._fonts[0] = Font(name=body, sz=10)
@@ -87,6 +93,7 @@ def write(eng, views: list[dict], vba: dict[str, bytes] | None = None, objects: 
             elif text:
                 cell.value = text
                 cell.data_type = "s"
+        dynamic.append(write_out(eng, ws, i))
         for r, c, code in eng.auto_formats(i) + eng.formats(i):
             ws.cell(row=r + 1, column=c + 1).number_format = code
         for r, c, _ in eng.styles(i):
@@ -173,7 +180,8 @@ def write(eng, views: list[dict], vba: dict[str, bytes] | None = None, objects: 
     for i, items in enumerate(objects or []):
         if items and i < len(wb.worksheets):
             plans[i] = objects_out(wb, wb.worksheets[i], items, views[i] if i < len(views) else {}, pivots=pivots)
-    wb.calculation.fullCalcOnLoad = True
+    links_out(wb, eng.calc("extlines").splitlines())
+    ignored = calc_out(wb, eng.calc("get"))
     if vba:
         buf = io.BytesIO()
         with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as arc:
@@ -182,6 +190,7 @@ def write(eng, views: list[dict], vba: dict[str, bytes] | None = None, objects: 
         wb.vba_archive = zipfile.ZipFile(io.BytesIO(buf.getvalue()))
     out = io.BytesIO()
     wb.save(out)
-    data = pivots_finish(out.getvalue(), shows)
+    data = calc_finish(out.getvalue(), dynamic, ignored)
+    data = pivots_finish(data, shows)
     data = patch_app(data, app_xml(props or {}, eng.sheet_names(), VERSION)) if stamps else data
     return overlay_finish(inject(review_finish(data, threads, ranges), wb, views, COL_PX, ROW_PX), plans, eng.sheet_names(), views)

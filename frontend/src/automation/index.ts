@@ -178,6 +178,10 @@ export class Automation {
     this.runner.stop();
   }
 
+  drain(fresh = false): Promise<void> {
+    return this.calls.drain(fresh, false);
+  }
+
   edited(changes: Changed[]): void {
     window.clearTimeout(this.drainTimer);
     this.drainTimer = window.setTimeout(() => void this.calls.drain(), 80);

@@ -785,7 +785,13 @@ impl Parser {
                 }
                 self.sheet_ref(name)
             }
-            Tok::Bracket(raw) => Some(Expr::Table(None, parse_spec(&raw)?)),
+            Tok::Bracket(raw) => {
+                if let (Some(Tok::Ident(sh)), Some(Tok::Bang)) = (self.peek().cloned(), self.peek_at(1)) {
+                    self.i += 2;
+                    return self.sheet_ref(format!("[{raw}]{sh}"));
+                }
+                Some(Expr::Table(None, parse_spec(&raw)?))
+            }
             Tok::Ident(id) => {
                 if let Some(Tok::Bracket(raw)) = self.peek() {
                     let spec = parse_spec(&raw.clone())?;
@@ -866,8 +872,9 @@ fn num_text(n: f64) -> String {
     }
 }
 
-fn sheet_text(name: &str, out: &mut String) {
-    let plain = !name.is_empty() && name.chars().all(|c| c.is_alphanumeric() || c == '_') && !name.starts_with(|c: char| c.is_ascii_digit());
+pub(crate) fn sheet_text(name: &str, out: &mut String) {
+    let word = |n: &str| !n.is_empty() && n.chars().all(|c| c.is_alphanumeric() || c == '_') && !n.starts_with(|c: char| c.is_ascii_digit());
+    let plain = word(name) || crate::xref::split(name).is_some_and(|(p, b, s)| p.is_empty() && word(s) && b.chars().all(|c| c.is_alphanumeric() || matches!(c, '.' | '_' | '-')));
     if plain {
         out.push_str(name);
     } else {
