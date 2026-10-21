@@ -5,6 +5,8 @@ use std::fmt;
 pub mod eval;
 pub mod formula;
 mod graph;
+pub mod numfmt;
+pub use numfmt::Fmt;
 mod store;
 pub mod wire;
 pub use formula::ErrKind;
@@ -28,6 +30,25 @@ pub enum Value {
 
 impl Value {
     pub fn parse_input(raw: &str) -> Value {
+        Value::parse_with_fmt(raw).0
+    }
+
+    pub fn parse_with_fmt(raw: &str) -> (Value, Option<Fmt>) {
+        let v = Value::parse_plain(raw);
+        let t = raw.trim();
+        let dec = |s: &str| if s.contains('.') { 2 } else { 0 };
+        match v {
+            Value::Number(n) if t.contains('$') => (Value::Number(n), Some(Fmt::Currency(dec(t)))),
+            Value::Number(n) if t.ends_with('%') => (Value::Number(n), Some(Fmt::Percent(dec(t)))),
+            Value::Text(_) => match numfmt::parse(t) {
+                Some((n, f)) => (Value::Number(n), Some(f)),
+                None => (v, None),
+            },
+            o => (o, None),
+        }
+    }
+
+    fn parse_plain(raw: &str) -> Value {
         let t = raw.trim();
         if t.is_empty() {
             return Value::Empty;
@@ -185,12 +206,15 @@ struct Change {
 struct Formula {
     ast: Option<Expr>,
     src: String,
+    volatile: bool,
 }
 
 impl Formula {
     fn new(raw: &str) -> Formula {
         let body = raw.trim_start().strip_prefix('=').unwrap_or(raw);
-        Formula { ast: formula::parse(body), src: body.to_string() }
+        let ast = formula::parse(body);
+        let volatile = ast.as_ref().is_some_and(formula::is_volatile);
+        Formula { ast, src: body.to_string(), volatile }
     }
 
     fn text(&self) -> String {
@@ -239,6 +263,7 @@ pub struct Workbook {
     redo: Vec<Tx>,
     formulas: FastMap<Key, Formula>,
     graph: graph::Graph,
+    fmts: FastMap<Key, Fmt>,
 }
 
 impl eval::Ctx for Workbook {
@@ -265,7 +290,7 @@ impl Default for Workbook {
 
 impl Workbook {
     pub fn new() -> Self {
-        Workbook { sheets: vec![Sheet::new("Sheet1")], undo: Vec::new(), redo: Vec::new(), formulas: FastMap::default(), graph: graph::Graph::default() }
+        Workbook { sheets: vec![Sheet::new("Sheet1")], undo: Vec::new(), redo: Vec::new(), formulas: FastMap::default(), graph: graph::Graph::default(), fmts: FastMap::default() }
     }
 
     pub fn sheet_count(&self) -> usize {
@@ -331,14 +356,33 @@ impl Workbook {
         if !tx.is_empty() {
             self.record(Tx::Cells(tx));
         }
-        Ok(self.recalc(&seeds))
+        let changed = self.recalc(&seeds);
+        Ok(self.present(changed))
+    }
+
+    pub fn fmt(&self, sheet: usize, a: Addr) -> Option<Fmt> {
+        self.fmts.get(&(sheet, a)).copied()
+    }
+
+    fn shown(&self, sheet: usize, a: Addr, v: Value) -> Value {
+        match (&v, self.fmts.get(&(sheet, a))) {
+            (Value::Number(n), Some(f)) => numfmt::show(*n, *f).map_or(v, Value::Text),
+            _ => v,
+        }
+    }
+
+    fn present(&self, changed: Changed) -> Changed {
+        changed.into_iter().map(|(s, a, v)| (s, a, self.shown(s, a, v))).collect()
     }
 
     pub fn input(&self, sheet: usize, a: Addr) -> String {
         if let Some(f) = self.formulas.get(&(sheet, a)) {
             return f.text();
         }
-        self.sheets.get(sheet).and_then(|s| s.cells.get(a)).map(Value::to_string).unwrap_or_default()
+        match self.sheets.get(sheet).and_then(|s| s.cells.get(a)) {
+            Some(v) => self.shown(sheet, a, v.clone()).to_string(),
+            None => String::new(),
+        }
     }
 
     pub fn formula_text(&self, sheet: usize, a: Addr) -> Option<String> {
@@ -350,7 +394,7 @@ impl Workbook {
         let mut out = Vec::with_capacity(s.len());
         if let Some(bottom) = s.cells.extent() {
             s.cells.for_each_in(Addr { row: 0, col: 0 }, bottom, |a, v| {
-                let text = self.formulas.get(&(sheet, a)).map_or_else(|| v.to_string(), Formula::text);
+                let text = self.formulas.get(&(sheet, a)).map_or_else(|| self.shown(sheet, a, v.clone()).to_string(), Formula::text);
                 out.push((a, text));
             });
         }
@@ -371,7 +415,43 @@ impl Workbook {
             if self.formulas.remove(&k).is_some() {
                 self.graph.remove(&k);
             }
-            self.sheets[sheet].cells.set(a, Value::parse_input(raw));
+            let (v, f) = Value::parse_with_fmt(raw);
+            match f {
+                Some(f) => self.fmts.insert(k, f),
+                None => self.fmts.remove(&k),
+            };
+            self.sheets[sheet].cells.set(a, v);
+        }
+    }
+
+    fn infer(&self, sheet: usize, e: &Expr) -> Option<Fmt> {
+        use formula::{Op, RefKind};
+        match e {
+            Expr::Call(n, args) => match n.as_str() {
+                "DATE" | "TODAY" | "EDATE" | "EOMONTH" | "DATEVALUE" => Some(Fmt::Date),
+                "NOW" => Some(Fmt::DateTime { secs: false, ampm: false }),
+                "TIME" | "TIMEVALUE" => Some(Fmt::Time { secs: false, ampm: true }),
+                "MIN" | "MAX" | "IF" | "IFERROR" => args.iter().skip(usize::from(n == "IF")).find_map(|x| self.infer(sheet, x)).filter(|f| f.is_date()),
+                _ => None,
+            },
+            Expr::Ref(s, RefKind::Cell(c)) => {
+                let idx = match s {
+                    None => Some(sheet),
+                    Some(name) => self.sheet_by_name(name),
+                }?;
+                self.fmts.get(&(idx, Addr { row: c.row, col: c.col })).copied()
+            }
+            Expr::Paren(x) => self.infer(sheet, x),
+            Expr::Bin(Op::Add | Op::Sub, a, b) => match (self.infer(sheet, a), self.infer(sheet, b)) {
+                (Some(f), None) | (None, Some(f)) if f.is_date() => Some(f),
+                (Some(f @ Fmt::Currency(_)), _) | (_, Some(f @ Fmt::Currency(_))) => Some(f),
+                _ => None,
+            },
+            Expr::Bin(Op::Mul | Op::Div, a, b) => match (self.infer(sheet, a), self.infer(sheet, b)) {
+                (Some(f @ Fmt::Currency(_)), _) | (_, Some(f @ Fmt::Currency(_))) => Some(f),
+                _ => None,
+            },
+            _ => None,
         }
     }
 
@@ -421,6 +501,11 @@ impl Workbook {
             for k in seeds {
                 if self.formulas.contains_key(k) {
                     dirty.insert(*k);
+                }
+            }
+            for (k, f) in &self.formulas {
+                if f.volatile && dirty.insert(*k) {
+                    queue.push_back(*k);
                 }
             }
             let mut found = Vec::new();
@@ -480,9 +565,13 @@ impl Workbook {
         while let Some(i) = ready.pop_front() {
             done[i] = true;
             let (s, a) = ids[i];
-            let v = match &self.formulas[&(s, a)].ast {
-                None => Value::Error(ErrKind::Error),
-                Some(e) => eval::Eval { ctx: &*self, sheet: s }.formula(e),
+            let (v, f) = match &self.formulas[&(s, a)].ast {
+                None => (Value::Error(ErrKind::Error), None),
+                Some(e) => (eval::Eval { ctx: &*self, sheet: s }.formula(e), self.infer(s, e)),
+            };
+            match f {
+                Some(f) if matches!(v, Value::Number(_)) => self.fmts.insert((s, a), f),
+                _ => self.fmts.remove(&(s, a)),
             };
             self.sheets[s].cells.set(a, v.clone());
             out.push((s, a, v));
@@ -561,7 +650,16 @@ impl Workbook {
                 self.formulas.insert((s.sheet, b), f);
             }
         }
-        let dropped = values.into_iter().map(|(a, v)| (a, lost.get(&a).cloned().unwrap_or_else(|| v.to_string()))).collect();
+        let dropped = values.into_iter().map(|(a, v)| (a, lost.get(&a).cloned().unwrap_or_else(|| self.shown(s.sheet, a, v).to_string()))).collect();
+        let fmts: Vec<(Key, Fmt)> = self.fmts.iter().filter(|((sh, _), _)| *sh == s.sheet).map(|(k, f)| (*k, *f)).collect();
+        for (k, _) in &fmts {
+            self.fmts.remove(k);
+        }
+        for ((sh, a), f) in fmts {
+            if let Some(b) = moved(a) {
+                self.fmts.insert((sh, b), f);
+            }
+        }
         self.recalc_all();
         (dropped, rewritten)
     }
@@ -571,6 +669,12 @@ impl Workbook {
         for ((s, a), f) in old {
             if let Some(n) = map(s) {
                 self.formulas.insert((n, a), f);
+            }
+        }
+        let old = std::mem::take(&mut self.fmts);
+        for ((s, a), f) in old {
+            if let Some(n) = map(s) {
+                self.fmts.insert((n, a), f);
             }
         }
     }
@@ -688,14 +792,14 @@ impl Workbook {
         let tx = self.undo.pop()?;
         let out = self.replay(&tx, false);
         self.redo.push(tx);
-        Some(out)
+        Some(Effect { cells: self.present(out.cells), shift: out.shift })
     }
 
     pub fn redo(&mut self) -> Option<Effect> {
         let tx = self.redo.pop()?;
         let out = self.replay(&tx, true);
         self.undo.push(tx);
-        Some(out)
+        Some(Effect { cells: self.present(out.cells), shift: out.shift })
     }
 
     pub fn can_undo(&self) -> bool {
@@ -708,6 +812,11 @@ impl Workbook {
 
     pub fn get(&self, sheet: usize, addr: Addr) -> Result<Value, EngineError> {
         self.check(sheet, addr)?;
+        Ok(self.shown(sheet, addr, self.sheets[sheet].cells.get(addr).cloned().unwrap_or(Value::Empty)))
+    }
+
+    pub fn value(&self, sheet: usize, addr: Addr) -> Result<Value, EngineError> {
+        self.check(sheet, addr)?;
         Ok(self.sheets[sheet].cells.get(addr).cloned().unwrap_or(Value::Empty))
     }
 
@@ -715,7 +824,7 @@ impl Workbook {
         self.check(sheet, top)?;
         self.check(sheet, bottom)?;
         let mut out = Vec::new();
-        self.sheets[sheet].cells.for_each_in(top, bottom, |a, v| out.push((a, v.clone())));
+        self.sheets[sheet].cells.for_each_in(top, bottom, |a, v| out.push((a, self.shown(sheet, a, v.clone()))));
         Ok(out)
     }
 

@@ -105,6 +105,12 @@ pub unsafe extern "C" fn fc_apply(id: u32, sheet: u32, edits: *const u8, len: u3
     }
 }
 
+/// Sets the engine's clock (a serial date in local time) for TODAY and NOW; the window calls it before each request.
+#[no_mangle]
+pub extern "C" fn fc_set_clock(serial: f64) {
+    formcel_core::numfmt::set_clock(serial);
+}
+
 /// Moves the relative references of a formula by `dr` rows and `dc` columns, as filling or pasting does.
 ///
 /// # Safety

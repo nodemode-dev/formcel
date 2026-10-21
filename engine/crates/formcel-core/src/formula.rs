@@ -611,6 +611,15 @@ pub fn walk_mut(e: &mut Expr, f: &mut dyn FnMut(&mut Expr)) {
     f(e);
 }
 
+pub fn is_volatile(e: &Expr) -> bool {
+    match e {
+        Expr::Call(n, args) => matches!(n.as_str(), "TODAY" | "NOW" | "RAND" | "RANDBETWEEN") || args.iter().any(is_volatile),
+        Expr::Neg(x) | Expr::Pos(x) | Expr::Pct(x) | Expr::Paren(x) => is_volatile(x),
+        Expr::Bin(_, a, b) => is_volatile(a) || is_volatile(b),
+        _ => false,
+    }
+}
+
 pub fn refs(e: &Expr, f: &mut dyn FnMut(Option<&str>, Area)) {
     match e {
         Expr::Ref(s, k) => f(s.as_deref(), k.area()),

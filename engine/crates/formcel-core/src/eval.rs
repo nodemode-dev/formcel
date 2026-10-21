@@ -1,5 +1,5 @@
 use crate::formula::{Area, ErrKind, Expr, Op};
-use crate::{Addr, Value};
+use crate::{numfmt, Addr, Value};
 
 pub trait Ctx {
     fn sheet_index(&self, name: &str) -> Option<usize>;
@@ -409,6 +409,77 @@ impl Eval<'_> {
                 "ISNONTEXT" => Value::Bool(!matches!(self.scalar(a.first().ok_or(ErrKind::Na)?), Value::Text(_))),
                 "ISREF" => Value::Bool(matches!(a.first().ok_or(ErrKind::Na)?, Expr::Ref(..))),
                 "NA" => return Err(ErrKind::Na),
+                "DATE" => {
+                    if !count(3, 3) {
+                        return Err(ErrKind::Na);
+                    }
+                    let mut y = self.n(a, 0)?.trunc() as i64;
+                    if (0..1900).contains(&y) {
+                        y += 1900;
+                    }
+                    if !(1900..10000).contains(&y) {
+                        return Err(ErrKind::Num);
+                    }
+                    let s = numfmt::serial(y, self.n(a, 1)?.trunc() as i64, self.n(a, 2)?.trunc() as i64).ok_or(ErrKind::Num)?;
+                    Value::Number(s)
+                }
+                "YEAR" | "MONTH" | "DAY" => {
+                    let (y, m, d) = numfmt::ymd(self.date_arg(a, 0)?).ok_or(ErrKind::Num)?;
+                    Value::Number(match name {
+                        "YEAR" => y,
+                        "MONTH" => m,
+                        _ => d,
+                    } as f64)
+                }
+                "HOUR" | "MINUTE" | "SECOND" => {
+                    let (h, m, s) = numfmt::hms(self.date_arg(a, 0)?);
+                    Value::Number(match name {
+                        "HOUR" => h,
+                        "MINUTE" => m,
+                        _ => s,
+                    } as f64)
+                }
+                "WEEKDAY" => {
+                    let serial = self.date_arg(a, 0)?;
+                    let w = numfmt::weekday(serial);
+                    let t = if a.len() > 1 { self.n(a, 1)?.trunc() as i64 } else { 1 };
+                    let r = match t {
+                        1 | 17 => w,
+                        2 | 11 => (w + 5) % 7 + 1,
+                        3 => (w + 5) % 7,
+                        12..=16 => (w - (t - 10) + 7) % 7 + 1,
+                        _ => return Err(ErrKind::Num),
+                    };
+                    Value::Number(r as f64)
+                }
+                "TODAY" => Value::Number(numfmt::now().floor()),
+                "NOW" => Value::Number(numfmt::now()),
+                "TIME" => {
+                    let (h, m, s) = (self.n(a, 0)?.trunc(), self.n(a, 1)?.trunc(), self.n(a, 2)?.trunc());
+                    let t = (h * 3600.0 + m * 60.0 + s) / 86_400.0;
+                    if t < 0.0 {
+                        return Err(ErrKind::Num);
+                    }
+                    num(t - t.floor())
+                }
+                "DATEVALUE" | "TIMEVALUE" => {
+                    let s = self.t(a, 0)?;
+                    let (v, _) = numfmt::parse(&s).ok_or(ErrKind::Value)?;
+                    num(if name == "DATEVALUE" { v.floor() } else { v - v.floor() })
+                }
+                "EDATE" | "EOMONTH" => {
+                    let (y, m, d) = numfmt::ymd(self.date_arg(a, 0)?).ok_or(ErrKind::Num)?;
+                    let k = self.n(a, 1)?.trunc() as i64;
+                    let s = if name == "EDATE" {
+                        let target = numfmt::serial(y, m + k, 1).ok_or(ErrKind::Num)?;
+                        let last = numfmt::serial(y, m + k + 1, 1).ok_or(ErrKind::Num)? - target;
+                        target + (d.min(last as i64) - 1) as f64
+                    } else {
+                        numfmt::serial(y, m + k + 1, 1).ok_or(ErrKind::Num)? - 1.0
+                    };
+                    num(s)
+                }
+                "DAYS" => num(self.date_arg(a, 0)?.floor() - self.date_arg(a, 1)?.floor()),
                 "IFS" => {
                     if a.len() < 2 || !a.len().is_multiple_of(2) {
                         return Err(ErrKind::Na);
@@ -571,6 +642,18 @@ impl Eval<'_> {
 }
 
 impl Eval<'_> {
+    fn date_arg(&self, a: &[Expr], i: usize) -> Result<f64, ErrKind> {
+        let v = self.scalar(a.get(i).ok_or(ErrKind::Na)?);
+        let n = match &v {
+            Value::Text(s) => numfmt::parse(s).map(|p| p.0).ok_or(ErrKind::Value)?,
+            o => number_of(o)?,
+        };
+        if n < 0.0 {
+            return Err(ErrKind::Num);
+        }
+        Ok(n)
+    }
+
     fn range(&self, e: &Expr) -> Result<(usize, Area), ErrKind> {
         match self.arg(e) {
             Arg::R(s, ar) => Ok((s, ar)),

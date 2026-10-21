@@ -175,12 +175,23 @@ Criteria take a leading `<=`, `>=`, `<>`, `<`, `>` or `=`; the rest is read as a
 
 `find` is the one search behind VLOOKUP, HLOOKUP, MATCH, XMATCH and XLOOKUP. Modes: exact; exact with wildcards (VLOOKUP and MATCH exact, XLOOKUP and XMATCH mode 2); sorted ascending, largest at or below the key, stopping at the first larger value (VLOOKUP approximate, MATCH 1); sorted descending (MATCH -1); and exact or next smaller or larger by a full scan (XLOOKUP and XMATCH -1 and 1). Values of another type never match. XLOOKUP returns a single cell, so its return range must be one row or column of the lookup's length; spilling a multi-column result waits for dynamic arrays. Added with them: IFS, SWITCH, CHOOSE. As with the first tranche, results are FormCel's reading and are not yet checked against vendor function pages.
 
+### Dates, times and automatic formats
+- refers-to: src/numfmt.rs; src/lib.rs :: Workbook.fmts, parse_with_fmt, shown, present, infer, value; src/eval.rs :: date functions, date_arg
+- kind: explainer
+- logged: v0.10.0 · 2026-10-21
+
+Dates are serial numbers in the 1900 system: 1 is 1/1/1900, and 60 is the 29 February 1900 that never existed, kept so serials line up with Excel's (checked: 1/1/2025 is 45658, 3/1/1900 is 61, 10/21/2026 is 46316). Times are the fraction of a day. Typed input reads ISO dates, US m/d/yy(yy) (two-digit years 00 to 29 are 2000s), "October 21, 2026", "21-Oct-2026", 24-hour and AM/PM times with optional seconds, and a date followed by a time. An impossible date (2/30/2026) stays text.
+
+The cell keeps the number and `fmts` keeps how it was typed: currency with 0 or 2 decimals, percent, date, time, date with time. It is the smallest piece of number formatting that typing needs; the full format system (Phase 3) will replace it. Formulas take a format from what they compute (DATE, TODAY, EDATE and the like give a date, NOW a date and time, TIME a time, a reference copies its cell's format, a date plus or minus a number stays a date, currency survives arithmetic). Every value that leaves the engine (reads, changes, undo, `get`) is shown through its format; `value` gives the bare number; `input` gives the shown text, which parses back to the same number and format, so saving and history need nothing new. Formats move with inserted and deleted rows and with sheet moves and deletes.
+
+TODAY, NOW, RAND and RANDBETWEEN make a formula volatile: every recalculation includes it. The clock comes from the host: the window's worker sets it before each request from the browser's local time, because a WebAssembly build has no system clock; the Python build falls back to the system clock in UTC, which only affects thumbnails. Functions added: DATE, YEAR, MONTH, DAY, HOUR, MINUTE, SECOND, WEEKDAY (types 1, 2, 3, 11 to 17), TODAY, NOW, TIME, DATEVALUE, TIMEVALUE, EDATE, EOMONTH, DAYS.
+
 ### Typed input: currency, percent, errors
 - refers-to: src/lib.rs :: Value::parse_input
 - kind: explainer
 - logged: v0.9.0 · 2026-10-21
 
-Besides plain numbers with thousands commas, input now reads `$1,234.50`, `-$5` and `$-5` as numbers, `50%` as 0.5, and an error literal (`#N/A`, `#REF!` and the rest) as that error value. Microsoft's function pages give their example data in these forms and tell the reader to paste it into a sheet, so the conformance run depended on it. The cell keeps only the number: the currency or percent look returns with number formats in Phase 3, so until then a template cell typed as `$12.00` shows 12.
+Besides plain numbers with thousands commas, input now reads `$1,234.50`, `-$5` and `$-5` as numbers, `50%` as 0.5, and an error literal (`#N/A`, `#REF!` and the rest) as that error value. Microsoft's function pages give their example data in these forms and tell the reader to paste it into a sheet, so the conformance run depended on it. The cell keeps only the number; since v0.10.0 the automatic format below brings back the `$` or `%` look.
 
 ### Conformance against Microsoft's function pages
 - refers-to: src/eval.rs (all functions); sidecar comparison/conformance/
