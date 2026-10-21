@@ -2,8 +2,8 @@
 
 Living log of comment content and rationale for the engine process. Source stays comment-free; it lives here.
 
-Current build version: v0.1.0
-Last updated: 2026-10-21 · scaffold
+Current build version: v0.3.0
+Last updated: 2026-10-21 · store, templates, commands
 
 ---
 
@@ -15,10 +15,59 @@ backend/
 ├── oc_install(.bat)        venv, requirements, then the Rust engine as formcel_engine
 ├── boot_backend(.bat)      uvicorn on FORMCEL_HOST:FORMCEL_PORT, default 127.0.0.1:8199
 └── app/
-    ├── main.py             FastAPI app, /api/health, /api/version
-    ├── config.py           host, port, data folder
-    └── version.py          VERSION
+    ├── main.py             FastAPI app, /api/health, /api/version, mounts the routers
+    ├── config.py           host, port, data folder and its subfolders
+    ├── version.py          VERSION
+    ├── routers/workbooks.py   /api/workbooks, /api/trash, /api/templates
+    ├── routers/commands.py    /api/commands, published by the window
+    ├── services/store.py      .fcel files, open workbooks held in the Rust engine
+    ├── services/templates.py  the template catalogue
+    └── templates/             native.json (6 made for FormCel), formmd.json (28 from form.md)
 ```
+
+## v0.3.0 entries
+
+### services/store.py · the .fcel file
+- refers-to: app/services/store.py :: Store._write, _read
+- kind: explainer
+- logged: v0.3.0 · 2026-10-21
+
+A zip with `mimetype` and `workbook.json`: format "fcel", version 1, id, title, created, modified, template, an 8 by 6 preview of the first sheet for Home, and each sheet's name and cells as [row, col, text]. Written to a `.fcel.tmp` and moved over the old file, so a crash mid-write leaves the last good copy. Cells are stored as their display text until Phase 2 adds formulas and types.
+
+### services/store.py · one engine per open workbook
+- refers-to: app/services/store.py :: Store._load, edit
+- kind: rationale
+- logged: v0.3.0 · 2026-10-21
+
+The engine process keeps each opened workbook in a `formcel_engine.Workbook` (the Rust core) and applies the window's edits with `load`, which records no undo step: history lives in the window. Every edit batch rewrites the file; the window batches keystrokes for 400 ms.
+
+### services/store.py · ids and paths
+- refers-to: app/services/store.py :: Store.path
+- kind: warning-context
+- logged: v0.3.0 · 2026-10-21
+
+Ids are 12 hex characters; `path` refuses anything that is not alphanumeric, so no request can name a file outside `Workbooks` or `Trash`. Checked: `..%2F..%2Fetc` and `zz..zz` both answer 404.
+
+### services/store.py · listing, not list
+- refers-to: app/services/store.py :: Store.listing
+- kind: warning-context
+- logged: v0.3.0 · 2026-10-21
+
+The method was first called `list`, which shadowed the built-in inside the class, so the later annotation `list[tuple[...]]` raised at import and the reloading server stopped answering. Renamed.
+
+### templates/formmd.json · how it was made
+- refers-to: app/templates/formmd.json
+- kind: explainer
+- logged: v0.3.0 · 2026-10-21
+
+Exported from form.md 0.46.0 by a scratch exporter placed inside a copy of `internal/templates` (the package keeps rows unexported): 28 templates, 84 sheets, 2,451 rows. Kept columns: title, text, number, select, status, multi-select, date, checkbox, email, url, phone, place, relation. Dates given as day offsets resolve against 2026-10-21. Formula columns are left out of the rows and kept per sheet under `formulas` for Phase 2.
+
+### routers/commands.py
+- refers-to: app/routers/commands.py
+- kind: todo
+- logged: v0.3.0 · 2026-10-21
+
+The window PUTs its command catalogue at start and GET lists it; running a command needs the agent bridge (Phase 10).
 
 ## Table of contents
 
