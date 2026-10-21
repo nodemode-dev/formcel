@@ -6,6 +6,7 @@ use std::collections::{HashMap, HashSet};
 
 mod fmtdialog;
 mod gotospecial;
+mod outline;
 mod pastex;
 mod series;
 
@@ -300,6 +301,7 @@ impl Workbook {
             "series" => self.t_series(sheet, &p),
             "pastelayers" => self.t_pastelayers(sheet, &p),
             "gotospecial" => self.t_gotospecial(sheet, &p),
+            "autooutline" => self.t_autooutline(sheet, &p),
             "localform" => Ok((Effect::default(), say(&crate::formlocale::convert(arg(&p, 2), arg(&p, 1) == "to")))),
             "fmtpreview" => self.t_fmtpreview(sheet, &p),
             "fmtspecials" => self.t_fmtspecials(sheet, &p),

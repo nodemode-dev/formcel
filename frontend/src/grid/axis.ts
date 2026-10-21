@@ -4,6 +4,7 @@ export interface AxisState {
   levels?: [number, number][];
   folded?: [number, number][];
   base?: number;
+  before?: boolean;
 }
 
 export interface OutlineRun {
@@ -25,6 +26,20 @@ export class Axis {
   private deltas: number[] = [];
 
   readonly home: number;
+  before = false;
+
+  summaryAt(r: OutlineRun): number {
+    if (this.before) return r.a > 0 ? r.a - 1 : r.a;
+    return r.b + 1 < this.count ? r.b + 1 : r.b;
+  }
+
+  clearOutline(): void {
+    for (const i of this.levels.keys()) this.hidden.delete(i);
+    this.levels.clear();
+    this.folded.clear();
+    this.runCache = null;
+    this.rebuild();
+  }
 
   constructor(
     readonly count: number,
@@ -116,11 +131,13 @@ export class Axis {
     if (this.levels.size) s.levels = [...this.levels.entries()];
     if (this.folded.size) s.folded = [...this.folded.entries()];
     if (this.base !== this.home) s.base = this.base;
+    if (this.before) s.before = true;
     return s;
   }
 
   restore(s: AxisState | undefined): void {
     this.base = s?.base ?? this.home;
+    this.before = !!s?.before;
     this.sizes.clear();
     this.hidden.clear();
     this.levels.clear();

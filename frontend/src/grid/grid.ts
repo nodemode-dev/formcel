@@ -586,15 +586,22 @@ export class Grid {
         for (const r of this.rows.runs()) {
           const cx = OUTLINE_PAD + (r.level - 1) * OUTLINE_STEP + OUTLINE_STEP / 2;
           const top = gh + this.y(r.a, pane) * z;
-          const end = r.b + 1 < MAX_ROWS ? r.b + 1 : r.b;
+          const end = this.rows.summaryAt(r);
           const by = gh + (this.y(end, pane) + this.rows.size(end) / 2) * z;
           if (by < gh || top > H) continue;
           if (!this.rows.isFolded(r)) {
             o.strokeStyle = pal.headFg;
             o.beginPath();
-            o.moveTo(cx - 4, top + 2.5);
-            o.lineTo(cx + 0.5, top + 2.5);
-            o.lineTo(cx + 0.5, by - 7);
+            if (this.rows.before) {
+              const bottom = gh + this.y(r.b + 1, pane) * z - 2.5;
+              o.moveTo(cx - 4, bottom);
+              o.lineTo(cx + 0.5, bottom);
+              o.lineTo(cx + 0.5, by + 7);
+            } else {
+              o.moveTo(cx - 4, top + 2.5);
+              o.lineTo(cx + 0.5, top + 2.5);
+              o.lineTo(cx + 0.5, by - 7);
+            }
             o.stroke();
           }
           button(cx, by, this.rows.isFolded(r) ? '+' : '−');
@@ -614,15 +621,22 @@ export class Grid {
         for (const r of this.cols.runs()) {
           const cy = OUTLINE_PAD + (r.level - 1) * OUTLINE_STEP + OUTLINE_STEP / 2;
           const left = gw + this.x(r.a, pane) * z;
-          const end = r.b + 1 < MAX_COLS ? r.b + 1 : r.b;
+          const end = this.cols.summaryAt(r);
           const bx = gw + (this.x(end, pane) + this.cols.size(end) / 2) * z;
           if (bx < gw || left > W) continue;
           if (!this.cols.isFolded(r)) {
             o.strokeStyle = pal.headFg;
             o.beginPath();
-            o.moveTo(left + 2.5, cy - 4);
-            o.lineTo(left + 2.5, cy + 0.5);
-            o.lineTo(bx - 7, cy + 0.5);
+            if (this.cols.before) {
+              const right = gw + this.x(r.b + 1, pane) * z - 2.5;
+              o.moveTo(right, cy - 4);
+              o.lineTo(right, cy + 0.5);
+              o.lineTo(bx + 7, cy + 0.5);
+            } else {
+              o.moveTo(left + 2.5, cy - 4);
+              o.lineTo(left + 2.5, cy + 0.5);
+              o.lineTo(bx - 7, cy + 0.5);
+            }
             o.stroke();
           }
           button(bx, cy, this.cols.isFolded(r) ? '+' : '−');
@@ -657,7 +671,7 @@ export class Grid {
       const pane = this.hit(HEAD_W, (py - gh) / z).pr;
       for (const r of this.rows.runs()) {
         if (r.level !== level) continue;
-        const end = r.b + 1 < MAX_ROWS ? r.b + 1 : r.b;
+        const end = this.rows.summaryAt(r);
         if (near(py, gh + (this.y(end, pane) + this.rows.size(end) / 2) * z)) {
           this.rows.fold(r, !this.rows.isFolded(r));
           axis = this.rows;
@@ -670,7 +684,7 @@ export class Grid {
       const pane = this.hit((px - gw) / z, HEAD_H).pc;
       for (const r of this.cols.runs()) {
         if (r.level !== level) continue;
-        const end = r.b + 1 < MAX_COLS ? r.b + 1 : r.b;
+        const end = this.cols.summaryAt(r);
         if (near(px, gw + (this.x(end, pane) + this.cols.size(end) / 2) * z)) {
           this.cols.fold(r, !this.cols.isFolded(r));
           axis = this.cols;
@@ -1589,6 +1603,31 @@ export class Grid {
     const s = this.copiedSource();
     if (!s || this.book < 0) return '';
     return this.runTool('pastelayers', `${s.r0},${s.c0},${s.r1},${s.c1}`, String(this.ar), String(this.ac), transpose ? '1' : '0', String(s.sheet), layers);
+  }
+
+  autoOutline(rows: [number, number][], cols: [number, number][]): void {
+    this.rows.clearOutline();
+    this.cols.clearOutline();
+    for (const [a, b] of rows) this.rows.group(a, b, 1);
+    for (const [a, b] of cols) this.cols.group(a, b, 1);
+    this.resize();
+    this.emitView();
+    this.paint();
+  }
+
+  clearOutline(): void {
+    this.autoOutline([], []);
+  }
+
+  summary(): { rowsBelow: boolean; colsRight: boolean } {
+    return { rowsBelow: !this.rows.before, colsRight: !this.cols.before };
+  }
+
+  setSummary(rowsBelow: boolean, colsRight: boolean): void {
+    this.rows.before = !rowsBelow;
+    this.cols.before = !colsRight;
+    this.emitView();
+    this.paint();
   }
 
   outlineRows(groups: [number, number][], clear: [number, number] | null): void {

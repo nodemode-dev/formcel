@@ -158,6 +158,15 @@ const SPECS: Spec[] = [
   { id: 'colwidth', title: 'Column width', ok: 'OK', fields: [{ k: 'size', label: 'Column width (characters, 0.5 to 255)', kind: 'text' }] },
   { id: 'stdwidth', title: 'Standard width', ok: 'OK', fields: [{ k: 'size', label: 'Standard column width (characters)', kind: 'text' }] },
   {
+    id: 'outlineset',
+    title: 'Outline settings',
+    ok: 'OK',
+    fields: [
+      { k: 'below', label: 'Summary rows below detail', kind: 'check' },
+      { k: 'right', label: 'Summary columns to right of detail', kind: 'check' },
+    ],
+  },
+  {
     id: 'movecopy',
     title: 'Move or Copy',
     ok: 'OK',
@@ -634,6 +643,29 @@ export class DataTools {
       if (['all', 'formulas', 'values', 'formats', 'theme'].includes(what)) return this.line(await g.pasteWith(what === 'theme' ? 'all' : what, op, skip, t));
       if (op !== 'none' || skip) throw new Error('Operations and skip blanks work with All, Formulas, Values and Formats.');
       await g.pasteSpecial(what as PasteKind, t);
+      return '';
+    });
+  }
+
+  async autoOutline(): Promise<void> {
+    const msg = await this.c.grid.runTool('autooutline');
+    const lines = msg.split('\n').slice(1).filter(Boolean).map((l) => l.split('\t'));
+    const pick = (k: string) => lines.filter((p) => p[0] === k).map((p) => [Number(p[1]), Number(p[2])] as [number, number]);
+    if (!lines.length) {
+      this.c.status(this.line(msg), true);
+      return;
+    }
+    this.c.grid.autoOutline(pick('r'), pick('c'));
+    this.c.status(this.line(msg));
+  }
+
+  outlineSettings(): void {
+    const s = this.c.grid.summary();
+    this.prepare('outlineset');
+    this.put('outlineset', 'below', s.rowsBelow);
+    this.put('outlineset', 'right', s.colsRight);
+    this.show('outlineset', async (v) => {
+      this.c.grid.setSummary(v.below as boolean, v.right as boolean);
       return '';
     });
   }

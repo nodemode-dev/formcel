@@ -6,6 +6,7 @@ from openpyxl.styles import Font, NamedStyle
 from openpyxl.utils import get_column_letter
 from openpyxl.workbook.defined_name import DefinedName
 from openpyxl.worksheet.hyperlink import Hyperlink
+from openpyxl.worksheet.properties import Outline
 
 from ...version import VERSION
 from .. import page
@@ -120,6 +121,8 @@ def write(eng, views: list[dict], vba: dict[str, bytes] | None = None, objects: 
             ws.row_dimensions[r + 1].hidden = True
         for r, lv in rows.get("levels", []):
             ws.row_dimensions[r + 1].outlineLevel = lv
+        if rows.get("before") or cols.get("before"):
+            ws.sheet_properties.outlinePr = Outline(summaryBelow=not rows.get("before"), summaryRight=not cols.get("before"))
         fr, fc = int(view.get("fr") or 0), int(view.get("fc") or 0)
         if fr or fc:
             ws.freeze_panes = f"{get_column_letter(fc + 1)}{fr + 1}"

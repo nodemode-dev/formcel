@@ -516,6 +516,9 @@ export class App {
     cmd('rows.unhide', 'Unhide rows', 'Show hidden rows inside the selection.', false, () => g.hide(true, false), 'Mod+Shift+9');
     cmd('cols.hide', 'Hide columns', 'Hide the selected columns.', false, () => g.hide(false, true), 'Mod+0');
     cmd('cols.unhide', 'Unhide columns', 'Show hidden columns inside the selection.', false, () => g.hide(false, false), 'Mod+Shift+0');
+    cmd('data.auto-outline', 'Auto Outline', 'Group the detail rows and columns that summary formulas such as SUM and SUBTOTAL add up, one level for each nested summary.', true, () => this.tools.autoOutline());
+    cmd('data.clear-outline', 'Clear Outline', 'Remove every row and column group from the sheet and show the rows and columns they hid.', true, () => this.grid.clearOutline());
+    cmd('data.outline-settings', 'Outline settings', 'Choose whether summary rows sit below or above their detail rows and summary columns to the right or left of theirs.', true, () => this.tools.outlineSettings());
     cmd('rows.group', 'Group rows', 'Add the selected rows to an outline group one level deeper, up to 7 levels.', false, () => g.group(true, 1), 'Alt+Shift+Right');
     cmd('rows.ungroup', 'Ungroup rows', 'Take the selected rows out of one outline level.', false, () => g.group(true, -1), 'Alt+Shift+Left');
     cmd('cols.group', 'Group columns', 'Add the selected columns to an outline group one level deeper, up to 7 levels.', false, () => g.group(false, 1));
@@ -2929,6 +2932,9 @@ export class App {
       { sep: true },
       { label: 'Consolidate', run: run('data.consolidate') },
       { label: 'Subtotal', run: run('data.subtotal') },
+      { label: 'Auto Outline', run: run('data.auto-outline') },
+      { label: 'Clear Outline', run: run('data.clear-outline') },
+      { label: 'Outline settings...', run: run('data.outline-settings') },
       { label: 'Advanced filter', run: run('data.advanced-filter') },
       { label: 'Filter views', run: run('data.filter-views') },
       { label: 'Insert slicer', run: run('data.slicer') },

@@ -172,6 +172,12 @@ def read(data: bytes) -> dict:
         view["rows"] = _axis(ws.row_dimensions, lambda d: round(d.ht / 0.75) if d.ht and d.customHeight else None, None, 0, notes)
         if _px_width(base) != 100:
             view["cols"]["base"] = _px_width(base)
+        outline = ws.sheet_properties.outlinePr
+        if outline is not None:
+            if outline.summaryBelow is False:
+                view["rows"]["before"] = True
+            if outline.summaryRight is False:
+                view["cols"]["before"] = True
         if ws.sheet_state != "visible":
             view["hidden"] = True
         z = (ws.sheet_view.zoomScale or 100) / 100
