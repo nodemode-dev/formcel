@@ -82,6 +82,9 @@ def used_area(engine, sheet: int) -> tuple[int, int, int, int] | None:
 def range_values(books, wid: str, ref: str) -> list[list]:
     b = books(wid)
     with b.lock:
+        hit = b.engine.table_area(ref.strip()) if "!" not in ref else None
+        if hit:
+            return grid(b.engine, hit[0], hit[1:])
         names = b.sheet_names()
         sheet, area = split_sheet(ref, names)
         return grid(b.engine, sheet, parse_area(area))
