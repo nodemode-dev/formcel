@@ -1,6 +1,7 @@
 import re
 
 A1 = re.compile(r"^\$?([A-Za-z]{1,3})\$?(\d+)$")
+DATE_LIKE = re.compile(r"\d\s*[/:-]\s*\d|[A-Za-z]{3}")
 
 
 def col_index(letters: str) -> int:
@@ -55,6 +56,7 @@ def grid(engine, sheet: int, area: tuple[int, int, int, int], kind: str = "typed
                 rows[item[0] - r0][item[1] - c0] = item[2]
         return rows
     kinds = {(i[0], i[1]): i[2] for i in engine.typed(sheet) if i[2] in "nbt"}
+    raw = {(i[0], i[1]): i[3] for i in engine.raw_values(sheet) if i[2] == "n"}
     for r, c, t in engine.values(sheet):
         if not (r0 <= r <= r1 and c0 <= c <= c1) or t == "":
             continue
@@ -68,6 +70,8 @@ def grid(engine, sheet: int, area: tuple[int, int, int, int], kind: str = "typed
                 v = float(t) if k in (None, "n") else t
             except ValueError:
                 v = t
+            if isinstance(v, str) and (r, c) in raw and not DATE_LIKE.search(t):
+                v = float(raw[(r, c)])
         rows[r - r0][c - c0] = v
     return rows
 

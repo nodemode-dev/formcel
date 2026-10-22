@@ -2074,6 +2074,14 @@ impl Workbook {
         Ok(out)
     }
 
+    pub fn read_raw(&self, sheet: usize, top: Addr, bottom: Addr) -> Result<Vec<(Addr, Value)>, EngineError> {
+        self.check(sheet, top)?;
+        self.check(sheet, bottom)?;
+        let mut out = Vec::new();
+        self.sheets[sheet].cells.for_each_in(top, bottom, |a, v| out.push((a, v.clone())));
+        Ok(out)
+    }
+
     pub fn extent(&self, sheet: usize) -> Result<Option<Addr>, EngineError> {
         self.sheets.get(sheet).map(|s| s.cells.extent()).ok_or(EngineError::NoSheet(sheet))
     }

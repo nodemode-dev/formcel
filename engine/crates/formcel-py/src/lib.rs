@@ -1,4 +1,4 @@
-use formcel_core::{parse_a1, to_a1, Addr, Changed, Dir, Workbook as CoreBook, MAX_COLS, MAX_ROWS, VERSION};
+use formcel_core::{parse_a1, to_a1, Addr, Changed, Dir, Value, Workbook as CoreBook, MAX_COLS, MAX_ROWS, VERSION};
 use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 
@@ -125,6 +125,27 @@ impl Workbook {
         };
         let cells = self.inner.read(sheet, Addr { row: 0, col: 0 }, bottom).map_err(|e| PyValueError::new_err(e.to_string()))?;
         Ok(cells.into_iter().map(|(a, v)| (a.row, a.col, v.to_string())).collect())
+    }
+
+    #[pyo3(signature = (sheet = 0))]
+    fn raw_values(&self, sheet: usize) -> PyResult<Vec<(u32, u32, char, String)>> {
+        let Some(bottom) = self.inner.extent(sheet).map_err(|e| PyValueError::new_err(e.to_string()))? else {
+            return Ok(Vec::new());
+        };
+        let cells = self.inner.read_raw(sheet, Addr { row: 0, col: 0 }, bottom).map_err(|e| PyValueError::new_err(e.to_string()))?;
+        Ok(cells
+            .into_iter()
+            .filter(|(_, v)| !matches!(v, Value::Empty))
+            .map(|(a, v)| {
+                let k = match v {
+                    Value::Number(_) => 'n',
+                    Value::Bool(_) => 'b',
+                    Value::Error(_) => 'e',
+                    _ => 't',
+                };
+                (a.row, a.col, k, v.to_string())
+            })
+            .collect())
     }
 
     fn rename_sheet(&mut self, sheet: usize, name: &str) -> PyResult<()> {
