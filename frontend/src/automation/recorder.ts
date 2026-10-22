@@ -76,6 +76,7 @@ export function generate(actions: Recorded[], sheetNames: (i: number) => string,
   };
   const body: string[] = [];
   let lastClear = '';
+  let charts = 0;
   for (const a of actions) {
     if (a.k === 'shift') {
       const how = a.insert ? (a.rows ? 'insert("Down")' : 'insert("Right")') : a.rows ? 'delete("Up")' : 'delete("Left")';
@@ -92,7 +93,7 @@ export function generate(actions: Recorded[], sheetNames: (i: number) => string,
       if (a.mode === 'unmerge') body.push(`${t}.unmerge();`);
       else {
         body.push(`${t}.merge(${a.mode === 'across'});`);
-        if (a.mode === 'center') body.push(`${t}.getFormat().setHorizontalAlignment("center");`);
+        if (a.mode === 'center') body.push(`${at(a.sheet, a.r0, a.c0, a.r0, a.c0)}.getFormat().setHorizontalAlignment("center");`);
       }
       continue;
     }
@@ -140,7 +141,12 @@ export function generate(actions: Recorded[], sheetNames: (i: number) => string,
       const t = CHART_NAMES[a.type] ?? a.type;
       const box = parseRef(a.range);
       const source = box && anchor && rel(a.sheet) ? at(a.sheet, box.r0, box.c0, box.r1, box.c1) : `${v(a.sheet)}.getRange(${q(a.range)})`;
-      body.push(a.title ? `${v(a.sheet)}.addChart(${q(t)}, ${source}${a.byRows ? ', "Rows"' : ''}).getTitle().setText(${q(a.title)});` : `${v(a.sheet)}.addChart(${q(t)}, ${source}${a.byRows ? ', "Rows"' : ''});`);
+      const made = `${v(a.sheet)}.addChart(${q(t)}, ${source}${a.byRows ? ', "Rows"' : ''})`;
+      if (a.at) {
+        const cv = `chart${++charts}`;
+        body.push(`const ${cv} = ${made};`, `${cv}.setPosition(${at(a.sheet, a.at[0], a.at[1], a.at[0], a.at[1])}, ${at(a.sheet, a.at[2], a.at[3], a.at[2], a.at[3])});`);
+        if (a.title) body.push(`${cv}.getTitle().setText(${q(a.title)});`);
+      } else body.push(a.title ? `${made}.getTitle().setText(${q(a.title)});` : `${made};`);
       continue;
     }
     if (a.k === 'edit') {

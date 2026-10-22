@@ -291,8 +291,9 @@ export class Charts {
     const got = await this.editor.open(spec, title);
     if (!got) return;
     const o = this.layer.viewOrigin();
-    this.grid.recorder?.({ k: 'chart', sheet: this.grid.sheetIndex, type: got.type, range: got.range, title: got.title, byRows: got.byRows });
-    this.layer.add({ kind: 'chart', x: o.x, y: o.y, w: 480, h: 300, chart: got });
+    const made = this.layer.add({ kind: 'chart', x: o.x, y: o.y, w: 480, h: 300, chart: got });
+    const an = made.anchor;
+    this.grid.recorder?.({ k: 'chart', sheet: this.grid.sheetIndex, type: got.type, range: got.range, title: got.title, byRows: got.byRows, at: an ? [an.r0, an.c0, Math.max(an.r0, an.r1 - (an.dy1 >= 12 ? 0 : 1)), Math.max(an.c0, an.c1 - (an.dx1 >= 50 ? 0 : 1))] : undefined });
   }
 
   private async edit(o: FloatObject): Promise<void> {

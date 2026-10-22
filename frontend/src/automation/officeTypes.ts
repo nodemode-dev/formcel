@@ -88,6 +88,7 @@ export type Op =
   | { k: 'sort'; sheet: string; r0: number; c0: number; r1: number; c1: number; keys: [number, boolean][]; header: boolean }
   | { k: 'merge'; sheet: string; r0: number; c0: number; r1: number; c1: number; mode: 'all' | 'across' | 'unmerge' }
   | { k: 'shift'; sheet: string; rows: boolean; at: number; n: number; insert: boolean }
+  | { k: 'shiftcells'; sheet: string; r0: number; c0: number; r1: number; c1: number; dir: 'up' | 'down' | 'left' | 'right'; insert: boolean }
   | { k: 'size'; sheet: string; cols: boolean; i0: number; i1: number; px: number }
   | { k: 'autofit'; sheet: string; cols: boolean; i0: number; i1: number }
   | { k: 'hide'; sheet: string; rows: boolean; i0: number; i1: number; on: boolean }
