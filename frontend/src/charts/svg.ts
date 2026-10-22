@@ -405,7 +405,8 @@ function xy(spec: ChartSpec, d: ChartData, b: Box): string {
   const bubble = spec.type === 'bubble';
   const ys = bubble ? d.series.slice(0, 1) : d.series;
   const xs = d.catNums.map((v, i) => (num(v) ? v : i + 1));
-  const xr = nice(Math.min(...xs), Math.max(...xs));
+  const xpad = bubble ? (Math.max(...xs) - Math.min(...xs) || 1) * 0.12 : 0;
+  const xr = nice(Math.min(...xs) - xpad, Math.max(...xs) + xpad);
   const all = ys.flatMap((s) => s.vals).filter(num);
   let ylo = Math.min(...all);
   let yhi = Math.max(...all);
@@ -418,6 +419,11 @@ function xy(spec: ChartSpec, d: ChartData, b: Box): string {
       yhi = Math.max(yhi, v + up);
     }
   });
+  if (bubble) {
+    const yp = (yhi - ylo || 1) * 0.12;
+    ylo -= yp;
+    yhi += yp;
+  }
   if (spec.min !== undefined) ylo = spec.min;
   if (spec.max !== undefined) yhi = spec.max;
   const yr: Axis = spec.logY ? logAxis(Math.min(...all.filter((v) => v > 0), yhi), yhi) : { ...nice(ylo, yhi), log: false };
@@ -888,22 +894,25 @@ function timeline(spec: ChartSpec, d: ChartData, b: Box): string {
   const order: string[] = [];
   for (const r of bars) if (!order.includes(r.c)) order.push(r.c);
   const row = (c: string) => order.indexOf(c);
-  const lanes = labeled ? order.length : bars.length;
+  const perTask = labeled && spec.tlMode === 'gantt';
+  const grouped = labeled && !perTask;
+  const lanes = grouped ? order.length : bars.length;
+  const laneNames = grouped ? order : bars.map((r) => (perTask ? r.name : r.c));
   const sc = nice(Math.min(...bars.map((r) => r.a)), Math.max(...bars.map((r) => r.z)), 6);
   const dates = sc.min > 20000;
   const fmtT = (v: number) => (dates ? serial(v) : fmt(v));
-  const lw = Math.min(110, labelWidth((labeled ? order : bars.map((r) => r.c)).map((s) => ellipsis(s, 16))));
+  const lw = Math.min(perTask ? 170 : 110, labelWidth(laneNames.map((s) => ellipsis(s, perTask ? 28 : 16))));
   const p: Box = { x: b.x + lw, y: b.y + 6, w: Math.max(10, b.w - lw - 14), h: Math.max(10, b.h - 28) };
   const px = (v: number) => p.x + ((v - sc.min) / (sc.max - sc.min)) * p.w;
   const rh = p.h / lanes;
   const out: string[] = [];
   sc.ticks.forEach((t) => out.push(line(px(t), p.y, px(t), p.y + p.h), text(px(t), p.y + p.h + 14, fmtT(t), { size: 10 })));
-  (labeled ? order : bars.map((r) => r.c)).forEach((c, i) => out.push(text(p.x - 6, p.y + rh * (i + 0.5), ellipsis(c, 16), { anchor: 'end', base: 'central' })));
+  laneNames.forEach((c, i) => out.push(text(p.x - 6, p.y + rh * (i + 0.5), ellipsis(c, perTask ? 28 : 16), { anchor: 'end', base: 'central', size: perTask && rh < 16 ? 9 : 11 })));
   bars.forEach((r, i) => {
-    const lane = labeled ? row(r.c) : i;
+    const lane = grouped ? row(r.c) : i;
     const w = Math.max(3, px(r.z) - px(r.a));
-    out.push(`<rect x="${r1(px(r.a))}" y="${r1(p.y + rh * lane + rh * 0.2)}" width="${r1(w)}" height="${r1(rh * 0.6)}" rx="3" fill="${color(labeled ? i : lane)}"><title>${esc(r.name)}: ${fmtT(r.a)} to ${fmtT(r.z)}</title></rect>`);
-    if (labeled && w > 36 && rh > 14) out.push(text(px(r.a) + 4, p.y + rh * (lane + 0.5), ellipsis(r.name, Math.floor(w / 6.2)), { anchor: 'start', base: 'central', fill: '#fff', size: 10 }));
+    out.push(`<rect x="${r1(px(r.a))}" y="${r1(p.y + rh * lane + rh * 0.2)}" width="${r1(w)}" height="${r1(rh * 0.6)}" rx="3" fill="${color(perTask ? row(r.c) : labeled ? i : lane)}"><title>${esc(r.name)}: ${fmtT(r.a)} to ${fmtT(r.z)}</title></rect>`);
+    if (grouped && w > 36 && rh > 14) out.push(text(px(r.a) + 4, p.y + rh * (lane + 0.5), ellipsis(r.name, Math.floor(w / 6.2)), { anchor: 'start', base: 'central', fill: '#fff', size: 10 }));
   });
   return out.join('');
 }
