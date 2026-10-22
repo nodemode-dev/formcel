@@ -139,8 +139,8 @@ export function generate(actions: Recorded[], sheetNames: (i: number) => string,
     if (a.k === 'chart') {
       const t = CHART_NAMES[a.type] ?? a.type;
       const box = parseRef(a.range);
-      const source = box && anchor && rel(a.sheet) ? at(a.sheet, box.r0, box.c0, box.r1, box.c1) : q(a.range);
-      body.push(`${v(a.sheet)}.addChart(${q(t)}, ${source}${a.byRows ? ', "Rows"' : ''})${a.title ? `.setTitle(${q(a.title)})` : ''};`);
+      const source = box && anchor && rel(a.sheet) ? at(a.sheet, box.r0, box.c0, box.r1, box.c1) : `${v(a.sheet)}.getRange(${q(a.range)})`;
+      body.push(a.title ? `${v(a.sheet)}.addChart(${q(t)}, ${source}${a.byRows ? ', "Rows"' : ''}).getTitle().setText(${q(a.title)});` : `${v(a.sheet)}.addChart(${q(t)}, ${source}${a.byRows ? ', "Rows"' : ''});`);
       continue;
     }
     if (a.k === 'edit') {

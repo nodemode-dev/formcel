@@ -1,5 +1,6 @@
 import { generate } from './recorder';
-import { check } from './scriptCheck';
+import { check, typed, type Diagnostic } from './scriptCheck';
+import { Completion, types } from './tsAssist';
 import type { Recorded } from '../grid/grid';
 import { el, esc, setText } from './dom';
 import { SAMPLE, uid, type Env, type Script } from './model';
@@ -22,6 +23,7 @@ export class ScriptsTab {
   private readonly diag: HTMLElement;
   private diagKey = '\u0000';
   private diagTimer = 0;
+  private diagSeq = 0;
   private recording: Recorded[] | null = null;
   private startNames: string[] = [];
   private origin: { sheet: number; r: number; c: number } | undefined;
@@ -65,6 +67,18 @@ export class ScriptsTab {
       else if (a === 'record') this.toggleRecord();
       else if (a === 'button') this.addButton();
     });
+    this.diag.addEventListener('click', (e) => {
+      const li = (e.target as HTMLElement).closest<HTMLElement>('li[data-start]');
+      if (li) this.jump(li);
+    });
+    this.diag.addEventListener('keydown', (e) => {
+      const li = (e.target as HTMLElement).closest<HTMLElement>('li[data-start]');
+      if (li && (e.key === 'Enter' || e.key === ' ')) {
+        e.preventDefault();
+        this.jump(li);
+      }
+    });
+    new Completion(this.text, () => typed(this.current()?.code ?? ''));
     this.pick.addEventListener('change', () => this.show());
     this.name.addEventListener('input', () => {
       const s = this.current();
@@ -137,12 +151,43 @@ export class ScriptsTab {
 
   private diagnose(): void {
     const s = this.current();
-    const found = s ? check(s.code) : [];
-    const key = found.map((d) => `${d.level}${d.line}${d.message}`).join('\n');
+    const code = s?.code ?? '';
+    const local = s ? check(code) : [];
+    this.showDiag(local);
+    if (!s || !typed(code)) return;
+    const mine = ++this.diagSeq;
+    void types.check(code).then((found) => {
+      if (mine !== this.diagSeq || this.current()?.code !== code) return;
+      this.showDiag([...local.filter((d) => !d.syntax || !found.length), ...found.map((d): Diagnostic => ({ line: d.line, col: d.col, level: d.level, message: d.message, start: d.start, length: d.length }))]);
+    });
+  }
+
+  private showDiag(found: Diagnostic[]): void {
+    const key = found.map((d) => `${d.level}${d.line}:${d.col ?? 0}${d.message}`).join('\n');
     if (key === this.diagKey) return;
     this.diagKey = key;
-    this.diag.replaceChildren(...found.map((d) => Object.assign(el('li', `fc-diag-${d.level}`), { textContent: `Line ${d.line}: ${d.message}` })));
+    this.diag.replaceChildren(
+      ...found.slice(0, 40).map((d) => {
+        const li = Object.assign(el('li', `fc-diag-${d.level}`), { textContent: `Line ${d.line}${d.col ? `, column ${d.col}` : ''}: ${d.message}` });
+        if (d.start !== undefined) {
+          li.tabIndex = 0;
+          li.setAttribute('role', 'button');
+          li.dataset.start = String(d.start);
+          li.dataset.length = String(d.length ?? 0);
+        }
+        return li;
+      }),
+    );
     this.diag.hidden = !found.length;
+  }
+
+  private jump(li: HTMLElement): void {
+    const start = Number(li.dataset.start);
+    const t = this.text;
+    t.focus();
+    t.setSelectionRange(start, start + Math.max(1, Number(li.dataset.length)));
+    const line = t.value.slice(0, start).split('\n').length - 1;
+    t.scrollTop = Math.max(0, line * 18 - t.clientHeight / 2);
   }
 
   private gutter(): void {

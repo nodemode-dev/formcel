@@ -2,6 +2,7 @@ import type { Range } from '../grid/a1';
 import type { Grid } from '../grid/grid';
 import type { RunResult, ScriptRunner } from './scripts';
 import type { HostCalls } from './hostCalls';
+import type { FnMeta } from './customMeta';
 
 export interface Script {
   id: string;
@@ -9,6 +10,7 @@ export interface Script {
   code: string;
   triggers?: { open?: boolean; edit?: boolean; every?: number };
   js?: string;
+  meta?: FnMeta[];
 }
 
 export interface Step {

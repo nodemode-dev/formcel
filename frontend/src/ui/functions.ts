@@ -245,8 +245,9 @@ export class Functions {
     this.inputs.push(input);
     this.values.push(val);
     input.addEventListener('input', () => void this.refresh());
+    const at = this.inputs.length - 1;
     input.addEventListener('focus', () => {
-      box.help.textContent = `${clean(label)}${optional(label) ? ' (optional)' : ''}`;
+      box.help.textContent = this.current?.argHelp?.[at] ?? `${clean(label)}${optional(label) ? ' (optional)' : ''}`;
     });
   }
 

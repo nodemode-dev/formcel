@@ -6,8 +6,10 @@ from pydantic import BaseModel, Field
 
 from ..services import extpkg, jsfn, offline_ai, ocr, pqx, pysand, ranges
 from ..services.store import now, store
+from . import scripts_srv
 
 router = APIRouter()
+router.include_router(scripts_srv.router)
 v1 = APIRouter(tags=["rest"])
 
 

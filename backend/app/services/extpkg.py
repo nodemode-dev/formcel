@@ -48,6 +48,63 @@ def read_manifest(folder: Path) -> dict:
     return doc
 
 
+TYPES = {"any", "boolean", "number", "string"}
+
+
+def text(v, limit: int) -> str:
+    return v.strip()[:limit] if isinstance(v, str) else ""
+
+
+def function_meta(raw: dict) -> dict | None:
+    name = text(raw.get("name") or raw.get("id"), 80)
+    if not re.fullmatch(r"[A-Za-z_][\w.]*", name):
+        return None
+    params = []
+    for p in raw.get("parameters", []) if isinstance(raw.get("parameters"), list) else []:
+        if not isinstance(p, dict) or not text(p.get("name"), 60):
+            continue
+        t = text(p.get("type"), 20).lower()
+        params.append({
+            "name": text(p.get("name"), 60),
+            "description": text(p.get("description"), 300),
+            "type": t if t in TYPES else "any",
+            "dimensionality": "matrix" if p.get("dimensionality") == "matrix" else "scalar",
+            "optional": bool(p.get("optional")),
+            "repeating": bool(p.get("repeating")),
+        })
+    opts = raw.get("options") if isinstance(raw.get("options"), dict) else {}
+    result = raw.get("result") if isinstance(raw.get("result"), dict) else {}
+    return {
+        "id": text(raw.get("id"), 80) or name.upper(),
+        "name": name,
+        "description": text(raw.get("description"), 400),
+        "helpUrl": text(raw.get("helpUrl"), 300) if text(raw.get("helpUrl"), 300).startswith(("http://", "https://")) else "",
+        "parameters": params,
+        "options": {"stream": bool(opts.get("stream")), "volatile": bool(opts.get("volatile")), "cancelable": bool(opts.get("cancelable")), "requiresAddress": bool(opts.get("requiresAddress"))},
+        "result": {"dimensionality": "matrix" if result.get("dimensionality") == "matrix" else "scalar"},
+        "script": text(raw.get("script"), 200),
+    }
+
+
+def manifest_functions(folder: Path, doc: dict) -> list[dict]:
+    raw = doc.get("functions", [])
+    ref = doc.get("functionsFile")
+    if isinstance(ref, str):
+        f = (folder / ref).resolve()
+        if folder.resolve() in f.parents and f.is_file():
+            try:
+                data = json.loads(f.read_text("utf-8"))
+            except (OSError, ValueError):
+                data = []
+            raw = data.get("functions", []) if isinstance(data, dict) else data
+    out = []
+    for item in raw if isinstance(raw, list) else []:
+        meta = function_meta(item) if isinstance(item, dict) else None
+        if meta:
+            out.append(meta)
+    return out[:200]
+
+
 def describe(folder: Path) -> dict | None:
     try:
         doc = read_manifest(folder)
@@ -56,8 +113,8 @@ def describe(folder: Path) -> dict | None:
     scripts = []
     for s in doc["scripts"]:
         f = (folder / s["file"]).resolve()
-        scripts.append({"name": s.get("name", f.stem), "code": f.read_text("utf-8"), "custom": bool(s.get("custom")), "button": s.get("button", "") if isinstance(s.get("button", ""), str) else ""})
-    return {"id": folder.name, "name": doc["name"], "version": str(doc.get("version", "")), "description": str(doc.get("description", "")), "author": str(doc.get("author", "")), "functions": [f for f in doc.get("functions", []) if isinstance(f, dict)][:100], "scripts": scripts}
+        scripts.append({"file": s["file"], "name": s.get("name", f.stem), "code": f.read_text("utf-8"), "custom": bool(s.get("custom")), "button": s.get("button", "") if isinstance(s.get("button", ""), str) else ""})
+    return {"id": folder.name, "name": doc["name"], "version": str(doc.get("version", "")), "description": str(doc.get("description", "")), "author": str(doc.get("author", "")), "functions": manifest_functions(folder, doc), "scripts": scripts}
 
 
 def listing() -> list[dict]:

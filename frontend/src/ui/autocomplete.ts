@@ -5,6 +5,8 @@ export interface Suggestion {
   kind: 'function' | 'name' | 'table' | 'column' | 'item' | 'value';
   summary: string;
   args?: string[];
+  argHelp?: string[];
+  custom?: boolean;
   help?: string;
   category?: string;
   insert?: string;
@@ -141,6 +143,12 @@ export const FUNCTIONS: Suggestion[] = catalog.functions.map((f) => ({
   help: f.excel?.source ?? f.sheets?.source ?? undefined,
   category: f.category ?? f.sheets?.category ?? 'Other',
 }));
+
+export function setCustomFunctions(list: Suggestion[]): void {
+  for (let i = FUNCTIONS.length - 1; i >= 0; i--) if (FUNCTIONS[i].custom) FUNCTIONS.splice(i, 1);
+  const known = new Set(FUNCTIONS.map((f) => f.name));
+  for (const f of list) if (!known.has(f.name)) FUNCTIONS.push(f);
+}
 
 export function scan(text: string, caret: number): Scan {
   if (!text.startsWith('=')) return { word: null, call: null };
@@ -356,7 +364,8 @@ export class Autocomplete {
       if (parts[i][1] >= 0) s.dataset.arg = String(parts[i][1]);
       else delete s.dataset.arg;
     });
-    if (this.sum.textContent !== fn.summary) this.sum.textContent = fn.summary;
+    const note = fn.argHelp?.[at] ? `${fn.summary}. ${fn.argHelp[at]}` : fn.summary;
+    if (this.sum.textContent !== note) this.sum.textContent = note;
     this.place(this.tip, 52, above);
     this.tip.hidden = false;
   }

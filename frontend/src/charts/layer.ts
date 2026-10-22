@@ -161,6 +161,18 @@ export class ObjectLayer implements ObjectsHook {
     return this.all[this.sheetNo] ?? (this.all[this.sheetNo] = []);
   }
 
+  listOf(i: number): FloatObject[] {
+    return this.all[i] ?? (this.all[i] = []);
+  }
+
+  store(i: number): void {
+    const list = this.listOf(i);
+    for (const o of list) if (o.anchor) Object.assign(o, frameOf(this.grid.rows, this.grid.cols, o.anchor));
+    void this.eng.setObjects(this.io.book(), i, list.map(toLine));
+    this.io.save(i, [...list]);
+    if (i === this.sheetNo) this.sheet(i);
+  }
+
   sheet(i: number): void {
     this.sheetNo = i;
     this.select(null);

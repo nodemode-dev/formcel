@@ -29,7 +29,11 @@ class AutomationIn(BaseModel):
 @router.put("/workbooks/{wid}/automation")
 def put_automation(wid: str, body: AutomationIn) -> dict:
     try:
-        return store().set_automation(wid, body.model_dump())
+        auto = body.model_dump()
+        kept = (books(wid).auto or {}).get("server")
+        if kept:
+            auto["server"] = kept
+        return store().set_automation(wid, auto)
     except (KeyError, FileNotFoundError):
         raise missing(wid)
 
@@ -37,14 +41,27 @@ def put_automation(wid: str, body: AutomationIn) -> dict:
 class ResolveIn(BaseModel):
     keys: list[str] = Field(max_length=500)
     fresh: bool = False
+    workbook: str = ""
 
 
 @router.post("/host/resolve")
 def resolve(body: ResolveIn) -> dict:
     out = {}
-    for k in body.keys:
-        data, note = hostcalls.resolve(k, books, body.fresh)
+    keys = body.keys
+    b = None
+    if body.workbook:
+        try:
+            b = books(body.workbook)
+            hostcalls.prepare(b)
+            keys = hostcalls.py_order(b, keys)
+        except (KeyError, FileNotFoundError):
+            b = None
+    for k in keys:
+        data, note = hostcalls.resolve(k, books, body.fresh, None, body.workbook)
         out[k] = {"data": data, "note": note}
+        if b is not None and k.startswith("PY\x1f"):
+            with b.lock:
+                b.engine.host_set(k, data)
     return {"results": out}
 
 
@@ -182,8 +199,8 @@ def settle(b) -> None:
             keys = b.engine.host_pending()
         if not keys:
             break
-        for k in keys:
-            data, _ = hostcalls.resolve(k, books, auto=b.auto)
+        for k in hostcalls.py_order(b, keys):
+            data, _ = hostcalls.resolve(k, books, auto=b.auto, wid=b.id)
             with b.lock:
                 b.engine.host_set(k, data)
             linked = linked or k.startswith("XREF")

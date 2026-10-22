@@ -1,4 +1,5 @@
 import { api, el, esc, setText } from './dom';
+import type { FnMeta } from './customMeta';
 import { uid, type Env } from './model';
 import { installable, installed, promptInstall } from '../pwa';
 
@@ -7,7 +8,8 @@ interface Ext {
   name: string;
   version: string;
   description: string;
-  scripts: { name: string; code: string; custom: boolean; button?: string }[];
+  functions: (FnMeta & { script?: string })[];
+  scripts: { file: string; name: string; code: string; custom: boolean; button?: string }[];
 }
 
 interface Registry {
@@ -148,9 +150,9 @@ export class MoreTab {
     const rt = this.root.querySelector<HTMLElement>('.fc-rt-state')!;
     const btn = this.root.querySelector<HTMLButtonElement>('[data-a="pytoggle"]')!;
     try {
-      const r = await api<{ ocr: { available: boolean; engine: string }; javascript: { available: boolean; runtime: string }; python: { enabled: boolean; version: string; modules: string[] }; databases: Record<string, boolean> }>('GET', '/api/runtime');
+      const r = await api<{ ocr: { available: boolean; engine: string }; javascript: { available: boolean; runtime: string }; python: { enabled: boolean; version: string; modules: string[]; pandas: boolean; network: string; limits: string }; databases: Record<string, boolean> }>('GET', '/api/runtime');
       this.pyOn = r.python.enabled;
-      setText(py, `=PY("code", range1, range2) runs Python ${r.python.version} in the engine process, in a separate restricted process with a 8 second limit and no file or network access from the code. Modules: ${r.python.modules.join(', ')}. In the code, arg1, arg2 hold the ranges as lists of rows; the last expression or a variable named result is the answer, and lists spill into cells. It is restricted, not a security boundary: turn it on only for workbooks you trust. State: ${r.python.enabled ? 'on' : 'off'}.`);
+      setText(py, `=PY("code", range1, range2) runs Python ${r.python.version} in the engine process, in a separate process (${r.python.limits}; ${r.python.network}). Modules: ${r.python.modules.join(', ')}. Inside the code xl("A1:C10", headers=True) reads a range or table as a DataFrame, arg1, arg2 hold ranges passed in the formula, the last expression or a variable named result is the answer, and DataFrames, lists and dicts spill into cells with their headers. Cells run by sheet, row, then column. Use Ctrl+Alt+Shift+P to edit a cell as Python. It is restricted, not a security boundary: turn it on only for workbooks you trust. State: ${r.python.enabled ? 'on' : 'off'}.`);
       setText(btn, r.python.enabled ? 'Turn Python cells off' : 'Turn Python cells on');
       setText(rt, `Text recognition: ${r.ocr.available ? r.ocr.engine : 'not installed'}. JavaScript for custom functions in the engine process: ${r.javascript.available ? r.javascript.runtime : 'not installed (they compute in the window only)'}. Databases: SQLite ${r.databases.sqlite ? 'ready' : 'missing'}, PostgreSQL ${r.databases.postgres ? 'ready' : 'driver missing'}, MySQL ${r.databases.mysql ? 'ready' : 'driver missing'}.`);
     } catch {
@@ -291,7 +293,8 @@ export class MoreTab {
     let n = 0;
     for (const s of x.scripts) {
       const sid = uid();
-      this.env.auto.scripts.push({ id: sid, name: `${x.name}: ${s.name}`, code: s.code });
+      const meta = s.custom ? x.functions.filter((f) => !f.script || f.script === s.file) : [];
+      this.env.auto.scripts.push({ id: sid, name: `${x.name}: ${s.name}`, code: s.code, ...(meta.length ? { meta } : {}) });
       if (s.button) this.env.auto.buttons.push({ id: uid(), label: s.button, script: sid, x: 24 + 120 * n++, y: 48 });
     }
     this.env.changed();

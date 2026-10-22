@@ -14,6 +14,7 @@ import formcel_engine
 from .. import config
 from . import calcstate
 from . import collab as cb
+from . import gastriggers
 from . import templates
 from .xlsx.props import clean as clean_props
 
@@ -734,6 +735,8 @@ class Store:
             b.modified = now()
             self._write(b)
             self.hub.publish(wid, {"type": "edit", "sheet": sheet, "cells": [list(x) for x in cells], "user": user, "told": told}, client)
+            if moved:
+                gastriggers.on_edit(wid, names[sheet], moved, {(r, c): was for (r, c, _), was in zip(cells, before)}, lambda r, c: b.engine.input(f"{cb.col_name(c)}{r + 1}", sheet))
             return {"id": b.id, "modified": b.modified}
 
     def collab_edit(self, wid: str, fn, client: str | None = None, event: str = "collab"):
@@ -890,6 +893,7 @@ class Store:
             idx = b.engine.add_sheet(name[:31])
             b.modified = now()
             self._write(b)
+            gastriggers.on_change(wid, "INSERT_GRID")
             return {"index": idx, "sheets": b.sheet_names()}
 
     def shift(self, wid: str, sheet: int, rows: bool, at: int, n: int, insert: bool, user: str = "") -> dict:
@@ -900,6 +904,7 @@ class Store:
             cb.log_shift(b.collab, user, sheet, b.sheet_names()[sheet], rows, at, n, insert)
             b.modified = now()
             self._write(b)
+            gastriggers.on_change(wid, ("INSERT_" if insert else "REMOVE_") + ("ROW" if rows else "COLUMN"))
             return {"id": b.id, "modified": b.modified}
 
     def sheet_op(self, wid: str, op: str, sheet: int, to: int | None = None, name: str | None = None, view: dict | None = None) -> dict:

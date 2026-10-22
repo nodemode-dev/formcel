@@ -8,6 +8,7 @@ import { chipHref } from './grid/smartchips';
 import { Charts } from './charts';
 import type { FloatObject } from './charts/types';
 import { Automation } from './automation';
+import type { ScriptHost } from './automation/scripts';
 import { Grid, type BorderKind, type MenuKind, type PasteKind, type SheetView } from './grid/grid';
 import { paint } from './grid/style';
 import { TABLE_STYLES, customId, parseCustom } from './grid/tables';
@@ -630,7 +631,7 @@ export class App {
       e.preventDefault();
       this.collab.refused(e.reason.message);
     });
-    this.auto = new Automation({ grid: this.grid, book: () => this.open?.book ?? -1, id: () => this.open?.id ?? '', sheets: () => this.open?.sheets ?? [], title: () => this.open?.title ?? '', status: (t, e) => this.status(t, e), addSheet: (n) => this.addSheetNamed(n), renameSheet: async (i, n) => this.renameSheetTo(i, n), deleteSheet: (i) => this.deleteSheet(i), showSheet: (i) => this.showSheet(i) });
+    this.auto = new Automation({ grid: this.grid, book: () => this.open?.book ?? -1, id: () => this.open?.id ?? '', sheets: () => this.open?.sheets ?? [], title: () => this.open?.title ?? '', status: (t, e) => this.status(t, e), addSheet: (n) => this.addSheetNamed(n), renameSheet: async (i, n) => this.renameSheetTo(i, n), deleteSheet: (i) => this.deleteSheet(i), showSheet: (i) => this.showSheet(i), script: this.scriptHost() });
     this.commands();
     this.calc.commands((id, title, description, changes, run, keys) => registerCommand({ id, title, description, changes, run, keys }));
     this.collab.commands((id, title, description, changes, run, keys) => registerCommand({ id, title, description, changes, run, keys }));
@@ -855,6 +856,7 @@ export class App {
       else if (e.key === 'F3' && e.shiftKey) id = 'formula.insert-function';
       else if (e.key === 'F3' && !e.altKey) id = 'names.paste';
       else if (e.key === 'F7' && !mod && !e.altKey && !e.shiftKey) id = 'review.spelling';
+      else if (mod && e.altKey && e.shiftKey && e.key.toLowerCase() === 'p') id = 'python.cell';
       else if (mod && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'a' && (e.target === p.formulaBar || e.target === this.grid.editor) && String((e.target as HTMLInputElement).value).startsWith('=')) id = 'formula.arguments';
       if (!id) return;
       e.preventDefault();
@@ -3627,6 +3629,31 @@ export class App {
       { sep: true },
       { label: 'Delete sheet', danger: true, disabled: o.sheets.length === 1, confirm: 'Click again to delete this sheet', run: () => this.deleteSheet(i) },
     ]);
+  }
+
+  private scriptHost(): ScriptHost {
+    return {
+      views: () => this.open?.views ?? [],
+      patchView: (s, part) => this.patchView(s, part),
+      names: () => this.open?.names ?? [],
+      layer: () => this.charts.layer,
+      pivotsChanged: () => this.pivotSync(),
+      defineName: async (name, refers) => {
+        const o = this.open;
+        if (!o) return;
+        this.grid.patch(await engine().defineName(o.book, name, refers));
+        o.names = await engine().names(o.book);
+        await api('PUT', `/api/workbooks/${o.id}/names`, { name, refers });
+      },
+      sheetOp: async (op, i, arg) => {
+        if (op === 'rename') this.renameSheetTo(i, String(arg));
+        else if (op === 'move') await this.moveSheet(i, Number(arg));
+        else if (op === 'delete') await this.deleteSheet(i);
+        else if (op === 'tab') this.colourSheet(i, String(arg));
+        else if (op === 'visible') this.hideSheet(i, arg !== 'Visible');
+        else this.showSheet(i);
+      },
+    };
   }
 
   private renameSheetTo(i: number, raw: string): void {

@@ -8,3 +8,4 @@ pdfplumber==0.11.10
 msoffcrypto-tool==5.4.2
 PyMySQL==1.2.3
 psycopg[binary]==3.3.6
+pandas==2.3.3

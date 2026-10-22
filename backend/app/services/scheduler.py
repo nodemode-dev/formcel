@@ -3,7 +3,7 @@ import re
 import time
 from datetime import datetime
 
-from . import pquery, qtable, ranges
+from . import gastriggers, pquery, qtable, ranges
 from .store import store
 
 TICK = 15
@@ -88,6 +88,10 @@ def tick() -> None:
             refresh(wid, qid)
         except Exception:
             continue
+    try:
+        gastriggers.tick()
+    except Exception:
+        return
 
 
 async def loop() -> None:
