@@ -127,7 +127,7 @@ class Store:
     def _write(self, b: Book) -> None:
         doc = {"format": FORMAT, "version": FORMAT_VERSION, "id": b.id, "title": b.title, "created": b.created,
                "modified": b.modified, "template": b.template, "locale": b.locale, "preview": b.preview(),
-               "names": [list(n) for n in b.engine.names()], "nameNotes": [list(n) for n in b.engine.name_notes()], "tables": b.engine.tables(), "pivots": b.engine.pivots(), "whatif": b.whatif,
+               "names": [list(n) for n in b.engine.names()], "nameNotes": [list(n) for n in b.engine.name_notes()], "tables": b.engine.tables(), "pivots": b.engine.pivots(), "model": b.engine.model_lines(), "whatif": b.whatif,
                "theme": b.engine.theme(), "cellStyles": b.engine.cell_styles(), "collab": b.collab, "protection": b.protection(),
                "sheets": [{"name": n, "view": b.views[i] if i < len(b.views) else {}, "cells": b.engine.cells(i), "formats": b.engine.formats(i), "styles": b.engine.styles(i), "merges": [list(m) for m in b.engine.merges(i)], "rules": b.engine.rules(i), "filter": b.engine.filter(i), "validations": b.engine.validations(i), "links": b.engine.links(i), "chips": b.engine.chips(i), "objects": b.fit_objects()[i]} for i, n in enumerate(b.sheet_names())]}
         doc["watches"] = b.watches
@@ -224,6 +224,8 @@ class Store:
                 eng.load_tables(doc["tables"])
             if doc.get("pivots"):
                 eng.load_pivots(doc["pivots"])
+            if doc.get("model"):
+                eng.load_model(doc["model"])
             calcstate.restore(eng, doc, doc.get("arrays") or [])
             b = Book(wid, doc["title"], doc["created"], doc["modified"], eng, doc.get("template"), [s.get("view") or {} for s in doc["sheets"]])
             b.objects = [list(s.get("objects") or []) for s in doc["sheets"]]
@@ -391,6 +393,8 @@ class Store:
             kept = eng.load_pivots(book["pivots"])
             if kept < len(book["pivots"]):
                 notes.append(f"{len(book['pivots']) - kept} pivot tables FormCel could not read left out")
+        if book.get("model"):
+            eng.load_model(book["model"])
         calcstate.restore(eng, book, [s.get("arrays") or [] for s in book["sheets"]])
         stamp = now()
         b = Book(uuid.uuid4().hex[:12], (title or "Imported workbook")[:120], stamp, stamp, eng, None, [s["view"] for s in book["sheets"]])
@@ -521,7 +525,7 @@ class Store:
         b = self._load(wid)
         with b.lock:
             n = len(b.sheet_names())
-            return {**b.meta(), "watches": b.watches, "names": [list(x) for x in b.engine.names()], "nameNotes": [list(x) for x in b.engine.name_notes()], "theme": b.engine.theme(), "cellStyles": b.engine.cell_styles(), "cells": [b.engine.cells(i) for i in range(n)], "formats": [b.engine.formats(i) for i in range(n)], "styles": [b.engine.styles(i) for i in range(n)], "merges": [[list(m) for m in b.engine.merges(i)] for i in range(n)], "rules": [b.engine.rules(i) for i in range(n)], "filters": [b.engine.filter(i) for i in range(n)], "validations": [b.engine.validations(i) for i in range(n)], "tables": b.engine.tables(), "pivots": b.engine.pivots(), "whatif": b.whatif, "links": [b.engine.links(i) for i in range(n)], "chips": [b.engine.chips(i) for i in range(n)], "collab": {"notes": b.collab["notes"], "threads": b.collab["threads"]}, "protection": b.protection(), "automation": b.auto, **calcstate.save(b.engine, n)}
+            return {**b.meta(), "watches": b.watches, "names": [list(x) for x in b.engine.names()], "nameNotes": [list(x) for x in b.engine.name_notes()], "theme": b.engine.theme(), "cellStyles": b.engine.cell_styles(), "cells": [b.engine.cells(i) for i in range(n)], "formats": [b.engine.formats(i) for i in range(n)], "styles": [b.engine.styles(i) for i in range(n)], "merges": [[list(m) for m in b.engine.merges(i)] for i in range(n)], "rules": [b.engine.rules(i) for i in range(n)], "filters": [b.engine.filter(i) for i in range(n)], "validations": [b.engine.validations(i) for i in range(n)], "tables": b.engine.tables(), "pivots": b.engine.pivots(), "model": b.engine.model_lines(), "whatif": b.whatif, "links": [b.engine.links(i) for i in range(n)], "chips": [b.engine.chips(i) for i in range(n)], "collab": {"notes": b.collab["notes"], "threads": b.collab["threads"]}, "protection": b.protection(), "automation": b.auto, **calcstate.save(b.engine, n)}
 
     def calc_command(self, wid: str, cmd: str) -> dict:
         b = self._load(wid)
@@ -646,6 +650,14 @@ class Store:
         b = self._load(wid)
         with b.lock:
             b.engine.load_pivots(lines)
+            b.modified = now()
+            self._write(b)
+            return {"id": b.id, "modified": b.modified}
+
+    def set_model(self, wid: str, lines: list[str]) -> dict:
+        b = self._load(wid)
+        with b.lock:
+            b.engine.load_model(lines)
             b.modified = now()
             self._write(b)
             return {"id": b.id, "modified": b.modified}

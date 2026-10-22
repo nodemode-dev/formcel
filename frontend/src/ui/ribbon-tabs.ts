@@ -228,7 +228,7 @@ export function ribbonTabs(h: RibbonHost): TabDef[] {
     id: 'pivotanalyze', label: 'PivotTable Analyze', ctx: true, groups: [
       G('pivot', 'PivotTable', L('pivot.fields', 'Fields', 'pivotFields'), L('pivot.create', 'Options', 'pivot')),
       G('data', 'Data', L('pivot.refresh', 'Refresh', 'refresh'), L('pivot.refresh-all', 'Refresh All', 'refreshAll')),
-      G('tools', 'Tools', L('insert.pivot-chart', 'PivotChart', 'pivotChart'), L('data.slicer', 'Insert Slicer', 'slicer')),
+      G('tools', 'Tools', L('insert.pivot-chart', 'PivotChart', 'pivotChart'), L('data.slicer', 'Insert Slicer', 'slicer'), L('cube.convert', 'OLAP Tools: Convert to Formulas', 'cube')),
       G('show', 'Show', L('pivotchart.field-buttons', 'Field Buttons', 'pivotFields')),
     ],
   };

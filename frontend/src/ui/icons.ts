@@ -170,6 +170,8 @@ export const icons = {
   viewLayout: svg('<rect x="6" y="3.5" width="12" height="17" rx="1.5"/><path d="M9 8h6M9 11h6M9 14h4"/>'),
   viewBreak: svg('<rect x="3.5" y="4.5" width="17" height="15" rx="2"/><path d="M12 4.5v15" stroke-dasharray="2.5 2"/><path d="M3.5 12h17" stroke-width="2.4"/>'),
   accessGood: svg('<circle cx="12" cy="5.5" r="1.8"/><path d="M5 9h14M12 9v5M9 20l3-6 3 6"/>'),
+  dataModel: svg('<rect x="3.5" y="4" width="7" height="6" rx="1.5"/><rect x="13.5" y="4" width="7" height="6" rx="1.5"/><rect x="8.5" y="14" width="7" height="6" rx="1.5"/><path d="M7 10v2.5h5V14M17 10v2.5h-5"/>'),
+  cube: svg('<path d="M12 3.5l7.5 4v9L12 20.5l-7.5-4v-9z"/><path d="M4.5 7.5L12 11.5l7.5-4M12 11.5v9"/>'),
 } as const;
 
 export type IconName = keyof typeof icons;

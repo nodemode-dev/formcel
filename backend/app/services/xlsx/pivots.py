@@ -603,7 +603,7 @@ def pivots_out(wb, eng) -> dict:
     extras: dict[str, dict] = {}
     for k, line in enumerate(eng.pivots()):
         d = parse(line)
-        if d is None or d["sheet"] >= len(wb.worksheets):
+        if d is None or d["sheet"] >= len(wb.worksheets) or d["table"].startswith("@model"):
             continue
         try:
             made = build(eng, d, tables, k + 1, wb)

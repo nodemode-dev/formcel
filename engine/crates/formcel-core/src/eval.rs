@@ -33,6 +33,7 @@ mod fx_regex;
 mod fx_text;
 #[path = "fx_xl.rs"]
 mod fx_xl;
+mod fx_cube;
 
 pub trait Ctx {
     fn formula_at(&self, _sheet: usize, _a: Addr) -> Option<String> {
@@ -81,6 +82,12 @@ pub trait Ctx {
     }
     fn r1c1(&self) -> bool {
         false
+    }
+    fn cell_ast(&self, _sheet: usize, _a: Addr) -> Option<Expr> {
+        None
+    }
+    fn cube_call(&self, _op: &str, _args: &[String]) -> Option<Result<Value, ErrKind>> {
+        None
     }
 }
 

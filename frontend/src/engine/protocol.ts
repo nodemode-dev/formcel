@@ -58,6 +58,9 @@ export type Request =
   | { id: number; op: 'pivot.remove'; book: number; name: string }
   | { id: number; op: 'whatif.run'; book: number; cmd: string }
   | { id: number; op: 'whatif.load'; book: number; lines: string[] }
+  | { id: number; op: 'model.run'; book: number; cmd: string }
+  | { id: number; op: 'model.lines'; book: number }
+  | { id: number; op: 'model.load'; book: number; lines: string[] }
   | { id: number; op: 'objects.list'; book: number; sheet: number }
   | { id: number; op: 'objects.load' | 'objects.set'; book: number; sheet: number; lines: string[] }
   | { id: number; op: 'calc.run'; book: number; cmd: string }

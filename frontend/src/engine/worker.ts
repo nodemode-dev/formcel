@@ -66,6 +66,9 @@ interface Exports {
   fc_refresh_pivot(book: number, name: number, len: number): number;
   fc_remove_pivot(book: number, name: number, len: number): number;
   fc_whatif(book: number, cmd: number, len: number): number;
+  fc_model(book: number, cmd: number, len: number): number;
+  fc_model_lines(book: number): number;
+  fc_load_model(book: number, lines: number, len: number): number;
   fc_load_whatif(book: number, lines: number, len: number): number;
   fc_calc(book: number, cmd: number, len: number): number;
   fc_validations(book: number, sheet: number): number;
@@ -539,6 +542,16 @@ function run(x: Exports, req: Request): Value {
       });
     case 'whatif.load':
       return withStrings(x, [req.lines.join('\n')], ([p, l]) => ok(x.fc_load_whatif(req.book, p, l), 'The engine refused those what-if definitions.'));
+    case 'model.run':
+      return withStrings(x, [req.cmd], ([p, l]) => {
+        const s = out(x, x.fc_model(req.book, p, l));
+        const i = s.indexOf('\u001f');
+        return { text: s.slice(0, i), effect: effect(s.slice(i + 1)) };
+      });
+    case 'model.lines':
+      return out(x, x.fc_model_lines(req.book)).split('\n').filter(Boolean);
+    case 'model.load':
+      return withStrings(x, [req.lines.join('\n')], ([p, l]) => ok(x.fc_load_model(req.book, p, l), 'The engine refused that Data Model.'));
     case 'objects.list':
       return out(x, x.fc_objects(req.book, req.sheet)).split('\n').filter(Boolean);
     case 'objects.load':

@@ -34,6 +34,9 @@ pub use numfmt::Fmt;
 mod store;
 pub mod style;
 pub mod pivot;
+pub mod cube;
+pub mod dax;
+pub mod datamodel;
 pub mod table;
 pub mod theme;
 pub mod valid;
@@ -477,6 +480,7 @@ pub struct Workbook {
     calc: calc::State,
     arrays: FastMap<Key, (u32, u32)>,
     ext: xref::Links,
+    model: datamodel::Model,
 }
 
 const SPILL_PASSES: usize = 8;
@@ -492,6 +496,14 @@ impl eval::Ctx for Workbook {
 
     fn spill(&self, sheet: usize, a: Addr) -> Option<(u32, u32)> {
         self.spills.get(&(sheet, a)).copied()
+    }
+
+    fn cell_ast(&self, sheet: usize, a: Addr) -> Option<Expr> {
+        self.formulas.get(&(sheet, a)).and_then(|f| f.ast.clone())
+    }
+
+    fn cube_call(&self, op: &str, args: &[String]) -> Option<Result<Value, ErrKind>> {
+        Some(self.model.cube(op, args))
     }
 
     fn each(&self, sheet: usize, area: Area, f: &mut dyn FnMut(Addr, &Value)) {
@@ -607,6 +619,7 @@ impl Workbook {
             calc: calc::State::default(),
             arrays: FastMap::default(),
             ext: xref::Links::default(),
+            model: datamodel::Model::default(),
         }
         .with_named_codes()
     }

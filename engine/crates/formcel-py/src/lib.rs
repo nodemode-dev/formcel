@@ -402,6 +402,18 @@ impl Workbook {
         self.inner.load_pivots(&lines)
     }
 
+    fn model_lines(&self) -> Vec<String> {
+        self.inner.model_lines()
+    }
+
+    fn load_model(&mut self, lines: Vec<String>) -> usize {
+        self.inner.load_model(&lines)
+    }
+
+    fn model_run(&mut self, cmd: &str) -> String {
+        self.inner.model_run(cmd).0
+    }
+
     fn refresh_pivot(&mut self, name: &str) -> PyResult<()> {
         self.inner.refresh_pivot(name).map(|_| ()).map_err(|e| PyValueError::new_err(e.to_string()))
     }
