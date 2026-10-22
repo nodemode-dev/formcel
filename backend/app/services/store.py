@@ -316,7 +316,9 @@ class Store:
         with zipfile.ZipFile(self.path(wid), "w", zipfile.ZIP_DEFLATED) as z:
             z.writestr("mimetype", "application/vnd.formcel+zip")
             z.writestr("workbook.json", json.dumps(doc, ensure_ascii=False, separators=(",", ":")))
-        return self._load(wid).meta()
+        b = self._load(wid)
+        self._write(b)
+        return b.meta()
 
     @neutral
     def create(self, title: str | None, template_id: str | None) -> dict:
