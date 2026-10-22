@@ -1,3 +1,4 @@
+import re
 import threading
 import time
 import urllib.error
@@ -55,9 +56,6 @@ def get(provider: str, url: str, params: dict | None = None, headers: dict | Non
         raise Unavailable(f"The network is unavailable or {provider} did not answer: {reason}")
     if len(body) > MAX_BYTES:
         raise QuoteError(f"{provider} sent more than 12 MB")
-    m = None
-    import re
-
     m = re.search(r"charset=([\w-]+)", ctype, re.I)
     try:
         return body.decode(m.group(1) if m else "utf-8", errors="replace")
