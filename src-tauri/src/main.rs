@@ -10,6 +10,7 @@ use tauri::{Manager, RunEvent, WebviewUrl, WebviewWindowBuilder, WindowEvent};
 
 mod packaged;
 mod reveal;
+mod system_fonts;
 mod text_edit;
 mod traffic_lights;
 
@@ -113,7 +114,7 @@ fn main() {
                 traffic_lights::place(window);
             }
         })
-        .invoke_handler(tauri::generate_handler![traffic_lights::set_window_title, reveal::app_ready, text_edit::text_edit])
+        .invoke_handler(tauri::generate_handler![traffic_lights::set_window_title, reveal::app_ready, text_edit::text_edit, system_fonts::system_fonts])
         .manage(Engine(Mutex::new(None)))
         .setup(|app| {
             let handle = app.handle().clone();

@@ -17,6 +17,7 @@
     "core:window:allow-set-title",
     "allow-set-window-title",
     "allow-app-ready",
-    "allow-text-edit"
+    "allow-text-edit",
+    "allow-system-fonts"
   ]
 }
