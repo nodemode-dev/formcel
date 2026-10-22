@@ -166,6 +166,91 @@ def pick_chart(prompt: str) -> str:
     return "column"
 
 
+TEMPLATES = {
+    "budget": [["Category", "Planned", "Actual", "Difference"], ["Rent", 1200, 1200, "=C2-B2"], ["Food", 450, 510, "=C3-B3"], ["Transport", 120, 95, "=C4-B4"], ["Utilities", 160, 172, "=C5-B5"], ["Savings", 300, 300, "=C6-B6"], ["Total", "=SUM(B2:B6)", "=SUM(C2:C6)", "=SUM(D2:D6)"]],
+    "invoice": [["Item", "Qty", "Unit price", "Amount"], ["Design work", 10, 85, "=B2*C2"], ["Hosting", 12, 20, "=B3*C3"], ["Support", 5, 60, "=B4*C4"], ["", "", "Subtotal", "=SUM(D2:D4)"], ["", "", "Tax 10%", "=D5*0.1"], ["", "", "Total", "=D5+D6"]],
+    "timesheet": [["Day", "Start", "End", "Hours"], ["Mon", "9:00", "17:30", "=(C2-B2)*24"], ["Tue", "9:00", "17:00", "=(C3-B3)*24"], ["Wed", "8:30", "16:30", "=(C4-B4)*24"], ["Thu", "9:00", "17:00", "=(C5-B5)*24"], ["Fri", "9:00", "15:00", "=(C6-B6)*24"], ["Total", "", "", "=SUM(D2:D6)"]],
+    "gradebook": [["Student", "Test 1", "Test 2", "Final", "Average"], ["Ann", 88, 92, 90, "=AVERAGE(B2:D2)"], ["Bob", 75, 80, 78, "=AVERAGE(B3:D3)"], ["Cy", 93, 85, 91, "=AVERAGE(B4:D4)"], ["Class average", "=AVERAGE(B2:B4)", "=AVERAGE(C2:C4)", "=AVERAGE(D2:D4)", "=AVERAGE(E2:E4)"]],
+    "inventory": [["SKU", "Item", "On hand", "Reorder at", "Status"], ["A-100", "Widget", 40, 25, '=IF(C2<=D2,"Reorder","OK")'], ["A-200", "Gadget", 12, 20, '=IF(C3<=D3,"Reorder","OK")'], ["B-300", "Gizmo", 75, 30, '=IF(C4<=D4,"Reorder","OK")']],
+    "tracker": [["Task", "Owner", "Due", "Status"], ["Draft plan", "Ann", "", "Open"], ["Review", "Bob", "", "Open"], ["Ship", "Cy", "", "Open"]],
+    "schedule": [["Time", "Mon", "Tue", "Wed", "Thu", "Fri"], ["9:00", "", "", "", "", ""], ["10:00", "", "", "", "", ""], ["11:00", "", "", "", "", ""], ["13:00", "", "", "", "", ""], ["15:00", "", "", "", "", ""]],
+    "loan": [["Loan amount", 200000], ["Annual rate", 0.06], ["Years", 30], ["Monthly payment", "=-PMT(B2/12,B3*12,B1)"], ["Total paid", "=B4*B3*12"], ["Total interest", "=B5-B1"]],
+}
+TEMPLATE_WORDS = {"budget": "budget", "expense": "budget", "invoice": "invoice", "bill": "invoice", "timesheet": "timesheet", "time sheet": "timesheet", "hours": "timesheet", "grade": "gradebook", "student": "gradebook", "inventory": "inventory", "stock": "inventory", "tracker": "tracker", "to-do": "tracker", "todo": "tracker", "task": "tracker", "schedule": "schedule", "timetable": "schedule", "planner": "schedule", "loan": "loan", "mortgage": "loan"}
+AGGS = [("average", "AVERAGE"), ("mean", "AVERAGE"), ("count", "COUNT"), ("maximum", "MAX"), ("highest", "MAX"), ("largest", "MAX"), ("max", "MAX"), ("minimum", "MIN"), ("lowest", "MIN"), ("smallest", "MIN"), ("min", "MIN"), ("median", "MEDIAN"), ("sum", "SUM"), ("total", "SUM"), ("add up", "SUM")]
+
+
+def columns_of(rows: list[list[str]]) -> tuple[list[str], list[list[str]], list[bool]]:
+    head = rows[0] if rows else []
+    body = rows[1:] if len(rows) > 1 else []
+    numeric = []
+    for i in range(len(head)):
+        col = [r[i] for r in body if i < len(r) and r[i].strip()]
+        numeric.append(bool(col) and all(text_to_number(x) is not None for x in col))
+    return head, body, numeric
+
+
+def offline_other(prompt: str, p: str, ctx: dict, read_range, out: dict) -> dict:
+    selection = ctx.get("selection", "")
+    sheet = ctx.get("sheet", "")
+    area = selection.rpartition("!")[2] if selection else "A1"
+    try:
+        a = ranges.parse_area(area)
+    except ValueError:
+        a = (0, 0, 0, 0)
+    start = f"{ranges.col_name(a[1])}{a[0] + 1}"
+    if re.search(r"\b(generate|make|create|build|give me|draft|set up|new)\b", p) and re.search(r"\b(table|template|sheet|tracker|budget|invoice|schedule|planner|timesheet|gradebook|inventory|loan)\b", p):
+        kind = next((v for w, v in TEMPLATE_WORDS.items() if w in p), None)
+        if kind:
+            if any(x.strip() for line in read_range(f"{sheet}!{area}").split("\n") for x in line.split("\t")):
+                start = f"{ranges.col_name(a[3] + 2)}{a[0] + 1}"
+            out["proposals"].append({"sheet": sheet, "start": start, "rows": TEMPLATES[kind], "note": f"{kind} template at {start}"})
+            out["text"] = f"Proposed a {kind} template at {start}: sample values and working formulas you can replace. Offline templates are fixed; a model endpoint writes tables to fit your request."
+            return out
+    has_data = ":" in area and (a[2] > a[0] or a[3] > a[1])
+    text = read_range(f"{sheet}!{area}") if has_data else ""
+    rows = [r.split("\t") for r in text.split("\n")] if text else []
+    if rows and re.search(r"\b(summari[sz]e|summary|describe|overview|insights?|what.s in|tell me about|analy[sz]e)\b", p):
+        head, body, numeric = columns_of(rows)
+        lines = [f"{len(body)} rows and {len(head)} columns in {area}."]
+        for i, h in enumerate(head):
+            col = [r[i].strip() for r in body if i < len(r) and r[i].strip()]
+            name = h or ranges.col_name(a[1] + i)
+            if numeric[i]:
+                nums = [text_to_number(x) for x in col]
+                lines.append(f"{name}: sum {fmt(sum(nums))}, average {fmt(round(sum(nums) / len(nums), 4))}, min {fmt(min(nums))}, max {fmt(max(nums))}.")
+            elif col:
+                top = Counter(col).most_common(3)
+                lines.append(f"{name}: {len(set(col))} distinct, most common " + ", ".join(f"{k} ({n})" for k, n in top) + ".")
+            blanks = len(body) - len(col)
+            if blanks:
+                lines.append(f"{name} has {blanks} blank cell{'s' if blanks != 1 else ''}.")
+        out["text"] = "\n".join(lines) + "\nThis is a fixed-rule summary; a model endpoint writes a narrative one."
+        return out
+    if rows and re.search(r"\b(formula|sum|total|average|mean|count|max|maximum|min|minimum|median|highest|lowest|largest|smallest|add up)\b", p):
+        head, body, numeric = columns_of(rows)
+        func = next((f for w, f in AGGS if re.search(rf"\b{w}\b", p)), "SUM")
+        cols = [i for i, n in enumerate(numeric) if n]
+        named = [i for i in cols if head[i] and head[i].lower() in p]
+        cols = named or cols
+        if not cols:
+            out["text"] = "I found no numeric column in the selection to build a formula over."
+            return out
+        r_first, r_last = a[0] + 2, a[2] + 1
+        base = min(cols)
+        first_col = ranges.col_name(a[1] + base)
+        row = [""] * (max(cols) - base + 1)
+        for i in cols:
+            letter = ranges.col_name(a[1] + i)
+            row[i - base] = f"={func}({letter}{r_first}:{letter}{r_last})"
+        at = f"{first_col}{a[2] + 2}"
+        out["proposals"].append({"sheet": sheet, "start": at, "rows": [row], "note": f"{func} of each numeric column, below the data at {at}"})
+        out["text"] = f"Proposed {func} formulas under the data at {at}. Offline suggestions cover totals and averages; a model endpoint writes formulas from a description."
+        return out
+    out["text"] = "No model is set, so the assistant works offline. Ask for a chart or a pivot table, for example \"column chart of the selection\" or \"pivot of Sales by Region\"; for a summary, a total or average formula under the data, or a template such as a budget or invoice; or use Clean data. Add an endpoint under Endpoint settings for open questions."
+    return out
+
+
 def plan(prompt: str, ctx: dict, read_range) -> dict:
     p = prompt.lower()
     selection = ctx.get("selection", "")
@@ -174,8 +259,7 @@ def plan(prompt: str, ctx: dict, read_range) -> dict:
     want_chart = bool(re.search(r"\b(chart|graph|plot|visuali[sz]e)\b", p))
     out = {"text": "", "proposals": [], "charts": [], "pivots": []}
     if not (want_pivot or want_chart):
-        out["text"] = "No model is set, so the assistant works offline. Ask for a chart or a pivot table, for example \"column chart of the selection\" or \"pivot of Sales by Region\", or use Clean data. Add an endpoint under Endpoint settings for open questions."
-        return out
+        return offline_other(prompt, p, ctx, read_range, out)
     area = selection.rpartition("!")[2] if selection else ""
     try:
         a = ranges.parse_area(area) if area and (":" in area) else None
