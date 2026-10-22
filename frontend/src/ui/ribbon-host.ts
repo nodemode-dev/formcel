@@ -114,7 +114,7 @@ export class RibbonHost {
 
   fontMenu(): MItem[] {
     const cur = this.grid.activeStyle().font ?? '';
-    return FONTS.map((f) => ({ label: f || 'Inter (default)', font: f || undefined, checked: f === cur, run: () => this.setFont(f) } as MItem));
+    return FONTS.map((f) => ({ label: f || 'Aptos Narrow (default)', font: f || undefined, checked: f === cur, run: () => this.setFont(f) } as MItem));
   }
 
   sizeMenu(): MItem[] {
@@ -498,9 +498,10 @@ export class RibbonHost {
       if (rbState.text.get('format.menu') !== n) { rbState.text.set('format.menu', n); rbState.changed(); }
     }, () => undefined);
     this.paintSwatches();
-    const font = this.grid.activeStyle().font ?? this.grid.look.body;
+    const named = this.grid.activeStyle().font ?? this.grid.look.body;
+    const font = named === 'Inter' ? 'Aptos Narrow' : named;
     rbState.text.set('format.font', font);
-    rbState.text.set('format.size', String(this.grid.activeStyle().size ?? 10));
+    rbState.text.set('format.size', String(this.grid.activeStyle().size ?? (this.grid.opts.defaultSize !== 10 ? this.grid.opts.defaultSize : 11)));
     rbState.changed();
   }
 }
