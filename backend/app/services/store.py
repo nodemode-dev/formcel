@@ -490,7 +490,7 @@ class Store:
             b.fit_views()
             if macros and not b.vba:
                 raise LookupError(wid)
-            return b.title, xlsx.write(b.engine, b.views, b.vba if macros else None, b.fit_objects(), b.collab["notes"], b.collab["threads"], b.props, (b.created, b.modified), whatif=b.whatif)
+            return b.title, xlsx.write(b.engine, b.views, b.vba if macros else None, b.fit_objects(), b.collab["notes"], b.collab["threads"], b.props, (b.created, b.modified), whatif=b.whatif, queries=b.auto.get("queries"))
 
     def properties(self, wid: str) -> dict:
         b = self._load(wid)
