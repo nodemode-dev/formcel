@@ -288,7 +288,8 @@ function cartesian(spec: ChartSpec, d0: ChartData, b: Box): string {
   const lw = horizontal ? Math.min(100, labelWidth(catLabels)) : labelWidth(tickText);
   const rw = sscale ? labelWidth(sscale.ticks.map(fmt)) : 0;
   const padL = lw + (spec.yTitle ? 18 : 0);
-  const padB = (horizontal ? labelWidth(tickText) * 0 + 22 : 22) + (spec.xTitle ? 18 : 0);
+  const spin = !horizontal && Math.max(...catLabels.map((c) => c.length)) > 4 && (b.w - lw - (spec.yTitle ? 18 : 0) - rw - 6) / Math.max(1, n) < 46;
+  const padB = (horizontal ? labelWidth(tickText) * 0 + 22 : 22) + (spin ? 20 : 0) + (spec.xTitle ? 18 : 0);
   const p: Box = { x: b.x + padL, y: b.y + 6, w: Math.max(10, b.w - padL - rw - 6), h: Math.max(10, b.h - padB - 6) };
   const out: string[] = [];
   if (spec.plotFill) out.push(`<rect x="${r1(p.x)}" y="${r1(p.y)}" width="${r1(p.w)}" height="${r1(p.h)}" fill="${esc(spec.plotFill)}"/>`);
