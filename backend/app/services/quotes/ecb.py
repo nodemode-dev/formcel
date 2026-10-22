@@ -45,7 +45,7 @@ def _cross(rates: dict[str, float], base: str, quote: str) -> float:
     if base not in rates or quote not in rates:
         missing = base if base not in rates else quote
         raise NoData(f"The European Central Bank publishes no rate for {missing}. It covers about 30 currencies against the euro.")
-    return rates[quote] / rates[base]
+    return round(rates[quote] / rates[base], 6)
 
 
 def currencies(fresh: bool = False) -> list[str]:

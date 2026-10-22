@@ -30,8 +30,16 @@ FIELD_PART = re.compile(r"\.(?:\[([^\]]*)\]|([A-Za-z_][A-Za-z0-9_]*))")
 def _fields_out(m: re.Match) -> str:
     expr = m.group(1)
     for p in FIELD_PART.finditer(m.group(2)):
-        expr = f'_FV({expr},"{p.group(1) if p.group(1) is not None else p.group(2)}")'
+        name = p.group(1) if p.group(1) is not None else p.group(2)
+        expr = f'_FV({expr},"~{name.encode().hex()}~")'
     return expr
+
+
+FIELD_TOKEN = re.compile(r'"~([0-9a-f]*)~"')
+
+
+def _field_names(s: str) -> str:
+    return FIELD_TOKEN.sub(lambda m: '"' + bytes.fromhex(m.group(1)).decode().replace('"', '""') + '"', s)
 
 
 def _close(s: str, open_at: int) -> int:
@@ -222,4 +230,4 @@ def to_file(formula: str) -> str:
             s = re.sub(r"(?<![A-Za-z0-9_.$!])(" + re.escape(p) + r")(?=\s*\()", lambda m: "_xlpm." + m.group(1), s, flags=re.I)
         return ANCHOR_OUT.sub(lambda m: f"_xlfn.ANCHORARRAY({m.group(1)})", _ext_out(s))
 
-    return _singles_out(_outside(formula, fix))
+    return _field_names(_singles_out(_outside(formula, fix)))

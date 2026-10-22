@@ -60,6 +60,24 @@ def load() -> dict:
     return {"provider": provider, "keys": {k: str(v) for k, v in keys.items() if k in PROVIDERS}, "bases": {k: str(v) for k, v in bases.items() if k in PROVIDERS or k == "ecb"}, "ttl": ttl, "rpm": rpm, "delay": delay, "fx": fx}
 
 
+def refresh_get(workbook: str) -> dict:
+    raw = (aiclient.load_settings().get("datatype_refresh") or {}).get(workbook) or {}
+    return {k: (raw.get(k) if raw.get(k) in REFRESH_MODES else "manual") for k in ("stocks", "currencies")}
+
+
+def refresh_put(workbook: str, body: dict) -> dict:
+    s = aiclient.load_settings()
+    book = refresh_get(workbook)
+    for k in ("stocks", "currencies"):
+        if k in body:
+            if body[k] not in REFRESH_MODES:
+                raise ValueError("refresh is manual, open or 5min")
+            book[k] = body[k]
+    s.setdefault("datatype_refresh", {})[workbook] = book
+    aiclient.save_settings(s)
+    return book
+
+
 def base_of(name: str) -> str:
     s = load()
     over = s["bases"].get(name, "").strip().rstrip("/")

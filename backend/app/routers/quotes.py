@@ -55,6 +55,24 @@ def test_provider(body: TestIn) -> dict:
     return out
 
 
+class RefreshIn(BaseModel):
+    stocks: str | None = None
+    currencies: str | None = None
+
+
+@router.get("/datatypes/refresh-settings")
+def get_refresh(workbook: str) -> dict:
+    return settings.refresh_get(workbook)
+
+
+@router.put("/datatypes/refresh-settings")
+def put_refresh(workbook: str, body: RefreshIn) -> dict:
+    try:
+        return settings.refresh_put(workbook, body.model_dump(exclude_none=True))
+    except ValueError as e:
+        raise HTTPException(422, str(e))
+
+
 class ResolveIn(BaseModel):
     kind: str = "stock"
     texts: list[str] = Field(max_length=500)
