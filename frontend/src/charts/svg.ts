@@ -286,7 +286,7 @@ function cartesian(spec: ChartSpec, d0: ChartData, b: Box): string {
   const sscale = sec.length ? linear(range(sec, false, false)) : null;
   const catLabels = d.cats.map((c, k) => ellipsis(spec.xFmt && num(d.catNums[k]) ? shown(spec.xFmt, d.catNums[k] as number) : c, 14));
   const lw = horizontal ? Math.min(100, labelWidth(catLabels)) : labelWidth(tickText);
-  const rw = sscale ? labelWidth(sscale.ticks.map(fmt)) : 0;
+  const rw = sscale ? labelWidth(sscale.ticks.map((v) => shown(spec.yFmt, v))) : 0;
   const padL = lw + (spec.yTitle ? 18 : 0);
   const padB = (horizontal ? labelWidth(tickText) * 0 + 22 : 22) + (spec.xTitle ? 18 : 0);
   const p: Box = { x: b.x + padL, y: b.y + 6, w: Math.max(10, b.w - padL - rw - 6), h: Math.max(10, b.h - padB - 6) };
