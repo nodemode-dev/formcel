@@ -18,6 +18,7 @@ from .chartex import inject
 from .chartsheets import finish as sheets_finish
 from .drawings import objects_out, pivot_ranges
 from .extlinks import links_out
+from .imagefn import collect as image_cells
 from .formulas import EXT_OUT, EXT_SHEETS, to_file
 from .overlay import finish as overlay_finish
 from .pivots import finish as pivots_finish
@@ -183,6 +184,7 @@ def write(eng, views: list[dict], vba: dict[str, bytes] | None = None, objects: 
     for i, items in enumerate(objects or []):
         if items and i < len(wb.worksheets):
             plans[i] = objects_out(wb, wb.worksheets[i], items, views[i] if i < len(views) else {}, pivots=pivots)
+    image_cells(eng, plans)
     links_out(wb, eng.calc("extlines").splitlines())
     ignored = calc_out(wb, eng.calc("get"))
     if vba:
