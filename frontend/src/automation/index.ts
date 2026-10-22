@@ -17,6 +17,8 @@ import { setCustomFunctions } from '../ui/autocomplete';
 import { metaOf, suggestion, type FnMeta } from './customMeta';
 import { isAppsScript } from './scriptCheck';
 import { strip } from './tsStrip';
+import { setVbaRuntime } from '../vbalang/bridge';
+import { VbaService } from '../vbalang/service';
 
 export interface AppHooks {
   grid: Grid;
@@ -53,6 +55,7 @@ export class Automation {
   private readonly layer: HTMLElement;
   private readonly runner: ScriptRunner;
   private readonly calls: HostCalls;
+  private readonly vba: VbaService;
   private readonly scripts: ScriptsTab;
   private readonly assistant: AssistantTab;
   private readonly data: DataTab;
@@ -83,13 +86,15 @@ export class Automation {
       log: (l, t) => this.scripts.log(l, t),
       host: h.script,
     });
+    this.vba = new VbaService({ runner: this.runner, book: () => h.book(), workbook: () => h.id(), sheets: () => h.sheets(), status: (t, e) => h.status(t, e) });
+    setVbaRuntime(this.vba);
     this.calls = new HostCalls({
       book: () => h.book(),
       workbook: () => h.id(),
       patch: (c) => h.grid.patch(c),
       custom: (name, args, stream) => {
         const f = this.fns.get(name.toUpperCase());
-        if (!f) throw new Error(`${name} is not defined in any script.`);
+        if (!f) return this.vba.call(name, args);
         return this.runner.call(f[0].code, f[1], args, stream);
       },
       cancel: () => this.runner.cancelStreams(),
@@ -186,6 +191,11 @@ export class Automation {
     this.layer.hidden = false;
     void this.calls.drain();
     this.customSoon();
+    void this.vba.open().then(async () => {
+      this.customSoon();
+      const sheet = this.h.sheets()[0];
+      if (sheet && this.vba.hasProject()) await this.vba.fire({ name: 'Open' });
+    });
     window.setTimeout(() => {
       this.server.opened();
       for (const s of this.auto.scripts) if (s.triggers?.open) void this.runScript(s.id, { type: 'open' });
@@ -212,12 +222,29 @@ export class Automation {
     this.drainTimer = window.setTimeout(() => void this.calls.drain(), 80);
     window.clearTimeout(this.readTimer);
     this.readTimer = window.setTimeout(() => void this.calls.drain(false, false, true), 1300);
+    this.vbaChanged(changes);
     if (this.quiet || !this.auto.scripts.some((s) => s.triggers?.edit)) return;
     const [s, r, c] = changes[0] ?? [0, 0, 0];
     window.clearTimeout(this.editTimer);
     this.editTimer = window.setTimeout(() => {
       for (const sc of this.auto.scripts) if (sc.triggers?.edit) void this.runScript(sc.id, { type: 'edit', sheet: this.h.sheets()[s] ?? '', address: a1(r, c) });
     }, 700);
+  }
+
+  private vbaTimer = 0;
+
+  private vbaChanged(changes: Changed[]): void {
+    if (this.vba.busy || !this.vba.hasProject() || !changes.length) return;
+    window.clearTimeout(this.vbaTimer);
+    this.vbaTimer = window.setTimeout(() => {
+      const sheet = changes[0][0];
+      const mine = changes.filter((c) => c[0] === sheet);
+      const rows = mine.map((c) => c[1]);
+      const cols = mine.map((c) => c[2]);
+      const name = this.h.sheets()[sheet];
+      if (!name) return;
+      void this.vba.fire({ name: 'Change', sheet: name, target: { sheet: name, r0: Math.min(...rows), c0: Math.min(...cols), r1: Math.max(...rows), c1: Math.max(...cols) } });
+    }, 250);
   }
 
   scriptList(): { id: string; name: string }[] {
@@ -288,7 +315,9 @@ export class Automation {
       const plain = [...raw.values()].filter(([, n]) => !known.has(n.toUpperCase())).map(([, n]): FnMeta => ({ name: n, description: '', helpUrl: '', parameters: [], options: { stream: false, volatile: false, cancelable: false, requiresAddress: false }, result: { dimensionality: 'scalar' } }));
       setCustomFunctions([...metas, ...plain].map((m) => suggestion(m)));
       this.calls.setTraits(metas.filter((m) => m.options.stream).map((m) => m.name), metas.filter((m) => m.options.volatile).map((m) => m.name));
-      await this.calls.setCustom([...raw.keys()]);
+      const vbaFns = (await this.vba.functions()).filter((n) => !raw.has(n.toUpperCase()));
+      setCustomFunctions([...metas, ...plain, ...vbaFns.map((n): FnMeta => ({ name: n, description: 'VBA function', helpUrl: '', parameters: [], options: { stream: false, volatile: false, cancelable: false, requiresAddress: false }, result: { dimensionality: 'scalar' } }))].map((m) => suggestion(m)));
+      await this.calls.setCustom([...raw.keys(), ...vbaFns.map((n) => n.toUpperCase())]);
     }, 300);
   }
 

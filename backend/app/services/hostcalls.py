@@ -139,9 +139,9 @@ _prepared: dict[str, tuple] = {}
 
 
 def prepare(b) -> None:
-    from . import jsfn
+    from . import jsfn, vbarun
 
-    names = tuple(sorted({"PY", *jsfn.functions(b.auto or {}).keys()}))
+    names = tuple(sorted({"PY", *jsfn.functions(b.auto or {}).keys(), *(n.upper() for n in vbarun.functions(b))}))
     if _prepared.get(b.id) != names:
         with b.lock:
             b.engine.host_custom(list(names))
@@ -248,6 +248,14 @@ def resolve(key: str, books, fresh: bool = False, auto: dict | None = None, wid:
                     return error("#NAME?"), str(e)
                 except jsfn.JsError as e:
                     return error(e.code if e.code in ERRORS else "#VALUE!"), f"{name}: {e}"
+            from . import vbarun
+
+            if wid and name.upper() in {n.upper() for n in vbarun.functions(books(wid))}:
+                try:
+                    return encode(norm(vbarun.call_udf(wid, name, args))), ""
+                except vbarun.VbaError as e:
+                    code = str(e)
+                    return error(code if code in ERRORS else "#VALUE!"), f"{name}: {code}"
         if name == "WEBSERVICE":
             need(args, 1)
             url = text_arg(args[0])
