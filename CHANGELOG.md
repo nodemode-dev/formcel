@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.39.0 · 2026-10-22
+
+- All 28 Form family themes. Preferences > General > Appearance has a Family theme list; the one you pick is shared with every Form app on this computer, and a theme picked in another Form app now opens here too instead of falling back to Studio.
+- The FormCel icon follows the family rule: small icons, the favicon, the title bar, Home, About and the splash show the icon's tile edge to edge instead of a shrunken copy with an empty margin. The maskable web app icon is rebuilt.
+
 ## 0.38.0 · 2026-10-22
 
 - Every font: the font box lists 28 bundled typefaces and every font installed on the computer (through the desktop app, the browser, or the engine process for Safari and Firefox), grouped as Theme, Recently used, Bundled, This computer and In this workbook, each name in its own face, with type-to-filter. Cells, shapes and charts draw the real face; fonts a file names but this computer lacks are kept and listed. PDF export embeds the fonts the sheet uses.
