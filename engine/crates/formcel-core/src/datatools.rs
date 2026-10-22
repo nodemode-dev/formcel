@@ -820,6 +820,12 @@ impl Workbook {
                 }
             }
         }
+        if flag(p, 3) && examples.len() == 1 {
+            let same = quote(&examples[0].1);
+            if edits.iter().all(|(_, v)| *v == same) {
+                edits.clear();
+            }
+        }
         let n = edits.len();
         if flag(p, 3) {
             let lines: Vec<String> = edits.iter().map(|(ad, v)| format!("{}\t{}\t{}", ad.row, ad.col, v)).collect();

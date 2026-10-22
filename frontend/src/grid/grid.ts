@@ -3297,7 +3297,7 @@ export class Grid {
     const mod = e.ctrlKey || e.metaKey;
     const dir = ARROWS[e.key];
     if (this.ghost.size && !this.editing) {
-      if (e.key === 'Enter' && !mod) {
+      if ((e.key === 'Enter' || (e.key === 'Tab' && !e.shiftKey)) && !mod) {
         await this.acceptGhost();
         return;
       }
