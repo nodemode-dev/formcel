@@ -350,6 +350,18 @@ export class EngineClient {
     return (await this.call({ op: 'whatif.run', book, cmd })) as WhatIfReply;
   }
 
+  async model(book: number, cmd: string): Promise<WhatIfReply> {
+    return (await this.call({ op: 'model.run', book, cmd })) as WhatIfReply;
+  }
+
+  async modelLines(book: number): Promise<string[]> {
+    return (await this.call({ op: 'model.lines', book })) as string[];
+  }
+
+  async loadModel(book: number, lines: string[]): Promise<void> {
+    if (lines.length) await this.call({ op: 'model.load', book, lines });
+  }
+
   async loadWhatif(book: number, lines: string[]): Promise<void> {
     if (lines.length) await this.call({ op: 'whatif.load', book, lines });
   }

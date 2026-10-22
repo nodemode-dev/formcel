@@ -94,6 +94,8 @@ export const icons = {
   errCheck: svg('<path d="M12 4.5l8.5 15h-17z"/><path d="M12 10.5v4M12 17v.1"/>'),
   extLink: svg('<path d="M10 14a3.5 3.5 0 005 0l3-3a3.5 3.5 0 00-5-5l-1 1"/><path d="M14 10a3.5 3.5 0 00-5 0l-3 3a3.5 3.5 0 005 5l1-1"/>'),
   dataConn: svg('<ellipse cx="12" cy="6.5" rx="7" ry="2.8"/><path d="M5 6.5v11c0 1.5 3.1 2.8 7 2.8s7-1.3 7-2.8v-11M5 12c0 1.5 3.1 2.8 7 2.8s7-1.3 7-2.8"/>'),
+  dataModel: svg('<rect x="3.5" y="4" width="7" height="6" rx="1.5"/><rect x="13.5" y="4" width="7" height="6" rx="1.5"/><rect x="8.5" y="14" width="7" height="6" rx="1.5"/><path d="M7 10v2.5h5V14M17 10v2.5h-5"/>'),
+  cube: svg('<path d="M12 3.5l7.5 4v9L12 20.5l-7.5-4v-9z"/><path d="M4.5 7.5L12 11.5l7.5-4M12 11.5v9"/>'),
 } as const;
 
 export type IconName = keyof typeof icons;

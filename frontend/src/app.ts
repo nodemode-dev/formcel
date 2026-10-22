@@ -35,6 +35,7 @@ import { cleanPage, layoutOf, PageSetupDialog, type PageSetup } from './ui/pages
 import { NumberFormatDialog } from './ui/numberformat';
 import { hasHtmlTable } from './grid/pastedata';
 import { SpellCheck } from './ui/spell';
+import { DataModelWindow } from './ui/datamodel';
 
 const LOCALES: [string, string][] = [['en-US', 'English (United States)'], ['en-GB', 'English (United Kingdom)'], ['de-DE', 'Deutsch (Deutschland)'], ['fr-FR', 'Francais (France)'], ['ja-JP', 'Japanese (Japan)'], ['es-ES', 'Espanol (Espana)'], ['it-IT', 'Italiano (Italia)'], ['pt-BR', 'Portugues (Brasil)'], ['nl-NL', 'Nederlands (Nederland)'], ['sv-SE', 'Svenska (Sverige)'], ['pl-PL', 'Polski (Polska)'], ['ru-RU', 'Russian (Russia)'], ['zh-CN', 'Chinese (China)'], ['ko-KR', 'Korean (Korea)']];
 
@@ -776,6 +777,13 @@ export class App {
     cmd('data.filter', 'Filter', 'Add filter buttons to the header row of the data around the active cell, or take them off.', true, () => this.toggleFilter(), 'Mod+Shift+L');
     cmd('table.create', 'Table', 'Turn the data around the active cell into a table with a header row, banded rows and filter buttons, or change the table the active cell is in.', true, () => (g.activeTable() ? this.designBox() : this.tableBox()), 'Mod+T');
     cmd('pivot.create', 'PivotTable', 'Summarize the data around the active cell in a PivotTable on a new sheet or a chosen cell, with recommended layouts to start from. Inside a PivotTable this opens its fields panel instead.', true, () => this.pivotBox());
+    cmd('datamodel.manage', 'Data Model', 'Open the Data Model window: the tables added to the workbook model, their relationships, calculated columns, measures, hierarchies and KPIs.', false, () => this.modelWindow().open());
+    cmd('datamodel.add', 'Add to Data Model', 'Add the table or the selected range with a header row to the Data Model.', true, async () => {
+      const w = this.modelWindow();
+      await w.open('data');
+    });
+    cmd('datamodel.pivot', 'PivotTable from Data Model', 'Insert a PivotTable that reads the Data Model, with its relationships and measures.', true, () => this.pivotCreate('@model', null, null).catch((err: unknown) => this.status(err instanceof Error ? err.message : 'The PivotTable was not made', true)));
+    cmd('cube.convert', 'Convert to Formulas', 'Replace the Data Model PivotTable under the active cell with CUBEMEMBER, CUBEVALUE and CUBESET formulas.', true, () => this.cubeConvert());
     cmd('pivot.fields', 'PivotTable fields', 'Choose which fields of the PivotTable under the active cell go in Rows, Columns, Values and Filters, how values are summarized and shown, and add calculated fields.', false, () => this.pivotFields());
     cmd('pivot.refresh', 'Refresh PivotTable', 'Recompute the PivotTable under the active cell from its current source data, or every PivotTable when the active cell is not in one.', true, () => this.pivotRefresh(false));
     cmd('pivot.refresh-all', 'Refresh all PivotTables', 'Recompute every PivotTable in the workbook from its current source data.', true, () => this.pivotRefresh(true));
@@ -2301,7 +2309,7 @@ export class App {
     this.flush();
     await this.saving;
     this.collab.detach();
-    let doc: WorkbookMeta & { collab?: { notes: Record<string, { text: string; author: string; time: string }>; threads: never[]; people: string[] }; protection?: { book: string[]; sheets: string[][] }; cells: [number, number, string][][]; formats?: [number, number, string][][]; styles?: [number, number, string][][]; merges?: Area[][]; rules?: string[][]; filters?: string[]; validations?: string[][]; tables?: string[]; pivots?: string[]; whatif?: string[]; links?: [number, number, string][][]; theme?: string; cellStyles?: string[]; views?: SheetView[]; names?: Name[]; nameNotes?: [string, string][]; watches?: [number, number, number][] };
+    let doc: WorkbookMeta & { collab?: { notes: Record<string, { text: string; author: string; time: string }>; threads: never[]; people: string[] }; protection?: { book: string[]; sheets: string[][] }; cells: [number, number, string][][]; formats?: [number, number, string][][]; styles?: [number, number, string][][]; merges?: Area[][]; rules?: string[][]; filters?: string[]; validations?: string[][]; tables?: string[]; pivots?: string[]; model?: string[]; whatif?: string[]; links?: [number, number, string][][]; theme?: string; cellStyles?: string[]; views?: SheetView[]; names?: Name[]; nameNotes?: [string, string][]; watches?: [number, number, number][] };
     try {
       doc = await api('GET', `/api/workbooks/${id}`);
     } catch {
@@ -2330,6 +2338,8 @@ export class App {
     for (const [n, c] of doc.nameNotes ?? []) await e.nameComment(book, n, c).catch(() => undefined);
     this.nameNoteMap = new Map(doc.nameNotes ?? []);
     await e.loadTables(book, doc.tables ?? []);
+    await e.loadModel(book, doc.model ?? []);
+    this.modelLines = doc.model ?? [];
     await e.loadPivots(book, doc.pivots ?? []);
     this.pivotLines = doc.pivots ?? [];
     this.pivotPanel?.hide();
@@ -2796,6 +2806,72 @@ export class App {
         this.p.save.title = err instanceof Error ? err.message : '';
       }
     });
+  }
+
+  private modelWin: DataModelWindow | null = null;
+  private modelLines: string[] = [];
+
+  private modelWindow(): DataModelWindow {
+    if (this.modelWin) return this.modelWin;
+    const g = this.grid;
+    return (this.modelWin = new DataModelWindow({
+      book: () => this.open?.book ?? 0,
+      tables: () => g.tables().map((t) => ({ name: t.name, sheet: t.sheet, area: t.area })),
+      sheetName: (i) => this.open?.sheets[i] ?? `Sheet${i + 1}`,
+      selection: () => {
+        const s = g.selection();
+        return { sheet: g.sheetIndex, r0: s.r0, c0: s.c0, r1: s.r1, c1: s.c1 };
+      },
+      activeTable: () => g.activeTable()?.name ?? null,
+      say: (m, bad) => this.status(m, !!bad),
+      changed: async (effect, lines) => {
+        await g.applyPivot(effect);
+        if (lines.join('\n') !== this.modelLines.join('\n')) {
+          this.modelLines = lines;
+          this.sendModel(lines);
+        }
+        await this.pivotSync();
+      },
+    }));
+  }
+
+  private sendModel(lines: string[]): void {
+    const o = this.open;
+    if (!o) return;
+    this.status('Saving');
+    this.saving = this.saving.then(async () => {
+      try {
+        await api('PUT', `/api/workbooks/${o.id}/model`, { lines });
+        if (!this.pending.size) this.status('Saved');
+      } catch (err) {
+        this.status('Not saved', true);
+        this.p.save.title = err instanceof Error ? err.message : '';
+      }
+    });
+  }
+
+  private async cubeConvert(): Promise<void> {
+    const o = this.open;
+    if (!o) return;
+    const s = this.grid.selection();
+    const d = this.pivotAt(this.grid.sheetIndex, s.r0, s.c0);
+    if (!d || !d.table.startsWith('@model')) {
+      this.status('Select a cell inside a PivotTable made from the Data Model first.', true);
+      return;
+    }
+    const r = await engine().model(o.book, `tofx\t${d.name}`);
+    if (r.text.startsWith('error\t')) {
+      this.status(r.text.slice(6), true);
+      return;
+    }
+    this.pivotBusy = true;
+    try {
+      await this.grid.applyPivot(r.effect);
+    } finally {
+      this.pivotBusy = false;
+    }
+    await this.pivotSync();
+    this.status('Converted to CUBE formulas.');
   }
 
   private async pivotSync(): Promise<void> {
