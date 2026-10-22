@@ -733,7 +733,7 @@ export class App {
       },
       fnPick: (name) => this.fnTools.pick(name),
       after: () => {
-        if (!this.menu.open && document.activeElement?.closest('.fc-fmt-custom, .rb-menu, .rb-combo, .fc-modal') == null) this.grid.focus();
+        if (!this.menu.open && document.activeElement?.closest('#overlay-root, .fc-fmt-custom, .rb-menu, .rb-combo, .fc-modal') == null) this.grid.focus();
       },
     });
     setLayoutSummary('ribbon', () => {

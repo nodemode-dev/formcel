@@ -41,7 +41,10 @@ function ensure(pick: (v: Variant) => void): HTMLElement {
 
 export function hideGallery(): void {
   if (popover) popover.hidden = true;
-  if (closer) document.removeEventListener('pointerdown', closer, true);
+  if (closer) {
+    document.removeEventListener('pointerdown', closer, true);
+    document.removeEventListener('keydown', closer, true);
+  }
   closer = null;
 }
 
@@ -59,9 +62,10 @@ export function showGallery(at: { x: number; y: number }, pick: (v: Variant) => 
   root.style.left = `${Math.max(4, Math.min(at.x, window.innerWidth - r.width - 4))}px`;
   root.style.top = `${Math.max(4, Math.min(at.y, window.innerHeight - r.height - 4))}px`;
   closer = (e) => {
-    if (!root.contains(e.target as Node)) hideGallery();
+    if (e instanceof KeyboardEvent ? e.key === 'Escape' : !root.contains(e.target as Node)) hideGallery();
   };
   document.addEventListener('pointerdown', closer, true);
+  document.addEventListener('keydown', closer, true);
   root.querySelector<HTMLElement>('.fc-shape-item')?.focus();
 }
 
