@@ -533,3 +533,12 @@ The dir stream's project information and references are kept verbatim on rewrite
 - logged: v0.37.0 · 2026-10-22
 
 The model is stored as lines in the .fcel document. In .xlsx, CUBE formulas get cached values, connections.xml gains ThisWorkbookDataModel and the definition goes into a customXml item; Excel sees formulas and values but not a refreshable model. Writer finishing order is now calc, pivots, app, review and objects, slicers, queries, model, data types, chart sheets. Data type cells are written as display text and plain formulas with a formcel/datatypes.json part (Excel's richData is not written); field formulas use _xlfn.FIELDVALUE. Quote providers (Stooq, Alpha Vantage, Finnhub) need the user's key and ECB rates are free; settings live under "quotes" in settings.json and keys never enter a workbook.
+
+## v0.37.1 entries
+
+### Installer proves the engine loads; desktop requirements
+- refers-to: oc_install, oc_install.bat, requirements_macos.txt, requirements_desktop.txt, requirements_desktop_macos.txt
+- kind: explainer
+- logged: v0.37.1 · 2026-10-22
+
+oc_install reinstalls the engine module every run (--force-reinstall --no-deps, so a broken wheel from an earlier toolchain never survives) and imports it at once; if the import fails it prints the error and stops, rather than letting ./formcel start a server that dies at import with the window showing an empty Home. requirements_macos.txt must carry every pin in requirements.txt; 0.37.0 missed pypdfium2 and keyring there. PyInstaller for the desktop build lives in requirements_desktop*.txt, installed by setup/install_desktop or build_app.bat only.

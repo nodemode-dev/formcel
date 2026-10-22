@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.37.1 · 2026-10-22
+
+- Fixed: on macOS 27 the engine process stopped at start with "mis-aligned LINKEDIT string pool", so the window showed no workbooks or templates. Release builds of the engine and the desktop app are no longer stripped (rustc before 1.98 strips Mac libraries in a way macOS 27 refuses). `./formcel_oc_install` now rebuilds the engine every time and stops with a clear message if it cannot load it.
+- New: `./build_app` (macOS and Linux) and `build_app.bat` (Windows) at the top of the folder build the desktop app start to finish, as in formvis and formdeck: FormCel.app in Applications and a .dmg on macOS, a .deb on Linux, .msi and setup .exe on Windows.
+
 ## 0.37.0 · 2026-10-22
 
 - FormCel now opens and looks like an Excel window in the form family: a rounded splash with a loading bar, then the window appears whole; a 38 px title row with the workbook name, a command search box (Alt+Q), share, account and settings; on Windows and Linux optional custom minimize, maximize and close buttons.

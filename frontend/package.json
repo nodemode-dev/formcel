@@ -1,7 +1,7 @@
 {
   "name": "formcel",
   "private": true,
-  "version": "0.37.0",
+  "version": "0.37.1",
   "description": "FormCel · spreadsheets in the form family",
   "license": "Apache-2.0",
   "type": "module",
