@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.39.1 · 2026-10-22
+
+- The repository's GitHub Actions now run basic checks (frontend, backend and scripts) on main, on pull requests and on `compile_vX.Y.Z` branches.
+- Releases are built by formcompiler (`nodemode-ai/formcompiler`) and published on its release page as `formcel-vX.Y.Z`.
+- There is no change to the app itself.
+
 ## 0.39.0 · 2026-10-22
 
 - All 28 Form family themes. Preferences > General > Appearance has a Family theme list; the one you pick is shared with every Form app on this computer, and a theme picked in another Form app now opens here too instead of falling back to Studio.
