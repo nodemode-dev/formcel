@@ -155,7 +155,7 @@ export class Vbe {
 
   private syncTitle(): void {
     const sub = this.active ? ` - [${this.active} (Code)]` : '';
-    const t = `Microsoft Visual Basic for Applications - ${this.host.title()}${sub}`;
+    const t = `Visual Basic for Applications - ${this.host.title()}${sub}`;
     if (this.titleText.textContent !== t) this.titleText.textContent = t;
   }
 

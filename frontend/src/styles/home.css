@@ -295,8 +295,12 @@
 
 .fc-save {
   min-width: 72px;
+  max-width: 220px;
   font-size: var(--text-sm);
   color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .fc-save[data-state="error"] { color: var(--bad); }

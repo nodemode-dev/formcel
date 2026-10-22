@@ -4144,6 +4144,7 @@ export class App {
   private status(text: string, error = false): void {
     this.p.saveText.nodeValue = text;
     this.p.save.dataset.state = error ? 'error' : 'ok';
+    if (this.p.save.title !== text) this.p.save.title = text;
   }
 
   private queueSave(changes: Changed[]): void {
