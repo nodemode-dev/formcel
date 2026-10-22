@@ -35,6 +35,9 @@ import { cleanPage, layoutOf, PageSetupDialog, type PageSetup } from './ui/pages
 import { NumberFormatDialog } from './ui/numberformat';
 import { hasHtmlTable } from './grid/pastedata';
 import { SpellCheck } from './ui/spell';
+import { installSettings } from './ui/settings';
+import { macroPolicy, pivotFlags, prefs } from './ui/prefs';
+import { userName } from './ui/collab';
 
 const LOCALES: [string, string][] = [['en-US', 'English (United States)'], ['en-GB', 'English (United Kingdom)'], ['de-DE', 'Deutsch (Deutschland)'], ['fr-FR', 'Francais (France)'], ['ja-JP', 'Japanese (Japan)'], ['es-ES', 'Espanol (Espana)'], ['it-IT', 'Italiano (Italia)'], ['pt-BR', 'Portugues (Brasil)'], ['nl-NL', 'Nederlands (Nederland)'], ['sv-SE', 'Svenska (Sverige)'], ['pl-PL', 'Polski (Polska)'], ['ru-RU', 'Russian (Russia)'], ['zh-CN', 'Chinese (China)'], ['ko-KR', 'Korean (Korea)']];
 
@@ -643,6 +646,29 @@ export class App {
     });
     this.auto = new Automation({ grid: this.grid, book: () => this.open?.book ?? -1, id: () => this.open?.id ?? '', sheets: () => this.open?.sheets ?? [], title: () => this.open?.title ?? '', status: (t, e) => this.status(t, e), addSheet: (n) => this.addSheetNamed(n), renameSheet: async (i, n) => this.renameSheetTo(i, n), deleteSheet: (i) => this.deleteSheet(i), showSheet: (i) => this.showSheet(i), script: this.scriptHost() });
     this.commands();
+    installSettings({
+      grid: this.grid,
+      calc: this.calc,
+      locales: LOCALES,
+      hasWorkbook: () => !!this.open,
+      locale: () => this.open?.locale ?? null,
+      setLocale: (tag) => this.setLocale(tag),
+      userName,
+      setUserName: (v) => this.collab.setUserName(v),
+      autocomplete: () => this.grid.autoComplete,
+      setAutocomplete: (on) => {
+        if (on !== this.grid.autoComplete) this.toggleAutoComplete();
+      },
+      flashAuto: () => this.flashAuto,
+      setFlashAuto: (on) => {
+        if (on !== this.flashAuto) this.toggleFlashAuto();
+      },
+      pageBreaks: () => this.preview,
+      say: (t, bad) => this.status(t, !!bad),
+    });
+    this.grid.opts.barEdit = () => {
+      this.p.formulaBar.focus();
+    };
     this.calc.commands((id, title, description, changes, run, keys) => registerCommand({ id, title, description, changes, run, keys }));
     this.collab.commands((id, title, description, changes, run, keys) => registerCommand({ id, title, description, changes, run, keys }));
     bindShortcuts(this.shortcuts, () => !!this.open);
@@ -671,6 +697,8 @@ export class App {
     cmd('file.home', 'Home', 'Save and go to the home screen.', false, () => { location.hash = ''; });
     cmd('file.new', 'New blank workbook', 'Create an empty workbook and open it.', true, () => this.create());
     cmd('file.download', 'Download', 'Choose a file format to download this workbook or sheet in.', false, () => this.downloadMenu());
+    cmd('file.download-default', 'Save a copy', 'Save a copy of this workbook in the format chosen in Preferences, Save: FormCel Workbook (.fcel) or Excel Workbook (.xlsx).', false, () => this.download(prefs().defaultFormat));
+    cmd('file.download-fcel', 'Download as .fcel', 'Save a copy of this workbook as a FormCel Workbook, with every feature kept.', false, () => this.download('fcel'));
     cmd('file.download-xlsx', 'Download as .xlsx', 'Save a copy of this workbook as an Excel workbook in your downloads.', false, () => this.download('xlsx'));
     cmd('file.download-xlsm', 'Download as .xlsm', 'Save a copy as an Excel macro-enabled workbook with the macros the file was opened with. FormCel keeps macros but does not run them.', false, () => this.download('xlsm'));
     cmd('file.download-xlsx-password', 'Download as .xlsx with a password', 'Save a copy as an Excel workbook that asks for a password to open.', false, () => this.downloadLocked());
@@ -1041,8 +1069,23 @@ export class App {
     }
     this.flush();
     await this.saving;
+    if (!this.launched) {
+      this.launched = true;
+      if (!prefs().startScreen) {
+        const list = await api<WorkbookMeta[]>('GET', '/api/workbooks').catch(() => [] as WorkbookMeta[]);
+        const last = [...list].sort((a, b) => String(b.modified).localeCompare(String(a.modified)))[0];
+        if (last) {
+          location.hash = `w-${last.id}`;
+          return;
+        }
+        await this.create();
+        return;
+      }
+    }
     this.showHome();
   }
+
+  private launched = false;
 
   private showHome(): void {
     const p = this.p;
@@ -1081,6 +1124,9 @@ export class App {
   private async create(template?: string): Promise<void> {
     this.flush();
     const meta = await api<WorkbookMeta>('POST', '/api/workbooks', template ? { template } : {});
+    if (!template) {
+      for (let n = meta.sheets.length; n < prefs().newSheets; n++) await api('POST', `/api/workbooks/${meta.id}/sheets`, { name: `Sheet${n + 1}` }).catch(() => undefined);
+    }
     location.hash = `w-${meta.id}`;
   }
 
@@ -1893,7 +1939,8 @@ export class App {
     const b = this.button('file.download').getBoundingClientRect();
     const run = (id: string) => () => runCommand(id).then(() => this.grid.focus());
     this.menu.show(b.left, b.bottom + 4, [
-      { label: 'Excel workbook (.xlsx)', run: run('file.download-xlsx') },
+      { label: 'FormCel workbook (.fcel)', keys: prefs().defaultFormat === 'fcel' ? 'Default' : '', run: run('file.download-fcel') },
+      { label: 'Excel workbook (.xlsx)', keys: prefs().defaultFormat === 'xlsx' ? 'Default' : '', run: run('file.download-xlsx') },
       ...(this.open?.macros ? [{ label: 'Excel macro-enabled workbook (.xlsm), with the macros it was opened with', run: run('file.download-xlsm') }] : []),
       { label: 'Excel workbook with a password (.xlsx)', run: run('file.download-xlsx-password') },
       { label: 'OpenDocument spreadsheet (.ods)', run: run('file.download-ods') },
@@ -2013,6 +2060,8 @@ export class App {
     const themes: [ThemeName, string][] = [['dark', 'Dark theme'], ['light', 'Light theme'], ['contrast', 'High contrast theme']];
     const sizes: [TextSize, string][] = [['normal', 'Normal text size'], ['large', 'Large text size'], ['xlarge', 'Extra large text size']];
     this.menu.show(b.left, b.bottom + 4, [
+      { label: 'Preferences...', keys: 'Ctrl+,', run: run('app.settings') },
+      { sep: true },
       { label: 'Check accessibility', run: run('a11y.check') },
       { label: 'Keyboard shortcuts', keys: 'Ctrl+/', run: run('a11y.shortcuts') },
       { sep: true },
@@ -2068,7 +2117,7 @@ export class App {
     });
   }
 
-  private async download(kind: 'xlsx' | 'xlsm' | 'ods' | 'csv' | 'tsv' | 'pdf' | 'pdf-all' | 'html' | 'html-all'): Promise<void> {
+  private async download(kind: 'fcel' | 'xlsx' | 'xlsm' | 'ods' | 'csv' | 'tsv' | 'pdf' | 'pdf-all' | 'html' | 'html-all'): Promise<void> {
     const o = this.open;
     if (!o) return;
     this.flush();
@@ -2107,13 +2156,22 @@ export class App {
     f.delim.focus();
   }
 
+  private async csvQuick(file: File): Promise<void> {
+    this.home.say(`Reading ${file.name}`);
+    const pv = await this.csvPreview(file);
+    if (!pv) return;
+    const convert = prefs().importConvert;
+    const text = pv.columns.map((c, i) => ((convert ? c.as : 'text') === 'text' ? i : -1)).filter((i) => i >= 0).join(',');
+    await this.importFile(file, `&delimiter=${pv.delimiter}&text=${text}`);
+  }
+
   private fillCsv(f: CsvForm, pv: CsvPreview): void {
     f.meta.textContent = `${pv.rows.toLocaleString()} row${pv.rows === 1 ? '' : 's'} · ${pv.encoding}`;
     const head = document.createElement('tr');
     pv.columns.forEach((c, i) => {
       const th = document.createElement('th');
       th.innerHTML = `<select class="fc-csv-as" data-col="${i}" aria-label="Column ${i + 1} as"><option value="general">General</option><option value="text">Text</option></select><span class="fc-csv-kind"></span>`;
-      th.querySelector<HTMLSelectElement>('select')!.value = c.as;
+      th.querySelector<HTMLSelectElement>('select')!.value = prefs().importConvert ? c.as : 'text';
       th.querySelector('.fc-csv-kind')!.textContent = c.label;
       head.appendChild(th);
     });
@@ -2273,14 +2331,16 @@ export class App {
   }
 
   private async importFile(file: File, options?: string, password?: string): Promise<string | null> {
-    if (options === undefined && /\.(csv|tsv|txt)$/i.test(file.name)) {
-      void this.csvBox(file);
+    const textFile = /\.(csv|tsv|txt)$/i.test(file.name);
+    if (options === undefined && textFile) {
+      void (prefs().importWizard ? this.csvBox(file) : this.csvQuick(file));
       return null;
     }
     this.home.say(`Opening ${file.name}`);
     const headers: Record<string, string> = { 'content-type': 'application/octet-stream' };
     if (password) headers['x-formcel-password'] = password;
-    const r = await fetch(`/api/import?name=${encodeURIComponent(file.name)}${options ?? ''}`, { method: 'POST', headers, body: file }).catch(() => null);
+    const cap = textFile && prefs().importMaxRows < 1048576 ? `&max_rows=${prefs().importMaxRows}` : '';
+    const r = await fetch(`/api/import?name=${encodeURIComponent(file.name)}${options ?? ''}${cap}`, { method: 'POST', headers, body: file }).catch(() => null);
     if (r && (r.status === 401 || r.status === 403)) {
       this.home.say('');
       if (r.status === 403) return 'That password does not open the file.';
@@ -2361,6 +2421,11 @@ export class App {
     this.tools.resetTemp();
     await this.calc.load(book, calcDoc);
     this.showSheet(0);
+    if (prefs().defaultView === 'pagebreak') {
+      this.preview = true;
+      void this.refreshBreaks();
+    }
+    if (doc.macros && macroPolicy() !== 'disable') this.status(macroPolicy() === 'enable' ? 'This workbook has macros, and Preferences allow them to run.' : 'This workbook has macros. They are off; change Macro settings in Preferences, Trust Center.');
     this.button('edit.undo').disabled = true;
     this.button('edit.redo').disabled = true;
     this.grid.focus();
@@ -2952,8 +3017,8 @@ export class App {
       sheet = o.sheets.length - 1;
     }
     if (sheet !== this.grid.sheetIndex) this.showSheet(sheet);
-    const base = (layout ? parsePivot(layout) : null) ?? emptyPivot(fields, sheet, row, col);
-    const def = { ...base, sheet, row, col, name: '', out: '', flags: base.flags || 'rcsa' };
+    const base = (layout ? parsePivot(layout) : null) ?? { ...emptyPivot(fields, sheet, row, col), flags: pivotFlags() };
+    const def = { ...base, sheet, row, col, name: '', out: '', flags: base.flags || pivotFlags() };
     await this.pivotApply((book) => e.createPivot(book, formatPivot(def)));
     this.grid.select(row, col);
     const made = this.pivotDefs().find((d) => d.sheet === sheet && d.row === row && d.col === col);
@@ -3902,7 +3967,7 @@ export class App {
     }
     this.status('Saving');
     window.clearTimeout(this.timer);
-    this.timer = window.setTimeout(() => this.flush(), 400);
+    this.timer = window.setTimeout(() => this.flush(), Math.round(prefs().autosaveSeconds * 1000));
   }
 
   private sendObjects(sheet: number, list: FloatObject[]): void {

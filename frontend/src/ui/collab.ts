@@ -872,6 +872,21 @@ export class Collab {
     d.show();
   }
 
+  setUserName(name: string): void {
+    const v = name.trim().slice(0, 60);
+    if (!v) return;
+    try {
+      localStorage.setItem(USER_KEY, v);
+    } catch {
+      return;
+    }
+    if (this.id) {
+      void engine().setUser(this.book, v);
+      this.source?.close();
+      this.connect();
+    }
+  }
+
   private async loadChanges(): Promise<void> {
     if (!this.id) return;
     const g = this.host.grid;

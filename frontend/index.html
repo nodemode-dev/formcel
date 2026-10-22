@@ -57,6 +57,18 @@
   root.style.background = p[0];
   root.style.colorScheme = LIGHT[theme] ? 'light' : 'dark';
   root.setAttribute('data-theme', LIGHT[theme] ? 'light' : 'dark');
+  try {
+    var o = JSON.parse(localStorage.getItem('formcel.options') || '{}');
+    if (typeof o.accent === 'string' && /^#[0-9a-fA-F]{6}$/.test(o.accent) && !(theme === 'light' || theme === 'sand')) {
+      root.style.setProperty('--accent-color', o.accent);
+      root.style.setProperty('--accent-color-dim', o.accent + '33');
+      root.style.setProperty('--accent-color-hover', 'color-mix(in srgb, ' + o.accent + ' 82%, #ffffff)');
+    }
+    if (o.density === 'compact' || o.density === 'comfortable') { root.classList.remove('fc-density-compact', 'fc-density-comfortable'); root.classList.add('fc-density-' + o.density); }
+    if (o.reduceMotion) root.classList.add('fc-reduce-motion');
+    if (o.showFormulaBar === false) root.classList.add('fc-hide-formulabar');
+    if (o.showStatusBar === false) root.classList.add('fc-hide-statusbar');
+  } catch (e) {}
   var tc = document.querySelector('meta[name="theme-color"]');
   if (tc) tc.setAttribute('content', p[0]);
 })();
@@ -79,6 +91,8 @@
   <link rel="stylesheet" href="/src/styles/datatools.css">
   <link rel="stylesheet" href="/src/styles/names.css">
   <link rel="stylesheet" href="/src/styles/titlebar.css">
+  <link rel="stylesheet" href="/src/styles/settings.css">
+
 </head>
 <body>
   <div id="app"></div>

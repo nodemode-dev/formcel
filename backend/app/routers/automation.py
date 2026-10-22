@@ -6,7 +6,7 @@ from pydantic import BaseModel, Field
 
 from ..services import aiclient, extbooks, extpkg, hostcalls, offline_ai, pquery, ranges, webdata
 from ..services.store import store
-from . import automation_x, queries, restapi, settings_x
+from . import automation_x, queries, restapi, settings_app, settings_x
 
 router = APIRouter(prefix="/api")
 
@@ -159,18 +159,13 @@ class TokenIn(BaseModel):
 
 @router.get("/settings/api")
 def get_api() -> dict:
-    return {"enabled": bool(aiclient.load_settings().get("api_token"))}
+    return {"enabled": bool(aiclient.api_token())}
 
 
 @router.put("/settings/api")
 def put_api(body: TokenIn) -> dict:
-    s = aiclient.load_settings()
     token = secrets.token_urlsafe(24) if body.generate else (body.token or "").strip()
-    if token:
-        s["api_token"] = token
-    else:
-        s.pop("api_token", None)
-    aiclient.save_settings(s)
+    aiclient.set_api_token(token)
     return {"enabled": bool(token), "token": token if body.generate else ""}
 
 
@@ -183,7 +178,7 @@ bearer = HTTPBearer(auto_error=False, description="The token made under More, RE
 
 
 def guard(cred: HTTPAuthorizationCredentials | None = Depends(bearer)) -> None:
-    token = aiclient.load_settings().get("api_token")
+    token = aiclient.api_token()
     if token and not secrets.compare_digest((cred.credentials if cred else "").encode(), token.encode()):
         raise HTTPException(401, "Send the API token as Authorization: Bearer TOKEN.", headers={"WWW-Authenticate": "Bearer"})
 
@@ -281,5 +276,6 @@ def v1_put_values(wid: str, sheet: str, body: ValuesIn, range: str = "A1") -> di
 router.include_router(automation_x.router)
 router.include_router(queries.router)
 router.include_router(settings_x.router)
+router.include_router(settings_app.router)
 v1.include_router(automation_x.v1)
 v1.include_router(restapi.v1)

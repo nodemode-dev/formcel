@@ -4,6 +4,7 @@ import urllib.error
 import urllib.request
 
 from .. import config
+from . import secrets
 
 MAX_TURNS = 6
 
@@ -37,29 +38,82 @@ def save_settings(data: dict) -> None:
     os.replace(tmp, p)
 
 
+def _file_secret(group: str | None, field: str):
+    def read() -> str | None:
+        s = load_settings()
+        return ((s.get(group) or {}) if group else s).get(field) or None
+
+    def write(value: str) -> None:
+        s = load_settings()
+        (s.setdefault(group, {}) if group else s)[field] = value
+        save_settings(s)
+
+    def clear() -> None:
+        s = load_settings()
+        box = (s.get(group) or {}) if group else s
+        if field in box:
+            box.pop(field)
+            save_settings(s)
+
+    return read, write, clear
+
+
+def ai_key() -> str:
+    read, _, clear = _file_secret("ai", "key")
+    return secrets.get("ai", read, clear) or ""
+
+
+def set_ai_key(value: str) -> None:
+    read, write, clear = _file_secret("ai", "key")
+    if value:
+        secrets.put("ai", value, write, clear)
+    else:
+        secrets.delete("ai", clear)
+
+
+def api_token() -> str:
+    read, _, clear = _file_secret(None, "api_token")
+    return secrets.get("api", read, clear) or ""
+
+
+def set_api_token(value: str) -> None:
+    read, write, clear = _file_secret(None, "api_token")
+    if value:
+        secrets.put("api", value, write, clear)
+    else:
+        secrets.delete("api", clear)
+
+
 def public() -> dict:
     ai = load_settings().get("ai") or {}
-    return {"configured": bool(ai.get("url")), "kind": ai.get("kind", "openai"), "url": ai.get("url", ""), "model": ai.get("model", ""), "key_set": bool(ai.get("key"))}
+    return {"configured": bool(ai.get("url")), "kind": ai.get("kind", "openai"), "url": ai.get("url", ""), "model": ai.get("model", ""), "key_set": bool(ai_key()), "store": secrets.where()}
 
 
 def update(kind: str, url: str, model: str, key: str | None) -> dict:
     s = load_settings()
-    old = s.get("ai") or {}
     if kind not in ("openai", "anthropic"):
         raise ValueError("the endpoint is openai or anthropic")
     if url and not url.lower().startswith(("http://", "https://")):
         raise ValueError("the endpoint address starts with http:// or https://")
-    s["ai"] = {"kind": kind, "url": url.strip(), "model": model.strip(), "key": old.get("key", "") if key is None else key.strip()}
+    old_key = (s.get("ai") or {}).get("key")
+    s["ai"] = {"kind": kind, "url": url.strip(), "model": model.strip()}
+    if old_key:
+        s["ai"]["key"] = old_key
     if not url.strip():
         s.pop("ai")
     save_settings(s)
+    if key is not None:
+        set_ai_key(key.strip())
+    if not url.strip():
+        set_ai_key("")
     return public()
 
 
 def endpoint() -> dict:
-    ai = load_settings().get("ai") or {}
+    ai = dict(load_settings().get("ai") or {})
     if not ai.get("url"):
         raise NotConfigured("No AI endpoint is set. Add one in Assistant settings; the key stays in the engine process's data folder, never in the workbook.")
+    ai["key"] = ai_key()
     return ai
 
 

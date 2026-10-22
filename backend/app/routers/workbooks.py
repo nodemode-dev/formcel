@@ -93,7 +93,7 @@ async def preview_file(request: Request, name: str, delimiter: str | None = None
 
 
 @router.post("/import", status_code=201)
-async def import_file(request: Request, name: str = "Imported workbook.xlsx", delimiter: str | None = None, text: str = "") -> dict:
+async def import_file(request: Request, name: str = "Imported workbook.xlsx", delimiter: str | None = None, text: str = "", max_rows: int = 0) -> dict:
     data = await request.body()
     if len(data) > MAX_IMPORT:
         raise HTTPException(413, "That file is over 100 MB.")
@@ -101,7 +101,7 @@ async def import_file(request: Request, name: str = "Imported workbook.xlsx", de
     ext = ext.lower()
     if ext in TEXT_FILES:
         cols = {int(x) for x in text.split(",") if x.strip().isdigit()}
-        return store().import_csv(data, name, delimiter, cols)
+        return store().import_csv(data, name, delimiter, cols, max_rows)
     if ext in ("pdf", "html", "htm", "paste"):
         try:
             return store().import_tables(data, stem or name, {"pdf": "pdf", "paste": "paste"}.get(ext, "html"))
@@ -189,6 +189,13 @@ def export_text(wid: str, kind: str, sheet: int = 0, scope: str = "sheet") -> Re
             raise HTTPException(404, f"No sheet {sheet}.")
         fname = "".join(ch for ch in title if ch not in '\\/:*?"<>|').strip() or "Workbook"
         return Response(data, media_type="application/pdf", headers={"Content-Disposition": f"attachment; filename*=UTF-8''{quote(fname)}.pdf"})
+    if kind == "fcel":
+        try:
+            title, data = store().export_fcel(wid)
+        except (KeyError, FileNotFoundError):
+            raise missing(wid)
+        fname = "".join(ch for ch in title if ch not in '\\/:*?"<>|').strip() or "Workbook"
+        return Response(data, media_type="application/vnd.formcel+zip", headers={"Content-Disposition": f"attachment; filename*=UTF-8''{quote(fname)}.fcel"})
     if kind in ("xlsm", "ods"):
         try:
             title, data = store().export_xlsx(wid, macros=True) if kind == "xlsm" else store().export_ods(wid)

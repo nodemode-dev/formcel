@@ -349,16 +349,19 @@ class Versions:
     def snapshot(self, wid: str, source: Path, name: str = "", user: str = "", force: bool = False, why: str = "autosave") -> dict | None:
         with self.guard:
             items = self.index(wid)
-            if not force and items and time.time() - items[-1]["epoch"] < SNAPSHOT_GAP:
+            from . import appsettings
+
+            limit = appsettings.version_limit()
+            if not force and items and time.time() - items[-1]["epoch"] < appsettings.snapshot_gap():
                 return None
             self.folder(wid).mkdir(parents=True, exist_ok=True)
             vid = f"{int(time.time() * 1000):x}"
             shutil.copyfile(source, self.folder(wid) / f"{vid}.fcel")
             item = {"id": vid, "time": stamp(), "epoch": time.time(), "name": name, "user": user, "why": why, "size": source.stat().st_size}
             items.append(item)
-            for old in items[:-VERSION_LIMIT]:
+            for old in items[:-limit]:
                 (self.folder(wid) / f"{old['id']}.fcel").unlink(missing_ok=True)
-            self._save(wid, items[-VERSION_LIMIT:])
+            self._save(wid, items[-limit:])
             return item
 
     def find(self, wid: str, vid: str) -> dict:
