@@ -7,6 +7,15 @@ Last updated: 2026-10-21 · autocomplete under fast typing
 
 ---
 
+## The family's 28 themes · v0.39.0 (2026-10-22)
+
+- refers-to: index.html boot script :: LIGHT, PROFILES; src/ui/family-themes.ts; src/ui/a11y.ts :: rebaseTheme; src/ui/settings.ts :: general
+- kind: rationale
+
+The boot table had the first 15 formvis profiles, so a family theme picked in another Form app (90s, Pro, Adwaita, Breeze, Soft and the rest) fell back to Studio here. The table now holds all 28 with the same LIGHT set, and the `formcel.options` accent is skipped on every light family theme, not only Light and Sand. `family-themes.ts` is the same table for the running window and must equal the boot one.
+
+Preferences > General > Appearance gains Family theme. Picking one writes `nodemode_ui_settings` (theme, appearance 3, other keys kept) so every Form app opens with it. FormCel's own Theme row stays (its Light and High contrast are accessibility profiles laid over the family colours); its first option is renamed Form family theme because that is what it shows. The order on a pick matters: Theme goes back to the family one first so the light or contrast tokens are off, then the family colours are set, then `rebaseTheme` lets `applyPrefs` take its base from the new colours instead of the old ones.
+
 ## Form family icon rule · v0.39.0 (2026-10-22)
 
 - refers-to: ../assets/formcel_icon_macos.png; public/favicon.svg, public/favicon.ico, public/icons/*, public/splash.html, public/sw.js; ../src-tauri/icons/*

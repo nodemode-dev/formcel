@@ -1,7 +1,8 @@
 import { RULES, type CalcMode } from '../engine/calc';
 import { el, setText } from '../automation/dom';
 import type { Grid } from '../grid/grid';
-import { setTextSize, setTheme, textSize, theme, type TextSize, type ThemeName } from './a11y';
+import { rebaseTheme, setTextSize, setTheme, textSize, theme, type TextSize, type ThemeName } from './a11y';
+import { FAMILY_THEMES, familyThemeId, setFamilyTheme } from './family-themes';
 import { applyAccent, applyGrid, applyRoot } from './apply';
 import type { Calc } from './calc';
 import { listCommands, registerCommand, runCommand } from './commands';
@@ -204,9 +205,16 @@ export class SettingsDialog extends Dialog {
     const view = selectRow('Default view for new sheets', [['normal', 'Normal'], ['pagebreak', 'Page Break Preview']], (v) => this.change({ defaultView: v as Prefs['defaultView'] }));
     const sheets = numberRow('Sheets in a new workbook', 1, 50, 1, (v) => this.change({ newSheets: Math.round(v) }));
     const start = toggleRow('Show the Home screen when FormCel starts', (v) => this.change({ startScreen: v }));
-    const themeRow = selectRow('Theme', [['dark', 'Dark'], ['light', 'Light'], ['contrast', 'High contrast']], (v) => {
+    const themeRow = selectRow('Theme', [['dark', 'Form family theme'], ['light', 'Light, like Excel'], ['contrast', 'High contrast']], (v) => {
       setTheme(v as ThemeName);
       applyAccent();
+    });
+    const familyRow = selectRow('Family theme', FAMILY_THEMES.map(([id, label]) => [id, label] as const), (v) => {
+      setTheme('dark');
+      setFamilyTheme(v);
+      rebaseTheme();
+      applyAccent();
+      themeRow.set('dark');
     });
     const accent = colorRow('Accent colour', (v) => this.change({ accent: v }), '#f97316');
     const density = selectRow('Density', [['', 'Standard'], ['compact', 'Compact'], ['comfortable', 'Comfortable']], (v) => this.change({ density: v as Prefs['density'] }));
@@ -230,7 +238,7 @@ export class SettingsDialog extends Dialog {
       this.grp('User', name.el),
       this.grp('New workbooks', this.reg(font, () => prefs().defaultFont), this.reg(size, () => String(prefs().defaultSize)), this.reg(view, () => prefs().defaultView), this.reg(sheets, () => prefs().newSheets), note('The font and size set how cells without their own font are drawn. A workbook opened in Page Break Preview shows its printed pages from the start.')),
       this.grp('Startup', this.reg(start, () => prefs().startScreen), note('When off, FormCel opens the workbook you used last, or a new blank one.')),
-      this.grp('Appearance', this.reg(themeRow, () => theme()), this.reg(accent, () => prefs().accent), this.reg(density, () => prefs().density), note('The light and high contrast themes bring their own accent colour.')),
+      this.grp('Appearance', this.reg(themeRow, () => theme()), this.reg(familyRow, () => familyThemeId()), this.reg(accent, () => prefs().accent), this.reg(density, () => prefs().density), note('The family theme is shared by every Form app on this computer. The light and high contrast themes bring their own accent colour.')),
       this.grp('Reset', reset.el, note('Preferences, the theme, text size, your shortcuts and remembered dialog positions go back to how FormCel comes. Workbooks are kept.')),
     ];
   }

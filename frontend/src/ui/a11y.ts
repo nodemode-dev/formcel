@@ -78,6 +78,11 @@ export function applyPrefs(): void {
   root.classList.toggle('fc-text-xlarge', prefs.text === 'xlarge');
 }
 
+export function rebaseTheme(): void {
+  base = null;
+  applyPrefs();
+}
+
 export const theme = () => prefs.theme;
 export const textSize = () => prefs.text;
 
