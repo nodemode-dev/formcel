@@ -8,7 +8,7 @@ import { makeBar, syncBar } from './pivotbar';
 import { FILTER_BAR, pivotChartData } from './pivotchart';
 import { contrast, isLine, shapeSvg } from './shapes';
 import { renderChartAsync } from './svg';
-import { isFloat, newId, type FloatObject, type ShapeSpec } from './types';
+import { isFloat, newId, type ChartSpec, type FloatObject, type ShapeSpec } from './types';
 
 export interface LayerIo {
   book(): number;
@@ -622,6 +622,21 @@ export class ObjectLayer implements ObjectsHook {
     n.el.addEventListener('pointercancel', up);
   }
 
+  private async liveRefs(spec: ChartSpec): Promise<ChartSpec> {
+    if (!spec.refs?.some((r) => typeof r.at === 'string')) return spec;
+    const refs = await Promise.all(
+      spec.refs.map(async (r) => {
+        if (typeof r.at !== 'string') return r;
+        const ref = await resolveRange(this.eng, this.io.book(), r.at);
+        const sheet = ref ? (ref.sheet ? this.io.sheetNames().indexOf(ref.sheet) : this.sheetNo) : -1;
+        if (!ref || sheet < 0) return { ...r, at: NaN };
+        const m = await readMatrix(this.eng, this.io.book(), sheet, { ...ref.range, r1: ref.range.r0, c1: ref.range.c0 });
+        return { ...r, at: Number(m[0]?.[0]) };
+      }),
+    );
+    return { ...spec, refs };
+  }
+
   private async draw(n: Node): Promise<void> {
     const spec = n.obj.chart;
     if (!spec) return;
@@ -641,7 +656,7 @@ export class ObjectLayer implements ObjectsHook {
         if (sheet < 0) html = `<div class="fc-chart-empty">There is no sheet named ${ref.sheet}.</div>`;
         else {
           const m = await readMatrix(this.eng, this.io.book(), sheet, ref.range);
-          html = await renderChartAsync(this.eng, spec, build(m, spec.byRows, spec.type), n.obj.w, n.obj.h);
+          html = await renderChartAsync(this.eng, await this.liveRefs(spec), build(m, spec.byRows, spec.type), n.obj.w, n.obj.h);
         }
       }
     }

@@ -64,7 +64,7 @@ def series_out(s, j: int, spec: dict, kind: str, line: bool) -> None:
         s.trendline = tl
         break
     for e in spec.get("errBars") or []:
-        if e.get("series", -1) >= 0 and e.get("series") != j:
+        if (e.get("series", -1) >= 0 and e.get("series") != j) or e.get("kind") == "column":
             continue
         ty = ERR_OUT.get(e.get("kind", "fixed"), "fixedVal")
         eb = ErrorBars(errDir="y", errBarType=e.get("dir", "both") if e.get("dir") in ("both", "plus", "minus") else "both", errValType=ty, noEndCap=False)
