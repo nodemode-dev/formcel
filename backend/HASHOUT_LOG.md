@@ -503,3 +503,10 @@ Queries round-trip as M-like text (steps with no Power Query equivalent as FormC
 - logged: v0.36.0 · 2026-10-22
 
 Apps Script runs in a node child of the engine process with its state in the automation block; triggers tick every 15 seconds in the scheduler, also with no window open. Python cells run in a separate process (pyrun_child with xl() from pyxl) with resource limits and no network, ordered by sheet position. Add-in manifests give function metadata for tips and Insert Function. With no model endpoint set, AI() and the assistant answer a fixed set of requests by rule (sentiment, extraction, summaries, totals, templates) and say so; the cleaner leaves real dates alone. External references read files on disk (path folder, data folder, working directory) through pqx.file_table before falling back to the library by name; a missing source gives #REF! so cached values stay.
+
+### Round three: query tables, IMAGE rich values, Python order, streaming functions
+- refers-to: app/services/xlsx/qtables.py, imagefn.py, richdata.py; services/pyorder.py, jsfn.py
+- kind: explainer
+- logged: v0.36.0 · 2026-10-22
+
+Loaded queries are written to .xlsx as tables of type queryTable with queryTable parts and connections.xml; the query steps are not stored there, so Excel shows the data but cannot re-run the query. Cells whose engine value is the IMAGE marker are written as cached rich values (a local image for data URIs, a web image otherwise) with the _xlfn.IMAGE formula kept. Earlier =PY cells run first in the same namespace so a later cell sees their names. The node runner for custom functions has timers, waits for the first result up to 3 seconds and then exits, so streaming functions return a value in the engine process.

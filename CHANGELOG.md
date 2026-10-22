@@ -12,6 +12,7 @@
 - Power Query as editable text with step undo, dependencies and tables that resize on refresh; PostgreSQL and MySQL queries with parameters; scheduled refresh with or without FormCel open; a better Data from picture; an extensions marketplace with signed packages; the REST API covers names, tables, charts, pivots, rules, validation and filters.
 - Apps Script scripts and triggers run in the engine process, also with the window closed; Office Scripts get TypeScript checking and completions; Python cells use pandas and spill DataFrames; add-in functions show their help.
 - Fixes found by driving every 0.35.0 feature in the window: scatter charts in .xlsx, undo with a chart selected, sparkline ranges growing, the Scenario PivotTable report, undoing an array delete, Ctrl+Shift+U, the accessibility checker's alt text.
+- A last round drove the remaining rows in the window: Power Query tables saved to .xlsx as query tables; IMAGE results stored as Excel in-cell pictures; Python cells share variables top to bottom; streaming custom functions update in the engine process; maps for regions of 230 more countries; a bare table name, unions and point mode in structured references; recorded macros replay cell shifts, charts and sheet changes exactly.
 
 ## 0.35.0 · 2026-10-21
 

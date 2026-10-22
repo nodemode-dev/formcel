@@ -704,3 +704,10 @@ Solver options (precision, scaling, iterations, time, convergence, population, m
 - logged: v0.36.0 · 2026-10-22
 
 When a formula is only a call to a host function (web functions, IMPORTRANGE, AI, custom host functions) its array spills as returned so empty cells stay empty; other formulas still turn empty array items into 0 as Excel does. An object's end anchor sitting exactly on the line where rows or columns are inserted keeps its size, so sparkline ranges and charts stop growing. A Flash Fill preview from one example that would give every row the same text is dropped.
+
+### Round three: structured reference forms
+- refers-to: src/formula.rs, src/table.rs, src/eval.rs
+- kind: explainer
+- logged: v0.36.0 · 2026-10-22
+
+A bare table name refers to the table's data (=SUM(Table1)); parenthesised unions are accepted by SUM and the other aggregates; renaming a table or a header rewrites stored formula text, calculated columns included, and is one undo step.

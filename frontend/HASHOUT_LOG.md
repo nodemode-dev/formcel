@@ -601,3 +601,10 @@ Chips are drawn as pills inside the cell text and committed with the text as one
 - logged: v0.36.0 · 2026-10-22
 
 The query editor keeps a history stack for undo and redo and asks the engine process for the text view. After a load, the table lines before and after are compared and synced to the engine process. Ctrl+Z works with an object selected; the objects effect line is no longer read as a format change; undoing an array delete saves the array formula; Ctrl+Shift+U toggles the formula bar; the accessibility checker waits for pending object saves.
+
+### Round three: recorder replay, maps, structured references, host cells
+- refers-to: src/automation/officeApi.ts (shiftcells op, setPosition), recorder.ts, scripts.ts; src/charts/regions_more.ts, regionmap.ts; src/automation/hostCalls.ts
+- kind: explainer
+- logged: v0.36.0 · 2026-10-22
+
+Partial-range Insert and Delete Cells from scripts go through the engine's shiftcells tool so formulas, formats and merges move; charts added by a script are stored before later sheet operations, and recorded charts keep their place through setPosition. Regions of 230 more countries are a lazy chunk (regions_more.ts) loaded only when a map needs them; tiny regions keep real outlines. Host cells are resolved again after custom function names register, so cached errors from before a reload go away. Selecting table cells while typing a formula writes structured references (point mode).
