@@ -180,6 +180,43 @@ TEMPLATE_WORDS = {"budget": "budget", "expense": "budget", "invoice": "invoice",
 AGGS = [("average", "AVERAGE"), ("mean", "AVERAGE"), ("count", "COUNT"), ("maximum", "MAX"), ("highest", "MAX"), ("largest", "MAX"), ("max", "MAX"), ("minimum", "MIN"), ("lowest", "MIN"), ("smallest", "MIN"), ("min", "MIN"), ("median", "MEDIAN"), ("sum", "SUM"), ("total", "SUM"), ("add up", "SUM")]
 
 
+POSITIVE = {"good", "great", "excellent", "love", "loved", "happy", "amazing", "fantastic", "perfect", "best", "nice", "wonderful", "pleased", "recommend", "fast", "easy", "helpful"}
+NEGATIVE = {"bad", "poor", "terrible", "hate", "hated", "awful", "worst", "slow", "broken", "disappointed", "disappointing", "angry", "useless", "refund", "problem", "late", "rude", "difficult"}
+
+
+def cell_answer(prompt: str, data: list[str]) -> str | None:
+    p = prompt.lower()
+    text = " ".join(data).strip()
+    if not text:
+        return None
+    words = re.findall(r"[a-z']+", text.lower())
+    if re.search(r"sentiment|positive or negative|tone", p):
+        score = sum(w in POSITIVE for w in words) - sum(w in NEGATIVE for w in words)
+        return "Positive" if score > 0 else "Negative" if score < 0 else "Neutral"
+    if "email" in p and re.search(r"extract|find|get", p):
+        m = re.search(r"[\w.+-]+@[\w-]+(\.[\w-]+)+", text)
+        return m.group(0) if m else ""
+    if re.search(r"extract|find|get", p) and re.search(r"url|link|website", p):
+        m = re.search(r"https?://[^\s,;]+", text)
+        return m.group(0) if m else ""
+    if re.search(r"extract|find|get", p) and re.search(r"phone", p):
+        m = re.search(r"\+?\d[\d\s().-]{6,}\d", text)
+        return m.group(0).strip() if m else ""
+    if re.search(r"extract|find|get", p) and re.search(r"number|amount|price", p):
+        m = re.search(r"-?\d[\d,]*(\.\d+)?", text)
+        return m.group(0) if m else ""
+    if re.search(r"word count|how many words|count the words", p):
+        return str(len(words))
+    if re.search(r"summari[sz]e|shorten|tl;?dr|in one sentence|brief", p):
+        first = re.split(r"(?<=[.!?])\s+", re.sub(r"\s+", " ", text))[0]
+        return first if len(first) <= 140 else first[:137].rsplit(" ", 1)[0] + "..."
+    if re.search(r"keywords?|key words", p):
+        stop = {"the", "and", "for", "with", "that", "this", "from", "are", "was", "has", "have", "you", "your", "not", "but", "its", "our", "his", "her", "their"}
+        top = Counter(w for w in words if len(w) > 3 and w not in stop).most_common(3)
+        return ", ".join(w for w, _ in top)
+    return None
+
+
 def columns_of(rows: list[list[str]]) -> tuple[list[str], list[list[str]], list[bool]]:
     head = rows[0] if rows else []
     body = rows[1:] if len(rows) > 1 else []
