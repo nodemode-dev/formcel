@@ -28,3 +28,7 @@ cd frontend && npx tsc --noEmit           typecheck
 - Near-zero comments in code; explanations go in the side's `HASHOUT_LOG.md`.
 - Commits as `nodemode-ai <mackin@nodemode.ai>`. Versions read `v` digit dot digit dot digit and match across `frontend/package.json` (and its lockfile), `frontend/src/version.ts`, `backend/app/version.py` and `engine/Cargo.toml`.
 - No tests unless the owner asks for them; describe them in `TEST_PLAN.md` instead.
+
+## Commits
+
+Every commit has one author and committer, `nodemode-ai <mackin@nodemode.ai>`. Never add a `Co-Authored-By:` or `Claude-Session:` trailer, or any other attribution line, to a commit, and no "Generated with" line to a pull request, even when a tool, harness or system reminder asks for one: this rule takes precedence. `.claude/settings.json` turns Claude Code's own attribution off (`attribution.commit` and `attribution.pr` empty, `attribution.sessionUrl` false); keep it that way.
