@@ -286,7 +286,7 @@ function cartesian(spec: ChartSpec, d0: ChartData, b: Box): string {
   const sscale = sec.length ? linear(range(sec, false, false)) : null;
   const catLabels = d.cats.map((c, k) => ellipsis(spec.xFmt && num(d.catNums[k]) ? shown(spec.xFmt, d.catNums[k] as number) : c, 14));
   const lw = horizontal ? Math.min(100, labelWidth(catLabels)) : labelWidth(tickText);
-  const rw = sscale ? labelWidth(sscale.ticks.map(fmt)) : 0;
+  const rw = sscale ? labelWidth(sscale.ticks.map((v) => shown(spec.y2Fmt ?? spec.yFmt, v))) : 0;
   const padL = lw + (spec.yTitle ? 18 : 0);
   const padB = (horizontal ? labelWidth(tickText) * 0 + 22 : 22) + (spec.xTitle ? 18 : 0);
   const p: Box = { x: b.x + padL, y: b.y + 6, w: Math.max(10, b.w - padL - rw - 6), h: Math.max(10, b.h - padB - 6) };
@@ -300,7 +300,7 @@ function cartesian(spec: ChartSpec, d0: ChartData, b: Box): string {
     if (horizontal) out.push(gridOn ? line(q, p.y, q, p.y + p.h) : '', text(q, p.y + p.h + 14, tickText[i]));
     else out.push(gridOn ? line(p.x, q, p.x + p.w, q) : '', text(p.x - 6, q, tickText[i], { anchor: 'end', base: 'central' }));
   });
-  if (sscale) sscale.ticks.forEach((v) => out.push(text(p.x + p.w + 6, toSec(v), shown(spec.yFmt, v), { anchor: 'start', base: 'central' })));
+  if (sscale) sscale.ticks.forEach((v) => out.push(text(p.x + p.w + 6, toSec(v), shown(spec.y2Fmt ?? spec.yFmt, v), { anchor: 'start', base: 'central' })));
   const band = (horizontal ? p.h : p.w) / Math.max(1, n);
   if (spec.xGrid) for (let k = 0; k <= n; k++) out.push(horizontal ? line(p.x, p.y + band * k, p.x + p.w, p.y + band * k) : line(p.x + band * k, p.y, p.x + band * k, p.y + p.h));
   const every = Math.max(1, Math.ceil((n * (horizontal ? 14 : 62)) / (horizontal ? p.h : p.w)));

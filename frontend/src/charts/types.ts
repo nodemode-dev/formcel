@@ -79,6 +79,7 @@ export interface ChartSpec {
   colors?: string[];
   xFmt?: string;
   yFmt?: string;
+  y2Fmt?: string;
   labelFmt?: string;
   logY?: boolean;
   grid?: boolean;
