@@ -1,4 +1,5 @@
 import { api, el, esc, setText } from './dom';
+import type { FnMeta } from './customMeta';
 import { uid, type Env } from './model';
 import { installable, installed, promptInstall } from '../pwa';
 
@@ -7,7 +8,8 @@ interface Ext {
   name: string;
   version: string;
   description: string;
-  scripts: { name: string; code: string; custom: boolean; button?: string }[];
+  functions: (FnMeta & { script?: string })[];
+  scripts: { file: string; name: string; code: string; custom: boolean; button?: string }[];
 }
 
 export class MoreTab {
@@ -194,7 +196,8 @@ export class MoreTab {
     let n = 0;
     for (const s of x.scripts) {
       const sid = uid();
-      this.env.auto.scripts.push({ id: sid, name: `${x.name}: ${s.name}`, code: s.code });
+      const meta = s.custom ? x.functions.filter((f) => !f.script || f.script === s.file) : [];
+      this.env.auto.scripts.push({ id: sid, name: `${x.name}: ${s.name}`, code: s.code, ...(meta.length ? { meta } : {}) });
       if (s.button) this.env.auto.buttons.push({ id: uid(), label: s.button, script: sid, x: 24 + 120 * n++, y: 48 });
     }
     this.env.changed();

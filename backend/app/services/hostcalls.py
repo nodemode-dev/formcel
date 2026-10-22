@@ -2,6 +2,7 @@ import re
 
 from . import aiclient, ranges, webdata
 
+ERRORS = {"#VALUE!", "#N/A", "#DIV/0!", "#NUM!", "#NULL!", "#NAME?", "#REF!"}
 NUM = re.compile(r"^[+-]?(\d+(\.\d*)?|\.\d+)([eE][+-]?\d+)?$")
 
 
@@ -225,11 +226,11 @@ def resolve(key: str, books, fresh: bool = False, auto: dict | None = None, wid:
             fn = jsfn.functions(auto).get(name.upper())
             if fn is not None:
                 try:
-                    return encode(norm(jsfn.call(fn[1], fn[0], args))), ""
+                    return encode(norm(jsfn.call(fn[1], fn[0], args, name.upper() in jsfn.streaming(auto)))), ""
                 except jsfn.JsUnavailable as e:
                     return error("#NAME?"), str(e)
                 except jsfn.JsError as e:
-                    return error("#VALUE!"), f"{name}: {e}"
+                    return error(e.code if e.code in ERRORS else "#VALUE!"), f"{name}: {e}"
         if name == "WEBSERVICE":
             need(args, 1)
             url = text_arg(args[0])

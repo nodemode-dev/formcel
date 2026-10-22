@@ -49,12 +49,17 @@ export interface CallHooks {
   book(): number;
   workbook(): string;
   patch(changes: Changed[]): void;
-  custom(name: string, args: unknown[]): Promise<unknown>;
+  custom(name: string, args: unknown[], stream?: (v: unknown) => void): Promise<unknown>;
+  cancel(): void;
   note(text: string): void;
 }
 
 export class HostCalls {
   private names = new Set<string>();
+  private streams = new Set<string>();
+  private volatile = new Set<string>();
+  private live = new Set<string>();
+  private last = new Map<string, string>();
   private sent = false;
   private running = false;
   private again = false;
@@ -72,7 +77,15 @@ export class HostCalls {
     await this.drain();
   }
 
+  setTraits(streams: string[], volatile: string[]): void {
+    this.streams = new Set(streams.map((n) => n.toUpperCase()));
+    this.volatile = new Set(volatile.map((n) => n.toUpperCase()));
+  }
+
   reset(): void {
+    this.h.cancel();
+    this.live = new Set();
+    this.last = new Map();
     this.names = new Set();
     this.sent = false;
   }
@@ -89,7 +102,7 @@ export class HostCalls {
         const book = this.h.book();
         if (book < 0) return;
         const pending = await engine().hostKeys(book, false);
-        const reads = xl && round === 0 ? (await engine().hostKeys(book, true)).filter((k) => k.startsWith('PY\x1f') && k.includes('xl(')) : [];
+        const reads = xl && round === 0 ? (await engine().hostKeys(book, true)).filter((k) => (k.startsWith('PY\x1f') && k.includes('xl(')) || this.volatile.has(k.split('\x1f')[0].toUpperCase())) : [];
         const keys = all && round === 0 ? [...new Set([...pending, ...(await engine().hostKeys(book, true))])] : [...new Set([...pending, ...reads])];
         if (!keys.length) {
           if (!this.again) return;
@@ -113,10 +126,25 @@ export class HostCalls {
         }
         for (const k of mine) {
           const { name, args } = parseKey(k);
+          const up = name.toUpperCase();
           try {
+            if (this.streams.has(up)) {
+              if (!this.live.has(k)) {
+                this.live.add(k);
+                const book = this.h.book();
+                await this.h.custom(name, args, (v) => {
+                  const data = encodeValue(v);
+                  this.last.set(k, data);
+                  if (this.h.book() === book) void engine().hostSet(book, k, data).then((c) => this.h.patch(c));
+                });
+              }
+              answers.set(k, this.last.get(k) ?? 'z:');
+              continue;
+            }
             answers.set(k, encodeValue(await this.h.custom(name, args)));
           } catch (err) {
-            answers.set(k, 'e:#VALUE!');
+            const code = (err as { excelCode?: string }).excelCode;
+            answers.set(k, `e:${code && /^#[A-Z/0!?]+$/.test(code) ? code : '#VALUE!'}`);
             this.h.note(`${name}: ${err instanceof Error ? err.message : String(err)}`);
           }
         }

@@ -6,13 +6,15 @@ import { icon } from '../ui/icons';
 import { api, el } from './dom';
 import { HostCalls } from './hostCalls';
 import { blankAuto, type Auto, type Env, type Script } from './model';
-import { ScriptRunner, type RunResult } from './scripts';
+import { ScriptRunner, type RunResult, type ScriptHost } from './scripts';
 import { AssistantTab } from './tabAssistant';
 import { DataTab } from './tabData';
 import { MoreTab } from './tabMore';
 import { ScriptsTab } from './tabScripts';
 import { PyCellEditor } from './pyCell';
 import { ServerTab } from './tabServer';
+import { setCustomFunctions } from '../ui/autocomplete';
+import { metaOf, suggestion, type FnMeta } from './customMeta';
 import { isAppsScript } from './scriptCheck';
 import { strip } from './tsStrip';
 
@@ -24,6 +26,7 @@ export interface AppHooks {
   title(): string;
   status(text: string, error?: boolean): void;
   addSheet(name: string): Promise<number>;
+  script: ScriptHost;
 }
 
 function compiled(s: Script): Script {
@@ -72,16 +75,18 @@ export class Automation {
       grid: h.grid,
       addSheet: (n) => h.addSheet(n),
       log: (l, t) => this.scripts.log(l, t),
+      host: h.script,
     });
     this.calls = new HostCalls({
       book: () => h.book(),
       workbook: () => h.id(),
       patch: (c) => h.grid.patch(c),
-      custom: (name, args) => {
+      custom: (name, args, stream) => {
         const f = this.fns.get(name.toUpperCase());
         if (!f) throw new Error(`${name} is not defined in any script.`);
-        return this.runner.call(f[0].code, f[1], args);
+        return this.runner.call(f[0].code, f[1], args, stream);
       },
+      cancel: () => this.runner.cancelStreams(),
       note: (t) => h.status(t.slice(0, 140), true),
     });
     const env: Env = {
@@ -256,6 +261,15 @@ export class Automation {
       const raw = new Map<string, [Script, string]>();
       for (const s of this.auto.scripts) for (const n of await this.runner.scan(s.code)) raw.set(n.toUpperCase(), [s, n]);
       this.fns = raw;
+      const metas: FnMeta[] = [];
+      for (const s of this.auto.scripts) {
+        const docs = metaOf(s.code);
+        for (const m of [...docs, ...(s.meta ?? []).filter((x) => !docs.some((d) => d.name.toUpperCase() === x.name.toUpperCase()))]) if (raw.has(m.name.toUpperCase())) metas.push(m);
+      }
+      const known = new Set(metas.map((m) => m.name.toUpperCase()));
+      const plain = [...raw.values()].filter(([, n]) => !known.has(n.toUpperCase())).map(([, n]): FnMeta => ({ name: n, description: '', helpUrl: '', parameters: [], options: { stream: false, volatile: false, cancelable: false, requiresAddress: false }, result: { dimensionality: 'scalar' } }));
+      setCustomFunctions([...metas, ...plain].map((m) => suggestion(m)));
+      this.calls.setTraits(metas.filter((m) => m.options.stream).map((m) => m.name), metas.filter((m) => m.options.volatile).map((m) => m.name));
       await this.calls.setCustom([...raw.keys()]);
     }, 300);
   }

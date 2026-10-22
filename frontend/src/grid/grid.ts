@@ -2789,6 +2789,26 @@ export class Grid {
     this.paint();
   }
 
+  setAxis(rows: boolean, a: number, b: number, px: number | null, hidden: boolean | null): void {
+    const axis = rows ? this.rows : this.cols;
+    const last = Math.min(b, a + (rows ? 10000 : 2000));
+    if (px !== null) for (let i = a; i <= last; i++) axis.setSize(i, px);
+    if (hidden !== null) axis.setHidden(a, last, hidden);
+    this.resize();
+    this.emitView();
+    this.paint();
+  }
+
+  async shiftSheet(sheet: number, rows: boolean, at: number, n: number, insert: boolean): Promise<void> {
+    const sh = await this.engine.shift(this.book, sheet, rows, at, n, insert);
+    if (sheet === this.sheet) this.afterShift(sh);
+    else {
+      this.events.onShift(sh);
+      void this.objectsHook?.shifted?.(sheet);
+    }
+    await this.refreshHistory();
+  }
+
   setStandardWidth(px: number): void {
     this.cols.setBase(px);
     this.resize();

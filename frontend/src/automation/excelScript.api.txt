@@ -1,0 +1,447 @@
+declare namespace ExcelScript {
+  enum BorderIndex { edgeTop = "EdgeTop", edgeBottom = "EdgeBottom", edgeLeft = "EdgeLeft", edgeRight = "EdgeRight", insideVertical = "InsideVertical", insideHorizontal = "InsideHorizontal", diagonalDown = "DiagonalDown", diagonalUp = "DiagonalUp" }
+  enum BorderLineStyle { none = "None", continuous = "Continuous", dash = "Dash", dashDot = "DashDot", dashDotDot = "DashDotDot", dot = "Dot", double = "Double", slantDashDot = "SlantDashDot" }
+  enum BorderWeight { hairline = "Hairline", thin = "Thin", medium = "Medium", thick = "Thick" }
+  enum HorizontalAlignment { general = "General", left = "Left", center = "Center", right = "Right", fill = "Fill", justify = "Justify", centerAcrossSelection = "CenterAcrossSelection", distributed = "Distributed" }
+  enum VerticalAlignment { top = "Top", center = "Center", bottom = "Bottom", justify = "Justify", distributed = "Distributed" }
+  enum RangeUnderlineStyle { none = "None", single = "Single", double = "Double", singleAccountant = "SingleAccountant", doubleAccountant = "DoubleAccountant" }
+  enum InsertShiftDirection { down = "Down", right = "Right" }
+  enum DeleteShiftDirection { up = "Up", left = "Left" }
+  enum ClearApplyTo { all = "All", formats = "Formats", contents = "Contents", hyperlinks = "Hyperlinks", removeHyperlinks = "RemoveHyperlinks" }
+  enum RangeCopyType { all = "All", formulas = "Formulas", values = "Values", formats = "Formats", link = "Link" }
+  enum SheetVisibility { visible = "Visible", hidden = "Hidden", veryHidden = "VeryHidden" }
+  enum SortOrientation { rows = "Rows", columns = "Columns" }
+  enum SortMethod { pinYin = "PinYin", strokeCount = "StrokeCount" }
+  enum ChartSeriesBy { auto = "Auto", columns = "Columns", rows = "Rows" }
+  enum ChartLegendPosition { invalid = "Invalid", top = "Top", bottom = "Bottom", left = "Left", right = "Right", corner = "Corner", custom = "Custom" }
+  enum ChartType {
+    invalid = "Invalid", columnClustered = "ColumnClustered", columnStacked = "ColumnStacked", columnStacked100 = "ColumnStacked100",
+    barClustered = "BarClustered", barStacked = "BarStacked", barStacked100 = "BarStacked100", line = "Line", lineMarkers = "LineMarkers",
+    area = "Area", areaStacked = "AreaStacked", areaStacked100 = "AreaStacked100", pie = "Pie", doughnut = "Doughnut", xyscatter = "XYScatter",
+    bubble = "Bubble", radar = "Radar", histogram = "Histogram", boxwhisker = "BoxWhisker", waterfall = "Waterfall", funnel = "Funnel",
+    treemap = "Treemap", sunburst = "Sunburst", regionMap = "RegionMap"
+  }
+  enum AggregationFunction { automatic = "Automatic", sum = "Sum", count = "Count", average = "Average", max = "Max", min = "Min", product = "Product", countNumbers = "CountNumbers", standardDeviation = "StandardDeviation", standardDeviationP = "StandardDeviationP", variance = "Variance", varianceP = "VarianceP" }
+  enum CalculationType { recalculate = "Recalculate", full = "Full", fullRebuild = "FullRebuild" }
+  enum DataValidationType { none = "None", wholeNumber = "WholeNumber", decimal = "Decimal", list = "List", date = "Date", time = "Time", textLength = "TextLength", custom = "Custom" }
+  enum DataValidationOperator { between = "Between", notBetween = "NotBetween", equalTo = "EqualTo", notEqualTo = "NotEqualTo", greaterThan = "GreaterThan", lessThan = "LessThan", greaterThanOrEqualTo = "GreaterThanOrEqualTo", lessThanOrEqualTo = "LessThanOrEqualTo" }
+  enum DataValidationAlertStyle { stop = "Stop", warning = "Warning", information = "Information" }
+  enum TableStyleName { light1 = "TableStyleLight1", medium2 = "TableStyleMedium2", dark1 = "TableStyleDark1" }
+
+  interface SortField { key: number; ascending?: boolean; sortOn?: string; dataOption?: string; subField?: string; color?: string; icon?: unknown }
+  interface RangeHyperlink { address?: string; documentReference?: string; textToDisplay?: string; screenTip?: string }
+  interface DataValidationRule {
+    wholeNumber?: { formula1: number | string; formula2?: number | string; operator: DataValidationOperator };
+    decimal?: { formula1: number | string; formula2?: number | string; operator: DataValidationOperator };
+    date?: { formula1: string | number; formula2?: string | number; operator: DataValidationOperator };
+    textLength?: { formula1: number | string; formula2?: number | string; operator: DataValidationOperator };
+    list?: { inCellDropDown: boolean; source: string };
+    custom?: { formula: string };
+  }
+  interface DataValidationErrorAlert { message: string; showAlert: boolean; style: DataValidationAlertStyle; title: string }
+  interface DataValidationPrompt { message: string; showPrompt: boolean; title: string }
+  type RangeValue = string | number | boolean;
+
+  class Application {
+    calculate(calculationType: CalculationType): void;
+    getCalculationMode(): string;
+  }
+
+  class Workbook {
+    getName(): string;
+    getApplication(): Application;
+    getActiveWorksheet(): Worksheet;
+    getWorksheet(key: string): Worksheet | undefined;
+    getWorksheets(): Worksheet[];
+    getFirstWorksheet(visibleOnly?: boolean): Worksheet;
+    getLastWorksheet(visibleOnly?: boolean): Worksheet;
+    addWorksheet(name?: string): Worksheet;
+    getSelectedRange(): Range;
+    getActiveCell(): Range;
+    getTables(): Table[];
+    getTable(key: string): Table | undefined;
+    addTable(address: Range | string, hasHeaders: boolean): Table;
+    getPivotTables(): PivotTable[];
+    getPivotTable(name: string): PivotTable | undefined;
+    addPivotTable(name: string, source: Range | string | Table, destination: Range | string): PivotTable;
+    getNamedItems(): NamedItem[];
+    getNamedItem(name: string): NamedItem | undefined;
+    addNamedItem(name: string, reference: Range | string, comment?: string): NamedItem;
+    refreshAllDataConnections(): void;
+    refreshAllPivotTables(): void;
+  }
+
+  class NamedItem {
+    getName(): string;
+    getFormula(): string;
+    getRange(): Range | undefined;
+    delete(): void;
+  }
+
+  class Worksheet {
+    getName(): string;
+    setName(name: string): void;
+    getPosition(): number;
+    setPosition(position: number): void;
+    getVisibility(): SheetVisibility;
+    setVisibility(visibility: SheetVisibility): void;
+    getTabColor(): string;
+    setTabColor(color: string): void;
+    getShowGridlines(): boolean;
+    setShowGridlines(showGridlines: boolean): void;
+    getFreezePanes(): WorksheetFreezePanes;
+    getRange(address?: string): Range;
+    getCell(row: number, column: number): Range;
+    getRangeByIndexes(startRow: number, startColumn: number, rowCount: number, columnCount: number): Range;
+    getUsedRange(valuesOnly?: boolean): Range;
+    getTables(): Table[];
+    getTable(key: string): Table | undefined;
+    addTable(address: Range | string, hasHeaders: boolean): Table;
+    getCharts(): Chart[];
+    getChart(name: string): Chart | undefined;
+    addChart(type: ChartType, sourceData: Range, seriesBy?: ChartSeriesBy): Chart;
+    getPivotTables(): PivotTable[];
+    getPivotTable(name: string): PivotTable | undefined;
+    addPivotTable(name: string, source: Range | string | Table, destination: Range | string): PivotTable;
+    activate(): void;
+    delete(): void;
+    getNamedItems(): NamedItem[];
+    addNamedItem(name: string, reference: Range | string, comment?: string): NamedItem;
+    getWorkbook(): Workbook;
+  }
+
+  class WorksheetFreezePanes {
+    freezeRows(count: number): void;
+    freezeColumns(count?: number): void;
+    freezeAt(frozenRange: Range | string): void;
+    unfreeze(): void;
+    getLocationOrNullObject(): Range | undefined;
+  }
+
+  class Range {
+    getAddress(): string;
+    getAddressLocal(): string;
+    getWorksheet(): Worksheet;
+    getRowCount(): number;
+    getColumnCount(): number;
+    getRowIndex(): number;
+    getColumnIndex(): number;
+    getCellCount(): number;
+    getIsEntireRow(): boolean;
+    getIsEntireColumn(): boolean;
+    getValues(): RangeValue[][];
+    getValue(): RangeValue;
+    getTexts(): string[][];
+    getText(): string;
+    getFormulas(): string[][];
+    getFormula(): string;
+    getValueTypes(): string[][];
+    getValueType(): string;
+    getNumberFormats(): string[][];
+    getNumberFormat(): string;
+    setValues(values: (RangeValue | undefined)[][]): void;
+    setValue(value: RangeValue | undefined): void;
+    setFormulas(formulas: (RangeValue | undefined)[][]): void;
+    setFormula(formula: string): void;
+    setNumberFormats(numberFormats: string[][]): void;
+    setNumberFormat(numberFormat: string): void;
+    clear(applyTo?: ClearApplyTo): void;
+    delete(shift: DeleteShiftDirection): void;
+    insert(shift: InsertShiftDirection): Range;
+    copyFrom(sourceRange: Range | string, copyType?: RangeCopyType, skipBlanks?: boolean, transpose?: boolean): void;
+    moveTo(destinationRange: Range | string): void;
+    getFormat(): RangeFormat;
+    getSort(): RangeSort;
+    getCell(row: number, column: number): Range;
+    getRow(row: number): Range;
+    getColumn(column: number): Range;
+    getOffsetRange(rowOffset: number, columnOffset: number): Range;
+    getResizedRange(deltaRows: number, deltaColumns: number): Range;
+    getRowsAbove(count?: number): Range;
+    getRowsBelow(count?: number): Range;
+    getColumnsBefore(count?: number): Range;
+    getColumnsAfter(count?: number): Range;
+    getLastCell(): Range;
+    getLastRow(): Range;
+    getLastColumn(): Range;
+    getUsedRange(valuesOnly?: boolean): Range;
+    getEntireColumn(): Range;
+    getEntireRow(): Range;
+    getIntersection(anotherRange: Range | string): Range | undefined;
+    getBoundingRect(anotherRange: Range | string): Range;
+    find(text: string, criteria: { completeMatch?: boolean; matchCase?: boolean }): Range | undefined;
+    replaceAll(text: string, replacement: string, criteria: { completeMatch?: boolean; matchCase?: boolean }): number;
+    merge(across?: boolean): void;
+    unmerge(): void;
+    removeDuplicates(columns: number[], includesHeader: boolean): { added: number; removed: number; uniqueRemaining: number };
+    getDataValidation(): DataValidation;
+    getHyperlink(): RangeHyperlink | undefined;
+    setHyperlink(hyperlink: RangeHyperlink): void;
+    select(): void;
+    getTable(): Table | undefined;
+  }
+
+  class RangeSort {
+    apply(fields: SortField[], matchCase?: boolean, hasHeaders?: boolean, orientation?: SortOrientation, method?: SortMethod): void;
+  }
+
+  class RangeFormat {
+    getFill(): RangeFill;
+    getFont(): RangeFont;
+    getRangeBorder(index: BorderIndex): RangeBorder;
+    getHorizontalAlignment(): HorizontalAlignment;
+    setHorizontalAlignment(horizontalAlignment: HorizontalAlignment): void;
+    getVerticalAlignment(): VerticalAlignment;
+    setVerticalAlignment(verticalAlignment: VerticalAlignment): void;
+    getWrapText(): boolean;
+    setWrapText(wrapText: boolean): void;
+    getIndentLevel(): number;
+    setIndentLevel(indentLevel: number): void;
+    setTextOrientation(textOrientation: number): void;
+    getColumnWidth(): number;
+    setColumnWidth(columnWidth: number): void;
+    getRowHeight(): number;
+    setRowHeight(rowHeight: number): void;
+    autofitColumns(): void;
+    autofitRows(): void;
+    getColumnHidden(): boolean;
+    setColumnHidden(columnHidden: boolean): void;
+    getRowHidden(): boolean;
+    setRowHidden(rowHidden: boolean): void;
+  }
+
+  class RangeFill {
+    getColor(): string;
+    setColor(color: string): void;
+    clear(): void;
+  }
+
+  class RangeFont {
+    getBold(): boolean;
+    setBold(bold: boolean): void;
+    getItalic(): boolean;
+    setItalic(italic: boolean): void;
+    getUnderline(): RangeUnderlineStyle;
+    setUnderline(underline: RangeUnderlineStyle): void;
+    getStrikethrough(): boolean;
+    setStrikethrough(strikethrough: boolean): void;
+    getColor(): string;
+    setColor(color: string): void;
+    getSize(): number;
+    setSize(size: number): void;
+    getName(): string;
+    setName(name: string): void;
+  }
+
+  class RangeBorder {
+    getStyle(): BorderLineStyle;
+    setStyle(style: BorderLineStyle): void;
+    getColor(): string;
+    setColor(color: string): void;
+    getWeight(): BorderWeight;
+    setWeight(weight: BorderWeight): void;
+  }
+
+  class DataValidation {
+    getRule(): DataValidationRule;
+    setRule(rule: DataValidationRule): void;
+    getErrorAlert(): DataValidationErrorAlert;
+    setErrorAlert(errorAlert: DataValidationErrorAlert): void;
+    getPrompt(): DataValidationPrompt;
+    setPrompt(prompt: DataValidationPrompt): void;
+    getIgnoreBlanks(): boolean;
+    setIgnoreBlanks(ignoreBlanks: boolean): void;
+    clear(): void;
+  }
+
+  class Table {
+    getId(): string;
+    getName(): string;
+    setName(name: string): void;
+    getWorksheet(): Worksheet;
+    getRange(): Range;
+    getHeaderRowRange(): Range;
+    getTotalRowRange(): Range;
+    getRangeBetweenHeaderAndTotal(): Range;
+    getColumns(): TableColumn[];
+    getColumn(key: string | number): TableColumn | undefined;
+    getColumnByName(name: string): TableColumn | undefined;
+    addColumn(index?: number, values?: (RangeValue)[][] | RangeValue[], name?: string): TableColumn;
+    getRows(): TableRow[];
+    getRowCount(): number;
+    addRow(index?: number, values?: RangeValue[] | RangeValue[][]): TableRow;
+    deleteRowsAt(index: number, count?: number): void;
+    getShowTotals(): boolean;
+    setShowTotals(showTotals: boolean): void;
+    getShowHeaders(): boolean;
+    getShowBandedRows(): boolean;
+    setShowBandedRows(showBandedRows: boolean): void;
+    getShowBandedColumns(): boolean;
+    setShowBandedColumns(showBandedColumns: boolean): void;
+    getHighlightFirstColumn(): boolean;
+    setHighlightFirstColumn(highlightFirstColumn: boolean): void;
+    getHighlightLastColumn(): boolean;
+    setHighlightLastColumn(highlightLastColumn: boolean): void;
+    getShowFilterButton(): boolean;
+    setShowFilterButton(showFilterButton: boolean): void;
+    getPredefinedTableStyle(): string;
+    setPredefinedTableStyle(style: string): void;
+    getSort(): TableSort;
+    resize(newRange: Range | string): void;
+    convertToRange(): Range;
+    delete(): void;
+  }
+
+  class TableSort {
+    apply(fields: SortField[], matchCase?: boolean): void;
+  }
+
+  class TableColumn {
+    getId(): number;
+    getName(): string;
+    setName(name: string): void;
+    getIndex(): number;
+    getRange(): Range;
+    getHeaderRowRange(): Range;
+    getRangeBetweenHeaderAndTotal(): Range;
+    getTotalRowRange(): Range;
+    delete(): void;
+  }
+
+  class TableRow {
+    getIndex(): number;
+    getRange(): Range;
+    getValues(): RangeValue[][];
+    setValues(values: RangeValue[][] | RangeValue[]): void;
+    delete(): void;
+  }
+
+  class Chart {
+    getId(): string;
+    getName(): string;
+    setName(name: string): void;
+    getChartType(): ChartType;
+    setChartType(chartType: ChartType): void;
+    getTitle(): ChartTitle;
+    getLegend(): ChartLegend;
+    getAxes(): ChartAxes;
+    setData(sourceData: Range, seriesBy?: ChartSeriesBy): void;
+    setPosition(startCell: Range | string, endCell?: Range | string): void;
+    getTop(): number;
+    setTop(top: number): void;
+    getLeft(): number;
+    setLeft(left: number): void;
+    getWidth(): number;
+    setWidth(width: number): void;
+    getHeight(): number;
+    setHeight(height: number): void;
+    getWorksheet(): Worksheet;
+    delete(): void;
+  }
+
+  class ChartTitle {
+    getText(): string;
+    setText(text: string): void;
+    getVisible(): boolean;
+    setVisible(visible: boolean): void;
+  }
+
+  class ChartLegend {
+    getVisible(): boolean;
+    setVisible(visible: boolean): void;
+    getPosition(): ChartLegendPosition;
+    setPosition(position: ChartLegendPosition): void;
+  }
+
+  class ChartAxes {
+    getCategoryAxis(): ChartAxis;
+    getValueAxis(): ChartAxis;
+  }
+
+  class ChartAxis {
+    getTitle(): ChartAxisTitle;
+  }
+
+  class ChartAxisTitle {
+    getText(): string;
+    setText(text: string): void;
+    getVisible(): boolean;
+    setVisible(visible: boolean): void;
+  }
+
+  class PivotTable {
+    getName(): string;
+    setName(name: string): void;
+    getWorksheet(): Worksheet;
+    getLayout(): PivotLayout;
+    getHierarchies(): PivotHierarchy[];
+    getHierarchy(name: string): PivotHierarchy;
+    getRowHierarchies(): RowColumnPivotHierarchy[];
+    getColumnHierarchies(): RowColumnPivotHierarchy[];
+    getDataHierarchies(): DataPivotHierarchy[];
+    getFilterHierarchies(): FilterPivotHierarchy[];
+    addRowHierarchy(pivotHierarchy: PivotHierarchy): RowColumnPivotHierarchy;
+    addColumnHierarchy(pivotHierarchy: PivotHierarchy): RowColumnPivotHierarchy;
+    addDataHierarchy(pivotHierarchy: PivotHierarchy): DataPivotHierarchy;
+    addFilterHierarchy(pivotHierarchy: PivotHierarchy): FilterPivotHierarchy;
+    removeRowHierarchy(rowHierarchy: RowColumnPivotHierarchy): void;
+    removeColumnHierarchy(columnHierarchy: RowColumnPivotHierarchy): void;
+    removeDataHierarchy(dataHierarchy: DataPivotHierarchy): void;
+    refresh(): void;
+    delete(): void;
+  }
+
+  class PivotLayout {
+    getRange(): Range;
+    getDataBodyRange(): Range;
+  }
+
+  class PivotHierarchy {
+    getName(): string;
+    setName(name: string): void;
+    getFields(): PivotField[];
+  }
+
+  class RowColumnPivotHierarchy {
+    getName(): string;
+  }
+
+  class FilterPivotHierarchy {
+    getName(): string;
+  }
+
+  class DataPivotHierarchy {
+    getName(): string;
+    setName(name: string): void;
+    getSummarizeBy(): AggregationFunction;
+    setSummarizeBy(summarizeBy: AggregationFunction): void;
+  }
+
+  class PivotField {
+    getName(): string;
+  }
+}
+
+declare namespace CustomFunctions {
+  enum ErrorCode { invalidValue = "#VALUE!", notAvailable = "#N/A", divisionByZero = "#DIV/0!", invalidNumber = "#NUM!", nullReference = "#NULL!", invalidName = "#NAME?", invalidReference = "#REF!" }
+  class Error {
+    constructor(code: ErrorCode, message?: string);
+    code: ErrorCode;
+    message: string;
+  }
+  interface Invocation { address?: string; functionName?: string }
+  interface CancelableInvocation extends Invocation { onCanceled: (() => void) | undefined }
+  interface StreamingInvocation<T> extends CancelableInvocation { setResult(value: T): void }
+}
+
+declare const console: {
+  log(...data: unknown[]): void;
+  info(...data: unknown[]): void;
+  warn(...data: unknown[]): void;
+  error(...data: unknown[]): void;
+  debug(...data: unknown[]): void;
+};
+declare function setTimeout(handler: () => void, timeout?: number): number;
+declare function clearTimeout(id: number | undefined): void;
+declare function setInterval(handler: () => void, timeout?: number): number;
+declare function clearInterval(id: number | undefined): void;
