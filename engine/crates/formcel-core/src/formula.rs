@@ -12,6 +12,7 @@ pub enum ErrKind {
     Error,
     Spill,
     Calc,
+    Field,
 }
 
 impl ErrKind {
@@ -27,11 +28,12 @@ impl ErrKind {
             ErrKind::Error => "#ERROR!",
             ErrKind::Spill => "#SPILL!",
             ErrKind::Calc => "#CALC!",
+            ErrKind::Field => "#FIELD!",
         }
     }
 
     pub fn parse(s: &str) -> Option<ErrKind> {
-        [ErrKind::Div0, ErrKind::Value, ErrKind::Ref, ErrKind::Name, ErrKind::Na, ErrKind::Num, ErrKind::Null, ErrKind::Error, ErrKind::Spill, ErrKind::Calc]
+        [ErrKind::Div0, ErrKind::Value, ErrKind::Ref, ErrKind::Name, ErrKind::Na, ErrKind::Num, ErrKind::Null, ErrKind::Error, ErrKind::Spill, ErrKind::Calc, ErrKind::Field]
             .into_iter()
             .find(|e| e.text().eq_ignore_ascii_case(s))
     }
@@ -369,7 +371,7 @@ pub fn has_table(e: &Expr) -> bool {
     any
 }
 
-pub const FUNCTIONS: [&str; 428] = [
+pub const FUNCTIONS: [&str; 431] = [
     "ABS", "ACOS", "ACOSH", "ACOT", "ACOTH", "ADDRESS", "AGGREGATE", "AI", "AND", "ARABIC", "AREAS", "ARRAYFORMULA", "ARRAYTOTEXT", "ASIN", "ASINH", "ATAN", "ATAN2", "ATANH",
     "AVEDEV", "AVERAGE", "AVERAGEA", "AVERAGEIF", "AVERAGEIFS", "BASE", "BESSELJ", "BETA.DIST", "BETA.INV", "BIN2DEC", "BIN2HEX", "BIN2OCT", "BINOM.DIST", "BINOM.INV", "BITAND", "BITLSHIFT", "BITOR", "BITRSHIFT",
     "BITXOR", "BYCOL", "BYROW", "CEILING", "CEILING.MATH", "CEILING.PRECISE", "CELL", "CHAR", "CHISQ.DIST", "CHISQ.DIST.RT", "CHISQ.INV", "CHISQ.INV.RT", "CHISQ.TEST", "CHOOSE", "CHOOSECOLS", "CHOOSEROWS", "CLEAN", "CODE",
@@ -377,9 +379,9 @@ pub const FUNCTIONS: [&str; 428] = [
     "COUNTIF", "COUNTIFS", "COVAR", "COVARIANCE.P", "COVARIANCE.S", "CSC", "CSCH", "CUMIPMT", "CUMPRINC", "DATE", "DATEDIF", "DATEVALUE", "DAVERAGE", "DAY", "DAYS", "DAYS360", "DB", "DCOUNT",
     "DCOUNTA", "DDB", "DEC2BIN", "DEC2HEX", "DEC2OCT", "DECIMAL", "DEGREES", "DELTA", "DEVSQ", "DGET", "DMAX", "DMIN", "DOLLAR", "DOLLARDE", "DOLLARFR", "DPRODUCT", "DROP", "DSTDEV",
     "DSTDEVP", "DSUM", "DVAR", "DVARP", "EDATE", "EFFECT", "EOMONTH", "EPOCHTODATE", "ERF", "ERF.PRECISE", "ERFC", "ERFC.PRECISE", "ERROR.TYPE", "EVEN", "EXACT", "EXP", "EXPAND", "EXPON.DIST",
-    "F.DIST", "F.DIST.RT", "F.INV", "F.INV.RT", "F.TEST", "FACT", "FACTDOUBLE", "FALSE", "FILTER", "FILTERXML", "FIND", "FISHER", "FISHERINV", "FIXED", "FLOOR", "FLOOR.MATH", "FLOOR.PRECISE", "FORECAST",
+    "F.DIST", "F.DIST.RT", "F.INV", "F.INV.RT", "F.TEST", "FACT", "FACTDOUBLE", "FALSE", "FIELDVALUE", "FILTER", "FILTERXML", "FIND", "FISHER", "FISHERINV", "FIXED", "FLOOR", "FLOOR.MATH", "FLOOR.PRECISE", "FORECAST",
     "FORECAST.ETS", "FORECAST.ETS.CONFINT", "FORECAST.ETS.SEASONALITY", "FORECAST.ETS.STAT", "FORECAST.LINEAR", "FORMULATEXT", "FREQUENCY", "FV", "FVSCHEDULE", "GAMMA", "GAMMA.DIST", "GAMMA.INV", "GAMMALN", "GAMMALN.PRECISE", "GAUSS", "GCD", "GEOMEAN", "GESTEP",
-    "GROUPBY", "HARMEAN", "HEX2BIN", "HEX2DEC", "HEX2OCT", "HLOOKUP", "HOUR", "HSTACK", "HYPERLINK", "IF", "IFERROR", "IFNA", "IFS", "IMABS", "IMAGE", "IMAGINARY", "IMDIV", "IMPORTDATA", "IMPORTFEED", "IMPORTHTML",
+    "GOOGLEFINANCE", "GROUPBY", "HARMEAN", "HEX2BIN", "HEX2DEC", "HEX2OCT", "HLOOKUP", "HOUR", "HSTACK", "HYPERLINK", "IF", "IFERROR", "IFNA", "IFS", "IMABS", "IMAGE", "IMAGINARY", "IMDIV", "IMPORTDATA", "IMPORTFEED", "IMPORTHTML",
     "IMPORTRANGE", "IMPORTXML", "IMPRODUCT", "IMREAL", "IMSUB", "IMSUM", "INDEX", "INDIRECT", "INFO", "INT", "INTERCEPT", "IPMT", "IRR", "ISBETWEEN", "ISBLANK", "ISDATE", "ISEMAIL", "ISERR", "ISERROR", "ISEVEN", "ISFORMULA",
     "ISLOGICAL", "ISNA", "ISNONTEXT", "ISNUMBER", "ISODD", "ISOMITTED", "ISOWEEKNUM", "ISPMT", "ISREF", "ISTEXT", "ISURL", "KURT", "LAMBDA", "LARGE", "LCM", "LEFT", "LEN", "LET", "LINEST", "LN",
     "LOG", "LOG10", "LOGNORM.DIST", "LOGNORM.INV", "LOOKUP", "LOWER", "MAKEARRAY", "MAP", "MATCH", "MAX", "MAXA", "MAXIFS", "MDETERM", "MEDIAN", "MID", "MIN", "MINA", "MINIFS",
@@ -389,7 +391,7 @@ pub const FUNCTIONS: [&str; 428] = [
     "PROB", "PRODUCT", "PROPER", "PV", "QUARTILE", "QUARTILE.EXC", "QUARTILE.INC", "QUERY", "QUOTIENT", "RADIANS", "RAND", "RANDARRAY", "RANDBETWEEN", "RANK", "RANK.AVG", "RANK.EQ", "RATE", "REDUCE",
     "REGEXEXTRACT", "REGEXMATCH", "REGEXREPLACE", "REGEXTEST", "REPLACE", "REPT", "RIGHT", "ROMAN", "ROUND", "ROUNDDOWN", "ROUNDUP", "ROW", "ROWS", "RRI", "RSQ", "SCAN", "SEARCH", "SEC",
     "SECH", "SECOND", "SEQUENCE", "SERIESSUM", "SHEET", "SHEETS", "SIGN", "SIN", "SINH", "SKEW", "SKEW.P", "SLN", "SLOPE", "SMALL", "SORT", "SORTBY", "SORTN", "SPARKLINE",
-    "SPLIT", "SQRT", "SQRTPI", "STANDARDIZE", "STDEV", "STDEV.P", "STDEV.S", "STDEVA", "STDEVPA", "STEYX", "SUBSTITUTE", "SUBTOTAL", "SUM", "SUMIF", "SUMIFS", "SUMPRODUCT", "SUMSQ", "SUMX2MY2",
+    "SPLIT", "SQRT", "SQRTPI", "STANDARDIZE", "STDEV", "STDEV.P", "STDEV.S", "STDEVA", "STDEVPA", "STEYX", "STOCKHISTORY", "SUBSTITUTE", "SUBTOTAL", "SUM", "SUMIF", "SUMIFS", "SUMPRODUCT", "SUMSQ", "SUMX2MY2",
     "SUMX2PY2", "SUMXMY2", "SWITCH", "SYD", "T", "T.DIST", "T.DIST.2T", "T.DIST.RT", "T.INV", "T.INV.2T", "T.TEST", "TAKE", "TAN", "TANH", "TEXT", "TEXTAFTER", "TEXTBEFORE", "TEXTJOIN",
     "TEXTSPLIT", "TIME", "TIMEVALUE", "TOCOL", "TODAY", "TOROW", "TRANSPOSE", "TREND", "TRIM", "TRIMMEAN", "TRUE", "TRUNC", "TYPE", "UNICHAR", "UNICODE", "UNIQUE", "UPPER", "VALUE",
     "VALUETOTEXT", "VAR", "VAR.P", "VAR.S", "VARA", "VARPA", "VDB", "VLOOKUP", "VSTACK", "WEBSERVICE", "WEEKDAY", "WEEKNUM", "WEIBULL.DIST", "WORKDAY", "WORKDAY.INTL", "WRAPCOLS", "WRAPROWS", "XIRR",
@@ -749,6 +751,24 @@ impl Parser {
         None
     }
 
+    fn fields(&mut self, sheet: Option<String>, id: &str) -> Option<Expr> {
+        let (head, tail) = id.split_once('.')?;
+        let cell = parse_cell(head)?;
+        if self.peek() == Some(&Tok::LParen) {
+            return None;
+        }
+        let mut e = Expr::Ref(sheet, RefKind::Cell(cell));
+        for seg in tail.split('.').filter(|s| !s.is_empty()) {
+            e = Expr::Call("_FV".to_string(), vec![e, Expr::Str(seg.to_string())]);
+        }
+        if tail.is_empty() || tail.ends_with('.') {
+            let Some(Tok::Bracket(b)) = self.peek().cloned() else { return None };
+            self.i += 1;
+            e = Expr::Call("_FV".to_string(), vec![e, Expr::Str(b)]);
+        }
+        Some(e)
+    }
+
     fn primary(&mut self) -> Option<Expr> {
         match self.next()? {
             Tok::Num(n) => {
@@ -801,6 +821,9 @@ impl Parser {
                 Some(Expr::Table(None, parse_spec(&raw)?))
             }
             Tok::Ident(id) => {
+                if let Some(e) = self.fields(None, &id) {
+                    return Some(e);
+                }
                 if let Some(Tok::Bracket(raw)) = self.peek() {
                     let spec = parse_spec(&raw.clone())?;
                     self.i += 1;
@@ -861,6 +884,9 @@ impl Parser {
             Tok::Err(ErrKind::Ref) => return Some(Expr::Err(ErrKind::Ref)),
             _ => return None,
         };
+        if let Some(e) = self.fields(Some(sheet.clone()), &first) {
+            return Some(e);
+        }
         self.reference(Some(sheet), &first)
     }
 }
@@ -977,6 +1003,19 @@ pub fn print(e: &Expr, out: &mut String) {
             print(a, out);
             out.push_str(op.text());
             print(b, out);
+        }
+        Expr::Call(name, args) if name == "_FV" && args.len() == 2 && matches!(&args[1], Expr::Str(_)) => {
+            print(&args[0], out);
+            out.push('.');
+            if let Expr::Str(s) = &args[1] {
+                if s.chars().all(|c| c.is_alphanumeric() || c == '_') {
+                    out.push_str(s);
+                } else {
+                    out.push('[');
+                    out.push_str(s);
+                    out.push(']');
+                }
+            }
         }
         Expr::Call(name, args) => {
             out.push_str(name);

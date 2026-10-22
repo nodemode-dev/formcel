@@ -445,14 +445,24 @@ impl Workbook {
 
     fn commit(&mut self, k: Key, o: Out, f: Option<Fmt>) -> Value {
         let (s, a) = k;
+        let mut f = f;
         let v = match o {
             Out::V(v) if self.arrays.contains_key(&k) => self.fill_array(k, Out::V(v)),
             Out::V(v) => {
                 self.unspill(k);
+                if self.host.dated.contains_key(&k) {
+                    self.host_formats(k);
+                }
                 v
             }
             Out::A(x) if self.arrays.contains_key(&k) => self.fill_array(k, Out::A(x)),
-            Out::A(x) => self.spill(k, x),
+            Out::A(x) => {
+                let v = self.spill(k, x);
+                if let Some(hf) = self.host_formats(k) {
+                    f = Some(hf);
+                }
+                v
+            }
         };
         match f {
             Some(f) if matches!(v, Value::Number(_)) => self.fmts.insert(k, f),

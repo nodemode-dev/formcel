@@ -4,11 +4,13 @@ use crate::{Addr, Changed, Value, Workbook};
 use std::sync::Mutex;
 use std::collections::HashMap;
 
-pub const HOST_FNS: [&str; 8] = ["AI", "FILTERXML", "IMPORTDATA", "IMPORTFEED", "IMPORTHTML", "IMPORTRANGE", "IMPORTXML", "WEBSERVICE"];
+pub const HOST_FNS: [&str; 10] = ["AI", "FILTERXML", "GOOGLEFINANCE", "IMPORTDATA", "IMPORTFEED", "IMPORTHTML", "IMPORTRANGE", "IMPORTXML", "STOCKHISTORY", "WEBSERVICE"];
 
 #[derive(Default, Debug)]
 pub struct Host {
     pub results: HashMap<String, Array>,
+    pub dates: HashMap<String, Vec<(usize, bool)>>,
+    pub dated: HashMap<(usize, Addr), Vec<(usize, Addr)>>,
     pub want: Mutex<Vec<String>>,
     pub custom: Vec<String>,
 }
@@ -45,8 +47,29 @@ fn cell_of(t: &str) -> Value {
         "b:" => Value::Bool(body == "1"),
         "e:" => formula::ErrKind::parse(&body).map_or(Value::Error(formula::ErrKind::Value), Value::Error),
         "z:" => Value::Empty,
+        "d:" | "m:" => body.parse().map_or(Value::Error(formula::ErrKind::Value), Value::Number),
         _ => Value::Text(body),
     }
+}
+
+fn date_cells(data: &str) -> Vec<(usize, bool)> {
+    let mut out = Vec::new();
+    let mut i = 0;
+    let mut cols = 1;
+    for l in data.split('\n') {
+        cols = cols.max(l.split('\t').count());
+    }
+    for l in data.split('\n') {
+        let mut c = 0;
+        for t in l.split('\t') {
+            if t.starts_with("d:") || t.starts_with("m:") {
+                out.push((i * cols + c, t.starts_with("m:")));
+            }
+            c += 1;
+        }
+        i += 1;
+    }
+    out
 }
 
 pub fn decode(data: &str) -> Array {
@@ -92,9 +115,16 @@ impl Workbook {
         match data {
             Some(d) => {
                 self.host.results.insert(key.to_string(), decode(d));
+                let dates = date_cells(d);
+                if dates.is_empty() {
+                    self.host.dates.remove(key);
+                } else {
+                    self.host.dates.insert(key.to_string(), dates);
+                }
             }
             None => {
                 self.host.results.remove(key);
+                self.host.dates.remove(key);
             }
         }
         self.host_recalc()
@@ -103,6 +133,36 @@ impl Workbook {
     pub fn host_clear(&mut self) -> Changed {
         self.host.results.clear();
         self.host_recalc()
+    }
+
+    pub(crate) fn host_formats(&mut self, k: (usize, Addr)) -> Option<crate::Fmt> {
+        for p in self.host.dated.remove(&k).unwrap_or_default() {
+            self.fmts.remove(&p);
+        }
+        if self.host.dates.is_empty() {
+            return None;
+        }
+        let Some(Expr::Call(name, args)) = self.formulas.get(&k).and_then(|f| f.ast.clone()) else { return None };
+        if !self.host.is_fn(&name) {
+            return None;
+        }
+        let key = crate::eval::Eval::new(self, k.0).placed(k.1).host_key(&name, &args).ok()?;
+        let cells = self.host.dates.get(&key)?.clone();
+        let w = self.spills.get(&k).map_or(1, |s| s.1 as usize).max(1);
+        let mut anchor = None;
+        let mut set = Vec::new();
+        for (i, moment) in cells {
+            let f = if moment { crate::Fmt::DateTime { secs: true, ampm: false } } else { crate::Fmt::Date };
+            let p = (k.0, Addr { row: k.1.row + (i / w) as u32, col: k.1.col + (i % w) as u32 });
+            if p == k {
+                anchor = Some(f);
+            } else {
+                self.fmts.insert(p, f);
+                set.push(p);
+            }
+        }
+        self.host.dated.insert(k, set);
+        anchor
     }
 
     fn host_recalc(&mut self) -> Changed {

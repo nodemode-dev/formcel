@@ -1,9 +1,14 @@
 use crate::wire::{escape, unescape};
 use crate::{link, Addr, Effect, EngineError, Key, Tx, Value, Workbook};
 
-pub const KINDS: [&str; 4] = ["person", "file", "date", "place"];
+pub const KINDS: [&str; 6] = ["person", "file", "date", "place", "stock", "currency"];
 const MAX_PER_CELL: usize = 50;
 const MAX_FIELD: usize = 2000;
+const MAX_TYPED: usize = 16000;
+
+pub fn typed_kind(kind: &str) -> bool {
+    matches!(kind, "stock" | "currency")
+}
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Chip {
@@ -32,7 +37,8 @@ pub fn parse(text: &str) -> Vec<Chip> {
             continue;
         }
         let Ok(start) = p[1].parse::<usize>() else { continue };
-        if p[2].is_empty() || p[2].chars().count() > MAX_FIELD || p[3].chars().count() > MAX_FIELD {
+        let cap = if typed_kind(&p[0]) { MAX_TYPED } else { MAX_FIELD };
+        if p[2].is_empty() || p[2].chars().count() > MAX_FIELD || p[3].chars().count() > cap {
             continue;
         }
         out.push(Chip { kind: p[0].clone(), start, label: p[2].clone(), value: p[3].clone(), tip: p.get(4).cloned().unwrap_or_default().chars().take(MAX_FIELD).collect() });
@@ -181,6 +187,11 @@ impl Workbook {
             if let Some(v) = self.sheets[k.0].cells.get(k.1) {
                 cells.push((k.0, k.1, v.clone()));
             }
+        }
+        let typed = |t: &Option<String>| t.as_ref().is_some_and(|t| t.starts_with("stock\t") || t.starts_with("currency\t"));
+        let seeds: Vec<(usize, Addr)> = changes.iter().filter(|(_, b, a)| typed(b) || typed(a)).map(|(k, _, _)| *k).collect();
+        if !seeds.is_empty() {
+            cells.extend(self.recalc(&seeds));
         }
         Effect { cells, ..Effect::default() }
     }
