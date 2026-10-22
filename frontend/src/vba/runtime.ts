@@ -1,3 +1,5 @@
+import { vbaRuntime } from '../vbalang/bridge';
+
 export type VbaKind = 'std' | 'class' | 'document' | 'form';
 
 export interface VbaModule {
@@ -62,5 +64,5 @@ const stub: VbaRuntime = {
 };
 
 export function runtime(): VbaRuntime {
-  return stub;
+  return vbaRuntime() ?? stub;
 }

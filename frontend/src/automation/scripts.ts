@@ -59,7 +59,7 @@ export class ScriptRunner {
     this.current?.stop('The script was stopped.');
   }
 
-  private async snapshot(): Promise<Snapshot> {
+  async snapshot(): Promise<Snapshot> {
     const book = this.h.book();
     const e = engine();
     const names = this.h.sheets();
@@ -205,7 +205,7 @@ export class ScriptRunner {
     return spec;
   }
 
-  private async apply(ops: Op[]): Promise<void> {
+  async apply(ops: Op[]): Promise<void> {
     const book = this.h.book();
     const g = this.h.grid;
     const e = engine();
@@ -244,7 +244,10 @@ export class ScriptRunner {
       }
       const i = idx('sheet' in op ? op.sheet : '');
       if (i < 0) continue;
-      if (op.k === 'filter') await g.applyEffect(await e.setFilter(book, i, op.text));
+      if (op.k === 'select') {
+        if (i !== g.sheetIndex) this.h.showSheet?.(i);
+        g.select(op.r0, op.c0, op.r1, op.c1, false);
+      } else if (op.k === 'filter') await g.applyEffect(await e.setFilter(book, i, op.text));
       else if (op.k === 'fill') {
         if (i !== g.sheetIndex) this.h.showSheet?.(i);
         const [sr0, sc0, sr1, sc1] = op.src;

@@ -12,7 +12,8 @@
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "build:vba": "vite build --config vite.vba.config.ts"
   },
   "devDependencies": {
     "typescript": "7.0.2",

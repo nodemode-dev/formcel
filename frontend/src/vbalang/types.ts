@@ -1,0 +1,107 @@
+export type ModuleKind = 'std' | 'class' | 'document' | 'form';
+
+export interface VbaModule {
+  name: string;
+  kind: ModuleKind;
+  code: string;
+  sheet?: string;
+}
+
+export interface Location {
+  module: string;
+  proc: string;
+  line: number;
+}
+
+export interface StackEntry extends Location {
+  depth: number;
+}
+
+export interface PauseInfo extends Location {
+  reason: 'breakpoint' | 'step' | 'stop';
+  stack: StackEntry[];
+  locals: { name: string; value: string; type: string }[];
+}
+
+export type StepAction = 'continue' | 'into' | 'over' | 'out' | 'stop';
+
+export type VbaEvent =
+  | { type: 'output'; text: string }
+  | { type: 'pause'; info: PauseInfo }
+  | { type: 'resumed' }
+  | { type: 'error'; number: number; description: string; source: string; location: Location }
+  | { type: 'done'; ok: boolean; value?: unknown }
+  | { type: 'status'; text: string };
+
+export interface RunResult {
+  ok: boolean;
+  value?: unknown;
+  error?: { number: number; description: string; source: string; location: Location };
+}
+
+export interface CompileProblem {
+  module: string;
+  line: number;
+  message: string;
+}
+
+export interface VbaHost {
+  evalFormula(sheet: string, formula: string): Promise<string>;
+  msgBox(prompt: string, buttons: number, title: string): Promise<number>;
+  inputBox(prompt: string, title: string, def: string): Promise<string | null>;
+  save?(): Promise<void>;
+  security?(): string;
+  now(): number;
+}
+
+export interface VbaEngine {
+  load(modules: VbaModule[]): Promise<CompileProblem[]>;
+  run(procName: string, args?: unknown[]): Promise<RunResult>;
+  setBreakpoints(module: string, lines: number[]): void;
+  resume(action: StepAction): void;
+  stepInto(procName: string, args?: unknown[]): Promise<RunResult>;
+  evaluate(text: string): Promise<string>;
+  stop(): void;
+  on(fn: (e: VbaEvent) => void): () => void;
+  procedures(): { module: string; name: string; kind: string; isPublic: boolean; params: number }[];
+}
+
+export type RunTrigger = 'user' | 'event' | 'function';
+
+export type MacroGate = (trigger: RunTrigger, workbook: string) => boolean | Promise<boolean>;
+
+export type MacroPolicy = 'disable' | 'notify' | 'signed' | 'enable';
+
+function stored(key: string): Record<string, unknown> {
+  try {
+    const raw: unknown = JSON.parse((typeof localStorage !== 'undefined' ? localStorage.getItem(key) : null) ?? '{}');
+    return raw && typeof raw === 'object' && !Array.isArray(raw) ? (raw as Record<string, unknown>) : {};
+  } catch {
+    return {};
+  }
+}
+
+export function storedPolicy(): MacroPolicy {
+  const v = stored('formcel.options').macroPolicy;
+  return v === 'disable' || v === 'signed' || v === 'enable' ? v : 'notify';
+}
+
+export function storedTrust(workbook: string): boolean {
+  const docs = (stored('formcel.prefs').macroSecurity as { documents?: Record<string, unknown> } | undefined)?.documents;
+  return !!docs && Object.prototype.hasOwnProperty.call(docs, workbook);
+}
+
+let gate: MacroGate = (trigger, workbook) => {
+  if (trigger === 'user') return true;
+  const p = storedPolicy();
+  if (p === 'enable') return true;
+  return p === 'notify' && storedTrust(workbook);
+};
+
+export function setMacroGate(g: MacroGate): void {
+  gate = g;
+}
+
+export function macroAllowed(trigger: RunTrigger, workbook: string): boolean | Promise<boolean> {
+  return gate(trigger, workbook);
+}

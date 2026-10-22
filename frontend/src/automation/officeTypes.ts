@@ -81,6 +81,7 @@ export interface PivotPatch {
 
 export type Op =
   | { k: 'edit'; sheet: string; r: number; c: number; raw: string }
+  | { k: 'select'; sheet: string; r0: number; c0: number; r1: number; c1: number }
   | { k: 'sheet'; name: string }
   | { k: 'sheetOp'; sheet: string; op: 'delete' | 'rename' | 'move' | 'tab' | 'visible' | 'grid' | 'freeze' | 'show'; name?: string; to?: number; value?: string; on?: boolean; rows?: number; cols?: number }
   | { k: 'format'; sheet: string; r0: number; c0: number; r1: number; c1: number; code: string }
