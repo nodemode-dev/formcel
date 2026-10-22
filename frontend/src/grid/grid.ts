@@ -20,6 +20,7 @@ import { runCommand } from '../ui/commands';
 import { markAction } from '../ui/action';
 import { parseTable, tablePaint, type TableInfo, type TablePaint } from './tables';
 import { pastedTable } from './pastedata';
+import { pointSlot, pointText, type PointSlot } from './pointref';
 import { drawImageCell, IMAGE_CODE } from '../charts/picture';
 import { drawSpark, SPARK_CODE } from '../charts/spark';
 
@@ -246,8 +247,12 @@ export class Grid {
   private viewColor: string | undefined;
   private fillTo: { r: number; c: number } | null = null;
   private fillCtrl = false;
+  private fillShift = false;
+  private point: PointSlot | null = null;
+  private pointing = false;
+  private pointGen = 0;
   private pal!: Palette;
-  private drag: null | { kind: 'cells' | 'rows' | 'cols' | 'fill' | 'split-r' | 'split-c' } | { kind: 'resize-col' | 'resize-row'; index: number; start: number; size: number } | { kind: 'break'; axis: 'row' | 'col'; from: number; to: number } = null;
+  private drag: null | { kind: 'cells' | 'rows' | 'cols' | 'fill' | 'split-r' | 'split-c' } | { kind: 'point'; row: number; col: number } | { kind: 'resize-col' | 'resize-row'; index: number; start: number; size: number } | { kind: 'break'; axis: 'row' | 'col'; from: number; to: number } = null;
 
   constructor(
     host: HTMLElement,
@@ -2791,6 +2796,10 @@ export class Grid {
     }
     this.fillCtrl = false;
     const mark = await this.engine.undoMark(this.book);
+    if (this.fillShift && (down || right)) {
+      await this.applyEffect(await this.engine.tool(this.book, this.sheet, 'shiftcells', `${target.r0},${target.c0},${target.r1},${target.c1}`, down ? 'down' : 'right', '1'));
+    }
+    this.fillShift = false;
     const fmts = await this.formatsOf(s);
     if (edits.length) await this.commitEdits(await this.engine.apply(this.book, edits, this.sheet));
     if (pairs.length <= 100000) {
@@ -2804,6 +2813,42 @@ export class Grid {
     this.select(Math.min(s.r0, target.r0), Math.min(s.c0, target.c0), Math.max(s.r1, target.r1), Math.max(s.c1, target.c1), false);
     this.ar = s.r0;
     this.ac = s.c0;
+  }
+
+  private pointStart(e: PointerEvent): boolean {
+    const p = this.local(e);
+    if (p.x <= HEAD_W || p.y <= HEAD_H) return false;
+    const ed = this.editor;
+    const slot = pointSlot(ed.value, ed.selectionStart, ed.selectionEnd, this.point);
+    if (!slot) return false;
+    const { row, col } = this.hit(p.x, p.y);
+    this.point = slot;
+    this.pointing = true;
+    this.drag = { kind: 'point', row, col };
+    this.canvas.setPointerCapture(e.pointerId);
+    void this.pointPut(row, col, row, col);
+    return true;
+  }
+
+  private async pointPut(ar: number, ac: number, br: number, bc: number): Promise<void> {
+    const slot = this.point;
+    if (!slot || !this.editing) return;
+    const [r0, r1, c0, c1] = [Math.min(ar, br), Math.max(ar, br), Math.min(ac, bc), Math.max(ac, bc)];
+    const gen = ++this.pointGen;
+    const put = (text: string) => {
+      const ed = this.editor;
+      const keep = this.pointing;
+      this.pointing = true;
+      ed.value = ed.value.slice(0, slot.start) + text + ed.value.slice(slot.end);
+      slot.end = slot.start + text.length;
+      ed.setSelectionRange(slot.end, slot.end);
+      ed.dispatchEvent(new Event('input'));
+      this.pointing = keep;
+    };
+    put(pointText(r0, c0, r1, c1));
+    if (!this.tableList.length) return;
+    const said = (await this.engine.tool(this.book, this.sheet, 'tablepoint', String(r0), String(c0), String(r1), String(c1), String(this.ar), String(this.ac))).message ?? '';
+    if (said && gen === this.pointGen && this.point === slot && this.editing) put(said);
   }
 
   private async fillDownToData(): Promise<void> {
@@ -3083,9 +3128,15 @@ export class Grid {
         const dx = col > s.c1 ? col - s.c1 : col < s.c0 ? s.c0 - col : 0;
         this.fillTo = dy >= dx ? { r: row, c: s.c0 } : { r: s.r0, c: col };
         this.fillCtrl = e.ctrlKey || e.metaKey;
+        this.fillShift = e.shiftKey;
         if (!dy && !dx) this.fillTo = null;
         this.reveal(row, col);
         this.paint();
+        return;
+      }
+      if (this.drag?.kind === 'point') {
+        const { row, col } = this.hit(p.x, p.y);
+        void this.pointPut(this.drag.row, this.drag.col, row, col);
         return;
       }
       if (this.drag) {
@@ -3125,6 +3176,7 @@ export class Grid {
     el.addEventListener('pointerdown', (e) => {
       if (e.target !== this.canvas || e.button !== 0) return;
       e.preventDefault();
+      if (this.editing && this.pointStart(e)) return;
       if (this.editing) void this.endEdit(true);
       this.focus();
       const p = this.local(e);
@@ -3142,6 +3194,7 @@ export class Grid {
       if (this.onFillHandle(p.x, p.y)) {
         this.drag = { kind: 'fill' };
         this.fillTo = null;
+        this.fillShift = false;
         return;
       }
       const b = this.boundary(p.x, p.y);
@@ -3194,7 +3247,10 @@ export class Grid {
       if (this.canvas.hasPointerCapture(e.pointerId)) this.canvas.releasePointerCapture(e.pointerId);
       const d = this.drag;
       this.drag = null;
-      if (d?.kind === 'break') {
+      if (d?.kind === 'point') {
+        this.editor.focus({ preventScroll: true });
+        setTimeout(() => (this.pointing = false), 0);
+      } else if (d?.kind === 'break') {
         if (d.to !== d.from) this.events.onBreakMove?.(d.axis, d.from, d.to);
         this.paint();
       } else if (this.painter && (d?.kind === 'cells' || d?.kind === 'rows' || d?.kind === 'cols')) this.enqueue(() => this.applyPainter());
@@ -3255,10 +3311,13 @@ export class Grid {
     });
 
     this.editor.addEventListener('blur', () => {
-      if (this.editing && !document.querySelector('.fc-modal:not([hidden])')) void this.endEdit(true);
+      if (this.editing && !this.pointing && !document.querySelector('.fc-modal:not([hidden])')) void this.endEdit(true);
     });
 
-    this.editor.addEventListener('input', (e) => void this.suggest(e as InputEvent));
+    this.editor.addEventListener('input', (e) => {
+      if (!this.pointing) this.point = null;
+      void this.suggest(e as InputEvent);
+    });
 
     document.addEventListener('copy', (e) => {
       if (document.activeElement !== el) return;
