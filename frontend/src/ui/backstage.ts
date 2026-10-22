@@ -825,7 +825,7 @@ export class Backstage {
       a.click();
       a.remove();
       window.setTimeout(() => URL.revokeObjectURL(a.href), 10000);
-      this.noteOn(kind, `${base}.${f.ext} was made (${blob.size < 1024 ? `${blob.size} bytes` : `${Math.round(blob.size / 1024)} KB`}) and sent to your downloads.`);
+      this.noteOn(kind, `${base}.${f.ext} was made (${blob.size < 1024 ? `${blob.size} bytes` : `${Math.round(blob.size / 1024)} KB`}) and sent to your downloads.${r.headers.get('X-FormCel-Note') ? ` ${decodeURIComponent(r.headers.get('X-FormCel-Note') as string)}.` : ''}`);
     } catch (e) {
       this.noteOn(kind, e instanceof Error ? e.message : 'The file could not be made.', true);
     } finally {

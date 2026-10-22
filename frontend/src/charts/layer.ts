@@ -1,5 +1,6 @@
 import type { EngineClient } from '../engine';
 import type { Grid, ObjectsHook } from '../grid/grid';
+import { ensureFont } from '../grid/fonts';
 import type { PivotDef } from '../ui/pivot';
 import { anchorOf, frameOf, fromLine, toLine } from './anchor';
 import { build, readMatrix, resolveRange } from './data';
@@ -7,7 +8,7 @@ import { OrgEditor } from './orgedit';
 import { makeBar, syncBar } from './pivotbar';
 import { FILTER_BAR, pivotChartData } from './pivotchart';
 import { contrast, isLine, shapeSvg } from './shapes';
-import { renderChartAsync } from './svg';
+import { renderChartAsync, setChartFont } from './svg';
 import { isFloat, newId, type FloatObject, type ShapeSpec } from './types';
 
 export interface LayerIo {
@@ -467,7 +468,8 @@ export class ObjectLayer implements ObjectsHook {
     st.fontWeight = s.bold ? '700' : '';
     st.fontStyle = s.italic ? 'italic' : '';
     st.textDecoration = [s.underline ? 'underline' : '', s.strike ? 'line-through' : ''].filter(Boolean).join(' ');
-    st.fontFamily = s.font ?? '';
+    st.fontFamily = s.font ? `"${s.font}", var(--font-ui)` : '';
+    if (s.font) void ensureFont(s.font);
     st.textAlign = s.align === 'l' ? 'left' : s.align === 'r' ? 'right' : s.align === 'j' ? 'justify' : 'center';
     st.justifyContent = s.valign === 't' ? 'flex-start' : s.valign === 'b' ? 'flex-end' : 'center';
     label.hidden = isLine(s.shape);
@@ -625,6 +627,10 @@ export class ObjectLayer implements ObjectsHook {
   private async draw(n: Node): Promise<void> {
     const spec = n.obj.chart;
     if (!spec) return;
+    const face = this.grid.opts.defaultFont || this.grid.look.body;
+    const own = face && face !== 'Aptos Narrow' && face !== 'Inter' ? face : '';
+    if (own) await ensureFont(own);
+    setChartFont(own);
     let html: string;
     let def: PivotDef | null = null;
     if (spec.pivot) {

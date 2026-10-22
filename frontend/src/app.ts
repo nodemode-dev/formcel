@@ -5,6 +5,7 @@ import { colName, parseRef, type Range } from './grid/a1';
 import { Autocomplete, FUNCTIONS, type Suggestion } from './ui/autocomplete';
 import { ChipPicker } from './ui/chippicker';
 import { chipHref } from './grid/smartchips';
+import { SIZE_PRESETS } from './grid/fonts';
 import { Charts } from './charts';
 import type { FloatObject } from './charts/types';
 import { Automation } from './automation';
@@ -187,8 +188,6 @@ const NUMBER_FORMATS: { id: string; label: string; description: string; code: st
   { id: 'text', label: 'Text', description: 'Keep what is typed as text, even numbers and formulas.', code: '@' },
 ];
 
-const FONTS = ['', 'Arial', 'Georgia', 'Times New Roman', 'Courier New', 'Verdana', 'JetBrains Mono'];
-const SIZES = [8, 9, 10, 11, 12, 14, 16, 18, 20, 24, 28, 36, 48, 72];
 const CELL_COLOURS = ['', '#000000', '#ffffff', '#ef4444', '#f97316', '#eab308', '#22c55e', '#14b8a6', '#3b82f6', '#8b5cf6', '#ec4899', '#94a3b8'];
 const BORDER_KINDS: [BorderKind, string][] = [
   ['all', 'All borders'], ['outside', 'Outside borders'], ['inside', 'Inside borders'], ['top', 'Top border'],
@@ -974,8 +973,8 @@ export class App {
     cmd('format.borders', 'Borders', 'Draw or remove lines around and inside the selection.', true, () => this.borderMenu());
     cmd('format.outline-border', 'Outline border', 'Draw a line around the selection.', true, () => g.borders('outside'), 'Mod+Shift+&');
     cmd('format.no-border', 'No border', 'Remove the borders of the selected cells.', true, () => g.borders('none'), 'Mod+Shift+_');
-    cmd('format.font', 'Font', 'Choose the typeface of the selected cells.', true, () => this.listMenu('format.font', FONTS.map((f) => [f || 'Aptos Narrow (default)', f ? `ff:${f}` : 'ff:']), g.activeStyle().font ?? ''));
-    cmd('format.size', 'Font size', 'Choose the text size of the selected cells, in points.', true, () => this.listMenu('format.size', SIZES.map((n) => [String(n), n === 10 ? 'sz:' : `sz:${n}`]), String(g.activeStyle().size ?? 10)));
+    cmd('format.font', 'Font', 'Choose the typeface of the selected cells.', true, () => document.querySelector<HTMLButtonElement>('.rb-combo.is-font .rb-combo-btn')?.click());
+    cmd('format.size', 'Font size', 'Choose the text size of the selected cells, in points.', true, () => this.listMenu('format.size', SIZE_PRESETS.map((n) => [String(n), n === 10 ? 'sz:' : `sz:${n}`]), String(g.activeStyle().size ?? 10)));
     void api('PUT', '/api/commands', listCommands()).catch(() => undefined);
   }
 

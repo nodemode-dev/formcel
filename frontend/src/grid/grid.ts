@@ -17,6 +17,7 @@ export type BorderKind ='all' | 'outside' | 'inside' | 'top' | 'bottom' | 'left'
 import { Axis, type AxisState } from './axis';
 import { MAX_COLS, MAX_ROWS, a1, colName, parseRef, rangeText, type Range } from './a1';
 import { fillSeries } from './fill';
+import { ensureFont, isFontReady, onFontsLoaded } from './fonts';
 import { runCommand } from '../ui/commands';
 import { markAction } from '../ui/action';
 import { parseTable, tablePaint, type TableInfo, type TablePaint } from './tables';
@@ -269,6 +270,7 @@ export class Grid {
   private typedEntry = false;
   private tabStart = -1;
   private raf = 0;
+  readonly offFonts = onFontsLoaded((families) => this.fontsArrived(new Set(families)));
   private queue: Promise<void> = Promise.resolve();
   private sheet = 0;
   private z = 1;
@@ -935,11 +937,29 @@ export class Grid {
     return undefined;
   }
 
+  private faceOf(st: CellStyle): string {
+    const named = st.font ?? (this.opts.defaultFont || this.look.body);
+    return named === 'Inter' ? 'Aptos Narrow' : named;
+  }
+
+  usedFonts(): string[] {
+    const out = new Set<string>();
+    for (const st of this.styles.values()) if (st.font) out.add(st.font);
+    return Array.from(out);
+  }
+
+  private fontsArrived(families: Set<string>): void {
+    const rows = new Set<number>();
+    for (const [k, st] of this.styles) if ((st.wrap || st.size) && families.has(this.faceOf(st))) rows.add(Math.floor(k / MAX_COLS));
+    if (rows.size) this.fitRows(rows);
+    this.paint();
+  }
+
   private font(st: CellStyle): number {
     const size = st.size || (this.opts.defaultSize !== 10 ? this.opts.defaultSize : 0);
     const px = size ? Math.round(size * 13.333) / 10 : BODY_PX;
-    const named = st.font ?? (this.opts.defaultFont || this.look.body);
-    const face = named === 'Inter' ? 'Aptos Narrow' : named;
+    const face = this.faceOf(st);
+    if (!isFontReady(face)) void ensureFont(face);
     this.ctx.font = `${st.i ? 'italic ' : ''}${st.b ? '700 ' : ''}${px}px "${face}", ${FALLBACK}`;
     return px;
   }

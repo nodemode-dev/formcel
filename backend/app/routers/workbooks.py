@@ -181,14 +181,18 @@ def export_text(wid: str, kind: str, sheet: int = 0, scope: str = "sheet") -> Re
         fname = "".join(ch for ch in title if ch not in '\\/:*?"<>|').strip() or "Workbook"
         return Response(text.encode("utf-8"), media_type="text/html; charset=utf-8", headers={"Content-Disposition": f"attachment; filename*=UTF-8''{quote(fname)}.html"})
     if kind == "pdf":
+        notes: list[str] = []
         try:
-            title, data = store().export_pdf(wid, None if scope == "all" else sheet)
+            title, data = store().export_pdf(wid, None if scope == "all" else sheet, notes)
         except (KeyError, FileNotFoundError):
             raise missing(wid)
         except IndexError:
             raise HTTPException(404, f"No sheet {sheet}.")
         fname = "".join(ch for ch in title if ch not in '\\/:*?"<>|').strip() or "Workbook"
-        return Response(data, media_type="application/pdf", headers={"Content-Disposition": f"attachment; filename*=UTF-8''{quote(fname)}.pdf"})
+        head = {"Content-Disposition": f"attachment; filename*=UTF-8''{quote(fname)}.pdf", "Access-Control-Expose-Headers": "X-FormCel-Note"}
+        if notes:
+            head["X-FormCel-Note"] = quote(notes[0])
+        return Response(data, media_type="application/pdf", headers=head)
     if kind == "fcel":
         try:
             title, data = store().export_fcel(wid)
