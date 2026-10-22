@@ -308,10 +308,22 @@ class Store:
             z.writestr("workbook.json", json.dumps(doc, ensure_ascii=False, separators=(",", ":")))
         return self._load(wid).meta()
 
+    def create_from_doc(self, title: str | None, tid: str) -> dict:
+        doc = templates.doc_of(tid)
+        stamp = now()
+        wid = uuid.uuid4().hex[:12]
+        doc.update({"id": wid, "title": (title or templates.catalog()[tid]["name"])[:120], "created": stamp, "modified": stamp, "template": tid})
+        with zipfile.ZipFile(self.path(wid), "w", zipfile.ZIP_DEFLATED) as z:
+            z.writestr("mimetype", "application/vnd.formcel+zip")
+            z.writestr("workbook.json", json.dumps(doc, ensure_ascii=False, separators=(",", ":")))
+        return self._load(wid).meta()
+
     @neutral
     def create(self, title: str | None, template_id: str | None) -> dict:
         if template_id and template_id.startswith("my-"):
             return self.create_from_personal(title, template_id)
+        if template_id and templates.doc_of(template_id) is not None:
+            return self.create_from_doc(title, template_id)
         eng = formcel_engine.Workbook()
         name = title
         if template_id:
