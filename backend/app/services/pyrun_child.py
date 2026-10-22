@@ -77,8 +77,14 @@ sys.addaudithook(audit)
 
 code = req["code"]
 tree = ast.parse(code, mode="exec")
+before = []
+for earlier in req.get("before") or []:
+    try:
+        before.append(ast.parse(earlier, mode="exec"))
+    except SyntaxError:
+        continue
 allowed = ALLOWED + have
-for node in ast.walk(tree):
+for node in [n for t in before + [tree] for n in ast.walk(t)]:
     if isinstance(node, ast.Import):
         for a in node.names:
             if a.name.split(".")[0] not in allowed:
@@ -223,6 +229,13 @@ def plain_cell(c):
         return json.dumps(c, default=str)
     return scalar(c)
 
+
+for earlier in before:
+    try:
+        exec(compile(earlier, "<before>", "exec"), env)
+    except Exception:
+        continue
+printed.clear()
 
 try:
     last = tree.body[-1] if tree.body else None

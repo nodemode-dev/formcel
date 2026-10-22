@@ -16,11 +16,13 @@ process.stdin.on("data", (d) => (input += d)).on("end", async () => {
     const quiet = { log() {}, info() {}, warn() {}, error() {}, debug() {} };
     class CfError extends Error { constructor(code, message) { super(message || String(code)); this.excelCode = String(code); } }
     const codes = { invalidValue: "#VALUE!", notAvailable: "#N/A", divisionByZero: "#DIV/0!", invalidNumber: "#NUM!", nullReference: "#NULL!", invalidName: "#NAME?", invalidReference: "#REF!" };
-    const ctx = vm.createContext({ console: quiet, CustomFunctions: { Error: CfError, ErrorCode: codes }, __args: JSON.stringify(req.args) }, { codeGeneration: { strings: false, wasm: false } });
-    const extra = req.stream ? ", { setResult(v) { last = v; has = true; }, onCanceled: null, address: '' }" : "";
-    const src = '"use strict";\n' + req.js + "\n;(async () => { const a = JSON.parse(__args); let last, has = false; const v = await " + req.name + "(...a" + extra + "); const r = has ? last : v; return JSON.stringify(r === undefined ? '' : r); })()";
+    const ctx = vm.createContext({ console: quiet, CustomFunctions: { Error: CfError, ErrorCode: codes }, __args: JSON.stringify(req.args), setTimeout, setInterval, clearTimeout, clearInterval }, { codeGeneration: { strings: false, wasm: false } });
+    const extra = req.stream ? ", { setResult(v) { last = v; has = true; if (wake) wake(); }, onCanceled: null, address: '' }" : "";
+    const hold = req.stream ? "if (!has) await new Promise((res) => { wake = res; setTimeout(res, 3000); });" : "";
+    const src = '"use strict";\n' + req.js + "\n;(async () => { const a = JSON.parse(__args); let last, wake, has = false; const v = await " + req.name + "(...a" + extra + "); " + hold + " const r = has ? last : v; return JSON.stringify(r === undefined ? '' : r); })()";
     const out = await new vm.Script(src).runInContext(ctx, { timeout: 4000 });
-    process.stdout.write(JSON.stringify({ value: out }));
+    process.stdout.write(JSON.stringify({ value: out }), () => process.exit(0));
+    return;
   } catch (e) {
     const code = e && e.excelCode ? e.excelCode : "";
     process.stderr.write((code ? "\u0001" + code + "\u0001" : "") + String(e && e.message ? e.message : e));

@@ -63,6 +63,7 @@ export class HostCalls {
   private sent = false;
   private running = false;
   private again = false;
+  private wantAll = false;
 
   constructor(private readonly h: CallHooks) {}
 
@@ -74,7 +75,7 @@ export class HostCalls {
     this.names = new Set(up);
     this.sent = true;
     this.h.patch(await engine().hostCustom(book, [...up, ...SERVER.filter((s) => !up.includes(s))]));
-    await this.drain();
+    await this.drain(false, up.length > 0);
   }
 
   setTraits(streams: string[], volatile: string[]): void {
@@ -93,6 +94,7 @@ export class HostCalls {
   async drain(fresh = false, all = false, xl = false): Promise<void> {
     if (this.running) {
       this.again = true;
+      if (all) this.wantAll = true;
       return;
     }
     this.running = true;
@@ -153,6 +155,10 @@ export class HostCalls {
       }
     } finally {
       this.running = false;
+      if (this.wantAll) {
+        this.wantAll = false;
+        void this.drain(false, true);
+      }
     }
   }
 }
