@@ -5,7 +5,7 @@ const FORCE_KEY = 'formcel.forceNativeMenus';
 
 function forced(): boolean {
   try {
-    return localStorage.getItem(FORCE_KEY) === '1';
+    return localStorage.getItem(FORCE_KEY) === '1' || /[?&]native-menus\b/.test(location.search);
   } catch {
     return false;
   }
