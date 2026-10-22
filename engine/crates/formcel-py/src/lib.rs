@@ -378,6 +378,10 @@ impl Workbook {
         self.inner.tables()
     }
 
+    fn table_area(&self, text: &str) -> Option<(usize, u32, u32, u32, u32)> {
+        self.inner.table_area_of(text).map(|(s, a)| (s, a.r0, a.c0, a.r1, a.c1))
+    }
+
     fn load_tables(&mut self, lines: Vec<String>) -> usize {
         self.inner.load_tables(&lines)
     }

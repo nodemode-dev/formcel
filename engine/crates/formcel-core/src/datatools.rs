@@ -316,6 +316,15 @@ impl Workbook {
             "tabletype" => self.t_tabletype(sheet, &p),
             "tableheader" => self.set_header(arg(&p, 1), arg(&p, 2) == "1").map(|e| (e, say("Header row set."))),
             "tablestep" => Ok((Effect::default(), say(&self.step_table_cols(arg(&p, 1), arg(&p, 2).parse().unwrap_or(0))))),
+            "tablearea" => {
+                let found = self.table_area_of(arg(&p, 1)).map(|(s, a)| format!("{s}\t{}\t{}\t{}\t{}", a.r0, a.c0, a.r1, a.c1));
+                Ok((Effect::default(), say(&found.unwrap_or_default())))
+            }
+            "tablepoint" => {
+                let n = |i: usize| arg(&p, i).parse::<u32>().unwrap_or(0);
+                let sel = crate::formula::Area { r0: n(1), c0: n(2), r1: n(3), c1: n(4) };
+                Ok((Effect::default(), say(&self.point_ref(sheet, sel, Addr { row: n(5), col: n(6) }).unwrap_or_default())))
+            }
             "typecheck" => self.t_typecheck(sheet, &p),
             "complete" => self.t_complete(sheet, &p),
             "mirror" => self.t_mirror(sheet, &p),

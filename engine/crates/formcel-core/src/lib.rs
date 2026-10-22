@@ -1243,7 +1243,10 @@ impl Workbook {
             self.fmts.remove(&k);
             self.sheets[sheet].cells.set(a, if raw.is_empty() { Value::Empty } else { Value::Text(raw.to_string()) });
         } else if is_formula(raw) {
-            let f = Formula::new(raw);
+            let mut f = Formula::new(raw);
+            if let Some(e) = f.ast.as_mut() {
+                Workbook::adopt_table_names(&self.tables, e);
+            }
             if self.graph.built {
                 let areas = self.areas_of(&k, &f);
                 self.graph.insert(k, areas);
