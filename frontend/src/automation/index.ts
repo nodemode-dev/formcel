@@ -224,6 +224,15 @@ export class Automation {
     return this.auto.scripts.map((s) => ({ id: s.id, name: s.name }));
   }
 
+  setting<T>(key: string): T | undefined {
+    return this.auto.settings[key] as T | undefined;
+  }
+
+  setSetting(key: string, value: unknown): void {
+    this.auto.settings[key] = value;
+    this.persist();
+  }
+
   runForObject(id: string, name: string): void {
     this.h.status(`Running ${name}`);
     void this.runScript(id, { type: 'button' }).then((r) => {

@@ -408,7 +408,7 @@ class Store:
         if book.get("protection"):
             eng.load_protection(book["protection"])
         if b.vba:
-            notes.append("1 macro project kept for saving as .xlsm (FormCel does not run macros)")
+            notes.append("1 macro project kept for saving as .xlsm; open it in the Visual Basic Editor with Alt+F11")
         with self.guard:
             self.open[b.id] = b
         self._write(b)
