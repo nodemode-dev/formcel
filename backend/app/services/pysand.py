@@ -59,7 +59,7 @@ def pandas_ready() -> bool:
     return importlib.util.find_spec("pandas") is not None and importlib.util.find_spec("numpy") is not None
 
 
-def run(code: str, args: list, reader=None, memory: int = 1536) -> dict:
+def run(code: str, args: list, reader=None, memory: int = 1536, before: list[str] | None = None) -> dict:
     if len(code) > MAX_CODE:
         raise PyError(f"the code is over {MAX_CODE} characters")
     cmd = [sys.executable, "-I", str(CHILD)]
@@ -73,7 +73,7 @@ def run(code: str, args: list, reader=None, memory: int = 1536) -> dict:
         timer.start()
         done: dict | None = None
         try:
-            p.stdin.write(json.dumps({"code": code, "args": args, "pandas": pandas_ready(), "memory": memory, "cpu": TIMEOUT + 2}, default=str) + "\n")
+            p.stdin.write(json.dumps({"code": code, "before": before or [], "args": args, "pandas": pandas_ready(), "memory": memory, "cpu": TIMEOUT + 2}, default=str) + "\n")
             p.stdin.flush()
             for line in p.stdout:
                 try:
