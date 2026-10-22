@@ -153,7 +153,7 @@ export function paintThumb(box: HTMLElement, t: GalleryTemplate): void {
         drawThumb(grid, t.preview);
         return;
       }
-      host.innerHTML = chartSvg(first, 320, 160, true);
+      host.innerHTML = chartSvg(first, 320, 130, true);
       host.dataset.state = 'ready';
     });
   };
