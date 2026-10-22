@@ -30,7 +30,7 @@ const h = <K extends keyof HTMLElementTagNameMap>(tag: K, cls = '', html = ''): 
 const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 
 const TOOLS: ([string, IconName, string, string] | null)[] = [
-  ['excel', 'sheet', 'View Microsoft Excel (Alt+F11)', 'Excel'],
+  ['excel', 'sheet', 'View FormCel (Alt+F11)', 'FormCel'],
   null,
   ['insert-module', 'moduleFile', 'Insert a Module', 'Module'],
   ['insert-class', 'classFile', 'Insert a Class Module', 'Class'],
@@ -79,7 +79,7 @@ export class Vbe {
     el.hidden = true;
     el.setAttribute('role', 'dialog');
     el.setAttribute('aria-label', 'Visual Basic Editor');
-    el.innerHTML = `<header class="fc-vbe-title"><span class="fc-vbe-appicon">${icon('vbe')}</span><span class="fc-vbe-tt"></span><button type="button" class="fc-tool" data-a="close" title="Close and return to Microsoft Excel (Alt+Q)" aria-label="Close">${icon('close')}</button></header>
+    el.innerHTML = `<header class="fc-vbe-title"><span class="fc-vbe-appicon">${icon('vbe')}</span><span class="fc-vbe-tt"></span><button type="button" class="fc-tool" data-a="close" title="Close and return to FormCel (Alt+Q)" aria-label="Close">${icon('close')}</button></header>
 <div class="fc-vbe-bar" role="toolbar" aria-label="Standard">${TOOLS.map((t) => (t ? `<button type="button" class="fc-vbe-btn" data-a="${t[0]}" title="${t[2]}" aria-label="${t[2]}">${icon(t[1])}<span>${t[3]}</span></button>` : '<span class="fc-tool-sep" aria-hidden="true"></span>')).join('')}</div>
 <div class="fc-vbe-body">
   <aside class="fc-vbe-side">
@@ -445,7 +445,7 @@ export class Vbe {
     this.tree.innerHTML = ['root'].map(() => `<div class="fc-vbe-node fc-vbe-root" data-k="VBAProject" data-group="1">${icon('folder')}<span class="fc-vbe-pn">VBAProject</span></div>`).join('');
     const root = this.tree.firstElementChild as HTMLElement;
     const wrap = h('div', 'fc-vbe-children');
-    for (const [id, label] of [['objects', 'Microsoft Excel Objects'], ['forms', 'Forms'], ['modules', 'Modules'], ['classes', 'Class Modules']] as const) {
+    for (const [id, label] of [['objects', 'FormCel Objects'], ['forms', 'Forms'], ['modules', 'Modules'], ['classes', 'Class Modules']] as const) {
       const g = h('div', 'fc-vbe-group');
       g.dataset.g = id;
       g.innerHTML = `<div class="fc-vbe-node" data-k="group:${id}" data-group="1" role="treeitem">${icon('folder')}<span>${label}</span></div><div class="fc-vbe-children"></div>`;
