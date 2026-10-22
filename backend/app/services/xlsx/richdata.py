@@ -16,8 +16,11 @@ PARTS = {
     "xl/richData/rdRichValueTypes.xml": ("application/vnd.ms-excel.rdrichvaluetypes+xml", "http://schemas.microsoft.com/office/2017/06/relationships/rdRichValueTypes"),
     "xl/richData/richValueRel.xml": ("application/vnd.ms-excel.richvaluerel+xml", "http://schemas.microsoft.com/office/2022/10/relationships/richValueRel"),
 }
+WEB_PART = "xl/richData/rdRichValueWebImage.xml"
+WEB_TYPE = ("application/vnd.ms-excel.rdrichvaluewebimage+xml", "http://schemas.microsoft.com/office/2020/07/relationships/rdRichValueWebImage")
 IMAGE_TYPES = {"png": "image/png", "jpeg": "image/jpeg", "jpg": "image/jpeg", "gif": "image/gif", "bmp": "image/bmp", "webp": "image/webp"}
 CALC_ORIGIN_PLACED = 5
+CALC_ORIGIN_IMAGE = 6
 TYPES_XML = (
     f'<rvTypesInfo xmlns="{NS_RD2}" xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" mc:Ignorable="x" xmlns:x="{NS_MAIN}"><global><keyFlags>'
     '<key name="_Self"><flag name="ExcludeFromFile" value="1"/><flag name="ExcludeFromCalcComparison" value="1"/></key>'
@@ -81,18 +84,38 @@ def write(files: dict[str, bytes], items: list[tuple[str, list[dict]]]) -> None:
         files[name] = data
         media_of[data] = len(media)
         media.append((name, data))
-    has_alt = any(p.get("alt") for _, p in pics)
+    has_alt = any(p.get("alt") and not p.get("url") for _, p in pics)
+    webs = [p for _, p in pics if p.get("url")]
     structure = '<s t="_localImage"><k n="_rvRel:LocalImageIdentifier" t="i"/><k n="CalcOrigin" t="i"/></s>'
     if has_alt:
         structure += '<s t="_localImage"><k n="_rvRel:LocalImageIdentifier" t="i"/><k n="CalcOrigin" t="i"/><k n="Text" t="s"/></s>'
+    structures = 2 if has_alt else 1
+    web_at = structures
+    if webs:
+        structure += '<s t="_webimage"><k n="WebImageIdentifier" t="i"/><k n="CalcOrigin" t="i"/><k n="ComputedImage" t="b"/></s>'
+        structures += 1
     values = ""
+    seen_web = 0
     for _, p in pics:
         rel = media_of[p["data"]]
-        if p.get("alt"):
+        if p.get("url"):
+            values += f'<rv s="{web_at}"><v>{seen_web}</v><v>{CALC_ORIGIN_IMAGE}</v><v>1</v></rv>'
+            seen_web += 1
+        elif p.get("alt"):
             values += f'<rv s="1"><v>{rel}</v><v>{CALC_ORIGIN_PLACED}</v><v>{escape(str(p["alt"]))}</v></rv>'
         else:
-            values += f'<rv s="0"><v>{rel}</v><v>{CALC_ORIGIN_PLACED}</v></rv>'
-    structures = 2 if has_alt else 1
+            values += f'<rv s="0"><v>{rel}</v><v>{CALC_ORIGIN_PLACED if not p.get("formula") else CALC_ORIGIN_IMAGE}</v></rv>'
+    parts = dict(PARTS)
+    if webs:
+        parts[WEB_PART] = WEB_TYPE
+        blips = ""
+        links = ""
+        for k, p in enumerate(webs):
+            name = f"../media/{posixpath.basename(next(m for m, d in media if d == p['data']))}"
+            blips += f'<webImageSrd><address r:id="rId{2 * k + 1}"/><blip r:id="rId{2 * k + 2}"/></webImageSrd>'
+            links += f'<Relationship Id="rId{2 * k + 1}" Type="{NS_REL}/hyperlink" Target="{escape(p["url"], {chr(34): "&quot;"})}" TargetMode="External"/><Relationship Id="rId{2 * k + 2}" Type="{NS_REL}/image" Target="{name}"/>'
+        files[WEB_PART] = (HEAD + f'<webImagesSrd xmlns="{NS_RD2}" xmlns:r="{NS_REL}">{blips}</webImagesSrd>').encode()
+        files[_rels_path(WEB_PART)] = (HEAD + f'<Relationships xmlns="{NS_PKG}">{links}</Relationships>').encode()
     files["xl/richData/rdrichvalue.xml"] = (HEAD + f'<rvData xmlns="{NS_RD}" count="{len(pics)}">{values}</rvData>').encode()
     files["xl/richData/rdrichvaluestructure.xml"] = (HEAD + f'<rvStructures xmlns="{NS_RD}" count="{structures}">{structure}</rvStructures>').encode()
     files["xl/richData/rdRichValueTypes.xml"] = (HEAD + TYPES_XML).encode()
@@ -105,7 +128,7 @@ def write(files: dict[str, bytes], items: list[tuple[str, list[dict]]]) -> None:
     for ext in {posixpath.splitext(name)[1][1:] for name, _ in media}:
         if f'Extension="{ext}"' not in ct:
             add += f'<Default Extension="{ext}" ContentType="{IMAGE_TYPES[ext]}"/>'
-    for part, (ctype, _) in PARTS.items():
+    for part, (ctype, _) in parts.items():
         if f'PartName="/{part}"' not in ct:
             add += f'<Override PartName="/{part}" ContentType="{ctype}"/>'
     if 'PartName="/xl/metadata.xml"' not in ct:
@@ -115,7 +138,7 @@ def write(files: dict[str, bytes], items: list[tuple[str, list[dict]]]) -> None:
     ids = [int(x) for x in re.findall(r'Id="rId(\d+)"', wrels)]
     top = max(ids, default=0)
     add = ""
-    for part, (_, rtype) in PARTS.items():
+    for part, (_, rtype) in parts.items():
         top += 1
         add += f'<Relationship Id="rId{top}" Type="{rtype}" Target="{part[3:]}"/>'
     if "/relationships/sheetMetadata" not in wrels:
@@ -133,7 +156,10 @@ def write(files: dict[str, bytes], items: list[tuple[str, list[dict]]]) -> None:
                 continue
             tag = m.group(0)
             head = re.sub(r'\s(?:t|vm)="[^"]*"', "", tag[:-2] if m.group(1) else tag[:-1]) + f' t="e" vm="{seq}"'
-            xml = xml[: m.start()] + head + ("><v>#VALUE!</v></c>" if m.group(1) else ">") + xml[m.end():]
+            tail = xml[m.end():]
+            if p.get("formula") and not m.group(1):
+                tail = re.sub(r"^(.*?)<v\s*/>|^(.*?)<v>[^<]*</v>", lambda g: (g.group(1) or g.group(2)) + "<v>#VALUE!</v>", tail, count=1, flags=re.S)
+            xml = xml[: m.start()] + head + ("><v>#VALUE!</v></c>" if m.group(1) else ">") + tail
         files[path] = xml.encode()
 
 
