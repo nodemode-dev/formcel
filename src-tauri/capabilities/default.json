@@ -16,6 +16,7 @@
     "core:window:allow-set-decorations",
     "core:window:allow-set-title",
     "allow-set-window-title",
-    "allow-app-ready"
+    "allow-app-ready",
+    "allow-text-edit"
   ]
 }

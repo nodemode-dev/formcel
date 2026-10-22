@@ -1,0 +1,91 @@
+.fc-menubar {
+  display: flex;
+  align-items: center;
+  flex: 0 1 auto;
+  gap: 0;
+  min-width: 0;
+  overflow: hidden;
+  margin-left: var(--space-2);
+}
+
+.has-native-menus .fc-menubar { display: none; }
+
+@media (max-width: 1100px) {
+  .fc-bar .fc-version, .fc-bar .fc-status, .fc-bar .fc-save { display: none; }
+}
+
+.fc-mb-btn {
+  height: 28px;
+  padding: 0 var(--space-2);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: var(--text-md);
+  white-space: nowrap;
+  cursor: default;
+}
+
+.fc-mb-btn:hover,
+.fc-mb-btn.is-open { background: var(--bg-tertiary); color: var(--text-primary); }
+
+.fc-mb-menu {
+  position: fixed;
+  z-index: var(--z-dropdown);
+  min-width: 232px;
+  max-height: calc(100vh - var(--space-8));
+  overflow-y: auto;
+  padding: var(--space-1);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-md);
+  background: var(--bg-secondary);
+  box-shadow: var(--shadow-md);
+}
+
+.fc-mb-item {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  height: 28px;
+  padding: 0 var(--space-2) 0 var(--space-1);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-primary);
+  font: inherit;
+  font-size: var(--text-md);
+  text-align: left;
+  cursor: default;
+}
+
+.fc-mb-item:hover:not(:disabled),
+.fc-mb-item:focus-visible,
+.fc-mb-item.is-open { background: var(--accent-color-dim); outline: none; }
+.fc-mb-item:disabled { color: var(--text-muted); }
+.fc-mb-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fc-mb-keys { color: var(--text-muted); font-size: var(--text-sm); white-space: nowrap; }
+.fc-mb-mark, .fc-mb-keys { display: inline-flex; align-items: center; }
+.fc-mb-mark .fc-icon, .fc-mb-keys .fc-icon { --icon-box: 16px; --icon-size: 14px; }
+.fc-mb-sep { height: 1px; margin: var(--space-1) var(--space-2); background: var(--border-color); }
+
+.fc-drop {
+  position: fixed;
+  inset: var(--space-3);
+  z-index: var(--z-scrim);
+  display: grid;
+  place-items: center;
+  border: 2px dashed var(--accent-color);
+  border-radius: var(--radius-lg);
+  background: var(--accent-color-dim);
+  color: var(--text-primary);
+  font-size: var(--text-lg);
+  font-weight: 600;
+  pointer-events: none;
+}
+
+.fc-about { display: grid; gap: var(--space-2); }
+.fc-about p { margin: 0; color: var(--text-secondary); }
+.fc-about .fc-about-name { color: var(--text-primary); font-size: var(--text-lg); font-weight: 600; }

@@ -10,6 +10,7 @@ use tauri::{Manager, RunEvent, WebviewUrl, WebviewWindowBuilder, WindowEvent};
 
 mod packaged;
 mod reveal;
+mod text_edit;
 mod traffic_lights;
 
 const FALLBACK_SIZE: (f64, f64) = (1440.0, 900.0);
@@ -112,7 +113,7 @@ fn main() {
                 traffic_lights::place(window);
             }
         })
-        .invoke_handler(tauri::generate_handler![traffic_lights::set_window_title, reveal::app_ready])
+        .invoke_handler(tauri::generate_handler![traffic_lights::set_window_title, reveal::app_ready, text_edit::text_edit])
         .manage(Engine(Mutex::new(None)))
         .setup(|app| {
             let handle = app.handle().clone();

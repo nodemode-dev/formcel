@@ -4,6 +4,8 @@ export interface Command {
   description: string;
   changes: boolean;
   keys?: string;
+  enabled?(): boolean;
+  checked?(): boolean;
   run(): void | Promise<void>;
 }
 
@@ -14,8 +16,19 @@ export function registerCommand(c: Command): void {
   commands.set(c.id, c);
 }
 
-export function listCommands(): Omit<Command, 'run'>[] {
-  return [...commands.values()].map(({ run: _run, ...rest }) => rest);
+export function listCommands(): Omit<Command, 'run' | 'enabled' | 'checked'>[] {
+  return [...commands.values()].map(({ run: _run, enabled: _enabled, checked: _checked, ...rest }) => rest);
+}
+
+export function getCommand(id: string): Command | undefined {
+  return commands.get(id);
+}
+
+export function setCommandState(id: string, state: { enabled?: () => boolean; checked?: () => boolean }): void {
+  const c = commands.get(id);
+  if (!c) return;
+  if (state.enabled) c.enabled = state.enabled;
+  if (state.checked) c.checked = state.checked;
 }
 
 export async function runCommand(id: string): Promise<boolean> {
