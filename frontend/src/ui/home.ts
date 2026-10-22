@@ -1,4 +1,7 @@
 import { icon } from './icons';
+import { HomeFiles } from './home-files';
+import { runCommand } from './commands';
+import { drawThumb } from './thumb';
 
 export interface WorkbookMeta {
   id: string;
@@ -33,8 +36,6 @@ export interface HomeHooks {
 }
 
 type Page = 'start' | 'recent' | 'templates' | 'trash';
-
-const NUMERIC = /^-?(\d+\.?\d*|\.\d+)(e[+-]?\d+)?$/i;
 
 function el<T extends HTMLElement = HTMLElement>(html: string): T {
   const t = document.createElement('div');
@@ -76,86 +77,64 @@ function patch<T>(host: HTMLElement, items: T[], key: (t: T) => string, make: (t
   }
 }
 
-function drawThumb(c: HTMLCanvasElement, grid: string[][]): void {
-  const sig = JSON.stringify(grid);
-  if (c.dataset.sig === sig) return;
-  c.dataset.sig = sig;
-  const dpr = window.devicePixelRatio || 1;
-  const w = 240;
-  const h = 120;
-  c.width = w * dpr;
-  c.height = h * dpr;
-  const g = c.getContext('2d')!;
-  g.setTransform(dpr, 0, 0, dpr, 0, 0);
-  const s = getComputedStyle(document.documentElement);
-  const v = (n: string) => s.getPropertyValue(n).trim();
-  g.fillStyle = v('--cell-bg') || '#1c1b1d';
-  g.fillRect(0, 0, w, h);
-  const rows = 8;
-  const cols = 6;
-  const rh = h / rows;
-  const cw = w / cols;
-  g.strokeStyle = v('--border-color') || '#2a2a2a';
-  g.lineWidth = 1;
-  g.beginPath();
-  for (let r = 1; r < rows; r++) { g.moveTo(0, Math.round(r * rh) + 0.5); g.lineTo(w, Math.round(r * rh) + 0.5); }
-  for (let k = 1; k < cols; k++) { g.moveTo(Math.round(k * cw) + 0.5, 0); g.lineTo(Math.round(k * cw) + 0.5, h); }
-  g.stroke();
-  g.font = '9px Inter, system-ui, sans-serif';
-  g.textBaseline = 'middle';
-  grid.slice(0, rows).forEach((row, r) => row.slice(0, cols).forEach((t, k) => {
-    if (!t) return;
-    g.save();
-    g.beginPath();
-    g.rect(k * cw + 1, r * rh, cw - 2, rh);
-    g.clip();
-    g.fillStyle = r === 0 ? v('--text-primary') : v('--text-secondary');
-    const num = NUMERIC.test(t);
-    g.textAlign = num ? 'right' : 'left';
-    g.fillText(t, num ? (k + 1) * cw - 3 : k * cw + 3, r * rh + rh / 2);
-    g.restore();
-  }));
-}
-
 export class Home {
   private page: Page = 'start';
   private cat = 'Spreadsheets';
   private query = '';
   private templates: TemplateMeta[] = [];
   private cats: { name: string; count: number }[] = [];
+  private lastId: string | null = null;
+  private readonly startFiles: HomeFiles;
+  private readonly recentFiles: HomeFiles;
 
   constructor(private readonly root: HTMLElement, private readonly hooks: HomeHooks) {
-    const skel = (n: number) => Array.from({ length: n }, (_, i) => `<div class="fc-card is-skeleton" data-key="__s${i}" aria-hidden="true"><span class="fc-thumb"></span><span class="fc-card-body"><span class="fc-card-name">&nbsp;</span><span class="fc-card-meta">&nbsp;</span></span></div>`).join('');
+    const mod = /Mac|iPhone|iPad/.test(navigator.platform) ? '⌘' : 'Ctrl';
+    const navItem = (v: Page, ic: Parameters<typeof icon>[0], label: string): string => `<button class="fc-home-nav-item" type="button" data-v="${v}">${icon(ic)}<span>${label}</span>${v === 'start' ? '' : '<span class="fc-home-count">0</span>'}</button>`;
+    const cmdItem = (attr: string, ic: Parameters<typeof icon>[0], label: string): string => `<button class="fc-home-nav-item" type="button" ${attr}>${icon(ic)}<span>${label}</span></button>`;
+    const key = (k: string): string => `<kbd class="fc-key">${mod}</kbd><kbd class="fc-key">${k}</kbd>`;
+    const formats = ['XLSX', 'XLSM', 'XLS', 'ODS', 'CSV', 'TSV', 'HTML', 'PDF'].map((f) => `<span class="fc-home-format">${f}</span>`).join('');
     root.innerHTML = `
       <nav class="fc-home-nav" aria-label="Home">
-        <button type="button" class="fc-nav" data-page="start" aria-current="page">${icon('home')}<span>Start</span></button>
-        <button type="button" class="fc-nav" data-page="recent">${icon('clock')}<span>Recent</span></button>
-        <button type="button" class="fc-nav" data-page="templates">${icon('template')}<span>Templates</span></button>
-        <button type="button" class="fc-nav" data-page="trash">${icon('trash')}<span>Trash</span></button>
-        <div class="fc-nav-foot">${icon('cloudOff')}<span>Workbooks stay on this computer, in ~/FormCel</span></div>
+        <div class="fc-home-brand">FormCel <span>by NodeMode</span></div>
+        ${navItem('start', 'home', 'Start')}${navItem('recent', 'clock', 'Recent')}${navItem('templates', 'template', 'Templates')}${navItem('trash', 'trash', 'Trash')}
+        <div class="fc-home-nav-sep"></div>
+        <div class="fc-home-nav-title">Create</div>
+        ${cmdItem('data-a="blank"', 'newFile', 'New workbook')}${cmdItem('data-a="openfile"', 'folderOpen', 'Open')}${cmdItem('data-a="pastedata"', 'clipboard', 'Paste data')}
+        <div class="fc-home-nav-foot"><button class="fc-home-nav-item fc-home-back" type="button" data-a="back" hidden>${icon('chevronLeft')}<span>Back to workbook</span></button>${cmdItem('data-cmd="app.settings"', 'settings', 'Preferences')}${cmdItem('data-cmd="a11y.shortcuts"', 'info', 'Help')}</div>
       </nav>
       <div class="fc-home-body">
-        <div data-page="start">
-          <header class="fc-home-head"><div><h1 class="fc-home-title">Hello</h1><p class="fc-home-sub">Start a workbook, pick a template, or carry on where you left off.</p></div><div class="fc-home-actions"><button type="button" class="fc-btn" data-a="openfile">${icon('upload')}Open a file</button><button type="button" class="fc-btn" data-a="pastedata">${icon('clipboard')}Paste data</button><button type="button" class="fc-btn fc-btn-primary" data-a="blank">${icon('plus')}Blank workbook</button><input type="file" class="fc-file" accept=".xlsx,.xlsm,.xls,.ods,.csv,.tsv,.txt,.html,.htm,.pdf" hidden></div></header>
-          <section class="fc-home-section"><div class="fc-home-section-head"><h2>Recent workbooks</h2><button type="button" class="fc-btn fc-btn-ghost" data-go="recent">See all</button></div><div class="fc-cards fc-one-row fc-start-recent">${skel(4)}</div><p class="fc-none fc-start-none" hidden>No workbooks yet. Start a blank one or pick a template.</p></section>
-          <section class="fc-home-section"><div class="fc-home-section-head"><h2>Spreadsheet templates</h2><button type="button" class="fc-btn fc-btn-ghost" data-go="templates">See all 36</button></div><div class="fc-cards fc-two-rows fc-start-tpl">${skel(8)}</div></section>
+        <div class="fc-home-narrow">${navItem('start', 'home', 'Start')}${navItem('recent', 'clock', 'Recent')}${navItem('templates', 'template', 'Templates')}${navItem('trash', 'trash', 'Trash')}</div>
+        <div class="fc-home-page" data-page="start">
+          <div class="fc-home-head"><div><h1 class="fc-home-title"></h1><p class="fc-home-sub">Open a spreadsheet, or start a new workbook.</p></div></div>
+          <div class="fc-home-hero">
+            <span class="fc-home-hero-icon">${icon('fileSheet')}</span>
+            <div class="fc-home-hero-text"><div class="fc-home-hero-title">Start from a file</div>
+              <div class="fc-home-hero-sub">Drop a spreadsheet, CSV or PDF anywhere in the window to open it. Workbooks keep every formula, format, chart and table editable.</div>
+              <div class="fc-home-formats">${formats}</div></div>
+            <div class="fc-home-hero-actions">
+              <button class="fc-home-action is-primary" type="button" data-a="blank">${icon('newFile')}<span class="fc-home-label">New workbook...</span>${key('N')}</button>
+              <button class="fc-home-action" type="button" data-a="openfile">${icon('folderOpen')}<span class="fc-home-label">Open...</span>${key('O')}</button>
+              <button class="fc-home-action is-ghost" type="button" data-a="pastedata">${icon('clipboard')}<span class="fc-home-label">Paste data</span></button>
+              <input type="file" class="fc-file" accept=".xlsx,.xlsm,.xls,.ods,.csv,.tsv,.txt,.html,.htm,.pdf" hidden>
+            </div>
+          </div>
+          <section class="fc-home-section"><div class="fc-home-section-head"><h2 class="fc-home-section-title">Recent</h2><button class="fc-btn fc-btn-ghost" type="button" data-v="recent">See all</button></div><div class="fc-home-slot" data-slot="start"></div></section>
+          <section class="fc-home-section"><div class="fc-home-section-head"><h2 class="fc-home-section-title">New workbook</h2><button class="fc-btn fc-btn-ghost" type="button" data-v="templates">More templates...</button></div><div class="fc-home-sizes"><button class="fc-home-size" type="button" data-a="blank" data-key="__blank"><span class="fc-home-size-box"><span class="fc-home-blank" style="aspect-ratio: 4 / 3"></span></span><span class="fc-home-size-name">Blank workbook</span><span class="fc-home-size-meta">One empty sheet</span></button><span class="fc-home-tpls"></span></div></section>
         </div>
-        <div data-page="recent" hidden>
-          <header class="fc-home-head"><div><h1>Recent workbooks</h1><p class="fc-home-sub">Everything in ~/FormCel, newest first. Workbooks save as you type.</p></div></header>
-          <div class="fc-cards fc-recent-all"></div><p class="fc-none fc-recent-none" hidden>No workbooks yet.</p>
+        <div class="fc-home-page" data-page="recent" hidden>
+          <div class="fc-home-head"><div><h1>Recent</h1><p class="fc-home-sub">Workbooks you created, opened or saved, newest first.</p></div></div>
+          <div class="fc-home-slot" data-slot="recent"></div>
         </div>
-        <div data-page="templates" hidden>
-          <header class="fc-home-head"><div><h1>Templates</h1><p class="fc-home-sub">Six spreadsheets made for FormCel, and the data templates and example projects from form.md, each with real rows.</p></div></header>
+        <div class="fc-home-page" data-page="templates" hidden>
+          <div class="fc-home-head"><div><h1>Templates</h1><p class="fc-home-sub">Spreadsheets made for FormCel, and the data templates and example projects from form.md, each with real rows.</p></div></div>
           <div class="fc-tpl-tools"><div class="fc-chips" role="tablist" aria-label="Categories"></div><label class="fc-search">${icon('search')}<input type="search" class="fc-tpl-q" placeholder="Search templates" aria-label="Search templates"></label></div>
           <div class="fc-cards fc-tpl-all"></div><p class="fc-none fc-tpl-none" hidden>No template matches that search.</p>
         </div>
-        <div data-page="trash" hidden>
-          <header class="fc-home-head"><div><h1>Trash</h1><p class="fc-home-sub">Workbooks wait here until you restore them or delete them for good.</p></div></header>
+        <div class="fc-home-page" data-page="trash" hidden>
+          <div class="fc-home-head"><div><h1>Trash</h1><p class="fc-home-sub">Workbooks wait here until you restore them or delete them for good.</p></div></div>
           <div class="fc-trash"></div><p class="fc-none fc-trash-none" hidden>The Trash is empty.</p>
         </div>
       </div>`;
-    const h = new Date().getHours();
-    setText(root.querySelector('.fc-home-title'), h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening');
     root.addEventListener('click', (e) => this.click(e));
     const file = root.querySelector<HTMLInputElement>('.fc-file')!;
     file.addEventListener('change', () => {
@@ -172,39 +151,42 @@ export class Home {
       e.preventDefault();
       this.hooks.pasteData(text, html);
     });
-    let depth = 0;
-    const carries = (e: DragEvent) => [...(e.dataTransfer?.types ?? [])].includes('Files');
-    root.addEventListener('dragenter', (e) => {
-      if (!carries(e)) return;
-      e.preventDefault();
-      if (depth++ === 0) root.classList.add('is-dropping');
-    });
-    root.addEventListener('dragover', (e) => {
-      if (carries(e)) e.preventDefault();
-    });
-    root.addEventListener('dragleave', () => {
-      if (depth > 0 && --depth === 0) root.classList.remove('is-dropping');
-    });
-    root.addEventListener('drop', (e) => {
-      if (!carries(e)) return;
-      e.preventDefault();
-      depth = 0;
-      root.classList.remove('is-dropping');
-      const f = e.dataTransfer?.files?.[0];
-      if (f) this.hooks.importFile(f);
+    const count = (v: Page) => (n: number): void => {
+      for (const c of this.root.querySelectorAll<HTMLElement>(`[data-v="${v}"] .fc-home-count`)) setText(c, String(n));
+    };
+    const deps = { open: (id: string) => this.hooks.open(id), trash: (id: string) => this.hooks.trash(id) };
+    this.startFiles = new HomeFiles(deps, { limit: 8, compact: true, onCount: count('recent') });
+    this.recentFiles = new HomeFiles(deps, { onCount: count('recent') });
+    root.querySelector('[data-slot="start"]')!.appendChild(this.startFiles.root);
+    root.querySelector('[data-slot="recent"]')!.appendChild(this.recentFiles.root);
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && !root.hidden && this.lastId && !document.querySelector('.fc-modal:not([hidden])') && !(e.target as HTMLElement).closest('input, textarea, select')) this.hooks.open(this.lastId);
     });
     root.querySelector<HTMLInputElement>('.fc-tpl-q')!.addEventListener('input', (e) => {
       this.query = (e.target as HTMLInputElement).value.trim().toLowerCase();
       this.renderTemplates();
     });
+    this.paint();
+    this.go(this.page);
+  }
+
+  private paint(): void {
+    const h = new Date().getHours();
+    setText(this.root.querySelector('[data-page="start"] .fc-home-title'), h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening');
+  }
+
+  setLast(id: string | null): void {
+    this.lastId = id;
+    this.root.querySelector<HTMLElement>('.fc-home-back')!.hidden = !id;
+    this.paint();
   }
 
   private click(e: MouseEvent): void {
     const t = e.target as HTMLElement;
-    const nav = t.closest<HTMLElement>('[data-page]');
-    if (nav?.classList.contains('fc-nav')) return this.go(nav.dataset.page as Page);
-    const go = t.closest<HTMLElement>('[data-go]');
-    if (go) return this.go(go.dataset.go as Page);
+    const nav = t.closest<HTMLElement>('[data-v]');
+    if (nav) return this.go(nav.dataset.v as Page);
+    const cmd = t.closest<HTMLElement>('[data-cmd]');
+    if (cmd) return void runCommand(cmd.dataset.cmd!);
     const chip = t.closest<HTMLElement>('[data-cat]');
     if (chip) {
       this.cat = chip.dataset.cat!;
@@ -215,7 +197,8 @@ export class Home {
     const id = act.closest<HTMLElement>('[data-key]')?.dataset.key ?? '';
     switch (act.dataset.a) {
       case 'blank': return this.hooks.create();
-      case 'openfile': return this.root.querySelector<HTMLInputElement>('.fc-file')!.click();
+      case 'openfile': return void runCommand('file.open');
+      case 'back': return this.lastId ? this.hooks.open(this.lastId) : undefined;
       case 'pastedata': return this.hooks.pasteData();
       case 'open': return this.hooks.open(id);
       case 'use': return this.hooks.create(id);
@@ -236,36 +219,23 @@ export class Home {
   say(text: string, error = false): void {
     const sub = this.root.querySelector<HTMLElement>('[data-page="start"] .fc-home-sub')!;
     sub.dataset.state = error ? 'error' : text ? 'busy' : '';
-    setText(sub, text || 'Start a workbook, pick a template, or carry on where you left off.');
+    setText(sub, text || 'Open a spreadsheet, or start a new workbook.');
   }
 
   go(page: Page): void {
     this.page = page;
-    for (const n of this.root.querySelectorAll<HTMLElement>('.fc-home-body > [data-page]')) n.hidden = n.dataset.page !== page;
-    for (const n of this.root.querySelectorAll<HTMLElement>('.fc-nav')) {
-      if (n.dataset.page === page) n.setAttribute('aria-current', 'page');
-      else n.removeAttribute('aria-current');
-    }
+    for (const n of this.root.querySelectorAll<HTMLElement>('.fc-home-page')) n.hidden = n.dataset.page !== page;
+    for (const n of this.root.querySelectorAll<HTMLElement>('.fc-home-nav-item[data-v]')) n.classList.toggle('is-active', n.dataset.v === page);
   }
 
   get current(): Page {
     return this.page;
   }
 
-  private workbookCard = (): HTMLElement =>
-    el(`<div class="fc-card"><button type="button" class="fc-card-open" data-a="open"><canvas class="fc-thumb" aria-hidden="true"></canvas><span class="fc-card-body"><span class="fc-card-name"></span><span class="fc-card-meta"></span></span></button><button type="button" class="fc-tool fc-card-more" data-a="trash" title="Move to Trash" aria-label="Move to Trash">${icon('trash')}</button></div>`);
-
-  private updateWorkbook = (n: HTMLElement, w: WorkbookMeta): void => {
-    setText(n.querySelector('.fc-card-name'), w.title);
-    setText(n.querySelector('.fc-card-meta'), `${ago(w.modified)} · ${w.sheets.length} ${w.sheets.length === 1 ? 'sheet' : 'sheets'}`);
-    drawThumb(n.querySelector('canvas')!, w.preview);
-  };
-
   setWorkbooks(list: WorkbookMeta[]): void {
-    patch(this.root.querySelector('.fc-start-recent')!, list.slice(0, 4), (w) => w.id, this.workbookCard, this.updateWorkbook);
-    patch(this.root.querySelector('.fc-recent-all')!, list, (w) => w.id, this.workbookCard, this.updateWorkbook);
-    this.root.querySelector<HTMLElement>('.fc-start-none')!.hidden = list.length > 0;
-    this.root.querySelector<HTMLElement>('.fc-recent-none')!.hidden = list.length > 0;
+    this.startFiles.set(list);
+    this.recentFiles.set(list);
+    if (this.lastId && !list.some((w) => w.id === this.lastId)) this.setLast(null);
   }
 
   private templateCard = (): HTMLElement =>
@@ -281,10 +251,20 @@ export class Home {
   setTemplates(cats: { name: string; count: number }[], list: TemplateMeta[]): void {
     this.cats = cats;
     this.templates = list;
-    patch(this.root.querySelector('.fc-start-tpl')!, list.filter((t) => t.category === 'Spreadsheets' || t.featured).slice(0, 8), (t) => t.id, this.templateCard, this.updateTemplate);
-    setText(this.root.querySelector('[data-go="templates"]'), `See all ${list.length}`);
+    patch(this.root.querySelector('.fc-home-tpls')!, list.filter((t) => t.category === 'Spreadsheets' || t.featured).slice(0, 7), (t) => t.id, this.presetTile, this.updatePreset);
+    for (const c of this.root.querySelectorAll<HTMLElement>('[data-v="templates"] .fc-home-count')) setText(c, String(list.length));
     this.renderTemplates();
   }
+
+  private presetTile = (): HTMLElement =>
+    el('<button class="fc-home-size" type="button" data-a="use"><span class="fc-home-size-box"><canvas aria-hidden="true"></canvas></span><span class="fc-home-size-name"></span><span class="fc-home-size-meta"></span></button>');
+
+  private updatePreset = (n: HTMLElement, t: TemplateMeta): void => {
+    setText(n.querySelector('.fc-home-size-name'), t.name);
+    setText(n.querySelector('.fc-home-size-meta'), `${t.sheets.length} ${t.sheets.length === 1 ? 'sheet' : 'sheets'} · ${t.rows} rows`);
+    n.setAttribute('title', t.description);
+    drawThumb(n.querySelector('canvas')!, t.preview);
+  };
 
   private renderTemplates(): void {
     patch(this.root.querySelector('.fc-chips')!, this.cats, (c) => c.name,
@@ -308,5 +288,6 @@ export class Home {
         setText(n.querySelector('.fc-trash-meta'), ago(w.modified));
       });
     this.root.querySelector<HTMLElement>('.fc-trash-none')!.hidden = list.length > 0;
+    for (const c of this.root.querySelectorAll<HTMLElement>('[data-v="trash"] .fc-home-count')) setText(c, String(list.length));
   }
 }

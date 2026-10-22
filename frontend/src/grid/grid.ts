@@ -239,6 +239,7 @@ export class Grid {
   private fr2 = 0;
   private fc2 = 0;
   private editing = false;
+  private typedEntry = false;
   private tabStart = -1;
   private raf = 0;
   private queue: Promise<void> = Promise.resolve();
@@ -2082,6 +2083,13 @@ export class Grid {
     return [this.ar, this.ac];
   }
 
+  editorMode(): 'ready' | 'enter' | 'edit' | 'point' {
+    if (!this.editing) return 'ready';
+    const ed = this.editor;
+    if (ed.value.startsWith('=') && pointSlot(ed.value, ed.selectionStart, ed.selectionEnd, this.point)) return 'point';
+    return this.typedEntry ? 'enter' : 'edit';
+  }
+
   shownAt(r: number, c: number): string {
     return this.cache.get(KEY(r, c)) ?? '';
   }
@@ -2989,6 +2997,7 @@ export class Grid {
   startEdit(initial?: string): void {
     if (this.editing) return;
     this.editing = true;
+    this.typedEntry = initial !== undefined;
     const k = KEY(this.ar, this.ac);
     this.editor.value = initial ?? (this.masked.has(k) ? this.cache.get(k) : this.fx.get(k) ?? this.cache.get(k)) ?? '';
     if (initial === undefined) this.editChips = this.smartAt(this.ar, this.ac).map((c) => ({ ...c }));

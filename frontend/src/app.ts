@@ -12,7 +12,11 @@ import type { ScriptHost } from './automation/scripts';
 import { Grid, type BorderKind, type MenuKind, type PasteKind, type SheetView } from './grid/grid';
 import { paint } from './grid/style';
 import { TABLE_STYLES, customId, parseCustom, parseTable } from './grid/tables';
-import { listCommands, registerCommand, runCommand } from './ui/commands';
+import { listCommands, registerCommand, runCommand, setCommandState } from './ui/commands';
+import { mountChrome } from './ui/shell-mount';
+import { autoShowHome } from './ui/shellcmds';
+import { withJob } from './ui/jobs';
+import type { StatusBar, ViewMode } from './ui/statusbar';
 import { Home, type TemplateMeta, type WorkbookMeta } from './ui/home';
 import { Menu, type MenuItem } from './ui/menu';
 import { Collab, identityHeaders } from './ui/collab';
@@ -306,13 +310,18 @@ export class App {
   private tools!: DataTools;
   private calc!: Calc;
   private grouped = new Set<number>();
+  private statusBar!: StatusBar;
+  private viewState: ViewMode = 'normal';
+  private launched = false;
+  private canUndo = false;
+  private canRedo = false;
 
   constructor(private readonly p: ShellParts) {
     initPrefs();
     this.home = new Home(p.home, {
       open: (id) => void this.openWorkbook(id),
       create: (template) => void this.create(template),
-      importFile: (file) => void this.importFile(file),
+      importFile: (file) => void withJob(`Opening ${file.name}`, () => this.importFile(file)),
       pasteData: (text, html) => this.pasteData(text, html),
       trash: (id) => void this.act(() => api('DELETE', `/api/workbooks/${id}`)),
       restore: (id) => void this.act(() => api('POST', `/api/trash/${id}/restore`)),
@@ -322,6 +331,7 @@ export class App {
       onActive: (text, ref, range) => {
         this.current = text;
         this.currentRange = range;
+        this.statusBar?.select(range);
         this.currentRef = this.nameOf(range) ?? ref;
         if (document.activeElement !== p.nameBox) p.nameBox.value = this.currentRef;
         if (document.activeElement !== p.formulaBar) {
@@ -349,6 +359,8 @@ export class App {
       onError: (message) => this.collab?.refused(message),
       onHover: (row, col, x, y) => this.collab?.hover(row, col, x, y),
       onHistory: (undo, redo) => {
+        this.canUndo = undo;
+        this.canRedo = redo;
         this.button('edit.undo').disabled = !undo;
         this.button('edit.redo').disabled = !redo;
         void this.whatIf?.sync();
@@ -360,6 +372,7 @@ export class App {
         this.whatIf?.changed();
         this.audit.invalidate();
         void this.audit.refresh();
+        this.statusBar?.changed();
         void this.mirror(changes);
         this.autoFlash(changes);
         this.calc?.changed();
@@ -610,7 +623,7 @@ export class App {
       grid: this.grid,
       menu: this.menu,
       engine: engine(),
-      sheetBar: p.sheet.querySelector<HTMLElement>('.fc-sheetbar')!,
+      sheetBar: p.statusbar,
       gridBox: p.grid,
       formulaBar: p.formulaBar,
       book: () => this.open?.book ?? -1,
@@ -645,6 +658,29 @@ export class App {
     this.collab.commands((id, title, description, changes, run, keys) => registerCommand({ id, title, description, changes, run, keys }));
     bindShortcuts(this.shortcuts, () => !!this.open);
     this.bindChrome();
+    this.statusBar = mountChrome(p, {
+      grid: this.grid,
+      hasBook: () => !!this.open,
+      book: () => this.open?.book ?? -1,
+      sheet: () => this.grid.sheetIndex,
+      importFile: (file) => this.importFile(file),
+      save: () => {
+        this.flush();
+        void this.saving.then(() => this.status('Saved'));
+      },
+      viewMode: () => this.viewState,
+      setViewMode: (m) => this.setView(m),
+      a11y: async () => {
+        const o = this.open;
+        if (!o) return null;
+        const issues = await api<{ level: string }[]>('GET', `/api/workbooks/${o.id}/accessibility`);
+        return { bad: issues.filter((i) => i.level !== 'tip').length, tips: issues.filter((i) => i.level === 'tip').length };
+      },
+      toast: (t) => this.status(t),
+    });
+    setCommandState('page.preview', { checked: () => this.viewState === 'break' });
+    setCommandState('edit.undo', { enabled: () => this.canUndo });
+    setCommandState('edit.redo', { enabled: () => this.canRedo });
     window.addEventListener('hashchange', () => void this.route());
     window.addEventListener('beforeunload', () => this.flush());
     void this.route();
@@ -1039,11 +1075,22 @@ export class App {
     }
     this.flush();
     await this.saving;
+    if (!this.launched) {
+      this.launched = true;
+      if (!autoShowHome()) {
+        const list = await api<WorkbookMeta[]>('GET', '/api/workbooks').catch(() => [] as WorkbookMeta[]);
+        if (list[0]) {
+          location.hash = `w-${list[0].id}`;
+          return;
+        }
+      }
+    }
     this.showHome();
   }
 
   private showHome(): void {
     const p = this.p;
+    if (this.open) this.home.setLast(this.open.id);
     this.open = null;
     this.collab.detach();
     this.auto.closed();
@@ -1938,9 +1985,15 @@ export class App {
   }
 
   private togglePreview(): void {
-    this.preview = !this.preview;
-    this.status(this.preview ? 'Page Break Preview on' : 'Page Break Preview off');
+    this.setView(this.viewState === 'break' ? 'normal' : 'break');
+  }
+
+  private setView(m: ViewMode): void {
+    this.viewState = m;
+    this.preview = m !== 'normal';
+    if (this.open) this.status(m === 'break' ? 'Page Break Preview on' : m === 'layout' ? 'Page Layout on' : 'Normal view');
     void this.refreshBreaks();
+    document.dispatchEvent(new Event('fc-viewmode'));
     this.grid.focus();
   }
 
@@ -2070,7 +2123,7 @@ export class App {
     const o = this.open;
     if (!o) return;
     this.flush();
-    await this.saving;
+    await withJob(`Preparing the ${kind.toUpperCase()} download`, () => this.saving);
     const a = document.createElement('a');
     const sheet = this.grid.sheetIndex;
     a.href = kind === 'csv' || kind === 'tsv' || kind === 'pdf' || kind === 'html' ? `/api/workbooks/${o.id}/export.${kind}?sheet=${sheet}` : kind === 'pdf-all' || kind === 'html-all' ? `/api/workbooks/${o.id}/export.${kind.slice(0, -4)}?scope=all` : `/api/workbooks/${o.id}/export.${kind}`;
@@ -2341,10 +2394,13 @@ export class App {
     this.grid.localForms = ((doc as { locale?: string }).locale ?? 'en-US') !== 'en-US';
     this.open = { id, book, title: doc.title, sheets: doc.sheets, views: doc.sheets.map((_, i) => doc.views?.[i] ?? {}), names, macros: !!doc.macros, pages: doc.sheets.map((_, i) => cleanPage((doc.views?.[i] as { page?: unknown } | undefined)?.page)), locale: (doc as { locale?: string }).locale ?? 'en-US' };
     this.preview = false;
+    this.viewState = 'normal';
+    document.dispatchEvent(new Event('fc-viewmode'));
     this.grid.setBreakView(null);
     const p = this.p;
     p.home.hidden = true;
     p.sheet.hidden = false;
+    this.statusBar?.touch();
     p.homeBtn.hidden = false;
     p.title.hidden = false;
     p.title.value = doc.title;

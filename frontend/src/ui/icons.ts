@@ -94,6 +94,21 @@ export const icons = {
   errCheck: svg('<path d="M12 4.5l8.5 15h-17z"/><path d="M12 10.5v4M12 17v.1"/>'),
   extLink: svg('<path d="M10 14a3.5 3.5 0 005 0l3-3a3.5 3.5 0 00-5-5l-1 1"/><path d="M14 10a3.5 3.5 0 00-5 0l-3 3a3.5 3.5 0 005 5l1-1"/>'),
   dataConn: svg('<ellipse cx="12" cy="6.5" rx="7" ry="2.8"/><path d="M5 6.5v11c0 1.5 3.1 2.8 7 2.8s7-1.3 7-2.8v-11M5 12c0 1.5 3.1 2.8 7 2.8s7-1.3 7-2.8"/>'),
+  newFile: svg('<path d="M6.5 3.5h7l4 4v13h-11z"/><path d="M13.5 3.5v4h4M12 11v6M9 14h6"/>'),
+  folderOpen: svg('<path d="M3.5 18.5v-12h5.2l2 2.2h7.8v3.3"/><path d="M3.5 18.5l2.6-7h15.4l-2.6 7z"/>'),
+  folder: svg('<path d="M3.5 6.5h6l2 2.2h9v9.8h-17z"/>'),
+  fileSheet: svg('<path d="M6.5 3.5h7l4 4v13h-11z"/><path d="M13.5 3.5v4h4M9 12h6M9 15.5h6M12 10v8"/>'),
+  settings: svg('<circle cx="12" cy="12" r="3"/><path d="M12 3.5v2.2M12 18.3v2.2M3.5 12h2.2M18.3 12h2.2M6 6l1.6 1.6M16.4 16.4L18 18M18 6l-1.6 1.6M7.6 16.4L6 18"/>'),
+  info: svg('<circle cx="12" cy="12" r="8.5"/><path d="M12 11v5.5M12 7.8v.1"/>'),
+  chevronLeft: svg('<path d="M14.5 6l-6 6 6 6"/>'),
+  chevronRight: svg('<path d="M9.5 6l6 6-6 6"/>'),
+  viewGrid: svg('<rect x="4" y="4" width="7" height="7" rx="1.2"/><rect x="13" y="4" width="7" height="7" rx="1.2"/><rect x="4" y="13" width="7" height="7" rx="1.2"/><rect x="13" y="13" width="7" height="7" rx="1.2"/>'),
+  viewList: svg('<path d="M9 6.5h11M9 12h11M9 17.5h11"/><circle cx="4.8" cy="6.5" r=".6"/><circle cx="4.8" cy="12" r=".6"/><circle cx="4.8" cy="17.5" r=".6"/>'),
+  check: svg('<path d="M5 12.5l4.5 4.5L19 7.5"/>'),
+  viewNormal: svg('<rect x="3.5" y="4.5" width="17" height="15" rx="2"/><path d="M3.5 9.5h17M9 9.5v10M15 9.5v10"/>'),
+  viewLayout: svg('<rect x="6" y="3.5" width="12" height="17" rx="1.5"/><path d="M9 8h6M9 11h6M9 14h4"/>'),
+  viewBreak: svg('<rect x="3.5" y="4.5" width="17" height="15" rx="2"/><path d="M12 4.5v15" stroke-dasharray="2.5 2"/><path d="M3.5 12h17" stroke-width="2.4"/>'),
+  accessGood: svg('<circle cx="12" cy="5.5" r="1.8"/><path d="M5 9h14M12 9v5M9 20l3-6 3 6"/>'),
 } as const;
 
 export type IconName = keyof typeof icons;

@@ -823,8 +823,9 @@ dependencies = [
 
 [[package]]
 name = "formcel-desktop"
-version = "0.33.0"
+version = "0.36.0"
 dependencies = [
+ "objc2",
  "serde_json",
  "tauri",
  "tauri-build",

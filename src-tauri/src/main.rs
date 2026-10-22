@@ -8,6 +8,8 @@ use std::time::{Duration, Instant};
 
 use tauri::{Manager, RunEvent};
 
+mod text_edit;
+
 const PORT: u16 = 8199;
 
 struct Engine(Mutex<Option<Child>>);
@@ -50,6 +52,7 @@ fn wait_ready() -> bool {
 
 fn main() {
     let app = tauri::Builder::default()
+        .invoke_handler(tauri::generate_handler![text_edit::text_edit])
         .setup(|app| {
             let child = start(app.handle());
             app.manage(Engine(Mutex::new(child)));

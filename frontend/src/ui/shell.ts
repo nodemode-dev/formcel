@@ -22,6 +22,8 @@ export interface ShellParts {
   addSheet: HTMLButtonElement;
   zoom: HTMLElement;
   zoomVal: HTMLElement;
+  menubar: HTMLElement;
+  statusbar: HTMLElement;
 }
 
 const tool = (cmd: string, name: Parameters<typeof icon>[0], title: string) =>
@@ -31,6 +33,7 @@ export function mountShell(root: HTMLElement): ShellParts {
   root.innerHTML = `
     <header class="fc-bar">
       <div class="fc-brand">${icon('sheet')}<span>FormCel</span><span class="fc-version">v${VERSION}</span></div>
+      <nav class="fc-menubar" aria-label="Main menu"></nav>
       <button type="button" class="fc-tool fc-home-btn" title="Home" aria-label="Home" hidden>${icon('home')}</button>
       <input class="fc-title" aria-label="Workbook name" spellcheck="false" autocomplete="off" hidden>
       <span class="fc-group-badge" aria-live="polite" hidden>[Group]</span>
@@ -71,7 +74,21 @@ export function mountShell(root: HTMLElement): ShellParts {
         <div class="fc-fbar-grip" role="separator" aria-orientation="horizontal" aria-label="Resize formula bar" hidden></div>
       </div>
       <div class="fc-grid" role="grid" aria-label="Sheet1"></div>
-      <div class="fc-sheetbar"><div class="fc-tabs" role="tablist" aria-label="Sheets"></div><button type="button" class="fc-tool fc-add-sheet" title="Add a sheet" aria-label="Add a sheet">${icon('plus')}</button><div class="fc-zoom" role="group" aria-label="Zoom"><button type="button" class="fc-tool" data-zoom="-1" title="Zoom out (Ctrl and scroll)" aria-label="Zoom out">${icon('minus')}</button><input type="range" class="fc-zoom-slider" min="50" max="200" step="5" value="100" aria-label="Zoom level"><span class="fc-zoom-val">100%</span><button type="button" class="fc-tool" data-zoom="1" title="Zoom in (Ctrl and scroll)" aria-label="Zoom in">${icon('plus')}</button></div></div>
+      <div class="fc-bottom">
+        <div class="fc-sheetbar"><div class="fc-tabs" role="tablist" aria-label="Sheets"></div><button type="button" class="fc-tool fc-add-sheet" title="Add a sheet" aria-label="Add a sheet">${icon('plus')}</button></div>
+        <footer class="fc-statusbar" aria-label="Status bar">
+          <span class="fc-st-mode" role="status">Ready</span>
+          <button type="button" class="fc-st-a11y" title="Open the accessibility checker.">${icon('accessGood')}<span class="fc-st-a11y-text">Accessibility: Check</span></button>
+          <span class="fc-st-lock fc-st-caps" hidden>Caps Lock</span><span class="fc-st-lock fc-st-num" hidden>Num Lock</span><span class="fc-st-lock fc-st-scroll" hidden>Scroll Lock</span>
+          <span class="fc-st-page" hidden></span>
+          <span class="fc-st-grow"></span>
+          <button type="button" class="fc-st-busy" title="Background jobs" hidden><span>Working</span><span class="fc-st-bar"><i></i></span><span class="fc-st-steps"></span></button>
+          <span class="fc-st-stats" aria-live="polite"><span class="fc-st-stat" data-stat="average" hidden>Average: <b></b></span><span class="fc-st-stat" data-stat="count" hidden>Count: <b></b></span><span class="fc-st-stat" data-stat="numcount" hidden>Numerical Count: <b></b></span><span class="fc-st-stat" data-stat="min" hidden>Min: <b></b></span><span class="fc-st-stat" data-stat="max" hidden>Max: <b></b></span><span class="fc-st-stat" data-stat="sum" hidden>Sum: <b></b></span></span>
+          <span class="fc-st-engine"></span>
+          <div class="fc-st-views" role="group" aria-label="Workbook views"><button type="button" class="fc-st-view" data-view="normal" title="Normal" aria-label="Normal view" aria-pressed="true">${icon('viewNormal')}</button><button type="button" class="fc-st-view" data-view="layout" title="Page Layout" aria-label="Page Layout view" aria-pressed="false">${icon('viewLayout')}</button><button type="button" class="fc-st-view" data-view="break" title="Page Break Preview" aria-label="Page Break Preview" aria-pressed="false">${icon('viewBreak')}</button></div>
+          <div class="fc-zoom" role="group" aria-label="Zoom"><button type="button" class="fc-tool" data-zoom="-1" title="Zoom out (Ctrl and scroll)" aria-label="Zoom out">${icon('minus')}</button><input type="range" class="fc-zoom-slider" min="50" max="200" step="5" value="100" aria-label="Zoom level"><button type="button" class="fc-tool" data-zoom="1" title="Zoom in (Ctrl and scroll)" aria-label="Zoom in">${icon('plus')}</button><span class="fc-zoom-val">100%</span></div>
+        </footer>
+      </div>
     </main>`;
   const status = root.querySelector<HTMLElement>('.fc-status')!;
   const statusText = document.createTextNode('Engine starting');
@@ -97,6 +114,8 @@ export function mountShell(root: HTMLElement): ShellParts {
     addSheet: root.querySelector<HTMLButtonElement>('.fc-add-sheet')!,
     zoom: root.querySelector<HTMLElement>('.fc-zoom')!,
     zoomVal: root.querySelector<HTMLElement>('.fc-zoom-val')!,
+    menubar: root.querySelector<HTMLElement>('.fc-menubar')!,
+    statusbar: root.querySelector<HTMLElement>('.fc-statusbar')!,
   };
 }
 
@@ -104,4 +123,9 @@ export function setStatus(parts: ShellParts, state: 'ok' | 'down', text: string,
   parts.status.dataset.state = state;
   parts.statusText.nodeValue = text;
   parts.status.title = detail;
+  const engine = parts.statusbar.querySelector<HTMLElement>('.fc-st-engine');
+  if (engine) {
+    engine.textContent = text;
+    engine.title = detail;
+  }
 }

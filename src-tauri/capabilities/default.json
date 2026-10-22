@@ -4,5 +4,5 @@
   "description": "Main window permissions",
   "windows": ["main"],
   "remote": { "urls": ["http://127.0.0.1:8199/*"] },
-  "permissions": ["core:default"]
+  "permissions": ["core:default", "allow-text-edit"]
 }
