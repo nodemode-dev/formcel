@@ -17,7 +17,13 @@ if ! command -v cargo >/dev/null 2>&1; then
   echo "FormCel needs Rust to build its engine. Install it from https://rustup.rs, then run this again." >&2
   exit 1
 fi
-pip install ../engine/crates/formcel-py
+pip install --force-reinstall --no-deps ../engine/crates/formcel-py
+if ! err="$(python -c "import formcel_engine" 2>&1)"; then
+  echo "$err" >&2
+  echo "The FormCel engine module was built but does not load. Run: rustup update stable, then ./formcel_oc_install again." >&2
+  exit 1
+fi
+echo "FormCel engine: $(python -c 'import formcel_engine, sys; print(getattr(formcel_engine, "__version__", "loaded"))') with $(rustc -V)"
 
 install_tesseract() {
   if command -v tesseract >/dev/null 2>&1; then

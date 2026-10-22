@@ -11,7 +11,11 @@ if errorlevel 1 (
   echo FormCel needs Rust to build its engine. Install it from https://rustup.rs, then run this again.
   exit /b 1
 )
-pip install ..\engine\crates\formcel-py
+pip install --force-reinstall --no-deps ..\engine\crates\formcel-py || exit /b 1
+python -c "import formcel_engine" || (
+  echo The FormCel engine module was built but does not load. Run: rustup update stable, then formcel_oc_install.bat again.
+  exit /b 1
+)
 
 where tesseract >nul 2>nul
 if errorlevel 1 (

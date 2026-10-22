@@ -24,7 +24,10 @@ objc2-foundation = { version = "0.3", default-features = false, features = ["std
 opt-level = "s"
 lto = true
 codegen-units = 1
-strip = true
+strip = false
 panic = "abort"
+
+[profile.release.build-override]
+strip = false
 
 [workspace]
