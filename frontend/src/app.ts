@@ -11,7 +11,7 @@ import { Automation } from './automation';
 import type { ScriptHost } from './automation/scripts';
 import { Grid, type BorderKind, type MenuKind, type PasteKind, type SheetView } from './grid/grid';
 import { paint } from './grid/style';
-import { TABLE_STYLES, customId, parseCustom } from './grid/tables';
+import { TABLE_STYLES, customId, parseCustom, parseTable } from './grid/tables';
 import { listCommands, registerCommand, runCommand } from './ui/commands';
 import { Home, type TemplateMeta, type WorkbookMeta } from './ui/home';
 import { Menu, type MenuItem } from './ui/menu';
@@ -459,6 +459,10 @@ export class App {
         if (o) await api('PUT', `/api/workbooks/${o.id}/properties`, props);
       },
       jump: (text) => this.jumpTo(text),
+      tableNames: async () => {
+        const o = this.open;
+        return o ? (await engine().tables(o.book)).map((l) => parseTable(l)?.name ?? '').filter(Boolean) : [];
+      },
       noteCells: (sheet) => this.collab.noteCells(sheet),
       pasteNotes: (src, dr, dc, t) => this.collab.pasteNotes(src, dr, dc, t),
       goTo: (s, r, c) => {
@@ -2389,13 +2393,23 @@ export class App {
     box.title = problem ?? '';
   }
 
-  private jumpTo(text: string): boolean {
+  private async jumpToTable(text: string): Promise<boolean> {
+    const o = this.open;
+    if (!o || !/^[\w.\\]+(\[.*\])?$/.test(text)) return false;
+    const found = (await engine().tool(o.book, this.grid.sheetIndex, 'tablearea', text)).message ?? '';
+    if (!found) return false;
+    const [s, r0, c0, r1, c1] = found.split('\t').map(Number);
+    if (s !== this.grid.sheetIndex) this.showSheet(s);
+    return this.grid.goTo(`${colName(c0)}${r0 + 1}:${colName(c1)}${r1 + 1}`);
+  }
+
+  private async jumpTo(text: string): Promise<boolean> {
     const o = this.open;
     if (this.grid.goTo(text)) return true;
     const hit = o?.names.find(([n]) => n.toLowerCase() === text.toLowerCase());
     const m = hit ? /^=(?:'((?:[^']|'')+)'|([^!']+))!([$A-Za-z0-9:]+)$/.exec(hit[1]) : null;
     const sheet = o && m ? o.sheets.findIndex((s) => s.toLowerCase() === (m[1] ?? m[2]).replace(/''/g, "'").toLowerCase()) : -1;
-    if (!m || sheet < 0) return false;
+    if (!m || sheet < 0) return this.jumpToTable(text);
     if (sheet !== this.grid.sheetIndex) this.showSheet(sheet);
     return this.grid.goTo(m[3].replace(/\$/g, ''));
   }
@@ -2404,6 +2418,7 @@ export class App {
     const o = this.open;
     if (this.grid.goTo(text)) return this.nameBoxResult(null);
     if (!o || !text) return this.nameBoxResult('Type a cell like B12, a range like B2:D9, or a name.');
+    if (await this.jumpToTable(text)) return this.nameBoxResult(null);
     const hit = o.names.find(([n]) => n.toLowerCase() === text.toLowerCase());
     if (hit) {
       const m = /^=(?:'((?:[^']|'')+)'|([^!']+))!([$A-Za-z0-9:]+)$/.exec(hit[1]);

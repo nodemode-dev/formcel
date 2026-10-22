@@ -711,6 +711,14 @@ impl<'a> Eval<'a> {
 
     fn values(&self, args: &[Expr], f: &mut dyn FnMut(&Value, bool) -> Result<(), ErrKind>) -> Result<(), ErrKind> {
         for a in args {
+            let mut head = a;
+            while let Expr::Paren(x) = head {
+                head = x;
+            }
+            if let Expr::Union(items) = head {
+                self.values(items, f)?;
+                continue;
+            }
             match self.arg(a) {
                 Arg::V(v) => f(&v, true)?,
                 Arg::R(s, ar) => {

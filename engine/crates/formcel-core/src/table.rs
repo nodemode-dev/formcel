@@ -1,6 +1,6 @@
 use crate::formula::{self, Area, ErrKind, Expr, TableSpec, ITEM_ALL, ITEM_DATA, ITEM_HEADERS, ITEM_THIS, ITEM_TOTALS};
 use crate::wire::{escape, unescape};
-use crate::{Addr, Effect, EngineError, Shift, Tx, Value, Workbook};
+use crate::{Addr, Change, Effect, EngineError, Shift, Tx, Value, Workbook};
 
 pub fn valid_style(s: &str) -> bool {
     for (kind, top) in [("Light", 21), ("Medium", 28), ("Dark", 11)] {
@@ -142,8 +142,32 @@ impl Workbook {
         self.tables.iter().map(Table::line).collect()
     }
 
+    pub(crate) fn adopt_table_names(tables: &[Table], e: &mut Expr) {
+        if tables.is_empty() {
+            return;
+        }
+        formula::walk_mut(e, &mut |node| {
+            if let Expr::Name(n) = node {
+                if tables.iter().any(|t| t.name.eq_ignore_ascii_case(n)) {
+                    *node = Expr::Table(Some(n.clone()), TableSpec { items: 0, cols: None, long: false, fixed: false });
+                }
+            }
+        });
+    }
+
+    fn adopt_all_names(&mut self) {
+        let tables = std::mem::take(&mut self.tables);
+        for f in self.formulas.values_mut() {
+            if let Some(e) = f.ast.as_mut() {
+                Self::adopt_table_names(&tables, e);
+            }
+        }
+        self.tables = tables;
+    }
+
     pub fn load_tables(&mut self, lines: &[String]) -> usize {
         self.tables = lines.iter().filter_map(|l| Table::parse(l)).filter(|t| t.sheet < self.sheets.len()).collect();
+        self.adopt_all_names();
         self.graph.built = false;
         self.recalc_all();
         self.tables.len()
@@ -221,6 +245,9 @@ impl Workbook {
                     n.clone_from(&own);
                 }
                 spec.long = spec.items == ITEM_THIS;
+                if spec.items == 0 && spec.cols.is_none() {
+                    spec.items = ITEM_DATA;
+                }
             }
         });
         Some(format!("={}", formula::to_text(&e)))
@@ -246,6 +273,46 @@ impl Workbook {
             }
         });
         format!("={}", formula::to_text(&e))
+    }
+
+    pub fn table_area_of(&self, text: &str) -> Option<(usize, Area)> {
+        let mut e = formula::parse(text.trim())?;
+        Self::adopt_table_names(&self.tables, &mut e);
+        let Expr::Table(Some(n), spec) = e else { return None };
+        self.resolve_table(0, Some(&n), &spec, None).ok()
+    }
+
+    pub fn point_ref(&self, sheet: usize, sel: Area, at: Addr) -> Option<String> {
+        let t = self.table_at(sheet, Addr { row: sel.r0, col: sel.c0 })?;
+        let a = t.area;
+        if sel.r1 > a.r1 || sel.c1 > a.c1 {
+            return None;
+        }
+        let (d0, d1) = t.data();
+        let name = |i: u32| t.cols.get((i - a.c0) as usize).cloned();
+        let all_cols = sel.c0 == a.c0 && sel.c1 == a.c1;
+        let cols = if all_cols && sel.c0 != sel.c1 { None } else { Some((name(sel.c0)?, name(sel.c1)?)) };
+        let fixed = sel.c0 != sel.c1;
+        let this = at.row == sel.r0 && sel.r0 == sel.r1 && sel.r0 >= d0 && sel.r0 <= d1;
+        let (items, qualify) = if this {
+            (ITEM_THIS, self.table_at(sheet, at).is_none_or(|o| o.name != t.name))
+        } else {
+            let head = t.header && sel.r0 == a.r0;
+            let foot = t.totals && sel.r1 == a.r1;
+            let data = sel.r0 <= d0 && sel.r1 >= d1 && (sel.r0 == d0 || head) && (sel.r1 == d1 || foot);
+            let items = match (head, data, foot) {
+                (true, false, false) if sel.r1 == a.r0 => ITEM_HEADERS,
+                (false, false, true) if sel.r0 == a.r1 => ITEM_TOTALS,
+                (true, true, true) => ITEM_ALL,
+                (true, true, false) => ITEM_HEADERS | ITEM_DATA,
+                (false, true, true) => ITEM_DATA | ITEM_TOTALS,
+                (_, true, _) => 0,
+                _ => return None,
+            };
+            (items, true)
+        };
+        let spec = TableSpec { items, cols: if items == ITEM_ALL && cols.is_none() { None } else { cols }, long: false, fixed };
+        Some(formula::to_text(&Expr::Table(qualify.then(|| t.name.clone()), spec)))
     }
 
     pub fn plain_formula(&self, sheet: usize, a: Addr) -> Option<String> {
@@ -355,6 +422,7 @@ impl Workbook {
             types: Vec::new(),
         });
         let t = self.tables.last().cloned().unwrap();
+        self.adopt_all_names();
         let e = self.put_tables(before);
         out = out.join(e);
         if self.filter(sheet).is_none() {
@@ -528,7 +596,9 @@ impl Workbook {
     }
 
     fn rename_table_refs(&mut self, old: &str, new: &str) {
-        for f in self.formulas.values_mut() {
+        let mut moved: Vec<Change> = Vec::new();
+        for ((s, a), f) in self.formulas.iter_mut() {
+            let before = f.text();
             if let Some(e) = f.ast.as_mut() {
                 formula::walk_mut(e, &mut |node| {
                     if let Expr::Table(Some(n), _) = node {
@@ -538,6 +608,24 @@ impl Workbook {
                     }
                 });
             }
+            let after = f.text();
+            if before != after {
+                moved.push(Change { sheet: *s, addr: *a, before, after });
+            }
+        }
+        for raw in self.tables.iter_mut().flat_map(|t| t.calc.iter_mut()).filter(|c| !c.is_empty()) {
+            let Some(mut e) = formula::parse(raw.trim_start().trim_start_matches('=')) else { continue };
+            formula::walk_mut(&mut e, &mut |node| {
+                if let Expr::Table(Some(n), _) = node {
+                    if n.eq_ignore_ascii_case(old) {
+                        *n = new.to_string();
+                    }
+                }
+            });
+            *raw = format!("={}", formula::to_text(&e));
+        }
+        if !moved.is_empty() {
+            self.record(Tx::Cells(moved));
         }
     }
 
@@ -651,7 +739,7 @@ impl Workbook {
                 let names = unique_names(&raw_names);
                 if names != t.cols {
                     let pairs: Vec<(String, String)> = t.cols.iter().zip(&names).filter(|(o, n)| o != n).map(|(o, n)| (o.clone(), n.clone())).collect();
-                    self.rename_col_refs(&t, &pairs);
+                    seeds.extend(self.rename_col_refs(&t, &pairs));
                     self.tables[i].cols = names;
                 }
                 continue;
@@ -690,29 +778,64 @@ impl Workbook {
         }
     }
 
-    fn rename_col_refs(&mut self, t: &Table, pairs: &[(String, String)]) {
+    fn rename_col_refs(&mut self, t: &Table, pairs: &[(String, String)]) -> Vec<(usize, Addr)> {
         let tables = self.tables.clone();
-        for ((s, a), f) in self.formulas.iter_mut() {
-            let Some(e) = f.ast.as_mut() else { continue };
-            formula::walk_mut(e, &mut |node| {
-                if let Expr::Table(n, spec) = node {
-                    let mine = match n {
-                        Some(n) => n.eq_ignore_ascii_case(&t.name),
-                        None => *s == t.sheet && tables.iter().any(|x| x.name == t.name && hit(x.area, *a)),
-                    };
-                    if let (true, Some((x, y))) = (mine, spec.cols.as_mut()) {
-                        for (o, nw) in pairs {
-                            if x.eq_ignore_ascii_case(o) {
-                                *x = nw.clone();
-                            }
-                            if y.eq_ignore_ascii_case(o) {
-                                *y = nw.clone();
-                            }
-                        }
+        let rename = |spec: &mut TableSpec| {
+            if let Some((x, y)) = spec.cols.as_mut() {
+                for (o, nw) in pairs {
+                    if x.eq_ignore_ascii_case(o) {
+                        *x = nw.clone();
+                    }
+                    if y.eq_ignore_ascii_case(o) {
+                        *y = nw.clone();
                     }
                 }
-            });
+            }
+        };
+        let mut moved: Vec<Change> = Vec::new();
+        for ((s, a), f) in self.formulas.iter_mut() {
+            let Some(e) = f.ast.as_mut() else { continue };
+            if !formula::has_table(e) {
+                continue;
+            }
+            let before = f.text();
+            if let Some(e) = f.ast.as_mut() {
+                formula::walk_mut(e, &mut |node| {
+                    if let Expr::Table(n, spec) = node {
+                        let mine = match n {
+                            Some(n) => n.eq_ignore_ascii_case(&t.name),
+                            None => *s == t.sheet && tables.iter().any(|x| x.name == t.name && hit(x.area, *a)),
+                        };
+                        if mine {
+                            rename(spec);
+                        }
+                    }
+                });
+            }
+            let after = f.text();
+            if before != after {
+                moved.push(Change { sheet: *s, addr: *a, before, after });
+            }
         }
+        for tb in self.tables.iter_mut() {
+            for raw in tb.calc.iter_mut().filter(|c| !c.is_empty()) {
+                let Some(mut e) = formula::parse(raw.trim_start().trim_start_matches('=')) else { continue };
+                let own = tb.name == t.name;
+                formula::walk_mut(&mut e, &mut |node| {
+                    if let Expr::Table(n, spec) = node {
+                        if n.as_deref().map_or(own, |n| n.eq_ignore_ascii_case(&t.name)) {
+                            rename(spec);
+                        }
+                    }
+                });
+                *raw = format!("={}", formula::to_text(&e));
+            }
+        }
+        let keys = moved.iter().map(|c| (c.sheet, c.addr)).collect();
+        if !moved.is_empty() {
+            self.record(Tx::Cells(moved));
+        }
+        keys
     }
 
     pub(crate) fn shift_tables(&mut self, s: Shift) {

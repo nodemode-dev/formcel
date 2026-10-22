@@ -78,6 +78,7 @@ def write(eng, views: list[dict], vba: dict[str, bytes] | None = None, objects: 
             ns.number_format = code
         wb.add_named_style(ns)
         registered.add(name)
+    has_tables = bool(eng.tables())
     for i, name in enumerate(eng.sheet_names()):
         ws = wb.active if i == 0 else wb.create_sheet()
         ws.title = name
@@ -85,7 +86,7 @@ def write(eng, views: list[dict], vba: dict[str, bytes] | None = None, objects: 
         for r, c, kind, text in eng.typed(i):
             cell = ws.cell(row=r + 1, column=c + 1)
             if kind == "f":
-                qualified = eng.file_formula(cell.coordinate, i) if "[" in text else None
+                qualified = eng.file_formula(cell.coordinate, i) if "[" in text or has_tables else None
                 cell.value = to_file(qualified or text)
             elif kind == "n":
                 cell.value = _number(text)

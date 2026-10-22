@@ -58,7 +58,8 @@ export interface DataCtx {
   moveCopy(sheet: number, dest: string, name: string, before: number | null, copy: boolean): Promise<string>;
   properties(): Promise<DocProps | null>;
   saveProperties(props: Record<string, string>): Promise<void>;
-  jump(text: string): boolean;
+  jump(text: string): Promise<boolean>;
+  tableNames(): Promise<string[]>;
   noteCells(sheet: number): [number, number][];
   pasteNotes(src: { sheet: number; r0: number; c0: number; r1: number; c1: number }, dr: number, dc: number, transpose: boolean): Promise<number>;
   tableAt(): { name: string; area: [number, number, number, number]; cols: string[]; types: string[] } | null;
@@ -753,12 +754,13 @@ export class DataTools {
     return `${n} ranges. Showing ${this.goAt + 1} of ${n}: ${rangeText(r)}`;
   }
 
-  goToDialog(): void {
+  async goToDialog(): Promise<void> {
     const g = this.c.grid;
+    const tables = await this.c.tableNames();
     this.prepare('goto');
     this.put('goto', 'ref', '');
     this.put('goto', 'special', '');
-    this.options('goto', 'name', [['', '(choose a name)'], ...this.c.names().map(([n]) => [n, n] as [string, string])], 'none');
+    this.options('goto', 'name', [['', '(choose a name)'], ...[...this.c.names().map(([n]) => n), ...tables].map((n) => [n, n] as [string, string])], 'none');
     this.options('goto', 'types', [['n', 'Numbers'], ['t', 'Text'], ['l', 'Logicals'], ['e', 'Errors']], 'all');
     const form = this.dlgs.get('goto')!.form;
     form.querySelector<HTMLSelectElement>('[data-k="name"]')!.onchange = () => this.put('goto', 'ref', form.querySelector<HTMLSelectElement>('[data-k="name"]')!.value);
@@ -769,7 +771,7 @@ export class DataTools {
       if (!special) {
         const text = (v.ref as string).trim();
         if (!text) throw new Error('Type a cell, a range or a name.');
-        if (!this.c.jump(text)) throw new Error(`${text} is not a cell, a range or a name in this workbook.`);
+        if (!(await this.c.jump(text))) throw new Error(`${text} is not a cell, a range or a name in this workbook.`);
         return '';
       }
       const [kind, flag] = special.split(':');
