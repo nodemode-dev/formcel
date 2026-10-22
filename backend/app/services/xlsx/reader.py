@@ -9,6 +9,7 @@ from openpyxl.utils.datetime import to_excel
 from openpyxl.worksheet.formula import ArrayFormula, DataTableFormula
 
 from .. import page
+from ..vba import service as vba_service
 from .arrays import members
 from .autofilter import filter_in
 from .calcio import calc_in, render, scan
@@ -131,6 +132,8 @@ def read(data: bytes) -> dict:
     books_in(wb)
     scanned = scan(data)
     vba = macro_parts(wb.vba_archive)
+    if vba:
+        vba[vba_service.NAMES] = vba_service.collect_codenames(wb)
     if wb.vba_archive is not None:
         wb.vba_archive.close()
         wb.vba_archive = None
