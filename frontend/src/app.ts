@@ -17,6 +17,8 @@ import { mountChrome } from './ui/shell-mount';
 import { autoShowHome } from './ui/shellcmds';
 import { withJob } from './ui/jobs';
 import type { StatusBar, ViewMode } from './ui/statusbar';
+import { mountRibbon, type RibbonMount } from './ui/ribbon-mount';
+import { ribbonButton } from './ui/rb-state';
 import { Home, type TemplateMeta, type WorkbookMeta } from './ui/home';
 import { Menu, type MenuItem } from './ui/menu';
 import { Collab, identityHeaders } from './ui/collab';
@@ -39,7 +41,7 @@ import { cleanPage, layoutOf, PageSetupDialog, type PageSetup } from './ui/pages
 import { NumberFormatDialog } from './ui/numberformat';
 import { hasHtmlTable } from './grid/pastedata';
 import { SpellCheck } from './ui/spell';
-import { installSettings } from './ui/settings';
+import { installSettings, setLayoutSummary } from './ui/settings';
 import { macroPolicy, pivotFlags, prefs } from './ui/prefs';
 import { userName } from './ui/collab';
 import { mountSheetChrome } from './ui/sheetchrome';
@@ -259,6 +261,7 @@ export class App {
   private readonly backstage: Backstage;
   private readonly grid: Grid;
   private readonly charts: Charts;
+  private ribbon!: RibbonMount;
   private readonly audit: Audit;
   private readonly nameTools: Names;
   private readonly fnTools: Functions;
@@ -708,6 +711,30 @@ export class App {
     };
     this.calc.commands((id, title, description, changes, run, keys) => registerCommand({ id, title, description, changes, run, keys }));
     this.collab.commands((id, title, description, changes, run, keys) => registerCommand({ id, title, description, changes, run, keys }));
+    this.ribbon = mountRibbon(p.toolbar, this.grid, {
+      book: () => this.open?.book ?? -1,
+      open: () => !!this.open,
+      cfItems: () => this.cfItems(),
+      styleBox: (name) => this.styleBox(name),
+      say: (t, bad) => this.status(t, !!bad),
+      formulaText: () => p.formulaBar.value,
+      selectedObject: () => this.charts.layer.selectedObject(),
+      sparkHere: () => false,
+      inPivot: () => {
+        const s = this.grid.selection();
+        return !!this.pivotAt(this.grid.sheetIndex, s.r0, s.c0);
+      },
+      fnPick: (name) => this.fnTools.pick(name),
+      after: () => {
+        if (!this.menu.open && document.activeElement?.closest('.fc-fmt-custom, .rb-menu, .rb-combo, .fc-modal') == null) this.grid.focus();
+      },
+    });
+    setLayoutSummary('ribbon', () => {
+      const tabs = p.toolbar.querySelectorAll('.rb-tab:not(.is-ctx):not([hidden])').length;
+      const groups = p.toolbar.querySelectorAll('.rb-panel .rb-group:not([hidden])').length;
+      return `${tabs} tabs with ${groups} groups, plus contextual tabs that appear with a table, chart, picture or PivotTable.`;
+    });
+    setLayoutSummary('qat', () => `${this.ribbon.qat.items.length} commands on the Quick Access Toolbar.`);
     bindShortcuts(this.shortcuts, () => !!this.open);
     this.bindChrome();
     mountSheetChrome(p, { grid: this.grid, extent: async () => (this.open ? engine().extent(this.open.book, this.grid.sheetIndex) : null) });
@@ -740,7 +767,7 @@ export class App {
   }
 
   private button(cmd: string): HTMLButtonElement {
-    return this.p.toolbar.querySelector<HTMLButtonElement>(`[data-cmd="${cmd}"]`)!;
+    return ribbonButton(cmd);
   }
 
   private commands(): void {
@@ -940,12 +967,6 @@ export class App {
 
   private bindChrome(): void {
     const p = this.p;
-    p.toolbar.addEventListener('click', (e) => {
-      const b = (e.target as HTMLElement).closest<HTMLButtonElement>('[data-cmd]');
-      if (b && !b.disabled) void runCommand(b.dataset.cmd!).then(() => {
-        if (!this.menu.open && document.activeElement?.closest('.fc-fmt-custom') == null) this.grid.focus();
-      });
-    });
     p.homeBtn.addEventListener('click', () => void runCommand('file.home'));
     p.formulaBar.parentElement?.querySelector('.fc-fx')?.addEventListener('mousedown', (e) => e.preventDefault());
     p.formulaBar.parentElement?.querySelector('.fc-fx')?.addEventListener('click', () => void runCommand('formula.arguments'));
@@ -3156,8 +3177,11 @@ export class App {
   }
 
   private cfMenu(): void {
-    const g = this.grid;
     const [x, y] = this.below('format.cf');
+    this.menu.show(x, y, this.cfItems(), () => this.grid.focus());
+  }
+
+  private cfItems(): MenuItem[] {
     const box = (title: string, kind: string, opts: RuleAsk) => () => this.ruleBox(title, kind, opts);
     const scale = (colors: string) => () => this.addRule('scale', [colors.split(',').length === 3 ? 'low,pctl:50,high' : 'low,high', colors]);
     const items: MenuItem[] = [
@@ -3195,7 +3219,7 @@ export class App {
       { label: 'Clear rules from selected cells', run: () => this.clearRules(true) },
       { label: 'Clear rules from this sheet', danger: true, run: () => this.clearRules(false) },
     ];
-    this.menu.show(x, y, items, () => g.focus());
+    return items;
   }
 
   private clearRules(selection: boolean): Promise<void> {
@@ -3570,6 +3594,7 @@ export class App {
     if (size.textContent !== sz) size.textContent = sz;
     this.button('format.text-color').style.setProperty('--swatch', st.fc ?? 'currentColor');
     this.button('format.fill-color').style.setProperty('--swatch', st.bg ?? 'currentColor');
+    this.ribbon?.refresh();
   }
 
   private formatMenu(): void {

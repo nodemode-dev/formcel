@@ -31,6 +31,17 @@ export function setCommandState(id: string, state: { enabled?: () => boolean; ch
   if (state.checked) c.checked = state.checked;
 }
 
+export function hasCommand(id: string): boolean {
+  return commands.has(id);
+}
+
+export function commandInfo(id: string): Omit<Command, 'run'> | null {
+  const c = commands.get(id);
+  if (!c) return null;
+  const { run: _run, ...rest } = c;
+  return rest;
+}
+
 export async function runCommand(id: string): Promise<boolean> {
   const c = commands.get(id);
   if (!c) return false;

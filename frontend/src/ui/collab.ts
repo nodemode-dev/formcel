@@ -2,6 +2,7 @@ import { engine } from '../engine';
 import type { Grid, Presence } from '../grid/grid';
 import { colName, parseRef } from '../grid/a1';
 import type { Menu } from './menu';
+import { anchorRect } from './rb-state';
 import { NoticesPane, PeoplePane, SharePane, type ChatLine, type Chip, type Notice, type PaneHost, type Watch } from './review';
 
 export interface Host {
@@ -675,7 +676,7 @@ export class Collab {
     const sheetOn = sl.some((l) => l.startsWith('S\t1'));
     const structure = bl.some((l) => l.split('\t')[1] === '1');
     const final = bl.some((l) => l.split('\t')[4] === '1');
-    const b = document.querySelector<HTMLElement>('[data-cmd="protect.menu"]')!.getBoundingClientRect();
+    const b = anchorRect('protect.menu');
     this.host.menu.show(b.left, b.bottom + 4, [
       { label: sheetOn ? 'Unprotect sheet' : 'Protect sheet', run: () => this.sheetBox() },
       { label: 'Cell protection: locked and hidden', run: () => this.cellBox() },
