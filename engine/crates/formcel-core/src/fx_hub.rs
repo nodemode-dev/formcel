@@ -25,6 +25,9 @@ impl Eval<'_> {
         if let Some(r) = self.call_eng(name, a) {
             return r;
         }
+        if let Some(r) = self.call_cube(name, a) {
+            return r;
+        }
         Err(ErrKind::Name)
     }
 

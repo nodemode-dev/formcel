@@ -540,6 +540,7 @@ fn hit(d: &Dim, path: &[usize], r: usize) -> bool {
 enum Src {
     Field(usize),
     Calc(Node),
+    Meas(crate::dax::D),
 }
 
 struct Vf {
@@ -557,6 +558,8 @@ mod group;
 mod showas;
 #[path = "pivot_suggest.rs"]
 mod suggest;
+#[path = "pivot_model.rs"]
+mod pmodel;
 pub use group::Group;
 
 fn aggregate(data: &Data, vf: &Vf, recs: &[usize]) -> Result<Option<f64>, ()> {
@@ -566,6 +569,7 @@ fn aggregate(data: &Data, vf: &Vf, recs: &[usize]) -> Result<Option<f64>, ()> {
     let sum_of = |f: usize| -> f64 { recs.iter().filter_map(|&r| if let Value::Number(n) = &data.vals[r][f] { Some(*n) } else { None }).sum() };
     match &vf.src {
         Src::Calc(n) => run(n, &|f| sum_of(f)).map(Some).ok_or(()),
+        Src::Meas(_) => Err(()),
         Src::Field(f) => {
             let nums: Vec<f64> = recs.iter().filter_map(|&r| if let Value::Number(n) = &data.vals[r][*f] { Some(*n) } else { None }).collect();
             let n = nums.len() as f64;
@@ -614,6 +618,9 @@ fn num_text(r: Result<Option<f64>, ()>) -> String {
 
 impl Workbook {
     fn pivot_range(&self, p: &Pivot) -> Result<(usize, Area), EngineError> {
+        if pmodel::is_model(p) {
+            return Ok((usize::MAX, Area { r0: 0, c0: 0, r1: 0, c1: 0 }));
+        }
         if !p.table.is_empty() {
             if let Some(t) = self.tables.iter().find(|t| t.name.eq_ignore_ascii_case(&p.table)) {
                 let (_, d1) = t.data();
@@ -642,7 +649,7 @@ impl Workbook {
         Data { names, vals, txt }
     }
 
-    fn shown_text(&self, sheet: usize, at: Addr) -> String {
+    pub(crate) fn shown_text(&self, sheet: usize, at: Addr) -> String {
         match self.sheets[sheet].cells.get(at) {
             Some(v) => self.shown(sheet, at, v.clone()).to_string(),
             None => String::new(),
@@ -654,11 +661,16 @@ impl Workbook {
     }
 
     fn render_pivot(&self, p: &Pivot) -> Result<Vec<Vec<Cl>>, EngineError> {
-        let (sheet, area) = self.pivot_range(p)?;
-        if area.r1 <= area.r0 {
-            return Err(EngineError::BadStyle("the source needs a header row and at least one row of data".into()));
-        }
-        let data = group::apply(self.pivot_data(sheet, area), &p.groups);
+        let model = pmodel::is_model(p);
+        let data = if model {
+            self.model_data(p)?
+        } else {
+            let (sheet, area) = self.pivot_range(p)?;
+            if area.r1 <= area.r0 {
+                return Err(EngineError::BadStyle("the source needs a header row and at least one row of data".into()));
+            }
+            group::apply(self.pivot_data(sheet, area), &p.groups)
+        };
         let mut all: Vec<String> = data.names.clone();
         let base_names = data.names.clone();
         for (n, f) in &p.calc {
@@ -673,6 +685,11 @@ impl Workbook {
         }
         let mut vfs: Vec<Vf> = Vec::new();
         for v in &p.values {
+            if model {
+                let (d, auto) = self.model_meas(&v.field, v.func)?;
+                vfs.push(Vf { src: Src::Meas(d), func: v.func, show: Show::Normal, name: if v.name.trim().is_empty() { auto } else { v.name.trim().to_string() }, base: None, base_item: String::new() });
+                continue;
+            }
             let i = find(&v.field)?;
             let (src, func) = if i >= data.names.len() {
                 let node = p.calc.iter().find(|(n, _)| n.eq_ignore_ascii_case(&v.field)).and_then(|(_, f)| compile(f, &base_names)).ok_or_else(|| EngineError::BadName(v.field.clone()))?;
@@ -811,14 +828,18 @@ impl Workbook {
                 if nv == 0 {
                     row.push(cl("", st));
                 }
+                let cons = if model { self.model_cons(&data, &rf, &rd, rpath, &cf, &cd, cpath, &p.filters) } else { Vec::new() };
                 for vf in &vfs {
-                    let own = aggregate(&data, vf, &cur);
+                    let own = match &vf.src {
+                        Src::Meas(d) => self.model_cell(d, &cons),
+                        _ => aggregate(&data, vf, &cur),
+                    };
                     let (raw, shape) = match vf.show {
                         Show::Normal => (num_text(own), 0),
                         _ => showas::apply(&showas::Ctx { data: &data, keep: &keep, rd: &rd, cd: &cd }, vf, rpath, cpath, own),
                     };
                     let pct = shape == 1;
-                    let dec = shape == 3 || (shape == 0 && (matches!(vf.src, Src::Calc(_)) || matches!(vf.func, Func::Average | Func::StDev | Func::StDevP | Func::Var | Func::VarP)));
+                    let dec = shape == 3 || (shape == 0 && (matches!(vf.src, Src::Calc(_)) || (matches!(vf.src, Src::Meas(_)) && raw.contains('.')) || matches!(vf.func, Func::Average | Func::StDev | Func::StDevP | Func::Var | Func::VarP)));
                     row.push(Cl { raw, st, pct, dec });
                 }
             }
@@ -839,7 +860,7 @@ impl Workbook {
         self.pivots.len()
     }
 
-    fn resolve_source(&self, sheet: usize, text: &str) -> Result<(usize, Area, String), EngineError> {
+    pub(crate) fn resolve_source(&self, sheet: usize, text: &str) -> Result<(usize, Area, String), EngineError> {
         let t = text.trim();
         if let Some(tb) = self.tables.iter().find(|x| x.name.eq_ignore_ascii_case(t)) {
             let (_, d1) = tb.data();
@@ -883,6 +904,9 @@ impl Workbook {
     }
 
     pub fn pivot_source(&self, sheet: usize, text: &str) -> Result<String, EngineError> {
+        if text.trim().eq_ignore_ascii_case(pmodel::MARK) || text.trim().eq_ignore_ascii_case(crate::datamodel::CONN_NAME) {
+            return Ok(self.model_fields_line());
+        }
         let (s, a, t) = self.resolve_source(sheet, text)?;
         if a.r1 <= a.r0 {
             return Err(EngineError::BadStyle("the source needs a header row and at least one row of data".into()));
@@ -892,12 +916,18 @@ impl Workbook {
 
     pub fn pivot_fields(&self, name: &str) -> Result<String, EngineError> {
         let p = &self.pivots[self.find_pivot(name)?];
+        if pmodel::is_model(p) {
+            return Ok(self.model_fields_line());
+        }
         let (s, a) = self.pivot_range(p)?;
         Ok(self.fields_line(s, a, &p.table, &p.groups))
     }
 
     pub fn pivot_items(&self, name: &str, field: &str) -> Result<Vec<String>, EngineError> {
         let p = &self.pivots[self.find_pivot(name)?];
+        if pmodel::is_model(p) {
+            return Ok(self.model_items(field));
+        }
         let (s, a) = self.pivot_range(p)?;
         let data = group::apply(self.pivot_data(s, a), &p.groups);
         let f = data.names.iter().position(|n| n.eq_ignore_ascii_case(field)).ok_or_else(|| EngineError::BadName(field.to_string()))?;
