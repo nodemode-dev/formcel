@@ -91,6 +91,7 @@ export interface ChartSpec {
   pivotButtons?: boolean;
   tlMode?: 'auto' | 'gantt' | 'annotated';
   level?: 'auto' | 'country' | 'region';
+  geoRegion?: string;
   collapsed?: string[];
   bins?: number;
   totals?: number[];

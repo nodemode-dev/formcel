@@ -1,5 +1,6 @@
 import type { EngineClient } from '../engine';
 import { build, readMatrix, recommendRanked, resolveRange } from './data';
+import { geoRegionOf } from './regionmap';
 import { renderChart, renderChartAsync } from './svg';
 import { CHART_TYPES, ERR_KINDS, PALETTE, TREND_KINDS, blankChart, type ChartData, type ChartSpec, type ChartType, type ErrKind, type Legend, type TrendKind } from './types';
 
@@ -21,6 +22,7 @@ export class ChartEditor {
   private lastRecs = '';
   private lastSeries = '';
   private seq = 0;
+  private geo: string | undefined;
   private base: ChartSpec = blankChart('column', '');
   private preset: (string | undefined)[] = [];
   private wantSeries: string[] = ['-1', '-1'];
@@ -169,6 +171,7 @@ export class ChartEditor {
     s.totals = totals.length ? totals : undefined;
     s.tlMode = v('tlMode') === 'auto' ? undefined : (v('tlMode') as ChartSpec['tlMode']);
     s.level = v('level') === 'auto' ? undefined : (v('level') as ChartSpec['level']);
+    s.geoRegion = s.type === 'map' ? this.geo ?? this.base.geoRegion : undefined;
     const colors = Array.from(this.form.querySelectorAll<HTMLInputElement>('[data-k="colors"] input')).map((el, i) => (el.dataset.custom === '1' ? el.value : this.preset[i] ?? ''));
     while (colors.length && !colors[colors.length - 1]) colors.pop();
     s.colors = colors.length ? colors : undefined;
@@ -269,6 +272,7 @@ export class ChartEditor {
           if (seq !== this.seq) return;
           data = build(m, s.byRows, s.type);
           html = await renderChartAsync(this.ctx.eng, s, data, 360, 260);
+          if (s.type === 'map') this.geo = geoRegionOf(data.cats, s.level);
           const oriented = s.byRows ? m[0].map((_, j) => m.map((r) => r[j])) : m;
           ranked = recommendRanked(oriented).map((r) => ({ ...r, svg: renderChart({ ...blankChart(r.type, ''), legend: 'none' }, build(m, s.byRows, r.type), 112, 84) }));
         }

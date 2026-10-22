@@ -3,7 +3,7 @@ import { annotatedTimeline, isAnnotated } from './annotated';
 import { FORMATS, errAmount, fitTrend } from './chartfx';
 import type { Kit } from './kit';
 import { countryFor, ramp } from './map';
-import { bounds, planMap, regionsIn, type MapPlan } from './regionmap';
+import { REGION_UNITS, bounds, center, loadMoreRegions, pathBox, planMap, regionsIn, type MapPlan } from './regionmap';
 import type { Region } from './regions';
 import { PALETTE, type ChartData, type ChartSpec, type Series } from './types';
 import { WORLD, WORLD_H, WORLD_W } from './world';
@@ -70,8 +70,8 @@ function nice(lo: number, hi: number, count = 5): { min: number; max: number; ti
   return { min, max, ticks };
 }
 
-const text = (x: number, y: number, s: string, o: { size?: number; anchor?: string; bold?: boolean; rot?: number; fill?: string; base?: string; op?: number } = {}): string =>
-  `<text x="${r1(x)}" y="${r1(y)}" font-size="${o.size ?? 11}" text-anchor="${o.anchor ?? 'middle'}"${o.base ? ` dominant-baseline="${o.base}"` : ''}${o.bold ? ' font-weight="600"' : ''} fill="${o.fill ?? 'currentColor'}"${o.op ? ` fill-opacity="${o.op}"` : ''}${o.rot ? ` transform="rotate(${o.rot} ${r1(x)} ${r1(y)})"` : ''}>${esc(s)}</text>`;
+const text = (x: number, y: number, s: string, o: { size?: number; anchor?: string; bold?: boolean; rot?: number; fill?: string; base?: string; op?: number; halo?: string } = {}): string =>
+  `<text x="${r1(x)}" y="${r1(y)}" font-size="${o.size ?? 11}" text-anchor="${o.anchor ?? 'middle'}"${o.base ? ` dominant-baseline="${o.base}"` : ''}${o.bold ? ' font-weight="600"' : ''}${o.halo ? ` stroke="${o.halo}" stroke-width="2.4" stroke-linejoin="round" paint-order="stroke"` : ''} fill="${o.fill ?? 'currentColor'}"${o.op ? ` fill-opacity="${o.op}"` : ''}${o.rot ? ` transform="rotate(${o.rot} ${r1(x)} ${r1(y)})"` : ''}>${esc(s)}</text>`;
 
 const line = (x1: number, y1: number, x2: number, y2: number, o = 'stroke-opacity="0.15"', w = 1): string =>
   `<line x1="${r1(x1)}" y1="${r1(y1)}" x2="${r1(x2)}" y2="${r1(y2)}" stroke="currentColor" ${o} stroke-width="${w}"/>`;
@@ -215,6 +215,7 @@ export function renderChart(spec: ChartSpec, d: ChartData, w: number, h: number)
 }
 
 export async function renderChartAsync(eng: EngineClient, spec: ChartSpec, d: ChartData, w: number, h: number): Promise<string> {
+  if (spec.type === 'map' && spec.level !== 'country') await loadMoreRegions();
   let html = renderChart(spec, d, w, h);
   if (FORMATS.pending()) {
     await FORMATS.prime(eng);
@@ -969,19 +970,34 @@ function regionMap(spec: ChartSpec, d: ChartData, b: Box, plan: MapPlan): string
   const barH = 26;
   const all = regionsIn(plan.countries);
   const [x0, y0, x1, y1] = bounds(all);
-  const k = Math.min((b.w - 8) / (x1 - x0 || 1), (b.h - barH - 8) / (y1 - y0 || 1));
-  const tx = b.x + (b.w - (x1 - x0) * k) / 2 - x0 * k;
+  const kx = Math.max(0.2, Math.cos((-(y0 + y1) / 2 / REGION_UNITS) * (Math.PI / 180)));
+  const k = Math.min((b.w - 8) / ((x1 - x0) * kx || 1), (b.h - barH - 8) / (y1 - y0 || 1));
+  const tx = b.x + (b.w - (x1 - x0) * k * kx) / 2 - x0 * k * kx;
   const ty = b.y + (b.h - barH - (y1 - y0) * k) / 2 - y0 * k;
   const id = `fcmap${mapSeq++}`;
   const base = color(0);
   const out: string[] = [`<defs><linearGradient id="${id}"><stop offset="0" stop-color="${ramp(0, base)}"/><stop offset="1" stop-color="${ramp(1, base)}"/></linearGradient></defs>`];
-  out.push(`<g transform="translate(${r1(tx)} ${r1(ty)}) scale(${Math.round(k * 1000) / 1000})">`);
+  out.push(`<g transform="translate(${r1(tx)} ${r1(ty)}) scale(${Math.round(k * kx * 10000) / 10000} ${Math.round(k * 10000) / 10000})">`);
   for (const r of all) {
     const v = by.get(r);
     const fill = v === undefined ? 'currentColor' : ramp((v - lo) / (hi - lo || 1), base);
-    out.push(`<path d="${r[3]}" fill="${fill}"${v === undefined ? ' fill-opacity="0.08"' : ''} stroke="var(--cell-bg, #fff)" stroke-width="${r1(0.8 / Math.max(k, 0.05))}" stroke-linejoin="round"><title>${esc(r[0])}${v === undefined ? '' : `: ${shown(spec.labelFmt, v)}`}</title></path>`);
+    out.push(`<path d="${r[3]}" fill="${fill}"${v === undefined ? ' fill-opacity="0.08"' : ''} stroke="var(--cell-bg, #fff)" stroke-width="0.8" vector-effect="non-scaling-stroke" stroke-linejoin="round"><title>${esc(r[0])}${v === undefined ? '' : `: ${shown(spec.labelFmt, v)}`}</title></path>`);
   }
   out.push('</g>');
+  if (spec.labels) {
+    for (const r of all) {
+      const v = by.get(r);
+      if (v === undefined) continue;
+      const [x, y] = center(r);
+      const [rx0, ry0, rx1, ry1] = pathBox(r[3]);
+      const wpx = (rx1 - rx0) * k * kx;
+      const hpx = (ry1 - ry0) * k;
+      const label = r[0];
+      if (wpx < Math.min(34, label.length * 4.2) || hpx < 9) continue;
+      const t = (v - lo) / (hi - lo || 1);
+      out.push(text(tx + x * k * kx, ty + y * k, ellipsis(label, Math.max(3, Math.floor(wpx / 5.2))), { base: 'central', size: 9, fill: t > 0.6 ? '#fff' : '#1b1f24', halo: t > 0.6 ? '#1b1f24' : '#fff' }));
+    }
+  }
   const bw = Math.min(160, b.w * 0.5);
   const by0 = b.y + b.h - barH + 6;
   const bx = b.x + (b.w - bw) / 2;
@@ -1022,6 +1038,17 @@ function mapChart(spec: ChartSpec, d: ChartData, b: Box): string {
     out.push(`<path d="${c[4]}" fill="${fill}"${v === undefined ? ' fill-opacity="0.08"' : ''} stroke="var(--cell-bg, #fff)" stroke-width="${r1(0.8 / Math.max(k, 0.05))}" stroke-linejoin="round"><title>${esc(c[0])}${v === undefined ? '' : `: ${shown(spec.labelFmt, v)}`}</title></path>`);
   }
   out.push('</g>');
+  if (spec.labels) {
+    for (const c of WORLD) {
+      const v = by.get(c[2]);
+      if (v === undefined) continue;
+      const [x0, y0, x1, y1] = pathBox(c[4]);
+      const wpx = (x1 - x0) * k;
+      if (wpx < Math.min(34, c[0].length * 4.2) || (y1 - y0) * k < 9) continue;
+      const t = (v - lo) / (hi - lo || 1);
+      out.push(text(tx + ((x0 + x1) / 2) * k, ty + ((y0 + y1) / 2) * k, ellipsis(c[0], Math.max(3, Math.floor(wpx / 5.2))), { base: 'central', size: 9, fill: t > 0.6 ? '#fff' : '#1b1f24', halo: t > 0.6 ? '#1b1f24' : '#fff' }));
+    }
+  }
   const bw = Math.min(160, b.w * 0.5);
   const by0 = b.y + b.h - barH + 6;
   const bx = b.x + (b.w - bw) / 2;

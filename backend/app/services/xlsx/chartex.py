@@ -209,7 +209,9 @@ def build(kind: str, spec: dict, ws, bounds: tuple[int, int, int, int], by_rows:
         if not lay["labels"]:
             return None
         data.append(f'<cx:data id="0">{_str_dim(src, "cat", 0, 0)}{_num_dim(src, "colorVal", first)}</cx:data>')
-        geo = '<cx:layoutPr><cx:geography cultureLanguage="en-US" cultureRegion="US" attribution="Powered by Bing"/></cx:layoutPr>'
+        region = str(spec.get("geoRegion") or "")
+        region = region if len(region) == 2 and region.isascii() and region.isalpha() else "US"
+        geo = f'<cx:layoutPr><cx:geography cultureLanguage="en-US" cultureRegion="{region.upper()}" attribution="Powered by Bing"/></cx:layoutPr>'
         series.append(f'<cx:series layoutId="{layout}" uniqueId="{sid()}">{tx(first)}{sppr(0)}{dlabels("ctr", cat=True)}<cx:dataId val="0"/>{geo}</cx:series>')
     else:
         return None
@@ -606,6 +608,9 @@ def parse(xml: bytes, ws_title: str) -> dict | None:
         nf = next((c for c in dl if _local(c.tag) == "numFmt"), None)
         if nf is not None and nf.attrib.get("formatCode") and nf.attrib.get("formatCode") != "General":
             spec["labelFmt"] = nf.attrib["formatCode"]
+    geo = next(ser.iter(f"{{{NS_CX}}}geography"), None)
+    if kind == "map" and geo is not None and len(geo.attrib.get("cultureRegion", "")) == 2:
+        spec["geoRegion"] = geo.attrib["cultureRegion"].upper()
     bc = next(ser.iter(f"{{{NS_CX}}}binCount"), None)
     if bc is not None:
         try:
