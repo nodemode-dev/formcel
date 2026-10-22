@@ -44,7 +44,6 @@ export function registerShellCommands(h: ShellHooks): void {
     registerCommand({ id, title, description, changes: false, run, ...extra });
   const book = () => h.hasBook();
 
-  cmd('file.open', 'Open', 'Choose a spreadsheet, CSV or PDF file and open it as a workbook.', () => h.openFile(), { keys: 'Mod+O' });
   cmd('file.save', 'Save', 'FormCel saves as you type; this saves anything still waiting and confirms it.', () => h.save(), { keys: 'Mod+S', enabled: book });
   cmd('edit.cut', 'Cut', 'Cut the selected cells to the clipboard.', () => {
     if (textFieldFocused()) return void document.execCommand('cut');
