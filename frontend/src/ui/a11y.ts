@@ -36,11 +36,12 @@ function save(): void {
 
 const PROFILES: Record<'light' | 'contrast', Record<string, string>> = {
   light: {
-    '--accent-color': '#c2410c', '--accent-color-dim': '#c2410c26', '--accent-color-hover': '#9a3412',
-    '--bg-primary': '#ffffff', '--bg-secondary': '#f4f4f5', '--bg-tertiary': '#e8e8ec', '--bg-node': '#fafafa',
-    '--border-color': '#d4d4d8', '--border-light': '#bcbcc4', '--text-primary': '#18181b', '--text-secondary': '#46464e', '--text-muted': '#5e5e68',
-    '--canvas-bg': '#ffffff', '--grid-color': '#a1a1aa', '--cell-grid': '#d4d4d8', '--cell-head-bg': '#f4f4f5', '--cell-head-fg': '#46464e',
-    '--cell-bg': '#ffffff', '--cell-fg': '#18181b', '--cell-link': '#1d4ed8', '--ok': '#15803d', '--warn': '#a16207', '--bad': '#b91c1c',
+    '--accent-color': '#107c41', '--accent-color-dim': '#107c4126', '--accent-color-hover': '#0b6a37',
+    '--bg-primary': '#ffffff', '--bg-secondary': '#f3f3f3', '--bg-tertiary': '#e6e6e6', '--bg-node': '#fafafa',
+    '--border-color': '#d1d1d1', '--border-light': '#bdbdbd', '--text-primary': '#242424', '--text-secondary': '#444444', '--text-muted': '#616161',
+    '--canvas-bg': '#ffffff', '--grid-color': '#a1a1aa', '--cell-grid': '#d4d4d4', '--cell-head-bg': '#f3f3f3', '--cell-head-fg': '#444444',
+    '--cell-head-on': '#cae9d8', '--cell-head-on-fg': '#0e5c31', '--cell-select': 'rgba(16, 124, 65, 0.1)', '--cell-select-edge': '#107c41',
+    '--cell-bg': '#ffffff', '--cell-fg': '#242424', '--cell-link': '#0563c1', '--ok': '#15803d', '--warn': '#a16207', '--bad': '#b91c1c',
   },
   contrast: {
     '--accent-color': '#ffd400', '--accent-color-dim': '#ffd40040', '--accent-color-hover': '#ffe566',

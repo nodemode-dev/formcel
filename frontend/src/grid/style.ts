@@ -42,8 +42,8 @@ export function themeOf(text: string): Look {
   return {
     name: name || 'FormCel',
     colors: colors.length === 10 ? colors : ['#000000', '#ffffff', '#1f2937', '#e5e7eb', '#f97316', '#3b82f6', '#22c55e', '#a855f7', '#eab308', '#14b8a6'],
-    heading: heading || 'Inter',
-    body: body || 'Inter',
+    heading: heading || 'Aptos Narrow',
+    body: body || 'Aptos Narrow',
   };
 }
 

@@ -89,8 +89,13 @@ type Band = [number, number, number, number, Pane];
 
 export const ZOOMS = [0.5, 0.67, 0.75, 0.9, 1, 1.1, 1.25, 1.5, 1.75, 2];
 
-const HEAD_H = 24;
-const HEAD_W = 60;
+const HEAD_H = 20;
+const HEAD_W = 46;
+const BODY_PX = 14.67;
+const FALLBACK = 'Calibri, Carlito, "Segoe UI", Inter, system-ui, -apple-system, sans-serif';
+const BODY_FONT = `${BODY_PX}px "Aptos Narrow", ${FALLBACK}`;
+const HEAD_FONT = `12px "Aptos Narrow", ${FALLBACK}`;
+export const SCROLL_W = 14;
 const KEY = (r: number, c: number) => r * MAX_COLS + c;
 const FILTER_BTN = 16;
 const LIST_BTN = 16;
@@ -105,6 +110,9 @@ interface Palette {
   headBg: string;
   headFg: string;
   headOn: string;
+  headOnFg: string;
+  headFull: string;
+  headFullFg: string;
   fg: string;
   sel: string;
   edge: string;
@@ -169,8 +177,8 @@ export interface Presence {
 }
 
 export class Grid {
-  readonly rows = new Axis(MAX_ROWS, 24, 8);
-  readonly cols = new Axis(MAX_COLS, 100, 12);
+  readonly rows = new Axis(MAX_ROWS, 20, 8);
+  readonly cols = new Axis(MAX_COLS, 64, 12);
   opts: GridOptions = { fillHandle: true, dragDrop: true, enterMove: true, enterDir: 'down', editInCell: true, gridlines: true, gridColor: '', entryFilter: null, barEdit: null, defaultFont: '', defaultSize: 10 };
   private moveTo: { r: number; c: number } | null = null;
   readonly el: HTMLElement;
@@ -302,7 +310,10 @@ export class Grid {
       grid: v('--cell-grid') || v('--border-color'),
       headBg: v('--cell-head-bg') || v('--bg-secondary'),
       headFg: v('--cell-head-fg') || v('--text-secondary'),
-      headOn: v('--accent-color-dim'),
+      headOn: v('--cell-head-on') || v('--accent-color-dim'),
+      headOnFg: v('--cell-head-on-fg') || v('--text-primary'),
+      headFull: v('--cell-head-full') || v('--accent-color'),
+      headFullFg: v('--cell-head-full-fg') || '#ffffff',
       fg: v('--cell-fg') || v('--text-primary'),
       sel: v('--cell-select') || v('--accent-color-dim'),
       edge: v('--cell-select-edge') || v('--accent-color'),
@@ -316,7 +327,7 @@ export class Grid {
     this.dpr = window.devicePixelRatio || 1;
     this.gw = gutter(this.rows);
     this.gh = gutter(this.cols);
-    const fw = Math.max(1, Math.floor(r.width));
+    const fw = Math.max(1, Math.floor(r.width) - SCROLL_W);
     const fh = Math.max(1, Math.floor(r.height));
     const cw = Math.max(1, fw - this.gw);
     const ch = Math.max(1, fh - this.gh);
@@ -488,6 +499,18 @@ export class Grid {
   }
 
   paintHook: (() => void) | null = null;
+  scrollHook: (() => void) | null = null;
+
+  scrollInfo(): { x: number; y: number; vw: number; vh: number; tx: number; ty: number } {
+    return { x: this.sx, y: this.sy, vw: this.w - HEAD_W - this.frozenW(), vh: this.h - HEAD_H - this.frozenH(), tx: this.cols.total() - this.frozenW(), ty: this.rows.total() - this.frozenH() };
+  }
+
+  scrollTo(x: number | null, y: number | null): void {
+    if (x !== null) this.sx = x;
+    if (y !== null) this.sy = y;
+    this.clampScroll();
+    this.paint();
+  }
 
   visibleWindow(): Range {
     const rows = this.paneRows(1);
@@ -508,7 +531,7 @@ export class Grid {
     ctx.fillRect(0, 0, w, h);
     const fh = this.frozenH();
     const fw = this.frozenW();
-    ctx.font = '13px Inter, system-ui, -apple-system, "Segoe UI", sans-serif';
+    ctx.font = BODY_FONT;
     ctx.textBaseline = 'middle';
     for (const [ra, rb, ytop, ybot, pr] of rowSets) {
       for (const [ca, cb, xl, xr, pc] of colSets) {
@@ -550,6 +573,7 @@ export class Grid {
     if (!this.og.hidden) this.paintOutline();
     this.objectsHook?.paint();
     if (this.editing) this.placeEditor();
+    this.scrollHook?.();
   }
 
   setMarks(marks: Map<number, string>): void {
@@ -875,14 +899,14 @@ export class Grid {
       ctx.clip();
       ctx.globalAlpha = 0.5;
       ctx.fillStyle = pal.fg;
-      ctx.font = 'italic 13px Inter, system-ui, -apple-system, "Segoe UI", sans-serif';
+      ctx.font = `italic ${BODY_FONT}`;
       ctx.textAlign = 'left';
       ctx.fillText(text.split('\n', 1)[0], this.x(c) + 5, this.y(r) + this.rows.size(r) - 6);
       ctx.restore();
     }
     if (this.circles.size) this.paintCircles(r0, r1, c0, c1);
     ctx.textBaseline = 'middle';
-    ctx.font = '13px Inter, system-ui, -apple-system, "Segoe UI", sans-serif';
+    ctx.font = BODY_FONT;
     if (!this.styles.size && !this.cfs.size && !this.tableList.length) return;
     for (let r = r0; r <= r1; r++) {
       const rh = this.rows.size(r);
@@ -909,9 +933,10 @@ export class Grid {
 
   private font(st: CellStyle): number {
     const size = st.size || (this.opts.defaultSize !== 10 ? this.opts.defaultSize : 0);
-    const px = size ? Math.round(size * 13.333) / 10 : 13;
-    const face = st.font ?? (this.opts.defaultFont || this.look.body);
-    this.ctx.font = `${st.i ? 'italic ' : ''}${st.b ? '700 ' : ''}${px}px ${face !== 'Inter' ? `"${face}", ` : ''}Inter, system-ui, -apple-system, "Segoe UI", sans-serif`;
+    const px = size ? Math.round(size * 13.333) / 10 : BODY_PX;
+    const named = st.font ?? (this.opts.defaultFont || this.look.body);
+    const face = named === 'Inter' ? 'Aptos Narrow' : named;
+    this.ctx.font = `${st.i ? 'italic ' : ''}${st.b ? '700 ' : ''}${px}px "${face}", ${FALLBACK}`;
     return px;
   }
 
@@ -1037,7 +1062,7 @@ export class Grid {
     const px = this.font(st);
     const ha = this.align(k, t, st);
     const mark = this.cfs.get(k);
-    const pad = 5 + st.indent * INDENT_PX + (mark?.icon && ha === 'left' ? 16 : 0);
+    const pad = 3 + st.indent * INDENT_PX + (mark?.icon && ha === 'left' ? 16 : 0);
     const lh = Math.round(px * 1.3);
     const dark = /^#[0-9a-f]{6}$/i.test(pal.bg) && !light(pal.bg);
     const peak = (c: string) => Math.max(...[1, 3, 5].map((i) => parseInt(c.slice(i, i + 2), 16)));
@@ -1429,8 +1454,17 @@ export class Grid {
     ctx.fillStyle = pal.headBg;
     ctx.fillRect(0, 0, w, HEAD_H);
     ctx.fillRect(0, 0, HEAD_W, h);
-    ctx.font = '11px "JetBrains Mono", ui-monospace, Menlo, monospace';
+    ctx.font = HEAD_FONT;
     ctx.textAlign = 'center';
+    const allRows = s.r0 === 0 && s.r1 === MAX_ROWS - 1;
+    const allCols = s.c0 === 0 && s.c1 === MAX_COLS - 1;
+    ctx.fillStyle = pal.grid;
+    ctx.beginPath();
+    ctx.moveTo(HEAD_W - 3, HEAD_H - 3);
+    ctx.lineTo(HEAD_W - 3, HEAD_H - 13);
+    ctx.lineTo(HEAD_W - 13, HEAD_H - 3);
+    ctx.closePath();
+    ctx.fill();
     for (const [ca, cb, xl, xr, pc] of colSets) {
       ctx.save();
       ctx.beginPath();
@@ -1440,12 +1474,17 @@ export class Grid {
         const xx = this.x(c, pc);
         const cw = this.cols.size(c);
         if (!cw) continue;
-        if (c >= s.c0 && c <= s.c1) {
-          ctx.fillStyle = pal.headOn;
+        const on = c >= s.c0 && c <= s.c1;
+        if (on) {
+          ctx.fillStyle = allRows ? pal.headFull : pal.headOn;
           ctx.fillRect(xx, 0, cw, HEAD_H);
+          if (!allRows) {
+            ctx.fillStyle = pal.edge;
+            ctx.fillRect(xx, HEAD_H - 2, cw, 2);
+          }
         }
-        ctx.fillStyle = pal.headFg;
-        ctx.fillText(this.colLabel(c), xx + cw / 2, HEAD_H / 2);
+        ctx.fillStyle = on ? (allRows ? pal.headFullFg : pal.headOnFg) : pal.headFg;
+        ctx.fillText(this.colLabel(c), xx + cw / 2, HEAD_H / 2 + 0.5);
         ctx.strokeStyle = pal.grid;
         ctx.lineWidth = 1;
         this.line(Math.round(xx + cw) + 0.5, 0, Math.round(xx + cw) + 0.5, HEAD_H);
@@ -1461,13 +1500,18 @@ export class Grid {
         const yy = this.y(r, pr);
         const rh = this.rows.size(r);
         if (!rh) continue;
-        if (r >= s.r0 && r <= s.r1) {
-          ctx.fillStyle = pal.headOn;
+        const on = r >= s.r0 && r <= s.r1;
+        if (on) {
+          ctx.fillStyle = allCols ? pal.headFull : pal.headOn;
           ctx.fillRect(0, yy, HEAD_W, rh);
+          if (!allCols) {
+            ctx.fillStyle = pal.edge;
+            ctx.fillRect(HEAD_W - 2, yy, 2, rh);
+          }
         }
         const fa = this.filterArea;
-        ctx.fillStyle = fa && this.filterCols.size && r > fa[0] && r <= fa[2] ? pal.link : pal.headFg;
-        ctx.fillText(String(r + 1), HEAD_W / 2, yy + rh / 2);
+        ctx.fillStyle = fa && this.filterCols.size && r > fa[0] && r <= fa[2] ? pal.link : on ? (allCols ? pal.headFullFg : pal.headOnFg) : pal.headFg;
+        ctx.fillText(String(r + 1), HEAD_W / 2, yy + rh / 2 + 0.5);
         ctx.strokeStyle = pal.grid;
         ctx.lineWidth = 1;
         this.line(0, Math.round(yy + rh) + 0.5, HEAD_W, Math.round(yy + rh) + 0.5);
@@ -3037,7 +3081,7 @@ export class Grid {
     const ext = await this.engine.extent(this.book, this.sheet);
     if (!ext) return;
     const cells = await this.engine.read(this.book, 0, col, Math.min(ext[0], 20000), col, this.sheet);
-    this.ctx.font = '13px Inter, system-ui, -apple-system, "Segoe UI", sans-serif';
+    this.ctx.font = BODY_FONT;
     let wmax = 40;
     for (const [, , t] of cells) wmax = Math.max(wmax, this.ctx.measureText(t.split('\n', 1)[0]).width + 12);
     this.cols.setSize(col, Math.min(800, wmax));
@@ -3079,10 +3123,14 @@ export class Grid {
     st.left = `${this.gw + this.x(this.ac) * z}px`;
     st.top = `${this.gh + this.y(this.ar) * z}px`;
     const [, , aw, ah] = this.activeArea();
-    st.width = `${Math.max(aw, 60) * z}px`;
-    st.height = `${Math.max(ah, 16) * z}px`;
-    st.fontSize = `${13 * z}px`;
-    st.lineHeight = `${16 * z}px`;
+    this.ctx.save();
+    this.ctx.font = BODY_FONT;
+    const typed = this.ctx.measureText(this.editor.value.split('\n', 1)[0]).width + 16;
+    this.ctx.restore();
+    st.width = `${Math.max(aw, 60, typed) * z}px`;
+    st.height = `${Math.max(ah, 18) * z}px`;
+    st.fontSize = `${BODY_PX * z}px`;
+    st.lineHeight = `${17 * z}px`;
   }
 
   private async endEdit(commit: boolean, move?: Dir, key?: 'Tab' | 'Enter'): Promise<void> {
@@ -3404,6 +3452,7 @@ export class Grid {
 
     this.editor.addEventListener('input', (e) => {
       if (!this.pointing) this.point = null;
+      if (this.editing) this.placeEditor();
       void this.suggest(e as InputEvent);
     });
 
