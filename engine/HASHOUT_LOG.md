@@ -711,3 +711,19 @@ When a formula is only a call to a host function (web functions, IMPORTRANGE, AI
 - logged: v0.36.0 · 2026-10-22
 
 A bare table name refers to the table's data (=SUM(Table1)); parenthesised unions are accepted by SUM and the other aggregates; renaming a table or a header rewrites stored formula text, calculated columns included, and is one undo step.
+
+## v0.37.0 entries
+
+### Data Model, DAX subset and CUBE functions
+- refers-to: crates/formcel-core/src/dax.rs, datamodel.rs, cube.rs, eval/fx_cube.rs, pivot_model.rs
+- kind: explainer
+- logged: v0.37.0 · 2026-10-22
+
+CUBE arguments are normalised to MDX text in the evaluator and parsed on the model side. Model PivotTables build a flat table over the active relationships and evaluate measures per cell with path filters. Ctx gains cell_ast and cube_call; the Workbook stays Send (no Rc). External OLAP connections return #N/A.
+
+### Data types, GOOGLEFINANCE, STOCKHISTORY
+- refers-to: crates/formcel-core/src/datatype.rs, chips.rs, host.rs, parse, eval.rs
+- kind: explainer
+- logged: v0.37.0 · 2026-10-22
+
+#FIELD! is ErrKind::Field (ERROR.TYPE 13). The parser turns A2.Price into an internal _FV call and prints it back in dot form. The data type payload is line based: v1, entity, provider, epoch, then name, tag and value lines. Stock and currency chips recalc the cells that read them when loaded. GOOGLEFINANCE and STOCKHISTORY are host functions with d: and m: date tokens, so their dates display as dates. FUNCTIONS has 438 names.

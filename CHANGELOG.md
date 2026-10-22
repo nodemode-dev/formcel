@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.37.0 · 2026-10-22
+
+- FormCel now opens and looks like an Excel window in the form family: a rounded splash with a loading bar, then the window appears whole; a 38 px title row with the workbook name, a command search box (Alt+Q), share, account and settings; on Windows and Linux optional custom minimize, maximize and close buttons.
+- The Excel ribbon replaces the flat toolbar: File, Home, Insert, Draw, Page Layout, Formulas, Data, Review, View, Automate, Developer and Help, with contextual tabs for tables, PivotTables, charts, shapes, pictures and sparklines. Groups shrink as the window narrows, Ctrl+F1 collapses the ribbon, Alt shows key tips, and the Quick Access Toolbar and Customize the Ribbon work like Excel's.
+- A menu bar (File to Help) in the window, or in the macOS menu bar; a status bar with Ready, Enter, Edit and Point, Sum, Average, Count, Min and Max of the selection, accessibility status, view buttons and the zoom slider; drop a spreadsheet anywhere to open it.
+- A File view like Excel's Backstage: New, Open, Info, Save As, Save a Copy, Print with a real page preview, Share, Export, Publish, Close, Account and Options. The grid looks like Excel's: 20 px rows, Aptos Narrow 11, green selection, highlighted headers, cancel and enter beside the formula bar, sheet tab arrows and a tab splitter.
+- A new Home screen with a greeting, Start from a file, recent workbooks as thumbnails or a list, and new workbook presets.
+- Preferences (Ctrl+,) gather Excel's Options: general, formulas, data, proofing, save, language, accessibility, advanced, Customize Ribbon, Quick Access Toolbar, add-ins and the Trust Center with macro settings, trusted locations and an external content switch. Keys and tokens go to the system password store when one is available.
+- VBA macros: a Visual Basic Editor (Alt+F11) with Project Explorer, code windows, Properties, Immediate, Locals, Watches, breakpoints and stepping; a Macros dialog (Alt+F8); Record Macro writes VBA; form controls; events and VBA functions in cells. .xlsm files keep their VBA project, open it in the editor and save edits back into vbaProject.bin. Macros are off until you enable them, as in Excel.
+- The Data Model: tables, relationships, calculated columns, measures, hierarchies and KPIs in a Data Model window; the seven CUBE functions over it; PivotTables from the model and Convert to Formulas.
+- Stocks and Currencies data types with cards, Insert Data and field formulas (=A2.Price, FIELDVALUE); GOOGLEFINANCE and STOCKHISTORY from a market data provider you choose with your own key, and free ECB exchange rates. 438 functions.
+
 ## 0.36.0 · 2026-10-22
 
 - Start a workbook by pasting comma or tab separated text or an HTML table, or by dropping a PDF with tables. Check Spelling (F7) with a bundled English word list and your own dictionary.

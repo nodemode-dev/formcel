@@ -7,11 +7,12 @@ Licensed under the Apache License, Version 2.0. See `LICENSE`.
 
 ## Code from the form family
 
-FormCel ports code from two sibling repositories by the same owner, both Apache-2.0:
+FormCel ports code from three sibling repositories by the same owner, all Apache-2.0:
 
 | Source | Version | What FormCel uses |
 | --- | --- | --- |
-| formdeck (nodemode-ai/formdeck) | 0.23.0 | the pre-paint theme profiles in `frontend/index.html`, the Vite proxy layout, the script suite shape; later the home screen, ribbon, command catalogue, terminal dock, sharing and MCP router |
+| formvis (nodemode-ai/formvis) | 1.96.4 | from 0.37.0: the splash and reveal (`src-tauri/src/reveal.rs`, `frontend/public/splash.html`, `revealApp` in `frontend/src/ui/desktop.ts`), macOS traffic lights and title (`src-tauri/src/traffic_lights.rs`), the packaged engine folder (`src-tauri/src/packaged.rs`, `setup/freeze_backend`, `backend/engine_main.py`), caption buttons and title tools (`frontend/src/ui/titlebar.ts`), the Preferences dialog layout and prefs store (`frontend/src/ui/settings.ts`, `prefs.ts`), the Home screen and file browser (`frontend/src/ui/home.ts`, `home-files.ts`), menus (`menubar.ts`, `native-menu.ts`, `src-tauri/src/text_edit.rs`), the status bar and jobs list (`statusbar.ts`, `jobs-list.ts`) and their styles |
+| formdeck (nodemode-ai/formdeck) | 0.23.0, 0.27.1 | the pre-paint theme profiles in `frontend/index.html`, the Vite proxy layout, the script suite shape; later the home screen, command catalogue, terminal dock, sharing and MCP router; from 0.27.1 (in 0.37.0) the ribbon, Quick Access Toolbar, Customize dialogs, key tips, responsive groups, ribbon styles and icon style (`frontend/src/ui/ribbon.ts`, `qat.ts`, `ribbon-customize.ts`, `key-tips.ts`, `responsive.ts`, `icons-ribbon.ts`, `styles/ribbon.css`) |
 | form.md (nodemode-ai/form.md) | 0.46.0 | `backend/app/templates/formmd.json`: the rows of its 14 Data and charts and 14 Example projects templates, exported from `internal/templates` with dates resolved to 2026-10-21 and option ids turned into their names; `backend/app/services/csvio.py`: the separator sniffing of `internal/collection/csv.go`; later: chart kinds and drawing, large-table windowing |
 
 ## Third-party components
@@ -45,4 +46,8 @@ FormCel ports code from two sibling repositories by the same owner, both Apache-
 | hunspell en_US dictionary (SCOWL) | permissive, see `backend/app/dictionaries/LICENSE-en_US.txt` | engine process: spell check word list |
 | ECMA-376 preset table styles (presetTableStyles, taken from Apache POI's copy) | Apache-2.0 for POI's file; the style definitions are from the published ECMA-376 standard | `frontend/src/grid/tablestyledata.ts`: Excel's built-in table style colours |
 | Natural Earth 1:50m and 1:10m admin 1 states and provinces | public domain | `frontend/src/charts/regions.ts` and `regions_more.ts`: regions for the map chart, from naturalearthdata.com |
+| pypdfium2 5.14.0 (with PDFium) | Apache-2.0 or BSD-3-Clause (PDFium BSD-3-Clause) | engine process: page images for the File view's print preview (`backend/app/routers/printpreview.py`) |
+| keyring 25.6.0 | MIT | engine process: keys and tokens in the system password store when one is available (`backend/app/services/secrets` via settings) |
+| @tauri-apps/api 2 | MIT or Apache-2.0 | window, desktop only: native menus, loaded on demand |
+| objc2, objc2-app-kit, objc2-foundation | MIT | desktop shell on macOS only: traffic lights, title and text editing commands |
 | Tesseract OCR (system binary, not bundled) | Apache-2.0 | engine process: Data from picture calls a `tesseract` already installed on the computer, if any (`backend/app/services/ocr.py`) |

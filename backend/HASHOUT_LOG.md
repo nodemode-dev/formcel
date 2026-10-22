@@ -510,3 +510,26 @@ Apps Script runs in a node child of the engine process with its state in the aut
 - logged: v0.36.0 · 2026-10-22
 
 Loaded queries are written to .xlsx as tables of type queryTable with queryTable parts and connections.xml; the query steps are not stored there, so Excel shows the data but cannot re-run the query. Cells whose engine value is the IMAGE marker are written as cached rich values (a local image for data URIs, a web image otherwise) with the _xlfn.IMAGE formula kept. Earlier =PY cells run first in the same namespace so a later cell sees their names. The node runner for custom functions has timers, waits for the first result up to 3 seconds and then exits, so streaming functions return a value in the engine process.
+
+## v0.37.0 entries
+
+### Packaged engine, print preview, settings and secrets
+- refers-to: engine_main.py, routers/printpreview.py, routers/settings_app.py, services/appsettings.py, services/secrets.py
+- kind: explainer
+- logged: v0.37.0 · 2026-10-22
+
+engine_main.py is not named formcel_engine.py because that name would shadow the extension module; it binds a free port and sets config.PORT and FORMCEL_PORT once started, since the OS scheduler reads them. Print preview renders page N of the PDF export with pypdfium2 (now pinned in requirements.txt). Keys and tokens go to keyring when a system store exists, else to the settings file as before. Web functions, GOOGLEFINANCE and STOCKHISTORY return #N/A with a note when Preferences, Trust Center blocks external content.
+
+### VBA project container
+- refers-to: services/vba/mlz.py, cfb.py, project.py, service.py; routers/vba.py
+- kind: explainer
+- logged: v0.37.0 · 2026-10-22
+
+The dir stream's project information and references are kept verbatim on rewrite so references to Office, Excel, MSForms or other libraries survive; a new project writes stdole, Excel and Office references (Excel resolves them by GUID). Modules are written at MODULEOFFSET 0 with a version-independent _VBA_PROJECT and no performance cache, so Excel recompiles from source. A raw chunk is used only when a compressed 4096-byte chunk would not fit. Sheet code names are kept in macros/fc/codenames.json. The compound file writer handles up to 109 FAT sectors (about 7 MB) and raises a clear error beyond that. UserForm designer storage is preserved but not editable; signature streams are neither read nor written.
+
+### Data Model and data types in files
+- refers-to: services/xlsx/datamodel.py, services/xlsx/datatypes.py, services/xlsx/writer.py, services/quotes/*, routers/quotes.py
+- kind: explainer
+- logged: v0.37.0 · 2026-10-22
+
+The model is stored as lines in the .fcel document. In .xlsx, CUBE formulas get cached values, connections.xml gains ThisWorkbookDataModel and the definition goes into a customXml item; Excel sees formulas and values but not a refreshable model. Writer finishing order is now calc, pivots, app, review and objects, slicers, queries, model, data types, chart sheets. Data type cells are written as display text and plain formulas with a formcel/datatypes.json part (Excel's richData is not written); field formulas use _xlfn.FIELDVALUE. Quote providers (Stooq, Alpha Vantage, Finnhub) need the user's key and ECB rates are free; settings live under "quotes" in settings.json and keys never enter a workbook.

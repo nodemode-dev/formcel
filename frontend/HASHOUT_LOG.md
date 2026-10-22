@@ -608,3 +608,40 @@ The query editor keeps a history stack for undo and redo and asks the engine pro
 - logged: v0.36.0 · 2026-10-22
 
 Partial-range Insert and Delete Cells from scripts go through the engine's shiftcells tool so formulas, formats and merges move; charts added by a script are stored before later sheet operations, and recorded charts keep their place through setPosition. Regions of 230 more countries are a lazy chunk (regions_more.ts) loaded only when a map needs them; tiny regions keep real outlines. Host cells are resolved again after custom function names register, so cached errors from before a reload go away. Selecting table cells while typing a formula writes structured references (point mode).
+
+## v0.37.0 entries
+
+### Window chrome: title row, menus, status bar, File view, Home
+- refers-to: src/ui/desktop.ts, titlebar.ts, shell.ts, menubar.ts, menudefs.ts, native-menu.ts, shellcmds.ts, statusbar.ts, jobs.ts, jobs-list.ts, shell-mount.ts, sheetchrome.ts, backstage.ts, home.ts, home-files.ts, thumb.ts
+- kind: explainer
+- logged: v0.37.0 · 2026-10-22
+
+The page calls Tauri through window.__TAURI_INTERNALS__.invoke for the title and reveal; only the native menu imports @tauri-apps/api, dynamically, so the web build never loads it at start. App.ready resolves after the first route and the Home list fetch, so the window is revealed with Home painted. --bar-h is 38 px. The menu bar sits in the title row's left group; menus are data (menudefs.ts) and an item whose command is not registered shows disabled, never hidden. Commands have optional enabled() and checked(), read when a menu opens; the native menu refreshes them 150 ms after pointer, key and focus events. The bottom is Excel's order: one .fc-bottom with the sheet bar (tab arrows, tabs, add, splitter, horizontal scroll) above the status bar, which holds the only zoom slider. Status bar stats read the selection's values after an 80 ms debounce and drop stale runs. Page Layout view reuses the Page Break Preview overlay; there is no margins canvas yet. The File view (backstage.ts) is a host interface in app.ts (current, settle, openWorkbook, create, importFile, page, setPage, closed) under --z-scrim so its modals open above it. Only the File view registers file.open (Ctrl+O opens its Open page, as in Excel); a second registration from the shell threw at start and was removed in the merge. Rows and columns default to 20 and 64 px; the theme body face Inter is drawn as Aptos Narrow at 11 pt until the engine theme default changes, and the ribbon font box shows that face. Show Home at launch (View menu) and Preferences, Startup are the same prefs.startScreen.
+
+### Ribbon, Quick Access Toolbar, key tips
+- refers-to: src/ui/ribbon.ts, ribbon-tabs.ts, ribbon-host.ts, ribbon-mount.ts, rb-dom.ts, rb-menu.ts, rb-state.ts, rb-icons.ts, icons-ribbon.ts, qat.ts, key-tips.ts, ribbon-customize.ts, responsive.ts
+- kind: explainer
+- logged: v0.37.0 · 2026-10-22
+
+Ported from formdeck 0.27.1 with fd- renamed rb- and tokens mapped. Items are cmd, act, split, menu or slot; a menu button may carry cmdId so it still answers to data-cmd. The ribbon runs commands itself (the old toolbar click handler is gone, so nothing runs twice). ribbonButton(cmd) returns a button-like facade so older app.ts code that asked the toolbar for a button keeps one path; anchorRect(cmd) anchors popups to the visible ribbon button. Space is reserved with --rb-h and --rb-qat-h so collapsing or simplifying never moves the grid. The after-command hook refocuses the grid unless focus is inside #overlay-root, a ribbon menu or a modal; before the merge fix it stole focus from overlay popups such as the shape gallery, whose Escape then never fired. Preferences, Customize Ribbon and Quick Access Toolbar read live summaries through setLayoutSummary. Ribbon icons live in icons-ribbon.ts and are spread into icons.ts.
+
+### Preferences and Trust Center
+- refers-to: src/ui/settings.ts, prefs.ts, entry.ts, dialog.ts, controls.ts, settings-engine.ts, apply.ts; src/vba/trust.ts
+- kind: explainer
+- logged: v0.37.0 · 2026-10-22
+
+Prefs live in formcel.options with a change event; index.html's pre-paint script reads accent, density, reduced motion and the formula and status bar switches from it so the first frame is right. Macro security has one home: prefs.macroPolicy (disable, notify, signed, enable). vba/trust.ts maps it to the editor's four levels and keeps only the trusted documents list; signed blocks everything because signatures are not verified yet.
+
+### VBA: editor and runtime
+- refers-to: src/vba/*, src/vbalang/*, src/automation/index.ts, styles/vba.css
+- kind: explainer
+- logged: v0.37.0 · 2026-10-22
+
+vba/runtime.ts returns the language runtime registered by automation through vbalang/bridge, else a stub that explains macros can be edited but not run. The runtime runs on the main thread with periodic yields so its ops go through the same undo path as ExcelScript; WorksheetFunction and Evaluate call the engine's eval tool, so no rule lives in the window. Empty is undefined, Nothing null, Null a sentinel. UDF range arguments become virtual hidden sheets. The editor is a transparent textarea over a highlighted layer patched per line; Locals, Watches and Properties rebuild their small tables only when their content key changes. Form controls live in the workbook's automation settings and are not written into .xlsm drawing parts. Alt+F11 is captured at document level; some systems still claim it. Names shown to the user say FormCel, not Excel.
+
+### Data Model, CUBE, data types
+- refers-to: src/ui/datamodel.ts, styles/datamodel.css; src/datatypes/*, grid/typemarks.ts, styles/datatypes.css
+- kind: explainer
+- logged: v0.37.0 · 2026-10-22
+
+The Data Model window talks to the engine through one command channel (model.run, model.lines, model.load). Data type cells carry a payload drawn by typemarks.ts with an icon pad in the cell; the card, selector and Insert Data are DOM patched in place. Refresh all data also refreshes data types. Provider errors come back as #N/A with a note through the refusal banner.
