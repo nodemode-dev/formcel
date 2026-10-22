@@ -44,5 +44,5 @@ FormCel ports code from two sibling repositories by the same owner, both Apache-
 | TypeScript 5.9.3 (npm alias typescript5) | Apache-2.0 | window: type checking in the Office Scripts editor, loaded on demand in a worker |
 | hunspell en_US dictionary (SCOWL) | permissive, see `backend/app/dictionaries/LICENSE-en_US.txt` | engine process: spell check word list |
 | ECMA-376 preset table styles (presetTableStyles, taken from Apache POI's copy) | Apache-2.0 for POI's file; the style definitions are from the published ECMA-376 standard | `frontend/src/grid/tablestyledata.ts`: Excel's built-in table style colours |
-| Natural Earth 1:50m admin 1 states and provinces | public domain | `frontend/src/charts/regions.ts`: regions for the map chart, from naturalearthdata.com |
+| Natural Earth 1:50m and 1:10m admin 1 states and provinces | public domain | `frontend/src/charts/regions.ts` and `regions_more.ts`: regions for the map chart, from naturalearthdata.com |
 | Tesseract OCR (system binary, not bundled) | Apache-2.0 | engine process: Data from picture calls a `tesseract` already installed on the computer, if any (`backend/app/services/ocr.py`) |
