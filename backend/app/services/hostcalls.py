@@ -1,6 +1,6 @@
 import re
 
-from . import aiclient, offline_ai, ranges, webdata
+from . import aiclient, appsettings, offline_ai, ranges, webdata
 
 ERRORS = {"#VALUE!", "#N/A", "#DIV/0!", "#NUM!", "#NULL!", "#NAME?", "#REF!"}
 NUM = re.compile(r"^[+-]?(\d+(\.\d*)?|\.\d+)([eE][+-]?\d+)?$")
@@ -248,6 +248,8 @@ def resolve(key: str, books, fresh: bool = False, auto: dict | None = None, wid:
                     return error("#NAME?"), str(e)
                 except jsfn.JsError as e:
                     return error(e.code if e.code in ERRORS else "#VALUE!"), f"{name}: {e}"
+        if name in ("WEBSERVICE", "IMPORTDATA", "IMPORTXML", "IMPORTHTML", "IMPORTFEED") and not appsettings.external_allowed():
+            return error("#N/A"), "External content is blocked in Preferences, Trust Center."
         if name == "WEBSERVICE":
             need(args, 1)
             url = text_arg(args[0])

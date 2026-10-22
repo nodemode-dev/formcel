@@ -102,11 +102,13 @@ def write(values: list[tuple[int, int, str]], delimiter: str) -> str:
     return out.getvalue()
 
 
-def cells(data: bytes, name: str, delimiter: str | None, text_cols: set[int]) -> tuple[list[tuple[int, int, str]], dict]:
+def cells(data: bytes, name: str, delimiter: str | None, text_cols: set[int], max_rows: int = 0) -> tuple[list[tuple[int, int, str]], dict]:
     text, enc = decode(data)
     d = BY_NAME.get(delimiter or "") or sniff(text, name)
     out = []
-    for r, rec in enumerate(rows_of(text, d)):
+    rows = rows_of(text, d)
+    cut = max_rows if 0 < max_rows < len(rows) else 0
+    for r, rec in enumerate(rows[:cut] if cut else rows):
         for c, v in enumerate(rec):
             if v == "":
                 continue
@@ -114,4 +116,4 @@ def cells(data: bytes, name: str, delimiter: str | None, text_cols: set[int]) ->
                 out.append((r, c, v if reads_as_text(v) else "'" + v))
             else:
                 out.append((r, c, v))
-    return out, {"delimiter": DELIMITERS[d], "encoding": enc}
+    return out, {"delimiter": DELIMITERS[d], "encoding": enc, "cut": cut, "rows": len(rows)}

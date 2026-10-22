@@ -415,14 +415,16 @@ class Store:
         return {**b.meta(), "notes": notes}
 
     @neutral
-    def import_csv(self, data: bytes, title: str, delimiter: str | None, text_cols: set[int]) -> dict:
+    def import_csv(self, data: bytes, title: str, delimiter: str | None, text_cols: set[int], max_rows: int = 0) -> dict:
         from . import csvio
 
-        cells, info = csvio.cells(data, title, delimiter, text_cols)
+        cells, info = csvio.cells(data, title, delimiter, text_cols, max_rows)
         eng = formcel_engine.Workbook()
         eng.rename_sheet(0, (title.rpartition(".")[0] or title)[:31] or "Sheet1")
         eng.load(cells, 0)
         notes = []
+        if info["cut"]:
+            notes.append(f"only the first {info['cut']:,} of {info['rows']:,} rows were read, as set in Preferences")
         if any(v.startswith("'=") for _, _, v in cells):
             notes.append(f"{sum(1 for _, _, v in cells if v.startswith(chr(39) + '='))} formulas kept as text")
         if info["encoding"] != "UTF-8":
@@ -481,6 +483,12 @@ class Store:
         with b.lock:
             b.fit_views()
             return b.title, ods.write(b.engine, b.views)[0]
+
+    def export_fcel(self, wid: str) -> tuple[str, bytes]:
+        b = self._load(wid)
+        with b.lock:
+            self._write(b)
+            return b.title, self.path(wid).read_bytes()
 
     def export_xlsx(self, wid: str, macros: bool = False) -> tuple[str, bytes]:
         from . import xlsx
