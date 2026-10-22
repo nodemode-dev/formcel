@@ -1,7 +1,7 @@
 import type { Changed } from '../engine';
 import { a1 } from '../grid/a1';
 import type { Grid } from '../grid/grid';
-import { registerCommand } from '../ui/commands';
+import { registerCommand, runCommand } from '../ui/commands';
 import { icon } from '../ui/icons';
 import { api, el } from './dom';
 import { HostCalls } from './hostCalls';
@@ -160,6 +160,7 @@ export class Automation {
     cmd('data.refresh', 'Refresh all data', 'Fetch web functions and run every saved query again.', async () => {
       await this.calls.drain(true, true);
       for (const q of this.auto.queries) await this.data.refresh(q.id);
+      await runCommand('datatypes.refresh-all');
     });
   }
 

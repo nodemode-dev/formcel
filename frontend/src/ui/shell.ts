@@ -61,7 +61,7 @@ export function mountShell(root: HTMLElement): ShellParts {
         <span class="fc-tool-sep" aria-hidden="true"></span>
         ${tool('file.download', 'download', 'Download as .xlsx, .csv, .pdf or .html')}
         <span class="fc-tool-sep" aria-hidden="true"></span>
-        ${tool('automate.panel', 'script', 'Scripts: write, record and run automation')}${tool('assistant.panel', 'assistant', 'Assistant')}${tool('data.panel', 'dataConn', 'Data connections and queries')}
+        ${tool('automate.panel', 'script', 'Scripts: write, record and run automation')}${tool('assistant.panel', 'assistant', 'Assistant')}${tool('data.panel', 'dataConn', 'Data connections and queries')}${tool('datatypes.stocks', 'stocks', 'Stocks: link selected tickers to market data')}${tool('datatypes.currencies', 'currencies', 'Currencies: link selected pairs to exchange rates')}
       </div>
       <div class="fc-formula">
         <input class="fc-namebox" aria-label="Name Box" spellcheck="false" autocomplete="off">

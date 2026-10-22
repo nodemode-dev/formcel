@@ -35,6 +35,7 @@ import { cleanPage, layoutOf, PageSetupDialog, type PageSetup } from './ui/pages
 import { NumberFormatDialog } from './ui/numberformat';
 import { hasHtmlTable } from './grid/pastedata';
 import { SpellCheck } from './ui/spell';
+import { DataTypes } from './datatypes';
 
 const LOCALES: [string, string][] = [['en-US', 'English (United States)'], ['en-GB', 'English (United Kingdom)'], ['de-DE', 'Deutsch (Deutschland)'], ['fr-FR', 'Francais (France)'], ['ja-JP', 'Japanese (Japan)'], ['es-ES', 'Espanol (Espana)'], ['it-IT', 'Italiano (Italia)'], ['pt-BR', 'Portugues (Brasil)'], ['nl-NL', 'Nederlands (Nederland)'], ['sv-SE', 'Svenska (Sverige)'], ['pl-PL', 'Polski (Polska)'], ['ru-RU', 'Russian (Russia)'], ['zh-CN', 'Chinese (China)'], ['ko-KR', 'Korean (Korea)']];
 
@@ -303,6 +304,7 @@ export class App {
     },
   });
   private readonly auto: Automation;
+  private dtypes!: DataTypes;
   private tools!: DataTools;
   private calc!: Calc;
   private grouped = new Set<number>();
@@ -343,10 +345,12 @@ export class App {
         this.formatBar();
         this.linkChip();
         this.collab?.active();
+        this.dtypes?.selected();
         this.pivotFollow(range);
         this.calc?.active();
       },
       onError: (message) => this.collab?.refused(message),
+      onTypeIcon: (row, col) => void this.dtypes?.openCard(row, col),
       onHover: (row, col, x, y) => this.collab?.hover(row, col, x, y),
       onHistory: (undo, redo) => {
         this.button('edit.undo').disabled = !undo;
@@ -640,7 +644,9 @@ export class App {
       this.collab.refused(e.reason.message);
     });
     this.auto = new Automation({ grid: this.grid, book: () => this.open?.book ?? -1, id: () => this.open?.id ?? '', sheets: () => this.open?.sheets ?? [], title: () => this.open?.title ?? '', status: (t, e) => this.status(t, e), addSheet: (n) => this.addSheetNamed(n), renameSheet: async (i, n) => this.renameSheetTo(i, n), deleteSheet: (i) => this.deleteSheet(i), showSheet: (i) => this.showSheet(i), script: this.scriptHost() });
+    this.dtypes = new DataTypes({ grid: this.grid, book: () => this.open?.book ?? -1, id: () => this.open?.id ?? '', sheets: () => this.open?.sheets ?? [], status: (t, e) => (e ? this.collab.refused(t) : this.status(t)) });
     this.commands();
+    this.dtypes.commands((id, title, description, changes, run, keys) => registerCommand({ id, title, description, changes, run, keys }));
     this.calc.commands((id, title, description, changes, run, keys) => registerCommand({ id, title, description, changes, run, keys }));
     this.collab.commands((id, title, description, changes, run, keys) => registerCommand({ id, title, description, changes, run, keys }));
     bindShortcuts(this.shortcuts, () => !!this.open);
@@ -1046,6 +1052,7 @@ export class App {
     const p = this.p;
     this.open = null;
     this.collab.detach();
+    this.dtypes.closed();
     this.auto.closed();
     this.grouped.clear();
     this.tools.resetTemp();
@@ -2366,6 +2373,7 @@ export class App {
     this.auto.opened(id, (doc as unknown as { automation?: Parameters<Automation['opened']>[1] }).automation);
     if (setHash && location.hash !== `#w-${id}`) location.hash = `w-${id}`;
     this.collab.attach(id, book, doc.sheets, doc.collab, doc.protection);
+    void this.dtypes.opened();
     void waiting(id).then((n) => {
       if (!n) return;
       this.status('Offline changes waiting to be sent');
