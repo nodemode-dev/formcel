@@ -199,6 +199,14 @@ def export_text(wid: str, kind: str, sheet: int = 0, scope: str = "sheet") -> Re
         fname = "".join(ch for ch in title if ch not in '\\/:*?"<>|').strip() or "Workbook"
         media = "application/vnd.ms-excel.sheet.macroEnabled.12" if kind == "xlsm" else "application/vnd.oasis.opendocument.spreadsheet"
         return Response(data, media_type=media, headers={"Content-Disposition": f"attachment; filename*=UTF-8''{quote(fname)}.{kind}"})
+    if kind == "fcel":
+        try:
+            title = store().properties(wid)["title"]
+            data = store().path(wid).read_bytes()
+        except (KeyError, FileNotFoundError):
+            raise missing(wid)
+        fname = "".join(ch for ch in title if ch not in '\\/:*?"<>|').strip() or "Workbook"
+        return Response(data, media_type="application/vnd.formcel+zip", headers={"Content-Disposition": f"attachment; filename*=UTF-8''{quote(fname)}.fcel"})
     if kind not in ("csv", "tsv"):
         raise HTTPException(404, f"FormCel does not export .{kind}.")
     try:
