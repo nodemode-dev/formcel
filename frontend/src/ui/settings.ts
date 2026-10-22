@@ -443,11 +443,11 @@ export class SettingsDialog extends Dialog {
   }
 
   private trust(): HTMLElement[] {
-    const policy = selectRow('Macro settings for VBA', [['disable', 'Disable all macros without notification'], ['notify', 'Disable all macros with notification'], ['enable', 'Enable all macros (not recommended)']], (v) => this.change({ macroPolicy: v as Prefs['macroPolicy'] }));
+    const policy = selectRow('Macro settings for VBA', [['disable', 'Disable all macros without notification'], ['notify', 'Disable all macros with notification'], ['signed', 'Disable all macros except digitally signed macros'], ['enable', 'Enable all macros (not recommended)']], (v) => this.change({ macroPolicy: v as Prefs['macroPolicy'] }));
     const policyNote = note('', true);
     const paintPolicy = (): void => {
       const p = prefs().macroPolicy;
-      setText(policyNote, p === 'disable' ? 'Macros in workbooks you open never run, and FormCel does not mention them.' : p === 'notify' ? 'Macros in workbooks you open do not run until you enable them; FormCel tells you when a workbook has some.' : 'Macros in every workbook you open are allowed to run. Use this only for files you trust.');
+      setText(policyNote, p === 'disable' ? 'Macros in workbooks you open never run, and FormCel does not mention them.' : p === 'notify' ? 'Macros in workbooks you open do not run until you enable them; FormCel tells you when a workbook has some.' : p === 'signed' ? 'FormCel cannot verify signatures yet, so every macro stays off and the message bar shows without Enable Content.' : 'Macros in every workbook you open are allowed to run. Use this only for files you trust.');
     };
     const list = el('div', 'fc-auto-list');
     const path = textRow('Folder', () => undefined, { placeholder: '/home/me/Documents/Trusted' });

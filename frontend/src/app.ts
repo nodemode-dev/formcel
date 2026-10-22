@@ -44,6 +44,7 @@ import { macroPolicy, pivotFlags, prefs } from './ui/prefs';
 import { userName } from './ui/collab';
 import { mountSheetChrome } from './ui/sheetchrome';
 import { Backstage } from './ui/backstage';
+import { Vba } from './vba';
 
 const LOCALES: [string, string][] = [['en-US', 'English (United States)'], ['en-GB', 'English (United Kingdom)'], ['de-DE', 'Deutsch (Deutschland)'], ['fr-FR', 'Francais (France)'], ['ja-JP', 'Japanese (Japan)'], ['es-ES', 'Espanol (Espana)'], ['it-IT', 'Italiano (Italia)'], ['pt-BR', 'Portugues (Brasil)'], ['nl-NL', 'Nederlands (Nederland)'], ['sv-SE', 'Svenska (Sverige)'], ['pl-PL', 'Polski (Polska)'], ['ru-RU', 'Russian (Russia)'], ['zh-CN', 'Chinese (China)'], ['ko-KR', 'Korean (Korea)']];
 
@@ -313,6 +314,7 @@ export class App {
     },
   });
   private readonly auto: Automation;
+  private readonly vba: Vba;
   private tools!: DataTools;
   private calc!: Calc;
   private grouped = new Set<number>();
@@ -564,8 +566,8 @@ export class App {
       say: (t) => this.status(t),
       timeline: (sheet) => this.open?.views[sheet]?.timeline ?? null,
       saveTimeline: (sheet, view) => this.patchView(sheet, { timeline: view }),
-      scripts: () => this.auto.scriptList(),
-      runScript: (id, name) => this.auto.runForObject(id, name),
+      scripts: () => [...this.auto.scriptList(), ...this.vba.macroList()],
+      runScript: (id, name) => (this.vba.runById(id) ? undefined : this.auto.runForObject(id, name)),
     });
     document.addEventListener('fc-ai-pivot', (e) => {
       const d = (e as CustomEvent<{ src: string; layout: string }>).detail;
@@ -679,6 +681,7 @@ export class App {
       this.collab.refused(e.reason.message);
     });
     this.auto = new Automation({ grid: this.grid, book: () => this.open?.book ?? -1, id: () => this.open?.id ?? '', sheets: () => this.open?.sheets ?? [], title: () => this.open?.title ?? '', status: (t, e) => this.status(t, e), addSheet: (n) => this.addSheetNamed(n), renameSheet: async (i, n) => this.renameSheetTo(i, n), deleteSheet: (i) => this.deleteSheet(i), showSheet: (i) => this.showSheet(i), script: this.scriptHost() });
+    this.vba = new Vba({ grid: this.grid, id: () => this.open?.id ?? '', book: () => this.open?.book ?? -1, title: () => this.open?.title ?? '', sheets: () => this.open?.sheets ?? [], status: (t, e) => this.status(t, e), settings: { get: (k) => this.auto.setting(k), set: (k, v) => this.auto.setSetting(k, v) }, toolbar: this.p.toolbar });
     this.commands();
     installSettings({
       grid: this.grid,
@@ -763,7 +766,7 @@ export class App {
     cmd('file.download-default', 'Save a copy', 'Save a copy of this workbook in the format chosen in Preferences, Save: FormCel Workbook (.fcel) or Excel Workbook (.xlsx).', false, () => this.download(prefs().defaultFormat));
     cmd('file.download-fcel', 'Download as .fcel', 'Save a copy of this workbook as a FormCel Workbook, with every feature kept.', false, () => this.download('fcel'));
     cmd('file.download-xlsx', 'Download as .xlsx', 'Save a copy of this workbook as an Excel workbook in your downloads.', false, () => this.download('xlsx'));
-    cmd('file.download-xlsm', 'Download as .xlsm', 'Save a copy as an Excel macro-enabled workbook with the macros the file was opened with. FormCel keeps macros but does not run them.', false, () => this.download('xlsm'));
+    cmd('file.download-xlsm', 'Download as .xlsm', 'Save a copy as an Excel macro-enabled workbook with its macros, including the ones edited in the Visual Basic Editor.', false, () => this.download('xlsm'));
     cmd('file.download-xlsx-password', 'Download as .xlsx with a password', 'Save a copy as an Excel workbook that asks for a password to open.', false, () => this.downloadLocked());
     cmd('file.download-pdf', 'Download sheet as PDF', 'Save this sheet as a PDF, laid out with its Page Setup (Letter portrait unless you changed it).', false, () => this.download('pdf'));
     cmd('file.download-pdf-all', 'Download workbook as PDF', 'Save every sheet in one PDF, each laid out with its own Page Setup.', false, () => this.download('pdf-all'));
@@ -1156,6 +1159,7 @@ export class App {
     this.open = null;
     this.collab.detach();
     this.auto.closed();
+    this.vba.closed();
     this.grouped.clear();
     this.tools.resetTemp();
     this.tools.syncSlicers();
@@ -2477,6 +2481,7 @@ export class App {
     document.dispatchEvent(new Event('fc-viewmode'));
     this.grid.setBreakView(null);
     const p = this.p;
+    this.vba.preopen(id, !!doc.macros);
     p.home.hidden = true;
     p.sheet.hidden = false;
     this.statusBar?.touch();
@@ -2504,6 +2509,7 @@ export class App {
     this.grid.focus();
     window.setTimeout(() => void this.tools.openLink((i) => this.showSheet(i)), 300);
     this.auto.opened(id, (doc as unknown as { automation?: Parameters<Automation['opened']>[1] }).automation);
+    void this.vba.opened(id);
     if (setHash && location.hash !== `#w-${id}`) location.hash = `w-${id}`;
     this.collab.attach(id, book, doc.sheets, doc.collab, doc.protection);
     void waiting(id).then((n) => {

@@ -10,6 +10,7 @@ from openpyxl.worksheet.properties import Outline
 
 from ...version import VERSION
 from .. import page
+from ..vba import service as vba_service
 from .arrays import write_out
 from .autofilter import filter_out
 from .calcio import calc_out, finish as calc_finish
@@ -195,6 +196,7 @@ def write(eng, views: list[dict], vba: dict[str, bytes] | None = None, objects: 
             for name, blob in vba.items():
                 arc.writestr(name, blob)
         wb.vba_archive = zipfile.ZipFile(io.BytesIO(buf.getvalue()))
+        vba_service.apply_codenames(wb, vba)
     out = io.BytesIO()
     wb.save(out)
     data = calc_finish(out.getvalue(), dynamic, ignored)

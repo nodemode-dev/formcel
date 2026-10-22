@@ -82,6 +82,8 @@ export function mountShell(root: HTMLElement): ShellParts {
         ${tool('file.download', 'download', 'Download as .xlsx, .csv, .pdf or .html')}
         <span class="fc-tool-sep" aria-hidden="true"></span>
         ${tool('automate.panel', 'script', 'Scripts: write, record and run automation')}${tool('assistant.panel', 'assistant', 'Assistant')}${tool('data.panel', 'dataConn', 'Data connections and queries')}
+        <span class="fc-tool-sep" aria-hidden="true"></span>
+        ${tool('vba.editor', 'vbe', 'Visual Basic Editor (Alt+F11)')}${tool('vba.macros', 'macro', 'Macros (Alt+F8)')}${tool('vba.record', 'recordDot', 'Record Macro')}${tool('vba.controls', 'ctlButton', 'Insert form controls')}
       </div>
       <div class="fc-formula">
         <div class="fc-namewrap"><input class="fc-namebox" aria-label="Name Box" spellcheck="false" autocomplete="off"><span class="fc-name-caret" aria-hidden="true">${icon('chevronDown')}</span></div>

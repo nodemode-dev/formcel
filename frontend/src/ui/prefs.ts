@@ -1,5 +1,5 @@
 export type EnterDir = 'down' | 'right' | 'up' | 'left';
-export type MacroPolicy = 'disable' | 'notify' | 'enable';
+export type MacroPolicy = 'disable' | 'notify' | 'signed' | 'enable';
 
 export interface Prefs {
   startScreen: boolean;
@@ -153,7 +153,7 @@ function clean(r: Record<string, unknown>): Prefs {
     showStatusBar: flag(r.showStatusBar, d.showStatusBar),
     gridlines: flag(r.gridlines, d.gridlines),
     gridColor: r.gridColor === '' ? '' : hex(r.gridColor, ''),
-    macroPolicy: pick(r.macroPolicy, ['disable', 'notify', 'enable'], d.macroPolicy),
+    macroPolicy: pick(r.macroPolicy, ['disable', 'notify', 'signed', 'enable'], d.macroPolicy),
     trusted: Array.isArray(r.trusted) ? r.trusted.filter((x): x is string => typeof x === 'string' && x.length > 0).map((x) => x.slice(0, 300)).slice(0, 200) : [],
   };
 }

@@ -65,7 +65,7 @@ export class MoreTab {
       <div class="fc-auto-row"><button type="button" class="fc-btn" data-a="gen">Create token</button><button type="button" class="fc-btn" data-a="off">Remove token</button><a class="fc-btn" href="/api/docs" target="_blank" rel="noopener">OpenAPI page</a></div>
       <p class="fc-auto-hint fc-api-msg" aria-live="polite"></p>
       <h3 class="fc-auto-h">Limits</h3>
-      <p class="fc-auto-hint">VBA macros are kept in .xlsm files and never run. Scripts and macros run in the window; only custom functions (when a JavaScript runtime is installed), =PY cells, =IMPORTRANGE and scheduled queries run in the engine process while the window is closed.</p>`;
+      <p class="fc-auto-hint">VBA macros are kept in .xlsm files and run from the Visual Basic Editor or the Macros list (Alt+F11, Alt+F8). Scripts and macros run in the window; only custom functions (when a JavaScript runtime is installed), =PY cells, =IMPORTRANGE and scheduled queries run in the engine process while the window is closed.</p>`;
     const q = <T extends HTMLElement>(s: string) => this.root.querySelector<T>(s)!;
     this.ext = q('[data-l="ext"]');
     this.btns = q('[data-l="btns"]');

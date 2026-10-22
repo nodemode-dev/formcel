@@ -7,6 +7,7 @@ from pydantic import BaseModel, Field
 from ..services import aiclient, extbooks, extpkg, hostcalls, offline_ai, pquery, ranges, webdata
 from ..services.store import store
 from . import automation_x, queries, restapi, settings_app, settings_x
+from . import vba as vba_router
 
 router = APIRouter(prefix="/api")
 
@@ -277,5 +278,6 @@ router.include_router(automation_x.router)
 router.include_router(queries.router)
 router.include_router(settings_x.router)
 router.include_router(settings_app.router)
+router.include_router(vba_router.router)
 v1.include_router(automation_x.v1)
 v1.include_router(restapi.v1)
