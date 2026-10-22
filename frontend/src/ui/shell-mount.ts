@@ -44,7 +44,11 @@ function aboutDialog(): () => void {
       modal = makeModal('About FormCel');
       const m = modal;
       const lines = el('div', 'fc-about');
-      lines.append(el('p', 'fc-about-name', `FormCel ${VERSION}`), el('p', '', 'A local-first spreadsheet from NodeMode, in the form family. Your workbooks stay on this computer.'));
+      const logo = el('img', 'fc-about-logo') as HTMLImageElement;
+      logo.src = '/icons/logo-128.png';
+      logo.width = logo.height = 72;
+      logo.alt = '';
+      lines.append(logo, el('p', 'fc-about-name', `FormCel ${VERSION}`), el('p', '', 'A local-first spreadsheet from NodeMode, in the form family. Your workbooks stay on this computer.'));
       versions = el('p', 'fc-about-versions', '');
       lines.appendChild(versions);
       lines.appendChild(el('p', 'fc-about-licence', 'Apache-2.0 licence.'));

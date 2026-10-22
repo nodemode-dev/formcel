@@ -1,3 +1,5 @@
+<img src="assets/formcel_icon.png" alt="FormCel" width="128" height="128">
+
 # FormCel
 
 Spreadsheets in the form family. An open alternative to Excel and Google Sheets, built so that Claude Code, Codex or Cursor can read and edit a live workbook while you watch.

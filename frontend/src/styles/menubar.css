@@ -87,5 +87,6 @@
 }
 
 .fc-about { display: grid; gap: var(--space-2); }
+.fc-about .fc-about-logo { display: block; width: 72px; height: 72px; }
 .fc-about p { margin: 0; color: var(--text-secondary); }
 .fc-about .fc-about-name { color: var(--text-primary); font-size: var(--text-lg); font-weight: 600; }

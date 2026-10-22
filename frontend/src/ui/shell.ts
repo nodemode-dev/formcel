@@ -30,7 +30,7 @@ export function mountShell(root: HTMLElement): ShellParts {
   root.innerHTML = `
     <header class="fc-titlebar">
       <div class="fc-tb-left">
-        <div class="fc-brand" title="FormCel v${VERSION}">${icon('sheet')}<span>FormCel</span></div>
+        <div class="fc-brand" title="FormCel v${VERSION}"><img class="fc-brand-logo" src="/icons/logo-64.png" width="20" height="20" alt="" draggable="false"><span>FormCel</span></div>
         <button type="button" class="fc-tool fc-home-btn" title="Home" aria-label="Home" hidden>${icon('home')}</button>
         <nav class="fc-menubar" aria-label="Main menu"></nav>
       </div>

@@ -95,7 +95,7 @@ export class Home {
     const formats = ['XLSX', 'XLSM', 'XLS', 'ODS', 'CSV', 'TSV', 'HTML', 'PDF'].map((f) => `<span class="fc-home-format">${f}</span>`).join('');
     root.innerHTML = `
       <nav class="fc-home-nav" aria-label="Home">
-        <div class="fc-home-brand">FormCel <span>by NodeMode</span></div>
+        <div class="fc-home-brand"><img class="fc-home-logo" src="/icons/logo-64.png" width="24" height="24" alt="" draggable="false">FormCel <span>by NodeMode</span></div>
         ${navItem('start', 'home', 'Start')}${navItem('recent', 'clock', 'Recent')}${navItem('templates', 'template', 'Templates')}${navItem('trash', 'trash', 'Trash')}
         <div class="fc-home-nav-sep"></div>
         <div class="fc-home-nav-title">Create</div>

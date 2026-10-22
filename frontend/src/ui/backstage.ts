@@ -1106,7 +1106,7 @@ export class Backstage {
     th.append(ic2, t2);
     const about = h('div', 'fc-bs-block');
     const ic3 = h('div', 'fc-bs-bicon');
-    ic3.insertAdjacentHTML('afterbegin', icon('bsInfo'));
+    ic3.insertAdjacentHTML('afterbegin', '<img src="/icons/logo-64.png" width="32" height="32" alt="" draggable="false">');
     const t3 = h('div', 'fc-bs-btext');
     t3.append(h('h3', '', 'About FormCel'), h('p', '', `FormCel ${VERSION}. A local-first spreadsheet in the form family.`));
     about.append(ic3, t3);
