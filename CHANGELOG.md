@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.38.0 · 2026-10-22
+
+- Every font: the font box lists 28 bundled typefaces and every font installed on the computer (through the desktop app, the browser, or the engine process for Safari and Firefox), grouped as Theme, Recently used, Bundled, This computer and In this workbook, each name in its own face, with type-to-filter. Cells, shapes and charts draw the real face; fonts a file names but this computer lacks are kept and listed. PDF export embeds the fonts the sheet uses.
+- 76 templates in seven categories. 40 are new, ten each in Finance, Sales & marketing, Operations and Personal & education, and the 14 Data & charts templates are rebuilt. Each is a finished workbook: a data sheet with real rows, a dashboard of formulas over it, and charts, sparklines and conditional formatting tied to its cells, so editing the data changes the dashboard. Chart kinds include combo with a secondary axis, waterfall, funnel, Pareto, treemap, sunburst, filled maps, Gantt timeline, org chart, box and whisker, histogram, scatter and bubble with trendlines, gauge, scorecard, radar and 100% stacked.
+- The template gallery draws each template's first chart from its own data on the card, names its visuals, and opens a preview with larger charts before you create it.
+- Charts: a separate number format for the secondary axis, reference lines on scatter charts linked to cells, error bars from a column, a Gantt timeline with one row per task coloured by phase, bubbles no longer clipped, room for tilted labels.
+- The real FormCel logo everywhere: title bar, Home, About, File view, favicon, web app icons and the desktop app icons.
+- Fixed: the REST API, Apps Script, Python cells, Power Query from a range and links to other workbooks read formatted numbers as text (for example "$912,200"); they now get numbers.
+
 ## 0.37.1 · 2026-10-22
 
 - Fixed: on macOS 27 the engine process stopped at start with "mis-aligned LINKEDIT string pool", so the window showed no workbooks or templates. Release builds of the engine and the desktop app are no longer stripped (rustc before 1.98 strips Mac libraries in a way macOS 27 refuses). `./formcel_oc_install` now rebuilds the engine every time and stops with a clear message if it cannot load it.

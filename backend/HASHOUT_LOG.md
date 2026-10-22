@@ -542,3 +542,26 @@ The model is stored as lines in the .fcel document. In .xlsx, CUBE formulas get 
 - logged: v0.37.1 · 2026-10-22
 
 oc_install reinstalls the engine module every run (--force-reinstall --no-deps, so a broken wheel from an earlier toolchain never survives) and imports it at once; if the import fails it prints the error and stops, rather than letting ./formcel start a server that dies at import with the window showing an empty Home. requirements_macos.txt must carry every pin in requirements.txt; 0.37.0 missed pypdfium2 and keyring there. PyInstaller for the desktop build lives in requirements_desktop*.txt, installed by setup/install_desktop or build_app.bat only.
+
+## v0.38.0 entries
+
+### Document templates
+- refers-to: services/templates.py (doc_of, doc_sheet, visuals), services/store.py (create_from_doc), templates/gallery_*.json, routers/tplthumb.py
+- kind: explainer
+- logged: v0.38.0 · 2026-10-22
+
+A template entry may carry "doc", a whole workbook document in the .fcel format; create writes it as a new workbook and opens it through the normal loader, so charts, sparklines, tables, validations, views and formats arrive exactly as authored and stay tied to their ranges. gallery_*.json files load after the four older sources and replace entries with the same id (the 14 Data & charts templates replace their formmd.json rows this way). They are generated data, made by building each workbook for real and exporting it with the sidecar's tools/templates/to_template.py; the sidecar's check_templates.py creates every template and fails on any error value or empty chart series (76 templates, 225 charts, 135 sparklines, 0 failing at release). The thumb endpoint builds a template in an engine and returns chart specs with their ranges as raw matrices.
+
+### Range values are numbers
+- refers-to: services/ranges.py (grid, DATE_LIKE)
+- kind: explainer
+- logged: v0.38.0 · 2026-10-22
+
+grid(..., "typed") used to parse the displayed text, so a number with a currency or percent format came back as text. It now takes numbers from the engine's raw_values and keeps the displayed text only for cells whose display looks like a date or time (a digit, a separator / - :, a digit; or a month name), which is what Apps Script, Python cells and Power Query expected before.
+
+### Fonts on the engine process
+- refers-to: services/sysfonts.py, routers/fonts.py, services/pdf_fonts.py, services/pdf.py
+- kind: explainer
+- logged: v0.38.0 · 2026-10-22
+
+GET /api/fonts scans the operating system's font folders (fc-list on Linux when present) and reads family names from the name tables of TTF, OTF and TTC files with a small reader, cached; no new dependency. PDF export embeds a used font when its file is found, else a bundled face converted from WOFF to TTF, else falls back to Helvetica and names the missing fonts in the X-FormCel-Note header, which the File view shows.

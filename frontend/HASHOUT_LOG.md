@@ -645,3 +645,26 @@ vba/runtime.ts returns the language runtime registered by automation through vba
 - logged: v0.37.0 · 2026-10-22
 
 The Data Model window talks to the engine through one command channel (model.run, model.lines, model.load). Data type cells carry a payload drawn by typemarks.ts with an icon pad in the cell; the card, selector and Insert Data are DOM patched in place. Refresh all data also refreshes data types. Provider errors come back as #N/A with a note through the refusal banner.
+
+## v0.38.0 entries
+
+### Fonts
+- refers-to: src/grid/fonts.ts, src/ui/fontpicker.ts, grid/grid.ts (faceOf, usedFonts, fontsArrived), ui/ribbon-host.ts, ui/settings.ts, charts/shapeui.ts, charts/svg.ts and layer.ts (setChartFont)
+- kind: explainer
+- logged: v0.38.0 · 2026-10-22
+
+fonts.ts is formdeck's module: 28 @fontsource families loaded on demand (ensureFont), and the computer's families from the Tauri system_fonts command, else window.queryLocalFonts, else GET /api/fonts. The picker groups Theme, Recently used, Bundled, This computer and In this workbook (names cells use that are not installed, italic, kept in the file); a typed unknown name is applied anyway, as in Excel. The grid asks for each face it draws; when faces arrive it repaints once in a batch and refits auto-height rows, so a face never flickers in. Until a bundled face is cached the first frame uses the fallback. Charts draw in the workbook's body font. There is no Format Cells font tab or theme font editor yet, so the picker is on the ribbon, Preferences and shapes.
+
+### Template gallery
+- refers-to: src/ui/tplgallery.ts, styles/tplgallery.css, ui/home.ts, ui/backstage.ts
+- kind: explainer
+- logged: v0.38.0 · 2026-10-22
+
+A card whose template lists visuals fetches /api/templates/{id}/thumb when it scrolls into view, gets chart specs and each range's raw matrix, and builds series with charts/data.ts, so the series rule lives in one place. The card's height is fixed and the chart fades in. Timelines, org charts, scatter and bubble charts read poorly at card size, so the card shows the first other chart; the preview (click) shows up to four. Double-click creates.
+
+### Chart additions made while writing templates
+- refers-to: src/charts/types.ts (y2Fmt, refs, error bar kind column), charts/svg.ts
+- kind: explainer
+- logged: v0.38.0 · 2026-10-22
+
+y2Fmt formats the secondary axis of a combo chart and sizes its label column. refs draws reference lines on scatter and bubble charts at a number or at a cell's value. Error bars of kind column take each point's amount from a column of the chart's range. None of these three is written to .xlsx yet (the charts are; these details are dropped). A Gantt-mode timeline whose first column is a label draws one row per task coloured by that label. Bubble domains are padded 12 percent. Columns and lines whose category labels will tilt reserve 26 px at the bottom (two builders made the same fix; one was kept at merge).

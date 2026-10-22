@@ -736,3 +736,12 @@ CUBE arguments are normalised to MDX text in the evaluator and parsed on the mod
 - logged: v0.37.1 · 2026-10-22
 
 Cargo's release profile strips debug info by default. On macOS rustc before 1.98 does that with LLVM's Mach-O objcopy, which leaves __LINKEDIT entries 4-byte aligned, and macOS 27's dyld refuses to load the result ("mis-aligned LINKEDIT string pool"). That stopped formcel_engine.abi3.so from importing on the owner's Mac (rustc 1.97), so the engine process died at start. strip = false keeps the libraries and the desktop app loadable on every toolchain; they are somewhat larger. formvis made the same choice for its desktop build. On Linux the difference shows as .debug_ sections kept in the module (6 against 0).
+
+## v0.38.0 entries
+
+### read_raw and raw_values
+- refers-to: crates/formcel-core/src/lib.rs (Workbook::read_raw), crates/formcel-py/src/lib.rs (raw_values)
+- kind: explainer
+- logged: v0.38.0 · 2026-10-22
+
+read applies each cell's number format (shown); read_raw returns the stored result unformatted. The Python module's raw_values gives (row, col, kind, text) with kind n, b, e or t, so the engine process can hand out numbers without parsing display text.
