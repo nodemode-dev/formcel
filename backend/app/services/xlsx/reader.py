@@ -12,6 +12,7 @@ from .. import page
 from .arrays import members
 from .autofilter import filter_in
 from .calcio import calc_in, render, scan
+from .datamodel import read as model_in
 from .cf import rules_in
 from .chartex import scan as scan_charts
 from .chartsheets import sheets_in
@@ -252,4 +253,11 @@ def read(data: bytes) -> dict:
         if i < len(sheets):
             sheets[i]["cells"].append((r, c, v))
     settings = render(calc_in(wb), [e for s in scanned for e in s["ignored"]])
-    return {"calc": settings, "externals": lines_in(wb), "sheets": sheets, "names": names, "nameNotes": name_notes, "tables": tables, "pivots": pivots, "whatif": what, "theme": theme_in(wb.loaded_theme), "cellStyles": custom, "vba": vba, "props": read_props(wb, data), "protection": book_in(wb), "notes": [f"{n} {what}" for what, n in sorted(notes.items())]}
+    model, conns, excel_model = model_in(data)
+    if conns and not model:
+        model = [f"X\t{n}\t{t}" for n, t in conns]
+    if model:
+        notes["Data Model brought in from FormCel's own definition part (Excel's Data Model is a binary part FormCel cannot write, so Excel sees the CUBE formulas and cached values but not a model it can refresh; OLAP connection definitions are kept but untested)"] += 1
+    if excel_model:
+        notes["Excel Data Model not read (it is a binary part FormCel cannot open), so CUBE formulas against it show errors until the model is rebuilt in FormCel"] += 1
+    return {"model": model, "calc": settings, "externals": lines_in(wb), "sheets": sheets, "names": names, "nameNotes": name_notes, "tables": tables, "pivots": pivots, "whatif": what, "theme": theme_in(wb.loaded_theme), "cellStyles": custom, "vba": vba, "props": read_props(wb, data), "protection": book_in(wb), "notes": [f"{n} {what}" for what, n in sorted(notes.items())]}
