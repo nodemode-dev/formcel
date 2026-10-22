@@ -423,9 +423,9 @@ export class Interp {
     const info: PauseInfo = { ...this.locOf(f, s.line), reason, stack: this.stackInfo(s.line), locals: this.localsOf(f) };
     this.paused = f;
     this.stepMode = 'run';
-    this.emit({ type: 'pause', info });
     const act = await new Promise<StepAction>((res) => {
       this.resumeFn = res;
+      this.emit({ type: 'pause', info });
     });
     if (act === 'stop') {
       this.aborted = true;
@@ -893,6 +893,7 @@ export class Interp {
         if (sig.t === 'exit' && sig.what === 'for') break;
         return sig;
       }
+      await this.endMark(s.endLine, f);
       const next = toNum(ref.v) + step;
       ref.v = t.name === 'variant' ? next : coerce(next, t);
       if (step === 0 && (++this.ticks & 0xfff) === 0) await this.yieldNow();
@@ -912,8 +913,13 @@ export class Interp {
         if (sig.t === 'exit' && sig.what === 'for') break;
         return sig;
       }
+      await this.endMark(s.endLine, f);
     }
     return undefined;
+  }
+
+  private async endMark(line: number, f: Frame): Promise<void> {
+    if (this.stepMode !== 'run' || this.breakpoints.size) await this.checkpoint({ k: 'nop', line }, f);
   }
 
   async enumerate(coll: any): Promise<unknown[]> {
@@ -950,6 +956,7 @@ export class Interp {
         if (sig.t === 'exit' && sig.what === 'do') break;
         return sig;
       }
+      await this.endMark(s.endLine, f);
       if (s.cond && s.post) {
         const c = toBool(await this.val(await this.eval(s.cond, f)));
         if (s.until ? c : !c) break;

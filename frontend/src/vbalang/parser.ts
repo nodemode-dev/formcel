@@ -464,8 +464,9 @@ export class Parser {
         this.p++;
         const cond = this.expr();
         const body = this.block(() => this.word() === 'wend');
+        const endLine = this.t.line;
         this.expectWord('wend');
-        return { k: 'do', cond, until: false, post: false, body, line };
+        return { k: 'do', cond, until: false, post: false, body, line, endLine };
       }
       case 'with': {
         this.p++;
@@ -771,9 +772,10 @@ export class Parser {
       this.expectWord('in');
       const coll = this.expr();
       const body = this.block(() => this.word() === 'next');
+      const endLine = this.t.line;
       this.expectWord('next');
       if (!this.atEol()) this.postfix();
-      return { k: 'foreach', v, coll, body, line };
+      return { k: 'foreach', v, coll, body, line, endLine };
     }
     const v = this.postfix();
     this.expectOp('=');
@@ -786,6 +788,7 @@ export class Parser {
       step = this.expr();
     }
     const body = this.block(() => this.word() === 'next');
+    const endLine = this.t.line;
     this.expectWord('next');
     if (!this.atEol()) {
       this.postfix();
@@ -794,7 +797,7 @@ export class Parser {
         this.postfix();
       }
     }
-    return { k: 'for', v, from, to, step, body, line };
+    return { k: 'for', v, from, to, step, body, line, endLine };
   }
 
   private parseDo(): Stmt {
@@ -809,6 +812,7 @@ export class Parser {
       cond = this.expr();
     }
     const body = this.block(() => this.word() === 'loop');
+    const endLine = this.t.line;
     this.expectWord('loop');
     if (!cond && (this.word() === 'while' || this.word() === 'until')) {
       until = this.word() === 'until';
@@ -816,7 +820,7 @@ export class Parser {
       cond = this.expr();
       post = true;
     }
-    return { k: 'do', cond, until, post, body, line };
+    return { k: 'do', cond, until, post, body, line, endLine };
   }
 
   parseExpressionOnly(): Expr {

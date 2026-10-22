@@ -39,9 +39,9 @@ export type Stmt = { line: number } & (
   | { k: 'call'; e: Expr }
   | { k: 'if'; cond: Expr; then: Stmt[]; elifs: { cond: Expr; body: Stmt[] }[]; else: Stmt[] | null }
   | { k: 'select'; e: Expr; cases: { tests: CaseTest[] | null; body: Stmt[] }[] }
-  | { k: 'for'; v: Expr; from: Expr; to: Expr; step: Expr | null; body: Stmt[] }
-  | { k: 'foreach'; v: Expr; coll: Expr; body: Stmt[] }
-  | { k: 'do'; cond: Expr | null; until: boolean; post: boolean; body: Stmt[] }
+  | { k: 'for'; v: Expr; from: Expr; to: Expr; step: Expr | null; body: Stmt[]; endLine: number }
+  | { k: 'foreach'; v: Expr; coll: Expr; body: Stmt[]; endLine: number }
+  | { k: 'do'; cond: Expr | null; until: boolean; post: boolean; body: Stmt[]; endLine: number }
   | { k: 'with'; o: Expr; body: Stmt[] }
   | { k: 'goto'; label: string }
   | { k: 'gosub'; label: string }

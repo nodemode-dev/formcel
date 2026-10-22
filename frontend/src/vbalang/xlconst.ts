@@ -1,4 +1,9 @@
 export const XL: Record<string, number | string | boolean> = {
+  xlcellvalue: 1,
+  xldefault: -4143,
+  xlwait: 2,
+  xlibeam: 3,
+  xlnorthwestarrow: 1,
   xlup: -4162,
   xldown: -4121,
   xltoleft: -4159,
