@@ -147,7 +147,8 @@ export function paintThumb(box: HTMLElement, t: GalleryTemplate): void {
   const load = (): void => {
     void fetchThumb(id).then((d) => {
       if (box.dataset.id !== id) return;
-      const first = d?.charts[0];
+      const dense = new Set(['timeline', 'org', 'scatter', 'bubble']);
+      const first = d?.charts.find((c) => !dense.has(c.spec.type)) ?? d?.charts[0];
       if (!first) {
         box.dataset.visual = '';
         drawThumb(grid, t.preview);

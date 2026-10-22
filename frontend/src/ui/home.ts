@@ -128,7 +128,7 @@ export class Home {
           <div class="fc-home-slot" data-slot="recent"></div>
         </div>
         <div class="fc-home-page" data-page="templates" hidden>
-          <div class="fc-home-head"><div><h1>Templates</h1><p class="fc-home-sub">Spreadsheets made for FormCel, and the data templates and example projects from form.md, each with real rows.</p></div></div>
+          <div class="fc-home-head"><div><h1>Templates</h1><p class="fc-home-sub">Finished workbooks with real data: dashboards, charts and formulas that update as you edit the data sheets.</p></div></div>
           <div class="fc-tpl-tools"><div class="fc-chips" role="tablist" aria-label="Categories"></div><label class="fc-search">${icon('search')}<input type="search" class="fc-tpl-q" placeholder="Search templates" aria-label="Search templates"></label></div>
           <div class="fc-cards fc-tpl-all"></div><p class="fc-none fc-tpl-none" hidden>No template matches that search.</p>
         </div>
