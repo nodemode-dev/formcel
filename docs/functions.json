@@ -1516,6 +1516,148 @@
    }
   },
   {
+   "name": "CUBEKPIMEMBER",
+   "args": [
+    "connection",
+    "kpi_name",
+    "kpi_property",
+    "[caption]"
+   ],
+   "summary": "A key performance indicator of the workbook's Data Model: its value, goal, status or trend.",
+   "category": "Cube",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/cubekpimember-function"
+   },
+   "sheets": {
+    "listed": false,
+    "category": null,
+    "source": null
+   }
+  },
+  {
+   "name": "CUBEMEMBER",
+   "args": [
+    "connection",
+    "member_expression",
+    "[caption]"
+   ],
+   "summary": "A member or tuple of the Data Model, checked to exist.",
+   "category": "Cube",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/cubemember-function"
+   },
+   "sheets": {
+    "listed": false,
+    "category": null,
+    "source": null
+   }
+  },
+  {
+   "name": "CUBEMEMBERPROPERTY",
+   "args": [
+    "connection",
+    "member_expression",
+    "property"
+   ],
+   "summary": "A property of a Data Model member, such as a column of the row it stands for.",
+   "category": "Cube",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/cubememberproperty-function"
+   },
+   "sheets": {
+    "listed": false,
+    "category": null,
+    "source": null
+   }
+  },
+  {
+   "name": "CUBERANKEDMEMBER",
+   "args": [
+    "connection",
+    "set_expression",
+    "rank",
+    "[caption]"
+   ],
+   "summary": "The member at a given rank in a set, such as the top seller.",
+   "category": "Cube",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/cuberankedmember-function"
+   },
+   "sheets": {
+    "listed": false,
+    "category": null,
+    "source": null
+   }
+  },
+  {
+   "name": "CUBESET",
+   "args": [
+    "connection",
+    "set_expression",
+    "[caption]",
+    "[sort_order]",
+    "[sort_by]"
+   ],
+   "summary": "A set of members or tuples from the Data Model, optionally sorted, for the other CUBE functions.",
+   "category": "Cube",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/cubeset-function"
+   },
+   "sheets": {
+    "listed": false,
+    "category": null,
+    "source": null
+   }
+  },
+  {
+   "name": "CUBESETCOUNT",
+   "args": [
+    "set"
+   ],
+   "summary": "How many items a CUBESET holds.",
+   "category": "Cube",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/cubesetcount-function"
+   },
+   "sheets": {
+    "listed": false,
+    "category": null,
+    "source": null
+   }
+  },
+  {
+   "name": "CUBEVALUE",
+   "args": [
+    "connection",
+    "[member_expression1]",
+    "[member_expression2], ..."
+   ],
+   "summary": "An aggregated value from the Data Model, such as a measure filtered by members.",
+   "category": "Cube",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-US/excel/functions/cubevalue-function"
+   },
+   "sheets": {
+    "listed": false,
+    "category": null,
+    "source": null
+   }
+  },
+  {
    "name": "CUMIPMT",
    "args": [
     "rate",
@@ -2586,6 +2728,25 @@
    }
   },
   {
+   "name": "FIELDVALUE",
+   "args": [
+    "value",
+    "field_name"
+   ],
+   "summary": "One field of a linked data type cell, such as the price of a stock.",
+   "category": null,
+   "excel": {
+    "listed": false,
+    "since": null,
+    "source": "https://support.microsoft.com/en-us/excel/functions/fieldvalue-function"
+   },
+   "sheets": {
+    "listed": false,
+    "category": null,
+    "source": null
+   }
+  },
+  {
    "name": "FILTER",
    "args": [
     "array",
@@ -3136,6 +3297,28 @@
    "sheets": {
     "listed": true,
     "category": "Engineering",
+    "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "GOOGLEFINANCE",
+   "args": [
+    "ticker",
+    "[attribute]",
+    "[start_date]",
+    "[end_date|num_days]",
+    "[interval]"
+   ],
+   "summary": "Current or historical securities and currency data from the market data provider set in FormCel.",
+   "category": "Google",
+   "excel": {
+    "listed": false,
+    "since": null,
+    "source": null
+   },
+   "sheets": {
+    "listed": true,
+    "category": "Google",
     "source": "https://support.google.com/docs/table/25273?hl=en"
    }
   },
@@ -6960,6 +7143,34 @@
     "listed": true,
     "category": "Statistical",
     "source": "https://support.google.com/docs/table/25273?hl=en"
+   }
+  },
+  {
+   "name": "STOCKHISTORY",
+   "args": [
+    "stock",
+    "start_date",
+    "[end_date]",
+    "[interval]",
+    "[headers]",
+    "[property0]",
+    "[property1]",
+    "[property2]",
+    "[property3]",
+    "[property4]",
+    "[property5]"
+   ],
+   "summary": "A spilled table of historical prices for a stock or currency pair over a date range.",
+   "category": "Information",
+   "excel": {
+    "listed": true,
+    "since": null,
+    "source": "https://support.microsoft.com/en-US/excel/functions/stockhistory-function"
+   },
+   "sheets": {
+    "listed": false,
+    "category": null,
+    "source": null
    }
   },
   {
