@@ -143,9 +143,10 @@ export function fitTrend(t: Trend, xs: number[], ys: number[]): Fit | null {
   return { at: (x) => a * x ** c[1], eq: `y = ${num(a)}x^${num(c[1])}`, r2: rsq(LY, LX.map((x) => c[0] + c[1] * x)), line: null };
 }
 
-export function errAmount(e: ErrBars, y: number, all: number[]): [number, number] {
+export function errAmount(e: ErrBars, y: number, all: number[], k = -1): [number, number] {
   let amt = e.value;
-  if (e.kind === 'percent') amt = (Math.abs(y) * e.value) / 100;
+  if (e.kind === 'column') amt = Math.abs(e.ext?.[k] ?? 0);
+  else if (e.kind === 'percent') amt = (Math.abs(y) * e.value) / 100;
   else if (e.kind === 'stdev' || e.kind === 'sterr') {
     const n = all.length;
     const mean = all.reduce((a, b) => a + b, 0) / (n || 1);

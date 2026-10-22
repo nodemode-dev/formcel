@@ -49,20 +49,27 @@ export interface Trend {
   r2?: boolean;
 }
 
-export type ErrKind = 'fixed' | 'percent' | 'stdev' | 'sterr';
+export type ErrKind = 'fixed' | 'percent' | 'stdev' | 'sterr' | 'column';
 
 export const ERR_KINDS: [ErrKind, string][] = [
-  ['fixed', 'Fixed value'], ['percent', 'Percentage'], ['stdev', 'Standard deviation'], ['sterr', 'Standard error'],
+  ['fixed', 'Fixed value'], ['percent', 'Percentage'], ['stdev', 'Standard deviation'], ['sterr', 'Standard error'], ['column', 'From a column (value is its series number, from 0)'],
 ];
 
 export interface ErrBars {
   series: number;
   kind: ErrKind;
   value: number;
+  ext?: (number | null)[];
   dir: 'both' | 'plus' | 'minus';
 }
 
 export type Legend = 'right' | 'bottom' | 'top' | 'left' | 'none';
+
+export interface RefLine {
+  axis: 'x' | 'y';
+  at: number | string;
+  label?: string;
+}
 
 export interface ChartSpec {
   type: ChartType;
@@ -79,6 +86,7 @@ export interface ChartSpec {
   colors?: string[];
   xFmt?: string;
   yFmt?: string;
+  y2Fmt?: string;
   labelFmt?: string;
   logY?: boolean;
   grid?: boolean;
@@ -96,6 +104,7 @@ export interface ChartSpec {
   bins?: number;
   totals?: number[];
   bands?: [number, number];
+  refs?: RefLine[];
 }
 
 export type ObjectKind = 'chart' | 'picture' | 'shape' | 'text' | 'spark' | 'range';

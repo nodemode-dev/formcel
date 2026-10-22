@@ -155,6 +155,12 @@ function legendItems(spec: ChartSpec, d: ChartData): string[] {
 export function renderChart(spec: ChartSpec, d: ChartData, w: number, h: number): string {
   w = Math.max(60, Math.round(w));
   h = Math.max(40, Math.round(h));
+  const src = (spec.errBars ?? []).find((e) => e.kind === 'column');
+  if (src && d.series[src.value]) {
+    const ext = d.series[src.value].vals;
+    d = { ...d, series: d.series.filter((_, i) => i !== src.value) };
+    spec = { ...spec, errBars: spec.errBars!.map((e) => (e.kind === 'column' ? { ...e, ext } : e)) };
+  }
   const parts: string[] = [];
   COLORS = spec.colors;
   if (spec.fill) parts.push(`<rect x="0" y="0" width="${w}" height="${h}" fill="${esc(spec.fill)}"/>`);
@@ -270,9 +276,9 @@ function cartesian(spec: ChartSpec, d0: ChartData, b: Box): string {
       for (const { s, i } of list) {
         const eb = (spec.errBars ?? []).find((e) => e.series === i || e.series < 0);
         const all = eb ? s.vals.filter(num) : [];
-        for (const v of s.vals) {
+        for (const [k, v] of s.vals.entries()) {
           if (!num(v) || (spec.logY && v <= 0)) continue;
-          const [dn, up] = eb ? errAmount(eb, v, all) : [0, 0];
+          const [dn, up] = eb ? errAmount(eb, v, all, k) : [0, 0];
           lo = Math.min(lo, v - dn);
           hi = Math.max(hi, v + up);
         }
@@ -292,7 +298,7 @@ function cartesian(spec: ChartSpec, d0: ChartData, b: Box): string {
   const sscale = sec.length ? linear(range(sec, false, false)) : null;
   const catLabels = d.cats.map((c, k) => ellipsis(spec.xFmt && num(d.catNums[k]) ? shown(spec.xFmt, d.catNums[k] as number) : c, 14));
   const lw = horizontal ? Math.min(100, labelWidth(catLabels)) : labelWidth(tickText);
-  const rw = sscale ? labelWidth(sscale.ticks.map(fmt)) : 0;
+  const rw = sscale ? labelWidth(sscale.ticks.map((v) => shown(spec.y2Fmt ?? spec.yFmt, v))) : 0;
   const padL = lw + (spec.yTitle ? 18 : 0);
   const padB = (horizontal ? labelWidth(tickText) * 0 + 22 : 22) + (spec.xTitle ? 18 : 0);
   const p: Box = { x: b.x + padL, y: b.y + 6, w: Math.max(10, b.w - padL - rw - 6), h: Math.max(10, b.h - padB - 6) };
@@ -306,7 +312,7 @@ function cartesian(spec: ChartSpec, d0: ChartData, b: Box): string {
     if (horizontal) out.push(gridOn ? line(q, p.y, q, p.y + p.h) : '', text(q, p.y + p.h + 14, tickText[i]));
     else out.push(gridOn ? line(p.x, q, p.x + p.w, q) : '', text(p.x - 6, q, tickText[i], { anchor: 'end', base: 'central' }));
   });
-  if (sscale) sscale.ticks.forEach((v) => out.push(text(p.x + p.w + 6, toSec(v), shown(spec.yFmt, v), { anchor: 'start', base: 'central' })));
+  if (sscale) sscale.ticks.forEach((v) => out.push(text(p.x + p.w + 6, toSec(v), shown(spec.y2Fmt ?? spec.yFmt, v), { anchor: 'start', base: 'central' })));
   const band = (horizontal ? p.h : p.w) / Math.max(1, n);
   if (spec.xGrid) for (let k = 0; k <= n; k++) out.push(horizontal ? line(p.x, p.y + band * k, p.x + p.w, p.y + band * k) : line(p.x + band * k, p.y, p.x + band * k, p.y + p.h));
   const every = Math.max(1, Math.ceil((n * (horizontal ? 14 : 62)) / (horizontal ? p.h : p.w)));
@@ -347,7 +353,7 @@ function cartesian(spec: ChartSpec, d0: ChartData, b: Box): string {
         if (spec.labels) out.push(horizontal ? text(Math.max(a, z) + 3, c + bw / 2, shown(spec.labelFmt, v), { anchor: 'start', base: 'central', size: 10 }) : text(c + bw / 2, lo2 - 3, shown(spec.labelFmt, v), { size: 10 }));
         const eb = stacked ? undefined : (spec.errBars ?? []).find((e) => e.series === i || e.series < 0);
         if (eb) {
-          const [dn, up] = errAmount(eb, v, s.vals.filter(num));
+          const [dn, up] = errAmount(eb, v, s.vals.filter(num), k);
           const m = c + bw / 2;
           const hi2 = toPx(v + up);
           const lo3 = toPx(v - dn);
@@ -424,6 +430,15 @@ function xy(spec: ChartSpec, d: ChartData, b: Box): string {
   yr.ticks.forEach((v) => out.push(gridOn ? line(p.x, py(v), p.x + p.w, py(v)) : '', text(p.x - 6, py(v), shown(spec.yFmt, v), { anchor: 'end', base: 'central' })));
   xr.ticks.forEach((v) => out.push(gridOn || spec.xGrid ? line(px(v), p.y, px(v), p.y + p.h) : '', text(px(v), p.y + p.h + 14, shown(spec.xFmt, v))));
   out.push(line(p.x, p.y + p.h, p.x + p.w, p.y + p.h, 'stroke-opacity="0.4"'), line(p.x, p.y, p.x, p.y + p.h, 'stroke-opacity="0.4"'));
+  for (const rf of spec.refs ?? []) {
+    const v = Number(rf.at);
+    if (!Number.isFinite(v)) continue;
+    const vertical = rf.axis === 'x';
+    if (v < (vertical ? xr.min : yr.min) || v > (vertical ? xr.max : yr.max)) continue;
+    const q = vertical ? px(v) : py(v);
+    out.push(vertical ? line(q, p.y, q, p.y + p.h, 'stroke-opacity="0.7" stroke-dasharray="6 4"', 1.5) : line(p.x, q, p.x + p.w, q, 'stroke-opacity="0.7" stroke-dasharray="6 4"', 1.5));
+    if (rf.label) out.push(vertical ? text(q + 4, p.y + 10, rf.label, { size: 10, anchor: 'start', op: 0.8 }) : text(p.x + p.w - 4, q - 6, rf.label, { size: 10, anchor: 'end', op: 0.8 }));
+  }
   const sizes = bubble && d.series[1] ? d.series[1].vals : [];
   const maxSize = Math.max(1, ...sizes.filter(num));
   ys.forEach((s, i) => {

@@ -62,6 +62,7 @@ export class ChartEditor {
 <details class="fc-chart-sec"><summary>Axes and gridlines</summary>
 <div class="fc-chart-row">
 <label class="fc-fmt-label">Value axis number format<input class="fc-fmt-input" data-k="yFmt" spellcheck="false" autocomplete="off" placeholder="General"></label>
+<label class="fc-fmt-label">Secondary axis number format<input class="fc-fmt-input" data-k="y2Fmt" spellcheck="false" autocomplete="off" placeholder="Same as value axis"></label>
 <label class="fc-fmt-label">Horizontal axis number format<input class="fc-fmt-input" data-k="xFmt" spellcheck="false" autocomplete="off" placeholder="General"></label>
 </div>
 <label class="fc-sort-check"><input type="checkbox" data-k="logY"> Logarithmic value axis</label>
@@ -158,6 +159,7 @@ export class ChartEditor {
     const text = (k: string) => v(k).trim() || undefined;
     const check = (k: string) => this.q<HTMLInputElement>(k).checked;
     s.yFmt = text('yFmt');
+    s.y2Fmt = text('y2Fmt');
     s.xFmt = text('xFmt');
     s.labelFmt = text('labelFmt');
     s.fill = text('fill');
@@ -196,6 +198,7 @@ export class ChartEditor {
     set('range', spec.pivot ? `PivotTable ${spec.pivot}` : spec.range);
     this.q<HTMLInputElement>('range').disabled = !!spec.pivot;
     set('yFmt', spec.yFmt ?? '');
+    set('y2Fmt', spec.y2Fmt ?? '');
     set('xFmt', spec.xFmt ?? '');
     set('labelFmt', spec.labelFmt ?? '');
     set('fill', spec.fill ?? '');
