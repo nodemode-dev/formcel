@@ -35,6 +35,8 @@ import { cleanPage, layoutOf, PageSetupDialog, type PageSetup } from './ui/pages
 import { NumberFormatDialog } from './ui/numberformat';
 import { hasHtmlTable } from './grid/pastedata';
 import { SpellCheck } from './ui/spell';
+import { mountSheetChrome } from './ui/sheetchrome';
+import { Backstage } from './ui/backstage';
 
 const LOCALES: [string, string][] = [['en-US', 'English (United States)'], ['en-GB', 'English (United Kingdom)'], ['de-DE', 'Deutsch (Deutschland)'], ['fr-FR', 'Francais (France)'], ['ja-JP', 'Japanese (Japan)'], ['es-ES', 'Espanol (Espana)'], ['it-IT', 'Italiano (Italia)'], ['pt-BR', 'Portugues (Brasil)'], ['nl-NL', 'Nederlands (Nederland)'], ['sv-SE', 'Svenska (Sverige)'], ['pl-PL', 'Polski (Polska)'], ['ru-RU', 'Russian (Russia)'], ['zh-CN', 'Chinese (China)'], ['ko-KR', 'Korean (Korea)']];
 
@@ -246,6 +248,7 @@ async function api<T>(method: string, url: string, body?: unknown): Promise<T> {
 
 export class App {
   private readonly home: Home;
+  private readonly backstage: Backstage;
   private readonly grid: Grid;
   private readonly charts: Charts;
   private readonly audit: Audit;
@@ -317,6 +320,25 @@ export class App {
       trash: (id) => void this.act(() => api('DELETE', `/api/workbooks/${id}`)),
       restore: (id) => void this.act(() => api('POST', `/api/trash/${id}/restore`)),
       purge: (id) => void this.act(() => api('DELETE', `/api/trash/${id}`)),
+    });
+    this.backstage = new Backstage(document.getElementById('app')!, {
+      current: () => (this.open ? { id: this.open.id, title: this.open.title, sheets: this.open.sheets, sheet: this.grid.sheetIndex, macros: this.open.macros } : null),
+      settle: async () => {
+        this.flush();
+        await this.saving;
+      },
+      openWorkbook: (id) => void this.openWorkbook(id),
+      create: (template) => void this.create(template),
+      importFile: (file) => void this.importFile(file),
+      page: (sheet) => this.pageOf(sheet),
+      setPage: async (sheet, page) => {
+        const o = this.open;
+        if (!o) return;
+        o.pages[sheet] = page;
+        await api('PATCH', `/api/workbooks/${o.id}/sheets/${sheet}`, { view: { page } }).catch(() => this.status('Page setup not saved', true));
+        void this.refreshBreaks();
+      },
+      closed: () => this.grid.focus(),
     });
     this.grid = new Grid(p.grid, engine(), -1, {
       onActive: (text, ref, range) => {
@@ -645,6 +667,7 @@ export class App {
     this.collab.commands((id, title, description, changes, run, keys) => registerCommand({ id, title, description, changes, run, keys }));
     bindShortcuts(this.shortcuts, () => !!this.open);
     this.bindChrome();
+    mountSheetChrome(p, { grid: this.grid, extent: async () => (this.open ? engine().extent(this.open.book, this.grid.sheetIndex) : null) });
     window.addEventListener('hashchange', () => void this.route());
     window.addEventListener('beforeunload', () => this.flush());
     void this.route();
@@ -666,6 +689,11 @@ export class App {
     cmd('view.freeze-panes', 'Freeze panes', 'Keep the rows above and the columns left of the active cell visible.', false, () => g.freezeAtActive());
     cmd('view.unfreeze', 'Unfreeze panes', 'Scroll every row and column again.', false, () => g.freeze(0, 0));
     cmd('view.split', 'Split panes', 'Split the sheet above and left of the active cell into panes that scroll on their own, or remove the split. Drag a split bar to move it, double-click it to remove it.', false, () => g.toggleSplit());
+    cmd('file.backstage', 'File', 'Open the File view: Home, New, Open, Info, Save, Save As, Save a Copy, Print, Share, Export, Publish, Close, Account and Options.', false, () => this.backstage.show());
+    cmd('file.info', 'Info', 'Open the File view on Info: properties, protect, inspect, version history and manage workbook.', false, () => this.backstage.show('info'));
+    cmd('file.open', 'Open', 'Open the File view on Open: recent workbooks, the library, or a file from this computer.', false, () => this.backstage.show('open'), 'Mod+O');
+    cmd('file.save-as', 'Save As', 'Open the File view on Save As, with every file type FormCel writes.', false, () => this.backstage.show('saveas'), 'F12');
+    cmd('file.print', 'Print', 'Open the File view on Print with a preview of the pages and the page settings.', false, () => this.backstage.show('print'), 'Mod+P');
     cmd('file.home', 'Home', 'Save and go to the home screen.', false, () => { location.hash = ''; });
     cmd('file.new', 'New blank workbook', 'Create an empty workbook and open it.', true, () => this.create());
     cmd('file.download', 'Download', 'Choose a file format to download this workbook or sheet in.', false, () => this.downloadMenu());
@@ -837,7 +865,7 @@ export class App {
     cmd('format.borders', 'Borders', 'Draw or remove lines around and inside the selection.', true, () => this.borderMenu());
     cmd('format.outline-border', 'Outline border', 'Draw a line around the selection.', true, () => g.borders('outside'), 'Mod+Shift+&');
     cmd('format.no-border', 'No border', 'Remove the borders of the selected cells.', true, () => g.borders('none'), 'Mod+Shift+_');
-    cmd('format.font', 'Font', 'Choose the typeface of the selected cells.', true, () => this.listMenu('format.font', FONTS.map((f) => [f || 'Inter (default)', f ? `ff:${f}` : 'ff:']), g.activeStyle().font ?? ''));
+    cmd('format.font', 'Font', 'Choose the typeface of the selected cells.', true, () => this.listMenu('format.font', FONTS.map((f) => [f || 'Aptos Narrow (default)', f ? `ff:${f}` : 'ff:']), g.activeStyle().font ?? ''));
     cmd('format.size', 'Font size', 'Choose the text size of the selected cells, in points.', true, () => this.listMenu('format.size', SIZES.map((n) => [String(n), n === 10 ? 'sz:' : `sz:${n}`]), String(g.activeStyle().size ?? 10)));
     void api('PUT', '/api/commands', listCommands()).catch(() => undefined);
   }
