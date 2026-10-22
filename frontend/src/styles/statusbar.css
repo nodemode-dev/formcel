@@ -1,5 +1,6 @@
 :root { --status-h: 26px; }
 
+#app, .fc-sheet { grid-template-columns: minmax(0, 1fr); }
 .fc-bottom { display: grid; grid-template-rows: auto auto; min-width: 0; }
 
 .fc-statusbar {
@@ -95,7 +96,13 @@
 .fc-statusbar .fc-zoom .fc-icon { --icon-box: 18px; --icon-size: 14px; }
 .fc-statusbar .fc-zoom-slider { width: 110px; }
 .fc-statusbar .fc-zoom-val { min-width: 40px; text-align: right; }
-.fc-statusbar .fc-calcstat { margin-left: 0; padding-inline: 0; }
+.fc-statusbar > * { order: 2; }
+.fc-statusbar > .fc-st-mode { order: 0; }
+.fc-statusbar > .fc-calcstat { order: 1; margin-left: 0; padding-inline: 0; gap: var(--space-2); }
+.fc-statusbar .fc-calcstat-calc[data-on="0"],
+.fc-statusbar .fc-calcstat-circ[data-on="0"] { display: none; }
+.fc-statusbar .fc-calcstat-circ { width: auto; max-width: 240px; }
+.fc-statusbar .fc-calcstat-calc { height: 20px; min-width: 0; }
 
 .fc-jobs {
   position: fixed;

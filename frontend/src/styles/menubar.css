@@ -10,6 +10,10 @@
 
 .has-native-menus .fc-menubar { display: none; }
 
+@media (max-width: 1100px) {
+  .fc-bar .fc-version, .fc-bar .fc-status, .fc-bar .fc-save { display: none; }
+}
+
 .fc-mb-btn {
   height: 28px;
   padding: 0 var(--space-2);
