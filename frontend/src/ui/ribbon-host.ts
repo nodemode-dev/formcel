@@ -5,6 +5,8 @@ import { engine } from '../engine';
 import { colName } from '../grid/a1';
 import type { BorderKind, Grid } from '../grid/grid';
 import { TABLE_STYLES } from '../grid/tables';
+import { SIZE_PRESETS, stepSize } from '../grid/fonts';
+import { fontPickerOpen, closeFontPicker, openFontPicker } from './fontpicker';
 import { FUNCTIONS } from './autocomplete';
 import type { MenuItem } from './menu';
 import { el, escapeHtml } from './rb-dom';
@@ -26,8 +28,6 @@ export interface HostHooks {
   run(id: string, anchor?: HTMLElement | null): void;
 }
 
-const FONTS = ['', 'Arial', 'Calibri', 'Cambria', 'Courier New', 'Georgia', 'Inter', 'JetBrains Mono', 'Times New Roman', 'Trebuchet MS', 'Verdana'];
-const SIZES = [8, 9, 10, 11, 12, 14, 16, 18, 20, 22, 24, 26, 28, 36, 48, 72];
 const STANDARD = ['#c00000', '#ff0000', '#ffc000', '#ffff00', '#92d050', '#00b050', '#00b0f0', '#0070c0', '#002060', '#7030a0'];
 const NUM_NAMES: [string, string][] = [
   ['', 'General'], ['#,##0.00', 'Number'], ['$#,##0.00_);($#,##0.00)', 'Currency'], ['_($* #,##0.00_);_($* (#,##0.00);_($* "-"??_);_(@_)', 'Accounting'], ['0%', 'Percentage'], ['0.00E+00', 'Scientific'],
@@ -112,18 +112,26 @@ export class RibbonHost {
     ];
   }
 
-  fontMenu(): MItem[] {
-    const cur = this.grid.activeStyle().font ?? '';
-    return FONTS.map((f) => ({ label: f || 'Aptos Narrow (default)', font: f || undefined, checked: f === cur, run: () => this.setFont(f) } as MItem));
-  }
-
   sizeMenu(): MItem[] {
     const cur = this.grid.activeStyle().size ?? 10;
-    return SIZES.map((n) => ({ label: String(n), checked: n === cur, run: () => this.setSize(n) }));
+    return SIZE_PRESETS.map((n) => ({ label: String(n), checked: n === cur, run: () => this.setSize(n) }));
+  }
+
+  fontPicker(anchor: HTMLElement, input?: HTMLInputElement): { filter(q: string): void; pickActive(): boolean; close(): void } {
+    return openFontPicker({
+      anchor,
+      current: this.grid.activeStyle().font ?? '',
+      theme: () => this.grid.look,
+      used: () => this.grid.usedFonts(),
+      defaultLabel: `${this.grid.look.body} (default)`,
+      filterInput: input,
+      onPick: (name) => this.setFont(name),
+    });
   }
 
   setFont(name: string): void {
-    void this.grid.styleSelection(name ? `ff:${name}` : 'ff:').then(() => this.grid.focus());
+    const clean = name.trim().replace(/["\\]/g, '');
+    void this.grid.styleSelection(clean ? `ff:${clean}` : 'ff:').then(() => this.grid.focus());
   }
 
   setSize(n: number): void {
@@ -133,8 +141,7 @@ export class RibbonHost {
 
   stepSize(dir: 1 | -1): void {
     const cur = this.grid.activeStyle().size ?? 10;
-    const next = dir > 0 ? SIZES.find((n) => n > cur) ?? cur : [...SIZES].reverse().find((n) => n < cur) ?? cur;
-    this.setSize(next);
+    this.setSize(stepSize(cur, dir));
   }
 
   palette(kind: 'fc' | 'bg'): Palette {
@@ -464,14 +471,30 @@ export class RibbonHost {
     };
     rbState.on(paint);
     paint();
+    let picker: { filter(q: string): void; pickActive(): boolean; close(): void } | null = null;
+    const showPicker = (): void => {
+      if (!fontPickerOpen()) picker = this.fontPicker(node, input);
+    };
     const commit = (): void => {
       const v = input.value.trim();
-      if (kind === 'font') this.setFont(v === 'Inter (default)' ? '' : v);
-      else this.setSize(Number(v));
+      if (kind === 'font') {
+        if (picker && fontPickerOpen() && picker.pickActive()) return;
+        closeFontPicker();
+        this.setFont(v === 'Inter (default)' || v === `${this.grid.look.body} (default)` ? '' : v);
+      } else this.setSize(Number(v));
     };
+    if (kind === 'font') {
+      input.addEventListener('input', () => { showPicker(); picker?.filter(input.value); });
+      btn.addEventListener('click', () => {
+        if (fontPickerOpen()) { closeFontPicker(); return; }
+        showPicker();
+        input.focus({ preventScroll: true });
+      });
+    }
     input.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); commit(); }
-      else if (e.key === 'Escape') { e.stopPropagation(); input.value = rbState.text.get(id) ?? ''; this.grid.focus(); }
+      else if (e.key === 'Escape') { e.stopPropagation(); closeFontPicker(); input.value = rbState.text.get(id) ?? ''; this.grid.focus(); }
+      else if (kind === 'font' && e.key === 'ArrowDown' && !fontPickerOpen()) { e.preventDefault(); showPicker(); }
     });
     input.addEventListener('focus', () => input.select());
     input.addEventListener('blur', () => paint());

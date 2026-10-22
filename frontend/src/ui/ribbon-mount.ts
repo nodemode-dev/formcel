@@ -108,9 +108,7 @@ export function mountRibbon(root: HTMLElement, grid: Grid, deps: MountDeps): Rib
 
   const slots: Record<string, () => HTMLElement> = {
     font: () => {
-      const n = host.combo('font');
-      n.querySelector('.rb-combo-btn')?.addEventListener('click', () => { rbState.anchor = n; void menus.open(() => host.fontMenu(), n); });
-      return n;
+      return host.combo('font');
     },
     size: () => {
       const n = host.combo('size');

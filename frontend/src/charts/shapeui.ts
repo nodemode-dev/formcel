@@ -1,4 +1,5 @@
 import { actions, el, field, makeModal } from '../ui/modal';
+import { attachFontInput } from '../ui/fontpicker';
 import { DASH_LABELS, SHAPES, SHAPE_GROUPS, gallery, isLine, thumb, canon, type Variant } from './shapes';
 import type { Dash, ShapeSpec } from './types';
 
@@ -135,6 +136,7 @@ export function formatShape(start: ShapeSpec, apply: (s: ShapeSpec) => void): Pr
     font.value = start.font ?? '';
     font.placeholder = 'Default';
     font.spellcheck = false;
+    attachFontInput(font, 'Default', { theme: () => ({ heading: 'Aptos Narrow', body: 'Aptos Narrow' }), used: () => [] });
     const size = numberInput(start.size ?? 11, 1, 400, 1);
     const color = colorInput(start.color || '#000000');
     const autoColor = check('Automatic text colour', !start.color);

@@ -5,6 +5,7 @@ import { setTextSize, setTheme, textSize, theme, type TextSize, type ThemeName }
 import { applyAccent, applyGrid, applyRoot } from './apply';
 import type { Calc } from './calc';
 import { listCommands, registerCommand, runCommand } from './commands';
+import { fontField } from './fontpicker';
 import { buttonRow, colorRow, note, numberRow, selectRow, textRow, toggleRow, type Row } from './controls';
 import { Dialog } from './dialog';
 import { icon, type IconName } from './icons';
@@ -47,7 +48,6 @@ const ICONS: Record<string, IconName> = {
 export const SECTIONS = Object.keys(ICONS);
 
 const MODES: [CalcMode, string][] = [['auto', 'Automatic'], ['tables', 'Automatic except for data tables'], ['manual', 'Manual']];
-const FONTS: [string, string][] = [['', 'Inter (default)'], ['Arial', 'Arial'], ['Georgia', 'Georgia'], ['Times New Roman', 'Times New Roman'], ['Courier New', 'Courier New'], ['Verdana', 'Verdana'], ['JetBrains Mono', 'JetBrains Mono']];
 const SIZES: [string, string][] = [8, 9, 10, 11, 12, 14, 16].map((n) => [String(n), String(n)]);
 const RAIL_KEY = 'formcel.prefsRailCollapsed';
 
@@ -199,7 +199,7 @@ export class SettingsDialog extends Dialog {
       const t = v.trim().slice(0, 60);
       if (t) this.host.setUserName(t);
     });
-    const font = selectRow('Default font for new sheets', FONTS, (v) => this.change({ defaultFont: v }));
+    const font = fontField('Default font for new sheets', 'Aptos Narrow (default)', (v) => this.change({ defaultFont: v }), { theme: () => ({ heading: 'Aptos Narrow', body: 'Aptos Narrow' }), used: () => [] });
     const size = selectRow('Default font size', SIZES, (v) => this.change({ defaultSize: Number(v) }));
     const view = selectRow('Default view for new sheets', [['normal', 'Normal'], ['pagebreak', 'Page Break Preview']], (v) => this.change({ defaultView: v as Prefs['defaultView'] }));
     const sheets = numberRow('Sheets in a new workbook', 1, 50, 1, (v) => this.change({ newSheets: Math.round(v) }));

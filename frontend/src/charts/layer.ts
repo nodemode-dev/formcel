@@ -1,5 +1,6 @@
 import type { EngineClient } from '../engine';
 import type { Grid, ObjectsHook } from '../grid/grid';
+import { ensureFont } from '../grid/fonts';
 import type { PivotDef } from '../ui/pivot';
 import { anchorOf, frameOf, fromLine, toLine } from './anchor';
 import { build, readMatrix, resolveRange } from './data';
@@ -467,7 +468,8 @@ export class ObjectLayer implements ObjectsHook {
     st.fontWeight = s.bold ? '700' : '';
     st.fontStyle = s.italic ? 'italic' : '';
     st.textDecoration = [s.underline ? 'underline' : '', s.strike ? 'line-through' : ''].filter(Boolean).join(' ');
-    st.fontFamily = s.font ?? '';
+    st.fontFamily = s.font ? `"${s.font}", var(--font-ui)` : '';
+    if (s.font) void ensureFont(s.font);
     st.textAlign = s.align === 'l' ? 'left' : s.align === 'r' ? 'right' : s.align === 'j' ? 'justify' : 'center';
     st.justifyContent = s.valign === 't' ? 'flex-start' : s.valign === 'b' ? 'flex-end' : 'center';
     label.hidden = isLine(s.shape);

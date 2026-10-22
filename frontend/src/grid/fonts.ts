@@ -69,7 +69,7 @@ export function ensureFont(family: string): Promise<void> {
   const p = (loader ? loader() : Promise.resolve())
     .then(() => Promise.all([document.fonts.load(`400 16px "${family}"`), document.fonts.load(`700 16px "${family}"`)]))
     .then(() => {
-      if (loader) {
+      if (isBundled(family)) {
         ready.add(family);
         announce(family);
       }
