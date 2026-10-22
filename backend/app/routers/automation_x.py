@@ -119,8 +119,9 @@ def clean(body: CleanIn) -> dict:
             raise HTTPException(422, "Select at most 200,000 cells to check.")
         rows = ranges.grid(b.engine, sheet, a, "typed")
         forms = ranges.grid(b.engine, sheet, a, "input")
+        real = frozenset((i[0] - a[0], i[1] - a[1]) for i in b.engine.typed(sheet) if i[2] == "n" and a[0] <= i[0] <= a[2] and a[1] <= i[1] <= a[3])
     live = [[f if isinstance(f, str) and f.startswith("=") else v for v, f in zip(rv, rf)] for rv, rf in zip(rows, forms)]
-    found = offline_ai.suggestions(live, body.header)
+    found = offline_ai.suggestions(live, body.header, real)
     for s in found:
         s["edits"] = [e for e in s["edits"] if not (isinstance(forms[e[0]][e[1]], str) and forms[e[0]][e[1]].startswith("="))]
         s["count"] = len(s["edits"])

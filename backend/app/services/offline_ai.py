@@ -52,7 +52,7 @@ def parse_date(s: str, order: str):
     return None
 
 
-def suggestions(rows: list[list], header: bool = True) -> list[dict]:
+def suggestions(rows: list[list], header: bool = True, dated: frozenset = frozenset()) -> list[dict]:
     out: list[dict] = []
     if not rows:
         return out
@@ -94,6 +94,8 @@ def suggestions(rows: list[list], header: bool = True) -> list[dict]:
         orders = Counter()
         found = []
         for r, v in strs:
+            if (r, c) in dated:
+                continue
             for rx, form in DATE_FORMS:
                 m = rx.match(v.strip())
                 if m:
