@@ -109,7 +109,7 @@ export type Recorded =
   | { k: 'fill'; sheet: number; src: [number, number, number, number]; dest: [number, number, number, number] }
   | { k: 'clear'; sheet: number; r0: number; c0: number; r1: number; c1: number }
   | { k: 'filter'; sheet: number; text: string }
-  | { k: 'chart'; sheet: number; type: string; range: string; title: string; byRows: boolean };
+  | { k: 'chart'; sheet: number; type: string; range: string; title: string; byRows: boolean; at?: [number, number, number, number] };
 
 export interface GridEvents {
   onActive(text: string, ref: string, range: Range): void;

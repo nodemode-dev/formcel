@@ -230,6 +230,10 @@ export class ScriptRunner {
         continue;
       }
       await flushBatch();
+      if ((op.k === 'sheet' || op.k === 'sheetOp') && touched.size) {
+        for (const t of touched) host.layer().store(t);
+        touched.clear();
+      }
       if (op.k === 'sheet') {
         if (!this.h.sheets().includes(op.name)) await this.h.addSheet(op.name);
         continue;
@@ -255,6 +259,7 @@ export class ScriptRunner {
       else if (op.k === 'sort') await g.applyEffect(await e.sort(book, i, op.r0, op.c0, op.r1, op.c1, op.keys, op.header));
       else if (op.k === 'merge') await g.applyEffect(await e.merge(book, i, op.r0, op.c0, op.r1, op.c1, op.mode === 'all' ? 'cells' : op.mode));
       else if (op.k === 'shift') await g.shiftSheet(i, op.rows, op.at, op.n, op.insert);
+      else if (op.k === 'shiftcells') await g.applyEffect(await e.tool(book, i, 'shiftcells', `${op.r0},${op.c0},${op.r1},${op.c1}`, op.dir, op.insert ? '1' : '0'));
       else if (op.k === 'link') await g.applyEffect(await e.setLink(book, i, op.r, op.c, op.target, op.display || undefined));
       else if (op.k === 'unlink') await g.applyEffect(await e.removeLinks(book, i, op.r0, op.c0, op.r1, op.c1));
       else if (op.k === 'validation') await g.applyEffect(await e.setValidation(book, i, op.r0, op.c0, op.r1, op.c1, op.line));

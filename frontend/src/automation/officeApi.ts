@@ -470,6 +470,7 @@ export class Range {
       return;
     }
     const u = usedBox(d);
+    const mark = this.ctx.ops.length;
     const moved: [number, number, { v: string; f?: string; t: string } | undefined][] = [];
     const sign = dir === 'down' || dir === 'right' ? 1 : -1;
     if (vertical) {
@@ -488,6 +489,8 @@ export class Range {
       }
       for (const [r, c, cell] of moved) if (cell) this.write(r, c + sign * n, cell.f ?? cell.v, !!cell.f);
     }
+    this.ctx.ops.length = mark;
+    this.ctx.ops.push({ k: 'shiftcells', sheet: this.sheet, r0: this.r0, c0: this.c0, r1: this.r1, c1: this.c1, dir, insert: sign > 0 });
   }
 
   autoFill(destination: Range | string, _type = 'FillDefault'): void {
