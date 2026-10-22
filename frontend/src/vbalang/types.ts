@@ -68,33 +68,40 @@ export interface VbaEngine {
 
 export type RunTrigger = 'user' | 'event' | 'function';
 
-export type MacroGate = (trigger: RunTrigger) => boolean | Promise<boolean>;
+export type MacroGate = (trigger: RunTrigger, workbook: string) => boolean | Promise<boolean>;
 
-export type MacroPolicy = 'disable' | 'notify' | 'enable';
+export type MacroPolicy = 'disable' | 'notify' | 'signed' | 'enable';
 
-export function storedPolicy(): MacroPolicy {
+function stored(key: string): Record<string, unknown> {
   try {
-    const raw = typeof localStorage !== 'undefined' ? localStorage.getItem('formcel.prefs') : null;
-    const v = raw ? String((JSON.parse(raw) as { macroSecurity?: { level?: unknown } }).macroSecurity?.level ?? '').toLowerCase() : '';
-    if (v === 'silent' || v === 'signed') return 'disable';
-    if (v === 'all') return 'enable';
+    const raw: unknown = JSON.parse((typeof localStorage !== 'undefined' ? localStorage.getItem(key) : null) ?? '{}');
+    return raw && typeof raw === 'object' && !Array.isArray(raw) ? (raw as Record<string, unknown>) : {};
   } catch {
-    return 'notify';
+    return {};
   }
-  return 'notify';
 }
 
-let gate: MacroGate = (trigger) => {
+export function storedPolicy(): MacroPolicy {
+  const v = stored('formcel.options').macroPolicy;
+  return v === 'disable' || v === 'signed' || v === 'enable' ? v : 'notify';
+}
+
+export function storedTrust(workbook: string): boolean {
+  const docs = (stored('formcel.prefs').macroSecurity as { documents?: Record<string, unknown> } | undefined)?.documents;
+  return !!docs && Object.prototype.hasOwnProperty.call(docs, workbook);
+}
+
+let gate: MacroGate = (trigger, workbook) => {
+  if (trigger === 'user') return true;
   const p = storedPolicy();
-  if (p === 'disable') return false;
   if (p === 'enable') return true;
-  return trigger === 'user';
+  return p === 'notify' && storedTrust(workbook);
 };
 
 export function setMacroGate(g: MacroGate): void {
   gate = g;
 }
 
-export function macroAllowed(trigger: RunTrigger): boolean | Promise<boolean> {
-  return gate(trigger);
+export function macroAllowed(trigger: RunTrigger, workbook: string): boolean | Promise<boolean> {
+  return gate(trigger, workbook);
 }

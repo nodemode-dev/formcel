@@ -75,6 +75,7 @@ export class VbaService implements VbaRuntimeApi {
   private problems: CompileProblem[] = [];
   private udf: VbaRuntime | null = null;
   private udfKey = '';
+  private codes = new Map<string, string>();
 
   constructor(private readonly h: VbaHooks) {}
 
@@ -118,7 +119,8 @@ export class VbaService implements VbaRuntimeApi {
     } catch {
       return;
     }
-    this.mods = doc.present ? doc.modules.map((m) => ({ ...m, sheet: doc.sheets.find((s) => s.codeName === m.name)?.name })) : [];
+    this.codes = new Map(doc.sheets.filter((s) => s.codeName).map((s) => [s.codeName, s.name]));
+    this.mods = doc.present ? doc.modules.map((m) => ({ ...m, sheet: this.codes.get(m.name) })) : [];
   }
 
   hasProject(): boolean {
@@ -177,9 +179,12 @@ export class VbaService implements VbaRuntimeApi {
     }
   }
 
-  async run(modules: VbaModule[], procName: string, args: unknown[], opts: RunOptions): Promise<RunOutcome> {
-    if (!(await macroAllowed('user'))) return { ok: false, error: 'Macros are disabled by the Trust Center setting.' };
+  async run(given: VbaModule[], procName: string, args: unknown[], opts: RunOptions): Promise<RunOutcome> {
+    if (!(await macroAllowed('user', this.h.workbook()))) return { ok: false, error: 'Macros are disabled by the Trust Center setting.' };
     if (this.running) return { ok: false, error: 'Another macro is still running.' };
+    if (!this.codes.size) await this.reload();
+    const modules = given.map((m) => ({ ...m, sheet: m.sheet ?? this.codes.get(m.name) }));
+    this.mods = modules;
     const rt = await this.prepare(modules);
     if (this.problems.length) {
       const p = this.problems[0];
@@ -213,7 +218,7 @@ export class VbaService implements VbaRuntimeApi {
   }
 
   private async allowed(trigger: RunTrigger): Promise<boolean> {
-    return this.mods.length > 0 && (await macroAllowed(trigger));
+    return this.mods.length > 0 && (await macroAllowed(trigger, this.h.workbook()));
   }
 
   async fire(spec: EventSpec): Promise<{ ran: boolean; cancel: boolean }> {
@@ -225,12 +230,12 @@ export class VbaService implements VbaRuntimeApi {
 
   async functions(): Promise<string[]> {
     if (!this.mods.length) return [];
-    if (!(await macroAllowed('function'))) return [];
+    if (!(await macroAllowed('function', this.h.workbook()))) return [];
     return (await this.prepareUdf()).udfNames();
   }
 
   async call(name: string, args: unknown[]): Promise<unknown> {
-    if (!(await macroAllowed('function'))) throw Object.assign(new Error('Macros are disabled.'), { excelCode: '#NAME?' });
+    if (!(await macroAllowed('function', this.h.workbook()))) throw Object.assign(new Error('Macros are disabled.'), { excelCode: '#NAME?' });
     const rt = await this.prepareUdf();
     try {
       return await rt.callFunction(name, args);

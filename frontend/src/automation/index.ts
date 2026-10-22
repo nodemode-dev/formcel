@@ -191,11 +191,7 @@ export class Automation {
     this.layer.hidden = false;
     void this.calls.drain();
     this.customSoon();
-    void this.vba.open().then(async () => {
-      this.customSoon();
-      const sheet = this.h.sheets()[0];
-      if (sheet && this.vba.hasProject()) await this.vba.fire({ name: 'Open' });
-    });
+    void this.vba.open().then(() => this.customSoon());
     window.setTimeout(() => {
       this.server.opened();
       for (const s of this.auto.scripts) if (s.triggers?.open) void this.runScript(s.id, { type: 'open' });
