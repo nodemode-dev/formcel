@@ -14,6 +14,17 @@ export function registerCommand(c: Command): void {
   commands.set(c.id, c);
 }
 
+export function hasCommand(id: string): boolean {
+  return commands.has(id);
+}
+
+export function commandInfo(id: string): Omit<Command, 'run'> | null {
+  const c = commands.get(id);
+  if (!c) return null;
+  const { run: _run, ...rest } = c;
+  return rest;
+}
+
 export function listCommands(): Omit<Command, 'run'>[] {
   return [...commands.values()].map(({ run: _run, ...rest }) => rest);
 }

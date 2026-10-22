@@ -103,6 +103,13 @@ export class Functions {
     box.m.open(box.q);
   }
 
+  pick(name: string): void {
+    const f = FUNCTIONS.find((x) => x.name === name);
+    if (!f) return;
+    this.grab();
+    this.argumentsFor(f, '');
+  }
+
   argumentsAtCaret(): void {
     this.grab();
     const t = this.target;

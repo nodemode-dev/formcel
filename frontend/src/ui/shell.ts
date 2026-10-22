@@ -24,9 +24,6 @@ export interface ShellParts {
   zoomVal: HTMLElement;
 }
 
-const tool = (cmd: string, name: Parameters<typeof icon>[0], title: string) =>
-  `<button type="button" class="fc-tool" data-cmd="${cmd}" title="${title}" aria-label="${title}">${icon(name)}</button>`;
-
 export function mountShell(root: HTMLElement): ShellParts {
   root.innerHTML = `
     <header class="fc-bar">
@@ -40,29 +37,7 @@ export function mountShell(root: HTMLElement): ShellParts {
     </header>
     <main class="fc-main fc-home" aria-label="Home"></main>
     <main class="fc-main fc-sheet" hidden>
-      <div class="fc-toolbar" role="toolbar" aria-label="Sheet">
-        ${tool('edit.undo', 'undo', 'Undo (Ctrl+Z)')}${tool('edit.redo', 'redo', 'Redo (Ctrl+Y)')}
-        <span class="fc-tool-sep" aria-hidden="true"></span>
-        <button type="button" class="fc-tool fc-tool-text fc-tool-font" data-cmd="format.font" title="Font" aria-label="Font"></button><button type="button" class="fc-tool fc-tool-text fc-tool-size" data-cmd="format.size" title="Font size" aria-label="Font size"></button>
-        ${tool('format.bold', 'bold', 'Bold (Ctrl+B)')}${tool('format.italic', 'italic', 'Italic (Ctrl+I)')}${tool('format.underline', 'underline', 'Underline (Ctrl+U)')}${tool('format.strike', 'strike', 'Strikethrough (Ctrl+5)')}${tool('format.text-color', 'textColor', 'Text colour')}${tool('format.fill-color', 'fillColor', 'Fill colour')}${tool('format.borders', 'borders', 'Borders')}
-        <span class="fc-tool-sep" aria-hidden="true"></span>
-        ${tool('format.align-left', 'alignLeft', 'Align left')}${tool('format.align-center', 'alignCenter', 'Center')}${tool('format.align-right', 'alignRight', 'Align right')}${tool('format.valign-top', 'alignTop', 'Top align')}${tool('format.valign-middle', 'alignMiddle', 'Middle align')}${tool('format.valign-bottom', 'alignBottom', 'Bottom align')}${tool('format.wrap', 'wrap', 'Wrap text')}${tool('format.merge', 'merge', 'Merge cells')}${tool('format.rotate', 'rotate', 'Text rotation')}${tool('format.indent-less', 'indentLess', 'Decrease indent')}${tool('format.indent-more', 'indentMore', 'Increase indent')}${tool('format.cf', 'cf', 'Conditional formatting')}${tool('format.styles', 'cellStyles', 'Cell styles')}${tool('format.theme', 'theme', 'Theme')}${tool('format.painter', 'painter', 'Format painter (double-click to keep it on)')}${tool('format.clear', 'clearFormat', 'Clear formats')}
-        <span class="fc-tool-sep" aria-hidden="true"></span>
-        ${tool('format.menu', 'numFormat', 'Number format')}${tool('format.decimals-more', 'decMore', 'Increase decimal places')}${tool('format.decimals-less', 'decLess', 'Decrease decimal places')}
-        <span class="fc-tool-sep" aria-hidden="true"></span>
-        ${tool('view.freeze-top-row', 'freezeRow', 'Freeze top row')}${tool('view.freeze-first-column', 'freezeCol', 'Freeze first column')}${tool('view.freeze-panes', 'freezePanes', 'Freeze panes above and left of the active cell')}${tool('view.unfreeze', 'unfreeze', 'Unfreeze panes')}${tool('view.split', 'split', 'Split into panes at the active cell')}
-        <span class="fc-tool-sep" aria-hidden="true"></span>
-        ${tool('data.sort-asc', 'sortAsc', 'Sort A to Z by the active column')}${tool('data.sort-desc', 'sortDesc', 'Sort Z to A by the active column')}${tool('data.sort', 'sort', 'Sort by several columns')}${tool('data.filter', 'filter', 'Filter (Ctrl+Shift+L)')}${tool('table.create', 'table', 'Table (Ctrl+T)')}${tool('pivot.create', 'pivot', 'Insert PivotTable')}${tool('pivot.refresh', 'refresh', 'Refresh PivotTable')}${tool('data.validation', 'validation', 'Data validation')}${tool('data.whatif', 'whatIf', 'What-If Analysis, forecast and data analysis')}${tool('data.tools', 'dataTools', 'Data tools')}
-        <span class="fc-tool-sep" aria-hidden="true"></span>
-        ${tool('audit.precedents', 'tracePrec', 'Trace precedents')}${tool('audit.dependents', 'traceDep', 'Trace dependents')}${tool('audit.remove-arrows', 'removeArrows', 'Remove arrows')}${tool('audit.evaluate', 'evalFormula', 'Evaluate formula')}${tool('audit.watch', 'watch', 'Watch window')}${tool('names.manager', 'names', 'Name Manager (Ctrl+F3)')}${tool('names.functions', 'insertFn', 'Named functions')}${tool('calc.menu', 'calcOpts', 'Calculation options: automatic or manual, iterative, R1C1, links')}${tool('errors.menu', 'errCheck', 'Error checking and trace error')}
-        ${tool('insert.chart', 'chart', 'Insert chart')}${tool('insert.chart-recommended', 'chartRecommended', 'Recommended charts')}${tool('insert.pivot-chart', 'pivotChart', 'Insert PivotChart')}${tool('insert.picture', 'picture', 'Insert picture')}${tool('insert.shapes', 'shapes', 'Insert shape')}${tool('insert.button', 'buttonShape', 'Insert button')}${tool('insert.textbox', 'textBox', 'Insert text box')}${tool('insert.cell-picture', 'cellPicture', 'Insert picture in cell')}${tool('insert.sparkline', 'sparkline', 'Insert sparklines')}${tool('view.timeline', 'timeline', 'Timeline view of the rows')}
-        ${tool('review.spelling', 'spell', 'Check spelling (F7)')}${tool('review.note', 'note', 'Notes on the active cell')}${tool('review.comment', 'comment', 'Comment on the active cell')}${tool('review.panel', 'clock', 'Comments, changes, version history and sharing')}${tool('protect.menu', 'lock', 'Protection')}${tool('share.panel', 'share', 'Share, publish and embed')}
-        ${tool('page.menu', 'page', 'Page layout, print area and page breaks')}${tool('view.access', 'access', 'Accessibility, theme, text size and locale')}
-        <span class="fc-tool-sep" aria-hidden="true"></span>
-        ${tool('file.download', 'download', 'Download as .xlsx, .csv, .pdf or .html')}
-        <span class="fc-tool-sep" aria-hidden="true"></span>
-        ${tool('automate.panel', 'script', 'Scripts: write, record and run automation')}${tool('assistant.panel', 'assistant', 'Assistant')}${tool('data.panel', 'dataConn', 'Data connections and queries')}
-      </div>
+      <div class="fc-ribbon" role="region" aria-label="Ribbon"></div>
       <div class="fc-formula">
         <input class="fc-namebox" aria-label="Name Box" spellcheck="false" autocomplete="off">
         <button type="button" class="fc-fx" data-cmd="formula.insert-function" title="Insert Function (Shift+F3)" aria-label="Insert Function">fx</button>
@@ -79,7 +54,7 @@ export function mountShell(root: HTMLElement): ShellParts {
   return {
     status,
     statusText,
-    toolbar: root.querySelector<HTMLElement>('.fc-toolbar')!,
+    toolbar: root.querySelector<HTMLElement>('.fc-ribbon')!,
     nameBox: root.querySelector<HTMLInputElement>('.fc-namebox')!,
     formulaBar: root.querySelector<HTMLTextAreaElement>('.fc-fbar')!,
     formulaBox: root.querySelector<HTMLElement>('.fc-formula')!,

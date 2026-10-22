@@ -2,6 +2,7 @@ import type { EngineClient } from '../engine';
 import type { Range } from '../grid/a1';
 import type { Grid } from '../grid/grid';
 import { registerCommand } from '../ui/commands';
+import { anchorRect } from '../ui/rb-state';
 import { Timeline, type TimelineView } from '../ui/timeline';
 import type { PivotDef } from '../ui/pivot';
 import { Decor } from './decor';
@@ -132,6 +133,11 @@ export class Charts {
     cmd('insert.sparkline-clear', 'Clear sparklines', 'Remove the sparklines in the selected cells.', () => this.clearSparklines());
     cmd('view.timeline', 'Timeline view', 'Lay out the rows of the selected range as cards on a time axis by their start and end dates, grouped by a column, with day, week, month, quarter and year zoom. Choose a card to go to its row.', () => {
       if (this.host.active()) void this.timeline.open();
+    });
+    cmd('chart.edit', 'Edit chart', 'Open the editor for the selected chart: type, data, titles, axes, legend and labels.', () => {
+      const o = this.layer.selectedObject();
+      if (o?.chart) void this.edit(o);
+      else this.host.say?.('Select a chart first.');
     });
     cmd('insert.alt-text', 'Alt text for the selected object', 'Describe the selected chart, picture, shape or text box for people who use a screen reader, or mark it decorative.', () => {
       const o = this.layer.selectedObject();
@@ -316,9 +322,8 @@ export class Charts {
 
   private gallery(): void {
     if (!this.host.active()) return;
-    const btn = document.querySelector<HTMLElement>('[data-cmd="insert.shapes"]');
-    const r = btn?.getBoundingClientRect();
-    showGallery({ x: r?.left ?? 80, y: (r?.bottom ?? 80) + 4 }, (v) => this.shape(v.spec, v.w, v.h));
+    const r = anchorRect('insert.shapes');
+    showGallery({ x: r.left, y: r.bottom + 4 }, (v) => this.shape(v.spec, v.w, v.h));
   }
 
   private shape(spec: Partial<ShapeSpec>, w: number, h: number): void {
