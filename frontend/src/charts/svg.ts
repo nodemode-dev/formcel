@@ -211,7 +211,13 @@ export function renderChart(spec: ChartSpec, d: ChartData, w: number, h: number)
   const gen = GENERATORS[spec.type] ?? cartesian;
   const empty = !d.series.length || (!d.series.some((s) => s.vals.some(num)) && !['org', 'timeline'].includes(spec.type));
   const body = empty ? text(w / 2, h / 2, 'No numbers in the chart data range', { op: 0.6 }) : gen(spec, d, box);
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${w} ${h}" width="${w}" height="${h}" role="img" aria-label="${esc(spec.title || spec.type)}" font-family="Inter, system-ui, -apple-system, 'Segoe UI', sans-serif">${parts.join('')}${body}</svg>`;
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${w} ${h}" width="${w}" height="${h}" role="img" aria-label="${esc(spec.title || spec.type)}" font-family="${chartFace ? `&quot;${esc(chartFace)}&quot;, ` : ''}Inter, system-ui, -apple-system, 'Segoe UI', sans-serif">${parts.join('')}${body}</svg>`;
+}
+
+let chartFace = '';
+
+export function setChartFont(name: string): void {
+  chartFace = name;
 }
 
 export async function renderChartAsync(eng: EngineClient, spec: ChartSpec, d: ChartData, w: number, h: number): Promise<string> {

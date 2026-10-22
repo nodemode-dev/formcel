@@ -8,7 +8,7 @@ import { OrgEditor } from './orgedit';
 import { makeBar, syncBar } from './pivotbar';
 import { FILTER_BAR, pivotChartData } from './pivotchart';
 import { contrast, isLine, shapeSvg } from './shapes';
-import { renderChartAsync } from './svg';
+import { renderChartAsync, setChartFont } from './svg';
 import { isFloat, newId, type FloatObject, type ShapeSpec } from './types';
 
 export interface LayerIo {
@@ -627,6 +627,10 @@ export class ObjectLayer implements ObjectsHook {
   private async draw(n: Node): Promise<void> {
     const spec = n.obj.chart;
     if (!spec) return;
+    const face = this.grid.opts.defaultFont || this.grid.look.body;
+    const own = face && face !== 'Aptos Narrow' && face !== 'Inter' ? face : '';
+    if (own) await ensureFont(own);
+    setChartFont(own);
     let html: string;
     let def: PivotDef | null = null;
     if (spec.pivot) {
