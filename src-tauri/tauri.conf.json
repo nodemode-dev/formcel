@@ -5,25 +5,26 @@
   "identifier": "ai.nodemode.formcel",
   "build": {
     "frontendDist": "../frontend/dist",
-    "devUrl": "http://localhost:5199",
     "beforeBuildCommand": "cd ../frontend && npm run build",
     "beforeDevCommand": ""
   },
   "app": {
     "windows": [
       {
-        "label": "main",
+        "label": "splash",
         "title": "FormCel",
-        "url": "http://127.0.0.1:8199/",
-        "width": 1440,
-        "height": 900,
-        "minWidth": 800,
-        "minHeight": 520,
+        "url": "splash.html",
+        "width": 360,
+        "height": 200,
+        "resizable": false,
+        "decorations": false,
         "center": true,
-        "resizable": true,
+        "transparent": true,
+        "shadow": false,
         "visible": false
       }
     ],
+    "macOSPrivateApi": true,
     "security": {
       "csp": null
     }
@@ -38,10 +39,7 @@
     "shortDescription": "A local-first spreadsheet",
     "longDescription": "FormCel is a local-first spreadsheet. The window runs a Rust calculation engine compiled to WebAssembly, and a local engine process keeps your workbooks on this computer.",
     "license": "../LICENSE",
-    "resources": {
-      "../backend/app": "engine/app",
-      "../frontend/dist": "engine/window"
-    },
+    "externalBin": ["binaries/formcel-engine"],
     "windows": {
       "webviewInstallMode": { "type": "downloadBootstrapper" },
       "nsis": { "installMode": "currentUser", "displayLanguageSelector": false },
@@ -52,7 +50,7 @@
       "hardenedRuntime": true
     },
     "linux": {
-      "deb": { "depends": ["python3", "python3-pip"], "section": "science" },
+      "deb": { "section": "science" },
       "appimage": { "bundleMediaFramework": false }
     }
   }

@@ -1,0 +1,6 @@
+{
+  "bundle": {
+    "externalBin": [],
+    "resources": { "../backend/app": null, "../frontend/dist": null, "engine": "engine" }
+  }
+}

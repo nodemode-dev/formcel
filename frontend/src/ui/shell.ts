@@ -29,14 +29,31 @@ const tool = (cmd: string, name: Parameters<typeof icon>[0], title: string) =>
 
 export function mountShell(root: HTMLElement): ShellParts {
   root.innerHTML = `
-    <header class="fc-bar">
-      <div class="fc-brand">${icon('sheet')}<span>FormCel</span><span class="fc-version">v${VERSION}</span></div>
-      <button type="button" class="fc-tool fc-home-btn" title="Home" aria-label="Home" hidden>${icon('home')}</button>
-      <input class="fc-title" aria-label="Workbook name" spellcheck="false" autocomplete="off" hidden>
-      <span class="fc-group-badge" aria-live="polite" hidden>[Group]</span>
-      <span class="fc-save" role="status" aria-live="polite" hidden></span>
-      <div class="fc-bar-spacer"></div>
-      <span class="fc-status" data-state="pending" role="status" aria-live="polite"><span class="fc-status-dot"></span><span class="fc-status-text"></span></span>
+    <header class="fc-titlebar">
+      <div class="fc-tb-left">
+        <div class="fc-brand" title="FormCel v${VERSION}">${icon('sheet')}<span>FormCel</span></div>
+        <button type="button" class="fc-tool fc-home-btn" title="Home" aria-label="Home" hidden>${icon('home')}</button>
+      </div>
+      <div class="fc-tb-doc">
+        <input class="fc-title" aria-label="Workbook name" spellcheck="false" autocomplete="off" hidden>
+        <span class="fc-group-badge" aria-live="polite" hidden>[Group]</span>
+        <span class="fc-save" role="status" aria-live="polite" hidden></span>
+      </div>
+      <div class="fc-title-tools">
+        <div class="fc-tb-search">
+          <label class="fc-tb-search-box">${icon('search')}<input class="fc-tb-search-input" type="text" placeholder="Search" title="Search commands (Alt+Q)" aria-label="Search commands" spellcheck="false" autocomplete="off"></label>
+          <div class="fc-search-pop" role="listbox" aria-label="Commands" hidden></div>
+        </div>
+        <button type="button" class="fc-tool fc-tb-share" title="Share" aria-label="Share">${icon('share')}</button>
+        <button type="button" class="fc-tb-account" aria-label="Account"></button>
+        <button type="button" class="fc-tool fc-tb-settings" title="Settings (Ctrl+,)" aria-label="Settings">${icon('settings')}</button>
+        <span class="fc-status" data-state="pending" role="status" aria-live="polite"><span class="fc-status-dot"></span><span class="fc-status-text"></span></span>
+      </div>
+      <div class="fc-caption" hidden>
+        <button type="button" class="fc-caption-btn" data-cap="min" title="Minimize" aria-label="Minimize">${icon('capMin')}</button>
+        <button type="button" class="fc-caption-btn" data-cap="max" title="Maximize" aria-label="Maximize">${icon('capMax')}</button>
+        <button type="button" class="fc-caption-btn fc-caption-close" data-cap="close" title="Close" aria-label="Close">${icon('close')}</button>
+      </div>
     </header>
     <main class="fc-main fc-home" aria-label="Home"></main>
     <main class="fc-main fc-sheet" hidden>

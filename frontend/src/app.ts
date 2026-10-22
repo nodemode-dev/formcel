@@ -306,6 +306,8 @@ export class App {
   private tools!: DataTools;
   private calc!: Calc;
   private grouped = new Set<number>();
+  private homeLoaded: Promise<unknown> = Promise.resolve();
+  readonly ready: Promise<unknown>;
 
   constructor(private readonly p: ShellParts) {
     initPrefs();
@@ -647,7 +649,7 @@ export class App {
     this.bindChrome();
     window.addEventListener('hashchange', () => void this.route());
     window.addEventListener('beforeunload', () => this.flush());
-    void this.route();
+    this.ready = this.route().catch(() => undefined).then(() => this.homeLoaded);
   }
 
   private button(cmd: string): HTMLButtonElement {
@@ -1057,7 +1059,7 @@ export class App {
     p.groupBadge.hidden = true;
     p.save.hidden = true;
     document.title = 'FormCel';
-    void this.refresh();
+    this.homeLoaded = this.refresh().catch(() => undefined);
   }
 
   private async refresh(): Promise<void> {

@@ -4,12 +4,13 @@
   grid-template-rows: var(--bar-h) minmax(0, 1fr);
 }
 
-.fc-bar {
+.fc-titlebar {
   position: relative;
   z-index: var(--z-chrome);
-  display: flex;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: center;
-  gap: var(--space-3);
+  column-gap: var(--space-3);
   padding-inline: var(--space-3);
   background: var(--bg-secondary);
   border-bottom: 1px solid var(--border-color);

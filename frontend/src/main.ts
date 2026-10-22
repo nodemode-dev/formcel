@@ -3,6 +3,9 @@ import { activateAll } from './extensions/registry';
 import { App } from './app';
 import { mountShell, setStatus } from './ui/shell';
 import { registerPwa } from './pwa';
+import { registerCommand } from './ui/commands';
+import { CaptionButtons, TitleTools } from './ui/titlebar';
+import { fontsOrTimeout, revealApp, wantsCustomTitleBar } from './ui/desktop';
 
 registerPwa();
 
@@ -20,8 +23,21 @@ async function checkEngines(): Promise<[string, Health]> {
 }
 
 const parts = mountShell(document.getElementById('app')!);
+const titlebar = parts.status.closest<HTMLElement>('.fc-titlebar')!;
+const caption = new CaptionButtons(titlebar);
+new TitleTools(titlebar);
+registerCommand({
+  id: 'view.custom-title-bar',
+  title: 'Custom title bar',
+  description: 'Draw the minimize, maximize and close buttons in the title row instead of the system title bar (Windows and Linux).',
+  changes: false,
+  run: () => { if (wantsCustomTitleBar()) caption.toggle(); },
+});
 activateAll(engine());
-new App(parts);
+const app = new App(parts);
+void Promise.race([app.ready, new Promise((done) => setTimeout(done, 2500))])
+  .then(() => fontsOrTimeout(2500))
+  .then(revealApp);
 
 checkEngines().then(
   ([wasm, health]) => {
