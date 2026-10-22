@@ -7,6 +7,8 @@ from openpyxl.utils import get_column_letter
 from reportlab.lib.utils import simpleSplit
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
+
+from .pdf_fonts import PdfFonts
 from reportlab.pdfgen import canvas
 
 from . import page as pg
@@ -84,7 +86,7 @@ def _style(text: str) -> dict:
             st[k] = True
         elif k == "sz" and v:
             st["sz"] = float(v)
-        elif k in ("fc", "bg", "ha", "va") and v:
+        elif k in ("fc", "bg", "ha", "va", "ff") and v:
             st[k] = v
         elif k in ("bt", "br", "bb", "bl"):
             line, _, col = v.partition(":")
@@ -105,7 +107,7 @@ def _pages(sizes: list[float], room: float, breaks: set[int] = frozenset(), lead
     return out
 
 
-def _sheet(c: canvas.Canvas, eng, i: int, view: dict, slots: dict[str, str], fonts: dict[str, str], name: str = "", file: str = "") -> int:
+def _sheet(c: canvas.Canvas, eng, i: int, view: dict, slots: dict[str, str], fonts: dict[str, str], name: str = "", file: str = "", pf: PdfFonts | None = None) -> int:
     values = {(r, col): v for r, col, v in eng.values(i) if v != ""}
     kinds = {(r, col): k for r, col, k, _ in eng.typed(i)}
     kinds.update({(r, col): k for r, col, k, _ in eng.results(i)})
@@ -158,7 +160,7 @@ def _sheet(c: canvas.Canvas, eng, i: int, view: dict, slots: dict[str, str], fon
         lines = 1
         text = values.get((r, col), "")
         if st.get("wrap") and text and cw[col]:
-            face = fonts["b" if st.get("b") else "r"]
+            face = pf.face(st.get("ff"), bool(st.get("b")), bool(st.get("i"))) if pf else fonts["b" if st.get("b") else "r"]
             lines = max(1, len(simpleSplit(text, face, size, cw[col] - 5 * scale)))
         rh[r] = max(rh[r], size * 1.2 * lines + 5 * scale)
     paint = {}
@@ -246,7 +248,7 @@ def _sheet(c: canvas.Canvas, eng, i: int, view: dict, slots: dict[str, str], fon
                     if not text:
                         continue
                     key = ("b" if st.get("b") else "") + ("i" if st.get("i") else "")
-                    face = fonts.get({"": "r", "b": "b", "i": "i", "bi": "bi"}[key], fonts["r"])
+                    face = pf.face(st.get("ff"), bool(st.get("b")), bool(st.get("i"))) if pf else fonts.get({"": "r", "b": "b", "i": "i", "bi": "bi"}[key], fonts["r"])
                     size = st.get("sz", 10.0) * scale
                     c.setFont(face, size)
                     c.setFillColorRGB(*(_colour(st["fc"], slots) if st.get("fc") else (0, 0, 0)))
@@ -319,9 +321,10 @@ def _sheet(c: canvas.Canvas, eng, i: int, view: dict, slots: dict[str, str], fon
     return pages
 
 
-def write(eng, views: list[dict], sheets: list[int], title: str) -> bytes:
+def write(eng, views: list[dict], sheets: list[int], title: str, notes: list[str] | None = None) -> bytes:
     fonts = family()
     theme = eng.theme().split(";")
+    pf = PdfFonts(fonts, (theme[2] if len(theme) > 2 and theme[2] else "Aptos Narrow", theme[3] if len(theme) > 3 and theme[3] else "Aptos Narrow"))
     slots = dict(zip(SLOTS, (theme[1] if len(theme) > 1 else "").split(",")))
     out = io.BytesIO()
     c = canvas.Canvas(out, pagesize=(PAGE_W, PAGE_H))
@@ -329,7 +332,9 @@ def write(eng, views: list[dict], sheets: list[int], title: str) -> bytes:
     c.setCreator("FormCel")
     total = 0
     for i in sheets:
-        total += _sheet(c, eng, i, views[i] if i < len(views) else {}, slots, fonts, eng.sheet_names()[i], title)
+        total += _sheet(c, eng, i, views[i] if i < len(views) else {}, slots, fonts, eng.sheet_names()[i], title, pf)
+    if notes is not None and pf.note():
+        notes.append(pf.note())
     if not total:
         c.setFont(fonts["r"], 10)
         c.drawString(MARGIN_X, PAGE_H - MARGIN_Y - 10, "This sheet is empty.")

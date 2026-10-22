@@ -20,6 +20,8 @@ export interface FontPickerHandle {
 
 let active: { handle: FontPickerHandle; panel: HTMLElement } | null = null;
 
+window.setTimeout(() => void loadSystemFonts(), 1500);
+
 export function attachFontInput(input: HTMLInputElement, defaultLabel: string, ctx: { theme: () => { heading: string; body: string }; used: () => string[] }): void {
   let handle: FontPickerHandle | null = null;
   const show = (): void => {
@@ -329,6 +331,16 @@ export function openFontPicker(o: FontPickerOpts): FontPickerHandle {
     const stub = sy.box.querySelector('.fp-hint');
     if (!names.length) { if (stub) stub.textContent = 'No installed fonts could be listed here.'; return; }
     stub?.remove();
+    const have = new Set(names.map((n) => n.toLowerCase()));
+    const wb = heads.find((h) => h.head.textContent === 'In this workbook');
+    if (wb) {
+      for (const r of rows.filter((x) => x.group === wb.box && have.has(x.name.toLowerCase()))) {
+        io.unobserve(r.btn);
+        r.btn.remove();
+        rows.splice(rows.indexOf(r), 1);
+      }
+      if (!rows.some((x) => x.group === wb.box)) wb.box.hidden = true;
+    }
     for (const f of names) addRow(sy.box, sy.box, f, f, f);
     if (lastQuery) filter(lastQuery);
   });
