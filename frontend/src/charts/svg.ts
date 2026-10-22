@@ -392,7 +392,8 @@ function xy(spec: ChartSpec, d: ChartData, b: Box): string {
   const bubble = spec.type === 'bubble';
   const ys = bubble ? d.series.slice(0, 1) : d.series;
   const xs = d.catNums.map((v, i) => (num(v) ? v : i + 1));
-  const xr = nice(Math.min(...xs), Math.max(...xs));
+  const xpad = bubble ? (Math.max(...xs) - Math.min(...xs) || 1) * 0.12 : 0;
+  const xr = nice(Math.min(...xs) - xpad, Math.max(...xs) + xpad);
   const all = ys.flatMap((s) => s.vals).filter(num);
   let ylo = Math.min(...all);
   let yhi = Math.max(...all);
@@ -405,6 +406,11 @@ function xy(spec: ChartSpec, d: ChartData, b: Box): string {
       yhi = Math.max(yhi, v + up);
     }
   });
+  if (bubble) {
+    const yp = (yhi - ylo || 1) * 0.12;
+    ylo -= yp;
+    yhi += yp;
+  }
   if (spec.min !== undefined) ylo = spec.min;
   if (spec.max !== undefined) yhi = spec.max;
   const yr: Axis = spec.logY ? logAxis(Math.min(...all.filter((v) => v > 0), yhi), yhi) : { ...nice(ylo, yhi), log: false };
