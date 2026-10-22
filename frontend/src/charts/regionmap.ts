@@ -11,6 +11,8 @@ const ALIASES: Record<string, string> = {
   'sao paulo': 'BR-SP', 'kwazulu natal': 'ZA-NL', 'kwazulu-natal': 'ZA-NL', 'north-west': 'ZA-NW',
 };
 
+export const REGION_UNITS = 20;
+
 const COUNTRY_ORDER = ['US', 'CA', 'AU', 'BR', 'IN', 'CN', 'RU', 'ID', 'ZA'];
 
 interface Index {
@@ -20,6 +22,22 @@ interface Index {
 }
 
 let cache: Index | null = null;
+let extra: Region[] = [];
+let extraLoad: Promise<void> | null = null;
+
+function every(): Region[] {
+  return extra.length ? REGIONS.concat(extra) : REGIONS;
+}
+
+export function loadMoreRegions(): Promise<void> {
+  if (!extraLoad) {
+    extraLoad = import('./regions_more').then((m) => {
+      extra = m.MORE_REGIONS;
+      cache = null;
+    });
+  }
+  return extraLoad;
+}
 
 function push<K, V>(m: Map<K, V[]>, k: K, v: V): void {
   const list = m.get(k);
@@ -32,8 +50,9 @@ function index(): Index {
   const names = new Map<string, Region[]>();
   const iso = new Map<string, Region>();
   const codes = new Map<string, Region[]>();
-  for (const r of REGIONS) {
+  for (const r of every()) {
     push(names, plain(r[0]), r);
+    if (r[4]) for (const a of r[4].split('|')) push(names, plain(a), r);
     iso.set(`${r[2]}-${r[1]}`.toLowerCase(), r);
     if (/^[A-Za-z]{2,3}$/.test(r[1])) push(codes, r[1].toLowerCase(), r);
   }
@@ -92,8 +111,46 @@ export function planMap(cats: string[], want: 'auto' | 'country' | 'region' | un
   return { level, rows, countries };
 }
 
+export function geoRegionOf(cats: string[], want: 'auto' | 'country' | 'region' | undefined): string | undefined {
+  const plan = planMap(cats, want);
+  if (plan.level === 'region' && plan.countries.length) return plan.countries[0];
+  const tally = new Map<string, number>();
+  for (const c of cats) {
+    const hit = countryFor(c);
+    if (hit) tally.set(hit[1], (tally.get(hit[1]) ?? 0) + 1);
+  }
+  const top = [...tally].sort((a, b) => b[1] - a[1])[0];
+  return top && /^[A-Z]{2}$/.test(top[0]) ? top[0] : undefined;
+}
+
 export function regionsIn(countries: string[]): Region[] {
-  return REGIONS.filter((r) => countries.includes(r[2]));
+  return every().filter((r) => countries.includes(r[2]));
+}
+
+const CENTERS = new WeakMap<Region, [number, number]>();
+
+export function center(r: Region): [number, number] {
+  let c = CENTERS.get(r);
+  if (!c) {
+    const [x0, y0, x1, y1] = pathBox(r[3]);
+    c = [(x0 + x1) / 2, (y0 + y1) / 2];
+    CENTERS.set(r, c);
+  }
+  return c;
+}
+
+export function pathBox(path: string): [number, number, number, number] {
+  let best: [number, number, number, number] = [0, 0, 0, 0];
+  let size = -1;
+  for (const ring of path.split('M').slice(1)) {
+    const b = bounds([['', '', '', `M${ring}`]]);
+    const s = (b[2] - b[0]) * (b[3] - b[1]);
+    if (s > size) {
+      size = s;
+      best = b;
+    }
+  }
+  return best;
 }
 
 export function bounds(regions: Region[]): [number, number, number, number] {
