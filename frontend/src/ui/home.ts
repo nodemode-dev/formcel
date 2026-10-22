@@ -2,6 +2,7 @@ import { icon } from './icons';
 import { HomeFiles } from './home-files';
 import { runCommand } from './commands';
 import { drawThumb } from './thumb';
+import { onPreviewGesture, openPreview, paintThumb, thumbBox, type Visual } from './tplgallery';
 
 export interface WorkbookMeta {
   id: string;
@@ -23,6 +24,7 @@ export interface TemplateMeta {
   sheets: string[];
   rows: number;
   preview: string[][];
+  visuals?: Visual[];
 }
 
 export interface HomeHooks {
@@ -238,14 +240,19 @@ export class Home {
     if (this.lastId && !list.some((w) => w.id === this.lastId)) this.setLast(null);
   }
 
-  private templateCard = (): HTMLElement =>
-    el(`<div class="fc-card"><button type="button" class="fc-card-open" data-a="use"><canvas class="fc-thumb" aria-hidden="true"></canvas><span class="fc-card-body"><span class="fc-card-name"></span><span class="fc-card-meta"></span></span></button></div>`);
+  private templateCard = (t: TemplateMeta): HTMLElement => {
+    const card = el(`<div class="fc-card"><button type="button" class="fc-card-open"><span class="fc-card-body"><span class="fc-card-name"></span><span class="fc-card-meta"></span></span></button></div>`);
+    const open = card.querySelector<HTMLElement>('.fc-card-open')!;
+    open.prepend(thumbBox());
+    onPreviewGesture(open, () => openPreview(t, (id) => this.hooks.create(id)), () => this.hooks.create(t.id));
+    return card;
+  };
 
   private updateTemplate = (n: HTMLElement, t: TemplateMeta): void => {
     setText(n.querySelector('.fc-card-name'), t.name);
     setText(n.querySelector('.fc-card-meta'), `${t.sheets.length} ${t.sheets.length === 1 ? 'sheet' : 'sheets'} · ${t.rows} rows${t.source === 'form.md' ? ' · from form.md' : ''}`);
     n.querySelector('.fc-card-open')!.setAttribute('title', t.description);
-    drawThumb(n.querySelector('canvas')!, t.preview);
+    paintThumb(n.querySelector('.fc-tt')!, t);
   };
 
   setTemplates(cats: { name: string; count: number }[], list: TemplateMeta[]): void {

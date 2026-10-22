@@ -3,6 +3,7 @@ import { MARGIN_PRESETS, PAPERS, type PageSetup, type Scale } from './pagesetup'
 import { setTheme, theme, type ThemeName } from './a11y';
 import { runCommand } from './commands';
 import { VERSION } from '../version';
+import { onPreviewGesture, openPreview, paintThumb, thumbBox, type Visual } from './tplgallery';
 
 export interface BackstageHost {
   current(): { id: string; title: string; sheets: string[]; sheet: number; macros: boolean } | null;
@@ -35,6 +36,7 @@ interface Template {
   sheets: string[];
   rows: number;
   preview: string[][];
+  visuals?: Visual[];
 }
 
 interface Pane {
@@ -61,7 +63,6 @@ const FORMATS: Fmt[] = [
   { id: 'fcel', label: 'FormCel Workbook', ext: 'fcel', desc: 'FormCel\'s own file, with everything including collaboration history. Open it again from Open > Browse.', scope: 'none' },
 ];
 
-const NUMERIC = /^-?(\d+\.?\d*|\.\d+)(e[+-]?\d+)?$/i;
 
 function h<K extends keyof HTMLElementTagNameMap>(tag: K, cls = '', text = ''): HTMLElementTagNameMap[K] {
   const n = document.createElement(tag);
@@ -97,45 +98,6 @@ function ago(iso: string): string {
   return new Date(iso).toLocaleDateString();
 }
 
-function drawThumb(c: HTMLCanvasElement, grid: string[][]): void {
-  const sig = JSON.stringify(grid);
-  if (c.dataset.sig === sig) return;
-  c.dataset.sig = sig;
-  const dpr = window.devicePixelRatio || 1;
-  const w = 240;
-  const hh = 120;
-  c.width = w * dpr;
-  c.height = hh * dpr;
-  const g = c.getContext('2d')!;
-  g.setTransform(dpr, 0, 0, dpr, 0, 0);
-  const s = getComputedStyle(document.documentElement);
-  const v = (n: string) => s.getPropertyValue(n).trim();
-  g.fillStyle = v('--cell-bg') || '#1c1b1d';
-  g.fillRect(0, 0, w, hh);
-  const rows = 8;
-  const cols = 6;
-  const rh = hh / rows;
-  const cw = w / cols;
-  g.strokeStyle = v('--cell-grid') || '#2a2a2a';
-  g.beginPath();
-  for (let r = 1; r < rows; r++) { g.moveTo(0, Math.round(r * rh) + 0.5); g.lineTo(w, Math.round(r * rh) + 0.5); }
-  for (let k = 1; k < cols; k++) { g.moveTo(Math.round(k * cw) + 0.5, 0); g.lineTo(Math.round(k * cw) + 0.5, hh); }
-  g.stroke();
-  g.font = '9px "Aptos Narrow", Calibri, Carlito, Inter, system-ui, sans-serif';
-  g.textBaseline = 'middle';
-  grid.slice(0, rows).forEach((row, r) => row.slice(0, cols).forEach((t, k) => {
-    if (!t) return;
-    g.save();
-    g.beginPath();
-    g.rect(k * cw + 1, r * rh, cw - 2, rh);
-    g.clip();
-    g.fillStyle = r === 0 ? v('--cell-fg') : v('--text-secondary');
-    const num = NUMERIC.test(t);
-    g.textAlign = num ? 'right' : 'left';
-    g.fillText(t, num ? (k + 1) * cw - 3 : k * cw + 3, r * rh + rh / 2);
-    g.restore();
-  }));
-}
 
 function patch<T>(host: HTMLElement, items: T[], key: (t: T) => string, make: (t: T) => HTMLElement, update: (n: HTMLElement, t: T) => void): void {
   const have = new Map<string, HTMLElement>();
@@ -439,14 +401,21 @@ export class Backstage {
       const t = h('span', 'fc-bs-blank');
       t.insertAdjacentHTML('afterbegin', icon('plus'));
       c.append(t);
-    } else c.append(h('canvas', 'fc-bs-thumb'));
+    } else c.append(thumbBox());
     const body = h('span', 'fc-bs-cbody');
     body.append(h('span', 'fc-bs-cname'), h('span', 'fc-bs-cmeta'));
     c.append(body);
-    c.addEventListener('click', () => {
+    const make = (id?: string): void => {
       this.hide(false);
-      this.host.create(blank ? undefined : c.dataset.key);
-    });
+      this.host.create(id);
+    };
+    if (blank) c.addEventListener('click', () => make());
+    else {
+      onPreviewGesture(c, () => {
+        const t = this.templates.find((x) => x.id === c.dataset.key);
+        if (t) openPreview(t, make);
+      }, () => make(c.dataset.key));
+    }
     return c;
   }
 
@@ -454,8 +423,8 @@ export class Backstage {
     setText(n.querySelector('.fc-bs-cname'), t.name);
     setText(n.querySelector('.fc-bs-cmeta'), `${t.sheets.length} ${t.sheets.length === 1 ? 'sheet' : 'sheets'} · ${t.rows} rows`);
     n.title = t.description;
-    const cv = n.querySelector('canvas');
-    if (cv) drawThumb(cv, t.preview);
+    const box = n.querySelector<HTMLElement>('.fc-tt');
+    if (box) paintThumb(box, t);
   };
 
   private buildHome(): Pane {
