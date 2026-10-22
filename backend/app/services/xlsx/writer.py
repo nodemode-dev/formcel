@@ -23,6 +23,7 @@ from .overlay import finish as overlay_finish
 from .pivots import finish as pivots_finish
 from .pivots import pivots_out
 from .props import app_xml, core_out, patch_app
+from .qtables import finish as queries_finish
 from .slicers import finish as slicers_finish
 from .protect import book_out, notes_out, sheet_out
 from .review import finish as review_finish, placeholders, ranges_out
@@ -45,7 +46,7 @@ def _number(text: str) -> int | float:
     return int(n) if n.is_integer() and abs(n) < 2**53 else n
 
 
-def write(eng, views: list[dict], vba: dict[str, bytes] | None = None, objects: list[list[dict]] | None = None, notes: dict | None = None, threads: list[dict] | None = None, props: dict | None = None, stamps: tuple[str, str] | None = None, whatif: list[str] | None = None) -> bytes:
+def write(eng, views: list[dict], vba: dict[str, bytes] | None = None, objects: list[list[dict]] | None = None, notes: dict | None = None, threads: list[dict] | None = None, props: dict | None = None, stamps: tuple[str, str] | None = None, whatif: list[str] | None = None, queries: list[dict] | None = None) -> bytes:
     threads = threads or []
     ranges: dict[int, list[tuple[str, str]]] = {}
     wb = Workbook()
@@ -198,4 +199,5 @@ def write(eng, views: list[dict], vba: dict[str, bytes] | None = None, objects: 
     data = patch_app(data, app_xml(props or {}, eng.sheet_names(), VERSION)) if stamps else data
     data = overlay_finish(inject(review_finish(data, threads, ranges), wb, views, COL_PX, ROW_PX), plans, eng.sheet_names(), views)
     data = slicers_finish(data, views, eng.tables(), eng.pivots())
+    data = queries_finish(data, queries)
     return sheets_finish(data,[wb.worksheets[i].title for i, plan in plans.items() if plan["alts"]["charts"] and i < len(views) and views[i].get("chartSheet")])
