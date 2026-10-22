@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+set -e
+source "$(dirname "$0")/lib.sh"
+fc_venv
+cd "$FORMCEL_ROOT/backend"
+if [ "$(fc_os)" = macos ]; then pip install -r requirements_desktop_macos.txt; else pip install -r requirements_desktop.txt; fi
+if ! command -v cargo >/dev/null 2>&1; then
+  fc_say "Rust is not installed. Install it from https://rustup.rs then run ./build_app again"
+  exit 1
+fi
+if [ "$(fc_os)" = linux ] && ! pkg-config --exists webkit2gtk-4.1 2>/dev/null; then
+  fc_say "Tauri needs system libraries. On Debian or Ubuntu run:"
+  fc_say "sudo apt install libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev patchelf"
+  exit 1
+fi
+[ -x "$FORMCEL_ROOT/frontend/node_modules/.bin/tauri" ] || ( cd "$FORMCEL_ROOT/frontend" && npm install )
+fc_say "desktop toolchain ready: rustc $(rustc --version | awk '{print $2}')"

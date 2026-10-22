@@ -4,9 +4,7 @@
   "version": "0.37.0",
   "identifier": "ai.nodemode.formcel",
   "build": {
-    "frontendDist": "../frontend/dist",
-    "beforeBuildCommand": "cd ../frontend && npm run build",
-    "beforeDevCommand": ""
+    "frontendDist": "../frontend/dist"
   },
   "app": {
     "windows": [

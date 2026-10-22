@@ -1,0 +1,170 @@
+#!/usr/bin/env bash
+set -euo pipefail
+cd "$(dirname "$0")"
+source setup/lib.sh
+
+usage() {
+  cat <<'EOF'
+./build_app            build the FormCel desktop app from this folder, start to finish
+  --no-install         macOS: leave the built app where it is instead of copying it to Applications
+  --install            Linux: install the built .deb with apt (asks for your password)
+  --open               open the app when the build is done
+  --clean              rebuild the Rust side and the frozen engine from nothing
+Every step's output goes to build_app.log beside this file.
+EOF
+}
+
+install_app=auto open_app=0 clean=0
+for arg in "$@"; do
+  case "$arg" in
+    --no-install) install_app=no ;;
+    --install) install_app=yes ;;
+    --open) open_app=1 ;;
+    --clean) clean=1 ;;
+    -h|--help) usage; exit 0 ;;
+    *) usage >&2; exit 2 ;;
+  esac
+done
+
+log="$FORMCEL_ROOT/build_app.log"
+: > "$log"
+exec > >(tee -a "$log") 2>&1
+trap 'status=$?; [ $status -eq 0 ] || printf "\n[formcel] the build stopped (exit %s). The full log is %s\n" "$status" "$log"' EXIT
+
+os="$(fc_os)"
+step() { printf '\n[formcel] == %s\n' "$*"; }
+
+step "checking the tools"
+[ "$os" = macos ] || [ "$os" = linux ] || fc_die "build_app runs on macOS and Linux; on Windows run build_app.bat"
+if [ "$os" = macos ]; then
+  xcode-select -p >/dev/null 2>&1 || fc_die "the Xcode command line tools are missing: run xcode-select --install, then ./build_app again"
+fi
+py="$(fc_python)" || fc_die "Python 3.12 or newer is required (on macOS: brew install python)"
+command -v node >/dev/null 2>&1 || fc_die "Node 20.19 or newer is required (on macOS: brew install node)"
+node -e 'const [a,b]=process.versions.node.split(".").map(Number); process.exit(a>22||(a===22&&b>=12)||(a===20&&b>=19)?0:1)' \
+  || fc_die "Node $(node -v) is too old; Vite needs 20.19 or 22.12 or newer"
+fc_rust_env
+if ! command -v rustup >/dev/null 2>&1 && ! command -v cargo >/dev/null 2>&1; then
+  fc_say "installing Rust with rustup (https://rustup.rs) into ~/.cargo; your shell profile is not changed"
+  curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal --default-toolchain stable --no-modify-path
+  fc_rust_env
+fi
+if command -v rustup >/dev/null 2>&1; then
+  rustup toolchain list | grep -q '^stable' || rustup toolchain install stable --profile minimal
+  rustup target list --installed 2>/dev/null | grep -q wasm32-unknown-unknown || rustup target add wasm32-unknown-unknown
+  fc_rust_env
+fi
+[ "$(dirname "$(command -v rustc)")" = "$(dirname "$(command -v cargo)")" ] \
+  || fc_die "rustc ($(command -v rustc)) and cargo ($(command -v cargo)) come from different installs; remove one (brew uninstall rust) and run ./build_app again"
+if [ "$os" = linux ] && ! pkg-config --exists webkit2gtk-4.1 2>/dev/null; then
+  fc_die "Tauri needs system libraries; on Debian or Ubuntu: sudo apt install libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev librsvg2-dev patchelf"
+fi
+version="$("$py" -c 'import json, sys; print(json.load(open(sys.argv[1]))["version"])' src-tauri/tauri.conf.json)"
+fc_say "building FormCel $version from $(pwd)"
+fc_say "python $("$py" -c 'import platform; print(platform.python_version())'), node $(node -v), $(rustc -V), $(cargo -V | awk '{print $1, $2}') from $(dirname "$(command -v rustc)")"
+
+step "installing the engine and the window"
+if [ -f backend/venv/bin/activate ] && [ -d frontend/node_modules ] && backend/venv/bin/python -c "import formcel_engine" >/dev/null 2>&1; then
+  fc_say "already installed; ./formcel_oc_install rebuilds it"
+else
+  ./formcel_oc_install
+fi
+step "installing the desktop packages (PyInstaller, the Tauri command line)"
+setup/install_desktop
+
+# The Rust build goes to a local cache outside this folder: a folder that a sync or file-provider app watches can
+# hold back or move freshly built files. FORMCEL_CARGO_TARGET overrides the place.
+if [ "$os" = macos ]; then cache_root="$HOME/Library/Caches/formcel"; else cache_root="${XDG_CACHE_HOME:-$HOME/.cache}/formcel"; fi
+export CARGO_TARGET_DIR="${FORMCEL_CARGO_TARGET:-$cache_root/tauri-target}"
+mkdir -p "$CARGO_TARGET_DIR"
+fc_say "Rust build folder: $CARGO_TARGET_DIR"
+
+rust_diagnose() {
+  fc_say "diagnosis for the log:"
+  printf '  rustc: %s\n  cargo: %s\n' "$(command -v rustc)" "$(command -v cargo)"
+  printf '  build folder: %s (%s free)\n' "$CARGO_TARGET_DIR" "$(df -h "$CARGO_TARGET_DIR" 2>/dev/null | awk 'NR==2 {print $4}')"
+  for c in "$HOME/.cargo/config.toml" "$HOME/.cargo/config" "$FORMCEL_ROOT/.cargo/config.toml" "$FORMCEL_ROOT/src-tauri/.cargo/config.toml"; do
+    [ -f "$c" ] && { printf '  %s:\n' "$c"; sed 's/^/    /' "$c"; }
+  done
+  return 0
+}
+
+if [ "$clean" = 1 ]; then
+  step "cleaning earlier builds"
+  ( cd src-tauri && cargo clean )
+  rm -rf backend/build/pyinstaller backend/dist-engine src-tauri/binaries/formcel-engine-* src-tauri/engine frontend/dist
+fi
+fc_rust_fresh
+
+step "building the window"
+setup/build_frontend
+step "freezing the engine into the app"
+setup/freeze_backend
+
+tauri_args=(build)
+case "$os" in
+  macos)
+    tauri_args+=(--bundles app)
+    [ -n "${APPLE_SIGNING_IDENTITY:-}" ] || tauri_args+=(--config '{"bundle":{"macOS":{"signingIdentity":"-"}}}')
+    ;;
+  linux) tauri_args+=(--bundles "${FORMCEL_BUNDLES:-deb}") ;;
+esac
+
+step "building the desktop app (the first build compiles several hundred Rust crates)"
+tlog="$(mktemp)"
+if ! frontend/node_modules/.bin/tauri "${tauri_args[@]}" 2>&1 | tee "$tlog"; then
+  grep -Eq 'error\[E|could not compile' "$tlog" || fc_die "tauri build failed outside the Rust compile; see the lines above"
+  rust_diagnose
+  fc_say "the Rust compile failed; cleaning the build folder and trying once more, one crate at a time"
+  ( cd src-tauri && cargo clean )
+  fc_rust_fresh
+  CARGO_BUILD_JOBS=1 frontend/node_modules/.bin/tauri "${tauri_args[@]}" || { rust_diagnose; fc_die "tauri build failed twice; send build_app.log"; }
+fi
+rm -f "$tlog"
+
+bundle="$CARGO_TARGET_DIR/release/bundle"
+
+if [ "$os" = macos ]; then
+  app="$bundle/macos/FormCel.app"
+  [ -d "$app" ] || fc_die "the build finished but $app is missing"
+  codesign --verify --deep --strict "$app" 2>/dev/null || fc_say "codesign could not verify the app; it is ad-hoc signed, so macOS may ask once before it opens"
+  step "packing the disk image"
+  mkdir -p "$bundle/dmg"
+  dmg="$bundle/dmg/FormCel_${version}_$(uname -m).dmg"
+  stage="$(mktemp -d)"
+  ditto "$app" "$stage/FormCel.app"
+  ln -s /Applications "$stage/Applications"
+  rm -f "$dmg"
+  hdiutil create -quiet -volname FormCel -srcfolder "$stage" -ov -format UDZO "$dmg"
+  rm -rf "$stage"
+  fc_say "app: $app"
+  fc_say "disk image: $dmg"
+  target_app=""
+  if [ "$install_app" != no ]; then
+    dest=/Applications
+    [ -w "$dest" ] || { dest="$HOME/Applications"; mkdir -p "$dest"; }
+    if pgrep -x FormCel >/dev/null 2>&1; then
+      osascript -e 'tell application "FormCel" to quit' >/dev/null 2>&1 || true
+      sleep 2
+    fi
+    rm -rf "$dest/FormCel.app"
+    ditto "$app" "$dest/FormCel.app"
+    xattr -dr com.apple.quarantine "$dest/FormCel.app" 2>/dev/null || true
+    target_app="$dest/FormCel.app"
+    fc_say "installed: $target_app"
+  fi
+  if [ "$open_app" = 1 ]; then open "${target_app:-$app}"; fi
+else
+  deb="$(ls -t "$bundle"/deb/*.deb 2>/dev/null | head -1 || true)"
+  [ -n "$deb" ] && fc_say "package: $deb"
+  ls "$bundle"/*/ 2>/dev/null | sed 's/^/  /'
+  if [ "$install_app" = yes ] && [ -n "$deb" ]; then
+    sudo apt install -y "$deb"
+  elif [ -n "$deb" ]; then
+    fc_say "install it with: sudo apt install $deb   (or run ./build_app --install)"
+  fi
+  if [ "$open_app" = 1 ]; then
+    "$CARGO_TARGET_DIR/release/formcel-desktop" >/dev/null 2>&1 &
+  fi
+fi
+fc_say "done in ${SECONDS}s"

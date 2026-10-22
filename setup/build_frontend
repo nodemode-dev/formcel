@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+set -e
+source "$(dirname "$0")/lib.sh"
+cd "$FORMCEL_ROOT/frontend"
+[ -d node_modules ] || npm install
+[ -f public/engine/formcel.wasm ] || ../engine/build_wasm
+npm run build
+fc_say "built frontend/dist"

@@ -65,6 +65,15 @@ Needs Python 3.12+, Node 20.19+ and Rust (https://rustup.rs).
 
 Windows: `formcel_oc_install.bat` then `formcel.bat`.
 
+### Desktop app
+
+```
+./build_app             # macOS and Linux: installs what is missing, builds the window, freezes the engine, builds the app
+./build_app --open      # and opens it; --clean rebuilds from nothing; --no-install keeps it out of Applications
+```
+
+On macOS this leaves `FormCel.app` in Applications and a `.dmg` beside the build; on Linux a `.deb` (`--install` installs it). Windows: `build_app.bat` makes the .msi and setup .exe. The Rust build goes to `~/Library/Caches/formcel` or `~/.cache/formcel` (set `FORMCEL_CARGO_TARGET` to move it), and every step is logged to `build_app.log`.
+
 Data lives in `~/FormCel` (override with `FORMCEL_DATA_DIR`): Workbooks, Templates, Media, Exports.
 
 ## Ports
