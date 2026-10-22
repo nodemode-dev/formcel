@@ -2,6 +2,7 @@ import type { Area, Cell, Changed, Dir, Effect, EngineClient, FormatChange, Form
 import { light, parseStyle, PLAIN, themeOf, tint, type CellStyle, type Look } from './style';
 import type { TimelineView } from '../ui/timeline';
 import { decodeChips, encodeChips, paintChipLine, type ChipHit, type SmartChip } from './smartchips';
+import { decodeTyped, paintTypeIcon, TYPE_PAD, type TypedMark } from './typemarks';
 
 interface Mark {
   style?: CellStyle;
@@ -159,6 +160,7 @@ export interface GridEvents {
   onLinks(changes: LinkChange[]): void;
   onChips(changes: LinkChange[]): void;
   onChipOpen?(row: number, col: number, chip: SmartChip): void;
+  onTypeIcon?(row: number, col: number): void;
   onOpenLink(): void;
   onLinkBox(): void;
   onView(sheet: number, view: SheetView): void;
@@ -205,6 +207,7 @@ export class Grid {
   private readonly colors = new Map<number, string>();
   private readonly linked = new Set<number>();
   private readonly smart = new Map<number, SmartChip[]>();
+  private readonly typed = new Map<number, TypedMark>();
   private smartHits: ChipHit[] = [];
   private editChips: SmartChip[] = [];
   private readonly styles = new Map<number, CellStyle>();
@@ -1041,7 +1044,7 @@ export class Grid {
 
   private textSpan(k: number, t: string, r: number, c: number, merged: (r: number, c: number) => boolean): [number, number] {
     const st = this.styleOf(k) ?? PLAIN;
-    if (t.charCodeAt(0) === SPARK_CODE || t.charCodeAt(0) === IMAGE_CODE || this.cfs.get(k)?.icon) return [this.x(c), this.x(c) + this.cols.size(c)];
+    if (t.charCodeAt(0) === SPARK_CODE || t.charCodeAt(0) === IMAGE_CODE || this.cfs.get(k)?.icon || this.typed.has(k)) return [this.x(c), this.x(c) + this.cols.size(c)];
     let left = this.x(c);
     let right = left + this.cols.size(c);
     if (st.wrap || st.rot || st.vertical || this.nums.has(k)) return [left, right];
@@ -1063,7 +1066,8 @@ export class Grid {
     const px = this.font(st);
     const ha = this.align(k, t, st);
     const mark = this.cfs.get(k);
-    const pad = 3 + st.indent * INDENT_PX + (mark?.icon && ha === 'left' ? 16 : 0);
+    const tmark = this.typed.get(k);
+    const pad = 3 + st.indent * INDENT_PX + (mark?.icon && ha === 'left' ? 16 : 0) + (tmark && ha === 'left' ? TYPE_PAD : 0);
     const lh = Math.round(px * 1.3);
     const dark = /^#[0-9a-f]{6}$/i.test(pal.bg) && !light(pal.bg);
     const peak = (c: string) => Math.max(...[1, 3, 5].map((i) => parseInt(c.slice(i, i + 2), 16)));
@@ -1081,6 +1085,7 @@ export class Grid {
       ctx.globalAlpha = 1;
     }
     if (mark?.icon) drawIcon(ctx, mark.icon[0], mark.icon[1], left + 4, yy + rh / 2);
+    if (tmark) paintTypeIcon(ctx, tmark, left + 4 + st.indent * INDENT_PX, yy, rh);
     this.font(st);
     ctx.fillStyle = st.fc ? auto(st.fc) : this.colors.get(k) ?? (st.bg ? (light(st.bg) ? '#1a1a1a' : '#f5f5f5') : pal.fg);
     if (st.vertical) {
@@ -2446,12 +2451,32 @@ export class Grid {
     const list = await this.engine.chipsOf(this.book, sheet);
     if (sheet !== this.sheet) return;
     this.smart.clear();
-    for (const [r, c, t] of list) this.smart.set(KEY(r, c), decodeChips(t));
+    this.typed.clear();
+    for (const [r, c, t] of list) {
+      const chips = decodeChips(t);
+      if (chips.length) this.smart.set(KEY(r, c), chips);
+      const mark = decodeTyped(t);
+      if (mark) this.typed.set(KEY(r, c), mark);
+    }
     this.paint();
   }
 
   smartAt(row: number, col: number): SmartChip[] {
     return this.smart.get(KEY(row, col)) ?? [];
+  }
+
+  typedAt(row: number, col: number): TypedMark | null {
+    return this.typed.get(KEY(row, col)) ?? null;
+  }
+
+  typedCells(): [number, number, TypedMark][] {
+    return [...this.typed.entries()].map(([k, m]) => [Math.floor(k / MAX_COLS), k % MAX_COLS, m]);
+  }
+
+  private typeIconHit(px: number, py: number, row: number, col: number): boolean {
+    if (!this.typed.has(KEY(row, col))) return false;
+    const x0 = this.x(col);
+    return px >= x0 + 2 && px <= x0 + 4 + TYPE_PAD && py >= this.y(row) && py <= this.y(row) + this.rows.size(row);
   }
 
   smartHit(px: number, py: number): { row: number; col: number; chip: SmartChip } | null {
@@ -2464,6 +2489,23 @@ export class Grid {
   async setSmart(row: number, col: number, chips: SmartChip[]): Promise<void> {
     const mark = await this.engine.undoMark(this.book);
     await this.applyEffect(await this.engine.setChips(this.book, this.sheet, row, col, encodeChips(chips)));
+    await this.engine.undoGroup(this.book, mark);
+    await this.refreshHistory();
+  }
+
+  async setTypedCells(items: [row: number, col: number, text: string, chips: string][]): Promise<void> {
+    if (!items.length) return;
+    const mark = await this.engine.undoMark(this.book);
+    const quoted = (t: string) => (/^[\d\s.,+\-%$=]/.test(t) ? `'${t}` : t);
+    await this.commitEdits(await this.engine.apply(this.book, items.map(([r, c, t]) => [r, c, quoted(t)] as [number, number, string]), this.sheet));
+    for (const [r, c, , chips] of items) await this.applyEffect(await this.engine.setChips(this.book, this.sheet, r, c, chips));
+    await this.engine.undoGroup(this.book, mark);
+    await this.refreshHistory();
+  }
+
+  async grouped(run: () => Promise<void>): Promise<void> {
+    const mark = await this.engine.undoMark(this.book);
+    await run();
     await this.engine.undoGroup(this.book, mark);
     await this.refreshHistory();
   }
@@ -2507,6 +2549,9 @@ export class Grid {
         const list = decodeChips(t);
         if (list.length) this.smart.set(KEY(r, c), list);
         else this.smart.delete(KEY(r, c));
+        const mark = decodeTyped(t);
+        if (mark) this.typed.set(KEY(r, c), mark);
+        else this.typed.delete(KEY(r, c));
       }
       this.events.onChips(chips);
     }
@@ -3371,6 +3416,7 @@ export class Grid {
         this.drag = { kind: 'cells' };
         const open = (e.ctrlKey || e.metaKey) && !shift && this.linked.has(KEY(row, col));
         const chipOpen = (e.ctrlKey || e.metaKey) && !shift ? this.smartHit(p.x, p.y) : null;
+        const typeOpen = !shift && !e.ctrlKey && !e.metaKey && this.typeIconHit(p.x, p.y, row, col);
         const box = !shift && !e.ctrlKey && !e.metaKey && this.isCheck(row, col) && Math.abs(p.x - (this.x(col) + this.cols.size(col) / 2)) <= 9 && Math.abs(p.y - (this.y(row) + this.rows.size(row) / 2)) <= 9;
         this.enqueue(async () => {
           pane(true, true);
@@ -3379,6 +3425,7 @@ export class Grid {
           if (box) await this.toggleCheck(row, col);
           if (open) this.events.onOpenLink();
           if (chipOpen) this.events.onChipOpen?.(chipOpen.row, chipOpen.col, chipOpen.chip);
+          if (typeOpen) this.events.onTypeIcon?.(row, col);
         });
       }
     });

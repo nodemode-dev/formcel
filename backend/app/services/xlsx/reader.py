@@ -17,6 +17,7 @@ from .datamodel import read as model_in
 from .cf import rules_in
 from .chartex import scan as scan_charts
 from .chartsheets import sheets_in
+from .datatypes import read as datatypes_in
 from .drawings import objects_in
 from .extlinks import books_in, lines_in
 from .formulas import from_file
@@ -255,6 +256,8 @@ def read(data: bytes) -> dict:
     for i, r, c, v in filled:
         if i < len(sheets):
             sheets[i]["cells"].append((r, c, v))
+    for i, found_types in datatypes_in(data, [s["name"] for s in sheets]).items():
+        sheets[i]["chips"] = found_types
     settings = render(calc_in(wb), [e for s in scanned for e in s["ignored"]])
     model, conns, excel_model = model_in(data)
     if conns and not model:

@@ -48,6 +48,7 @@ import { mountSheetChrome } from './ui/sheetchrome';
 import { Backstage } from './ui/backstage';
 import { Vba } from './vba';
 import { DataModelWindow } from './ui/datamodel';
+import { DataTypes } from './datatypes';
 
 const LOCALES: [string, string][] = [['en-US', 'English (United States)'], ['en-GB', 'English (United Kingdom)'], ['de-DE', 'Deutsch (Deutschland)'], ['fr-FR', 'Francais (France)'], ['ja-JP', 'Japanese (Japan)'], ['es-ES', 'Espanol (Espana)'], ['it-IT', 'Italiano (Italia)'], ['pt-BR', 'Portugues (Brasil)'], ['nl-NL', 'Nederlands (Nederland)'], ['sv-SE', 'Svenska (Sverige)'], ['pl-PL', 'Polski (Polska)'], ['ru-RU', 'Russian (Russia)'], ['zh-CN', 'Chinese (China)'], ['ko-KR', 'Korean (Korea)']];
 
@@ -319,6 +320,7 @@ export class App {
   });
   private readonly auto: Automation;
   private readonly vba: Vba;
+  private dtypes!: DataTypes;
   private tools!: DataTools;
   private calc!: Calc;
   private grouped = new Set<number>();
@@ -385,10 +387,12 @@ export class App {
         this.formatBar();
         this.linkChip();
         this.collab?.active();
+        this.dtypes?.selected();
         this.pivotFollow(range);
         this.calc?.active();
       },
       onError: (message) => this.collab?.refused(message),
+      onTypeIcon: (row, col) => void this.dtypes?.openCard(row, col),
       onHover: (row, col, x, y) => this.collab?.hover(row, col, x, y),
       onHistory: (undo, redo) => {
         this.canUndo = undo;
@@ -685,6 +689,7 @@ export class App {
       this.collab.refused(e.reason.message);
     });
     this.auto = new Automation({ grid: this.grid, book: () => this.open?.book ?? -1, id: () => this.open?.id ?? '', sheets: () => this.open?.sheets ?? [], title: () => this.open?.title ?? '', status: (t, e) => this.status(t, e), addSheet: (n) => this.addSheetNamed(n), renameSheet: async (i, n) => this.renameSheetTo(i, n), deleteSheet: (i) => this.deleteSheet(i), showSheet: (i) => this.showSheet(i), script: this.scriptHost() });
+    this.dtypes = new DataTypes({ grid: this.grid, book: () => this.open?.book ?? -1, id: () => this.open?.id ?? '', sheets: () => this.open?.sheets ?? [], status: (t, e) => (e ? this.collab.refused(t) : this.status(t)) });
     this.vba = new Vba({ grid: this.grid, id: () => this.open?.id ?? '', book: () => this.open?.book ?? -1, title: () => this.open?.title ?? '', sheets: () => this.open?.sheets ?? [], status: (t, e) => this.status(t, e), settings: { get: (k) => this.auto.setting(k), set: (k, v) => this.auto.setSetting(k, v) }, toolbar: this.p.toolbar });
     this.commands();
     installSettings({
@@ -710,6 +715,7 @@ export class App {
     this.grid.opts.barEdit = () => {
       this.p.formulaBar.focus();
     };
+    this.dtypes.commands((id, title, description, changes, run, keys) => registerCommand({ id, title, description, changes, run, keys }));
     this.calc.commands((id, title, description, changes, run, keys) => registerCommand({ id, title, description, changes, run, keys }));
     this.collab.commands((id, title, description, changes, run, keys) => registerCommand({ id, title, description, changes, run, keys }));
     this.ribbon = mountRibbon(p.toolbar, this.grid, {
@@ -1187,6 +1193,7 @@ export class App {
     if (this.open) this.home.setLast(this.open.id);
     this.open = null;
     this.collab.detach();
+    this.dtypes.closed();
     this.auto.closed();
     this.vba.closed();
     this.grouped.clear();
@@ -2543,6 +2550,7 @@ export class App {
     void this.vba.opened(id);
     if (setHash && location.hash !== `#w-${id}`) location.hash = `w-${id}`;
     this.collab.attach(id, book, doc.sheets, doc.collab, doc.protection);
+    void this.dtypes.opened();
     void waiting(id).then((n) => {
       if (!n) return;
       this.status('Offline changes waiting to be sent');

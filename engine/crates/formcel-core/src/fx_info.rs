@@ -61,11 +61,23 @@ impl Eval<'_> {
     }
 
     pub(super) fn call_info(&self, name: &str, a: &[Expr]) -> Option<Result<Value, ErrKind>> {
-        if !matches!(name, "CELL" | "INFO" | "ISEVEN" | "ISODD" | "ISFORMULA" | "TYPE" | "SHEET" | "SHEETS") {
+        if !matches!(name, "CELL" | "INFO" | "ISEVEN" | "ISODD" | "ISFORMULA" | "TYPE" | "SHEET" | "SHEETS" | "FIELDVALUE" | "_FV") {
             return None;
         }
         Some((|| {
             Ok(match name {
+                "FIELDVALUE" | "_FV" => {
+                    if a.len() != 2 {
+                        return Err(ErrKind::Na);
+                    }
+                    let field = self.t(a, 1)?;
+                    let found = match self.arg(&a[0]) {
+                        Arg::R(s, ar) if ar.r0 == ar.r1 && ar.c0 == ar.c1 => self.ctx.dtype_field(s, Addr { row: ar.r0, col: ar.c0 }, &field),
+                        Arg::V(Value::Error(k)) => return Err(k),
+                        _ => None,
+                    };
+                    found.ok_or(ErrKind::Value)??
+                }
                 "CELL" => self.cell_info(a)?,
                 "INFO" => self.info(a)?,
                 "ISEVEN" | "ISODD" => {

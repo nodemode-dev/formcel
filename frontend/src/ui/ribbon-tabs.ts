@@ -150,7 +150,7 @@ export function ribbonTabs(h: RibbonHost): TabDef[] {
     id: 'data', label: 'Data', groups: [
       G('get', 'Get & Transform Data', L('data.panel', 'Get Data', 'dataConn'), R([T('table.create', 'From Table/Range', 'table')])),
       G('queries', 'Queries & Connections', S('data.refresh', 'Refresh All', 'refreshAll', refreshMenu), R([T('data.panel', 'Queries & Connections', 'queries')], [T('data.links', 'Edit Links', 'extLink')])),
-      G('types', 'Data Types', L('datatypes.stocks', 'Stocks', 'stocks'), L('datatypes.currencies', 'Currencies', 'currency')),
+      G('types', 'Data Types', L('datatypes.stocks', 'Stocks', 'stocks'), L('datatypes.currencies', 'Currencies', 'currency'), L('datatypes.providers', 'Data Providers', 'refreshAll')),
       G('sort', 'Sort & Filter',
         R([I('data.sort-asc', 'Sort A to Z', 'sortAsc')], [I('data.sort-desc', 'Sort Z to A', 'sortDesc')]),
         L('data.sort', 'Sort', 'sort'), L('data.filter', 'Filter', 'filter'),

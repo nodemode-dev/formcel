@@ -71,6 +71,12 @@ pub trait Ctx {
         None
     }
     fn host_want(&self, _key: &str) {}
+    fn dtype_field(&self, _sheet: usize, _a: Addr, _field: &str) -> Option<Result<Value, ErrKind>> {
+        None
+    }
+    fn dtype_entity(&self, _sheet: usize, _a: Addr) -> Option<String> {
+        None
+    }
     fn cell_prop(&self, _sheet: usize, _a: Addr, _what: &str) -> Option<Value> {
         None
     }
@@ -331,11 +337,20 @@ impl<'a> Eval<'a> {
         ARRAY_FNS.contains(&name) || fx_hub::ARRAY_MORE.contains(&name) || SCOPED_FNS.contains(&name) || fx::routed(name) || self.user(name) || self.ctx.host_fn(name)
     }
 
-    fn hosted(&self, name: &str, a: &[Expr]) -> Result<Arg, ErrKind> {
+    pub(crate) fn host_key(&self, name: &str, a: &[Expr]) -> Result<String, ErrKind> {
         let mut key = name.to_ascii_uppercase();
         for e in a {
             key.push('\u{1f}');
-            match self.arg(e) {
+            let got = self.arg(e);
+            if let Arg::R(s, ar) = &got {
+                if ar.r0 == ar.r1 && ar.c0 == ar.c1 {
+                    if let Some(ent) = self.ctx.dtype_entity(*s, Addr { row: ar.r0, col: ar.c0 }) {
+                        key.push_str(&crate::host::token(&Value::Text(ent)));
+                        continue;
+                    }
+                }
+            }
+            match got {
                 Arg::V(Value::Error(k)) => return Err(k),
                 Arg::V(v) => key.push_str(&crate::host::token(&v)),
                 other => {
@@ -348,6 +363,11 @@ impl<'a> Eval<'a> {
                 }
             }
         }
+        Ok(key)
+    }
+
+    fn hosted(&self, name: &str, a: &[Expr]) -> Result<Arg, ErrKind> {
+        let key = self.host_key(name, a)?;
         match self.ctx.host_get(&key) {
             Some(g) => Ok(Arg::A(g)),
             None => {
@@ -1126,6 +1146,7 @@ impl<'a> Eval<'a> {
                         Value::Error(ErrKind::Num) => 6.0,
                         Value::Error(ErrKind::Na) => 7.0,
                         Value::Error(ErrKind::Spill) => 9.0,
+                        Value::Error(ErrKind::Field) => 13.0,
                         Value::Error(ErrKind::Error) => 12.0,
                         Value::Error(ErrKind::Calc) => 14.0,
                         _ => return Err(ErrKind::Na),

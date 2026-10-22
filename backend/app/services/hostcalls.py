@@ -1,6 +1,7 @@
 import re
 
 from . import aiclient, appsettings, offline_ai, ranges, webdata
+from .quotes import model as quote_model
 
 ERRORS = {"#VALUE!", "#N/A", "#DIV/0!", "#NUM!", "#NULL!", "#NAME?", "#REF!"}
 NUM = re.compile(r"^[+-]?(\d+(\.\d*)?|\.\d+)([eE][+-]?\d+)?$")
@@ -15,6 +16,10 @@ def cell(v) -> str:
         return "z:"
     if isinstance(v, bool):
         return f"b:{int(v)}"
+    if isinstance(v, quote_model.XDate):
+        return f"d:{float(v)}"
+    if isinstance(v, quote_model.XMoment):
+        return f"m:{float(v)}"
     if isinstance(v, (int, float)):
         return f"n:{v}"
     s = str(v)
@@ -248,8 +253,13 @@ def resolve(key: str, books, fresh: bool = False, auto: dict | None = None, wid:
                     return error("#NAME?"), str(e)
                 except jsfn.JsError as e:
                     return error(e.code if e.code in ERRORS else "#VALUE!"), f"{name}: {e}"
-        if name in ("WEBSERVICE", "IMPORTDATA", "IMPORTXML", "IMPORTHTML", "IMPORTFEED") and not appsettings.external_allowed():
+        if name in ("WEBSERVICE", "IMPORTDATA", "IMPORTXML", "IMPORTHTML", "IMPORTFEED", "GOOGLEFINANCE", "STOCKHISTORY") and not appsettings.external_allowed():
             return error("#N/A"), "External content is blocked in Preferences, Trust Center."
+        if name in ("GOOGLEFINANCE", "STOCKHISTORY"):
+            from .quotes import service as quote_service
+
+            rows = quote_service.googlefinance(args, fresh) if name == "GOOGLEFINANCE" else quote_service.stockhistory(args, fresh)
+            return encode(rows), ""
         if name == "WEBSERVICE":
             need(args, 1)
             url = text_arg(args[0])
@@ -296,6 +306,8 @@ def resolve(key: str, books, fresh: bool = False, auto: dict | None = None, wid:
                 return "t:" + esc(local), ""
     except aiclient.NotConfigured as e:
         return error("#ERROR!"), str(e)
+    except quote_model.QuoteError as e:
+        return error(e.code), f"{name}: {e}"
     except (webdata.FetchError, ValueError, KeyError, IndexError, TypeError, OSError) as e:
         code = "#VALUE!" if name in ("WEBSERVICE", "FILTERXML") else "#N/A"
         return error(code), f"{name}: {e}"

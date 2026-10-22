@@ -12,6 +12,7 @@ pub mod xref;
 pub mod eval;
 pub mod link;
 pub mod chips;
+pub mod datatype;
 pub mod filter;
 pub mod formula;
 pub mod host;
@@ -557,6 +558,15 @@ impl eval::Ctx for Workbook {
 
     fn host_get(&self, key: &str) -> Option<eval::Array> {
         self.host.results.get(key).cloned()
+    }
+
+    fn dtype_field(&self, sheet: usize, a: Addr, field: &str) -> Option<Result<Value, ErrKind>> {
+        let d = self.dtype_at(sheet, a)?;
+        Some(d.field(field).cloned().ok_or(ErrKind::Field))
+    }
+
+    fn dtype_entity(&self, sheet: usize, a: Addr) -> Option<String> {
+        self.dtype_at(sheet, a).map(|d| d.entity)
     }
 
     fn host_want(&self, key: &str) {
@@ -1285,6 +1295,7 @@ impl Workbook {
             Expr::Call(n, args) => match n.as_str() {
                 "DATE" | "TODAY" | "EDATE" | "EOMONTH" => Some(Fmt::Date),
                 "NOW" => Some(Fmt::DateTime { secs: false, ampm: false }),
+                "_FV" | "FIELDVALUE" => self.field_fmt(sheet, args),
                 "TIME" => Some(Fmt::Time { secs: false, ampm: true }),
                 "MIN" | "MAX" | "IF" | "IFERROR" => args.iter().skip(usize::from(n == "IF")).find_map(|x| self.infer(sheet, x)).filter(|f| f.is_date()),
                 _ => None,
