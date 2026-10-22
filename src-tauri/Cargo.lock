@@ -823,7 +823,7 @@ dependencies = [
 
 [[package]]
 name = "formcel-desktop"
-version = "0.36.0"
+version = "0.37.0"
 dependencies = [
  "objc2",
  "objc2-app-kit",
