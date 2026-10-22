@@ -672,3 +672,35 @@ Show Values As has all fifteen choices, computed by re-aggregating over the reco
 - logged: v0.35.0 · 2026-10-21
 
 render_numbers formats many numbers with one code so chart axes and labels use the same format engine as cells.
+
+## v0.36.0 entries
+
+Built in nine worktrees, then six verification worktrees, merged by hand. One entry per area.
+
+### Headerless tables, column stepping, locales
+- refers-to: src/table.rs (flag n, set_header), src/formula.rs :: TableSpec.fixed, step_table_cols; src/locale.rs, src/formlocale.rs
+- kind: explainer
+- logged: v0.36.0 · 2026-10-22
+
+A table line carries flag n when it has no header row; its data starts at the top row, turning the header on inserts a row above only when the cell above is busy, and #Headers resolves to #REF!. The absolute form Table[[Col]:[Col]] is marked fixed; filling across steps only named single-column specifiers that are not fixed, and stepping past the last column gives #REF!. Nine more locales (es-ES, it-IT, pt-BR, nl-NL, sv-SE, pl-PL, ru-RU, zh-CN, ko-KR) add separators, date order, currency and group spacing; stored formulas stay en-US.
+
+### Smart chips
+- refers-to: src/chips.rs
+- kind: explainer
+- logged: v0.36.0 · 2026-10-22
+
+Chips are a per-cell property: lines of kind, start, label, value and tip, checked against the cell text and relocated by label after edits, recorded in undo, moved by shifts and sorts, and exposed as links for export.
+
+### Solver options, Evolutionary, ToolPak outputs, Analyze Data inserts
+- refers-to: src/whatif_opts.rs, whatif_solver.rs, whatif_toolpak.rs, whatif_report.rs, whatif_ask.rs, whatif_scen.rs
+- kind: explainer
+- logged: v0.36.0 · 2026-10-22
+
+Solver options (precision, scaling, iterations, time, convergence, population, mutation, seed, no-improvement count, multistart) parse from one options line; the Evolutionary engine is a seeded genetic search; alldifferent groups and binary constraints are read with the model. ToolPak tools and reports return chart hints of seven fields for the window to draw. The Scenario PivotTable report resolves its destination through dst_of and returns early for the probe destination.
+
+### Host-call spills, object edge anchors, Flash Fill preview
+- refers-to: src/eval.rs :: Eval::formula; src/objects.rs :: Anchor::shifted; src/datatools.rs :: t_flash
+- kind: explainer
+- logged: v0.36.0 · 2026-10-22
+
+When a formula is only a call to a host function (web functions, IMPORTRANGE, AI, custom host functions) its array spills as returned so empty cells stay empty; other formulas still turn empty array items into 0 as Excel does. An object's end anchor sitting exactly on the line where rows or columns are inserted keeps its size, so sparkline ranges and charts stop growing. A Flash Fill preview from one example that would give every row the same text is dropped.

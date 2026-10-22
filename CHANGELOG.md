@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.36.0 · 2026-10-22
+
+- Start a workbook by pasting comma or tab separated text or an HTML table, or by dropping a PDF with tables. Check Spelling (F7) with a bundled English word list and your own dictionary.
+- Excel's own colours for all 60 built-in table styles; tables without a header row, in the window and in .xlsx; nine more spreadsheet locales with their separators.
+- Name Manager, Insert Function, Function Arguments and named LAMBDA functions checked end to end, with sheet-scoped names and LAMBDA names saved in .xlsx; all 18 checks on Microsoft's LAMBDA page pass. Web functions fetch for real; references to other workbooks read files on disk and keep cached values.
+- .xlsx: slicers, chart sheets, print areas and titles, pivot charts with field buttons, pictures in cells as Excel stores them, and 100 shapes with fill, line, rotation and text formatting. .ods keeps filters and data validation. .xls brings in conditional formatting, validation, array and table formulas and charts.
+- Charts: drag boxes in an org chart to change who reports to whom; annotated timelines; maps of states and provinces.
+- Smart chips inside cells with the @ picker; drag and resize timeline cards; buttons on any shape or picture run scripts.
+- Solver's Evolutionary engine and Options; ToolPak chart outputs; Analyze Data inserts its PivotTables and charts.
+- Power Query as editable text with step undo, dependencies and tables that resize on refresh; PostgreSQL and MySQL queries with parameters; scheduled refresh with or without FormCel open; a better Data from picture; an extensions marketplace with signed packages; the REST API covers names, tables, charts, pivots, rules, validation and filters.
+- Apps Script scripts and triggers run in the engine process, also with the window closed; Office Scripts get TypeScript checking and completions; Python cells use pandas and spill DataFrames; add-in functions show their help.
+- Fixes found by driving every 0.35.0 feature in the window: scatter charts in .xlsx, undo with a chart selected, sparkline ranges growing, the Scenario PivotTable report, undoing an array delete, Ctrl+Shift+U, the accessibility checker's alt text.
+
 ## 0.35.0 · 2026-10-21
 
 - Calculation: Automatic, Automatic except data tables and Manual with F9, Shift+F9 and Ctrl+Alt+F9; iterative calculation with maximum iterations and change, and a circular reference warning when it is off; the R1C1 reference style; Ctrl+Shift+Enter array formulas over a fixed range; the blue spill outline and `#SPILL!` reasons; error checking with green triangles, the smart tag and the Error Checking dialog; references to other workbooks with Edit Links; the engine process calculates on several threads. All of it is saved in .fcel and .xlsx.

@@ -466,3 +466,40 @@ chartex.py writes histogram, box and whisker, waterfall, funnel, treemap, sunbur
 - logged: v0.35.0 · 2026-10-21
 
 docProps core is written through openpyxl and app.xml patched after save. Copying a sheet goes through the store so names collide into "Sheet (2)" style names.
+
+## v0.36.0 entries
+
+### More .xlsx passes and parts
+- refers-to: app/services/xlsx/slicers.py, chartsheets.py, prints.py, pivotchart.py, richdata.py, shapexml.py, overlay.py, writer.py, reader.py
+- kind: explainer
+- logged: v0.36.0 · 2026-10-22
+
+The writer's passes keep their order (calcio, pivots, properties, review, chartex, overlay); new parts hang off them: slicer caches and slicers with the x14 and x15 extensions, chart sheets, print areas and titles from page setup, pivot chart sources and drop-zone options (pivotchart.attach and mark when the chart part is made, finish after the zip), in-cell pictures as Excel rich values (rdrichvalue, structure, types, richValueRel, metadata merged with the dynamic array metadata, vm on the cell; only empty cells take one). shapexml.py is the single builder and parser for shapes: angles in 60000ths of a degree, widths in EMU, DrawingML dash names, connectors as cxnSp; a button is a roundRect named Button with its macro. The reader unbinds pivot charts before slicers are read.
+
+### OpenDocument filters and validation, legacy .xls records
+- refers-to: app/services/ods/filters.py, ods/valid.py, services/xlsrecords.py
+- kind: explainer
+- logged: v0.36.0 · 2026-10-22
+
+.ods filters are table:database-range with table:filter (multi-value filters as filter-set-item children, the form LibreOffice writes; no data-type on conditions, which LibreOffice reads as empty) and filtered rows hidden with visibility filter; filter kinds with no ODS form are written as the rows they show and noted. Validations are table:content-validations with content-validation-name on cells (capped at 200,000 cells). .xls conditional formats, validations, array and table formulas and simple charts are parsed from BIFF8 records beside the 0.35.0 formula reader.
+
+### Paste and PDF import, spelling
+- refers-to: app/services/tabular.py, spell.py, routers/spell.py; app/dictionaries/
+- kind: explainer
+- logged: v0.36.0 · 2026-10-22
+
+Pasted HTML tables honour colspan and rowspan; PDF tables come from pdfplumber word positions (lines by y, cells split at gaps over 0.7 of the text height, columns from merged x intervals), keeping leading zeros as text. Spelling expands the hunspell en_US affixes (about 166,788 forms) and keeps a per-user dictionary at DATA_DIR/user-dictionary.txt; it lives in the engine process because the word list is data.
+
+### Queries, databases, schedules, OCR, marketplace, REST
+- refers-to: app/services/mtext.py, qgraph.py, qparams.py, qtable.py, ossched.py, extmarket.py, ocrprep.py, ocrtable.py, routers/restapi.py, restmodels.py
+- kind: explainer
+- logged: v0.36.0 · 2026-10-22
+
+Queries round-trip as M-like text (steps with no Power Query equivalent as FormCel.Step records). Refresh order follows the query dependency graph. Parameters fill {{name}} tokens, and in SQL they are bound as driver parameters for @name after a quote and comment aware scan, so values are never pasted into statements; one read statement only. A loaded table is resized to the result on every refresh through the engine's own table line, headers first. The OS schedule switch writes a systemd user timer, a launchd agent or a Task Scheduler entry running `python -m app.refresh_cli`, which exits when the engine process is already up. The marketplace requires a SHA-256 per package and checks Ed25519 signatures against a pinned key. REST resources map onto the engine's wire lines so the API and the window write identical data. OCR removes ruling lines, places tesseract words in rows, cuts columns at empty projection gaps or ruling lines, and merges headings that straddle cuts.
+
+### Apps Script, Python cells, add-in metadata, offline assistant
+- refers-to: app/services/gas_runner.js, gasrun.py, gastriggers.py, pyrun_child.py, pyxl.py, extpkg.py, hostcalls.py :: py_order, memo; offline_ai.py; extbooks.py
+- kind: explainer
+- logged: v0.36.0 · 2026-10-22
+
+Apps Script runs in a node child of the engine process with its state in the automation block; triggers tick every 15 seconds in the scheduler, also with no window open. Python cells run in a separate process (pyrun_child with xl() from pyxl) with resource limits and no network, ordered by sheet position. Add-in manifests give function metadata for tips and Insert Function. With no model endpoint set, AI() and the assistant answer a fixed set of requests by rule (sentiment, extraction, summaries, totals, templates) and say so; the cleaner leaves real dates alone. External references read files on disk (path folder, data folder, working directory) through pqx.file_table before falling back to the library by name; a missing source gives #REF! so cached values stay.

@@ -564,3 +564,40 @@ The assistant reaches charts and pivots only through the fc-ai-chart and fc-ai-p
 - logged: v0.35.0 · 2026-10-21
 
 Value chips carry base field and item selects; the ToolPak dialogs come from one TOOLS table of fields and engine argument slots; the formula bar shows `{=TABLE(...)}` inside a data table.
+
+## v0.36.0 entries
+
+### Shapes, buttons, pivot chart bar, org, map, timeline
+- refers-to: src/charts/shapes.ts, shapeui.ts, types.ts :: ShapeSpec, layer.ts :: fillShape; pivotbar.ts, orgedit.ts, regionmap.ts, regions.ts, annotated.ts
+- kind: explainer
+- logged: v0.36.0 · 2026-10-22
+
+Shapes are a ShapeSpec drawn by shapes.ts as preset geometry scaled to the box; the gallery and Format shape dialog are in shapeui.ts. A button is a ShapeSpec with `button` set (roundRect), so it uses the same drawing, format and export path; scripts run on click from any object. The pivot field bar is patched in place and its height reserved so the plot does not jump. Org edits go through the engine inside one undo group. The map picks country or region level from the data; the geometry is data in regions.ts. The annotated timeline is used only for dated numeric data or the annotated mode.
+
+### Scripts: ExcelScript runtime, TypeScript checking, Python editor, triggers
+- refers-to: src/automation/officeApi.ts, officeTypes.ts, scriptWorker.ts, scripts.ts, tsWorker.ts, tsAssist.ts, customMeta.ts, tabServer.ts, pyCell.ts, recorder.ts
+- kind: explainer
+- logged: v0.36.0 · 2026-10-22
+
+officeApi.ts is the worker-side ExcelScript runtime; it keeps a snapshot model and emits ops that scripts.ts applies through the grid and the engine. The recorder writes scripts against that API: Range.autoFill and Worksheet.getAutoFilter emit fill and filter ops, charts are recorded as addChart with a range and getTitle().setText. TypeScript 5 runs lazily in its own worker for checking and completions (TypeScript 7 has no JS API). The Triggers tab and the Python cell editor are their own modules.
+
+### Names, functions and the editor's blur
+- refers-to: src/grid/grid.ts (editor blur), src/ui/autocomplete.ts, ui/functions.ts, ui/names.ts, ui/calc.ts
+- kind: explainer
+- logged: v0.36.0 · 2026-10-22
+
+The cell editor ignores blur while a modal is open and the modal returns focus when it closes, so Insert Function, Function Arguments and Paste Name work on a half-typed formula. Named function tips match names case-insensitively. Ctrl+Alt+F9 refetches web data.
+
+### Chips, timeline view, paste data, spelling, table styles
+- refers-to: src/ui/smartchips.ts, chippicker.ts, ui/timeline.ts, ui/pastedata.ts, ui/spell.ts, grid/tablestyledata.ts, grid/tables.ts
+- kind: explainer
+- logged: v0.36.0 · 2026-10-22
+
+Chips are drawn as pills inside the cell text and committed with the text as one undo step; the @ picker inserts them. Timeline cards drag and resize to rewrite dates through the engine, and the view is saved. Built-in table styles are compact data with exact tints from the theme; text colour comes only from the style so dark mode keeps the foreground token; borders now draw on sheets with only tables.
+
+### Queries, pictures and fixes from verification
+- refers-to: src/automation/tabData.ts, tableFit.ts, picture.ts; charts/layer.ts; engine/worker.ts; ui/calc.ts :: syncArrays; app.ts
+- kind: explainer
+- logged: v0.36.0 · 2026-10-22
+
+The query editor keeps a history stack for undo and redo and asks the engine process for the text view. After a load, the table lines before and after are compared and synced to the engine process. Ctrl+Z works with an object selected; the objects effect line is no longer read as a format change; undoing an array delete saves the array formula; Ctrl+Shift+U toggles the formula bar; the accessibility checker waits for pending object saves.
