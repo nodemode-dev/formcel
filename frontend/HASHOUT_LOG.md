@@ -7,6 +7,13 @@ Last updated: 2026-10-21 · autocomplete under fast typing
 
 ---
 
+## Form family icon rule · v0.39.0 (2026-10-22)
+
+- refers-to: ../assets/formcel_icon_macos.png; public/favicon.svg, public/favicon.ico, public/icons/*, public/splash.html, public/sw.js; ../src-tauri/icons/*
+- kind: rationale
+
+`assets/formcel_icon_macos.png` (1024 px: an 824 px tile with a 100 px margin and shadow) is the one master. The macOS set (icon.icns, icon.png, 128 px and up, the web app icons) is the master as given. Every icon shown small or inside the page (64 px and below, the Square and Store logos, both .ico files, favicon.svg, the `icons/logo-*.png` used by the title bar, Home, About and the splash) is the tile, cropped at 100 to 923 and clipped to the rounded square, so it is not a shrunken tile with an empty margin. The opaque apple-touch icon and the maskable icon put the tile on #100f14 (the maskable one at 80 percent, inside its safe zone). The splash shows `icons/logo-256.png` like the rest of the family. The service worker cache name moved to `formcel-shell-2` so installed copies pick up the new files.
+
 ## Autocomplete under fast typing · v0.15.0 (2026-10-21)
 
 - refers-to: src/grid/grid.ts :: editorHook, startEdit, gridKey; src/ui/autocomplete.ts :: take, key; src/app.ts
