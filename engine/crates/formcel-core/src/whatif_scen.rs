@@ -3,7 +3,7 @@ use crate::pivot::{Func, Pivot, Show, ValueField};
 
 impl Workbook {
     pub(super) fn sc_pivot(&mut self, a: &[String], fx: &mut Effect) -> Reply {
-        let dst = self.sheet_of(&a[0])?;
+        let dst = self.dst_of(&a[0])?;
         let src = self.sheet_of(&a[1])?;
         let scenarios: Vec<Scenario> = self.whatif.scenarios.iter().filter(|s| s.sheet == src).cloned().collect();
         if scenarios.is_empty() {
@@ -48,6 +48,9 @@ impl Workbook {
             }
         }
         self.put_all(dst, &out, fx)?;
+        if dst == usize::MAX {
+            return Ok(format!("ok\t{}", scenarios.len()));
+        }
         let width = table[0].len() as u32;
         let area = Area { r0: 0, c0: 0, r1: table.len() as u32 - 1, c1: width - 1 };
         let p = Pivot {

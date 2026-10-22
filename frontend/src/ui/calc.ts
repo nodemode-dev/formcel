@@ -301,7 +301,7 @@ export class Calc {
       const was = this.arraySig.get(i);
       if (sig === was || (was === undefined && !areas.length)) continue;
       for (const [r0, c0, r1, c1] of areas) {
-        const formula = await this.host.engine.getCell(book, `${colName(c0)}${r0 + 1}`, i);
+        const formula = ((await this.host.engine.read(book, r0, c0, r0, c0, i))[0]?.[3] ?? '').replace(/^\{(=.*)\}$/, '$1');
         if (formula.startsWith('=')) this.forward(cmd('array', i, r0, c0, r1, c1, formula));
       }
       this.forward(cmd('loadarrays', i, areas.map((a) => a.join('\t')).join('\n')));

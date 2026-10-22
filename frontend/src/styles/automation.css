@@ -65,7 +65,7 @@ a.fc-btn { text-decoration: none; }
 .fc-qprev table, .fc-ai-proposal table { border-collapse: collapse; font-size: var(--text-xs); }
 .fc-qprev th, .fc-qprev td, .fc-ai-proposal td { padding: 2px var(--space-2); border: 1px solid var(--border-color); white-space: nowrap; }
 
-.fc-ai-log { display: grid; gap: var(--space-2); max-height: 260px; min-height: 80px; overflow-y: auto; padding: var(--space-2); border: 1px solid var(--border-color); border-radius: var(--radius); background: var(--bg-primary); font-size: var(--text-sm); }
+.fc-ai-log { display: grid; grid-auto-rows: max-content; align-content: start; gap: var(--space-2); max-height: 260px; min-height: 80px; overflow-y: auto; padding: var(--space-2); border: 1px solid var(--border-color); border-radius: var(--radius); background: var(--bg-primary); font-size: var(--text-sm); }
 .fc-ai-msg-user { justify-self: end; max-width: 90%; padding: var(--space-1) var(--space-2); border-radius: var(--radius); background: var(--accent-color-dim); white-space: pre-wrap; }
 .fc-ai-msg-bot { max-width: 95%; white-space: pre-wrap; }
 .fc-ai-msg-err { max-width: 95%; color: var(--bad); white-space: pre-wrap; }

@@ -184,9 +184,23 @@ def chart_out(wb, host, obj: dict, view: dict, pivots: dict | None = None) -> bo
         line = first + j
         vals = _ref(ws, by_rows, bounds, line, lo, hi)
         s = Series(vals, title=None)
+        if kind == "scatter":
+            from openpyxl.chart.series import XYSeries
+
+            s = XYSeries()
+            s.yVal = NumDataSource(numRef=NumRef(f=str(vals)))
         if lay["header"]:
             s.tx = SeriesLabel(strRef=StrRef(_cell_ref(ws, by_rows, bounds, line, 0)))
         chartstyle.series_out(s, j, spec, style_kind, line_like or kind in ("line", "scatter", "radar"))
+        if kind == "scatter" and not chartstyle._color(spec, j):
+            from openpyxl.chart.shapes import GraphicalProperties
+
+            fill = ("3B82F6", "F97316", "22C55E", "A855F7", "EAB308", "EF4444")[j % 6]
+            s.marker = Marker(symbol="circle", size=6)
+            s.marker.graphicalProperties = GraphicalProperties(solidFill=fill)
+            s.marker.graphicalProperties.line.solidFill = fill
+            s.graphicalProperties = GraphicalProperties()
+            s.graphicalProperties.line.noFill = True
         return s
 
     def attach(chart, indices, line_like: bool = False) -> None:

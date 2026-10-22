@@ -215,7 +215,11 @@ export class ObjectLayer implements ObjectsHook {
       e.stopPropagation();
       this.remove(this.selected);
     } else if (e.key === 'Escape') this.select(null);
-    else if (e.key.startsWith('Arrow') && !e.ctrlKey && !e.metaKey) {
+    else if ((e.ctrlKey || e.metaKey) && !e.altKey && ['z', 'y'].includes(e.key.toLowerCase())) {
+      e.preventDefault();
+      e.stopPropagation();
+      void (e.key.toLowerCase() === 'z' && !e.shiftKey ? this.grid.undo() : this.grid.redo());
+    } else if (e.key.startsWith('Arrow') && !e.ctrlKey && !e.metaKey) {
       const n = this.nodes.get(this.selected);
       if (!n) return;
       e.preventDefault();

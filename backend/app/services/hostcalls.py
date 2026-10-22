@@ -1,6 +1,6 @@
 import re
 
-from . import aiclient, ranges, webdata
+from . import aiclient, offline_ai, ranges, webdata
 
 ERRORS = {"#VALUE!", "#N/A", "#DIV/0!", "#NUM!", "#NULL!", "#NAME?", "#REF!"}
 NUM = re.compile(r"^[+-]?(\d+(\.\d*)?|\.\d+)([eE][+-]?\d+)?$")
@@ -277,7 +277,13 @@ def resolve(key: str, books, fresh: bool = False, auto: dict | None = None, wid:
             return extbooks.resolve(args, books), ""
         if name == "AI":
             need(args, 1, 7)
-            return aiclient.cell_answer(text_arg(args[0]), [text_arg(a) for a in args[1:] if a != ""]), ""
+            try:
+                return aiclient.cell_answer(text_arg(args[0]), [text_arg(a) for a in args[1:] if a != ""]), ""
+            except aiclient.NotConfigured:
+                local = offline_ai.cell_answer(text_arg(args[0]), [text_arg(a) for a in args[1:] if a != ""])
+                if local is None:
+                    raise
+                return "t:" + esc(local), ""
     except aiclient.NotConfigured as e:
         return error("#ERROR!"), str(e)
     except (webdata.FetchError, ValueError, KeyError, IndexError, TypeError, OSError) as e:

@@ -271,7 +271,11 @@ export class App {
   private readonly shortcuts = new Shortcuts();
   private readonly say = liveRegion();
   private readonly checker = new Checker({
-    fetch: () => api('GET', `/api/workbooks/${this.open?.id}/accessibility`),
+    fetch: async () => {
+      this.charts.layer.flush();
+      await this.saving;
+      return api('GET', `/api/workbooks/${this.open?.id}/accessibility`);
+    },
     go: (sheet, where) => {
       this.showSheet(sheet);
       if (this.charts.layer.find(where, sheet)) this.charts.layer.focusObject(where);
@@ -857,6 +861,7 @@ export class App {
       else if (e.key === 'F3' && !e.altKey) id = 'names.paste';
       else if (e.key === 'F7' && !mod && !e.altKey && !e.shiftKey) id = 'review.spelling';
       else if (mod && e.altKey && e.shiftKey && e.key.toLowerCase() === 'p') id = 'python.cell';
+      else if (mod && e.shiftKey && !e.altKey && e.code === 'KeyU') id = 'view.formula-bar';
       else if (mod && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'a' && (e.target === p.formulaBar || e.target === this.grid.editor) && String((e.target as HTMLInputElement).value).startsWith('=')) id = 'formula.arguments';
       if (!id) return;
       e.preventDefault();
