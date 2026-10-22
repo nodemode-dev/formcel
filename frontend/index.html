@@ -15,6 +15,8 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <style>
     html, body { background: #111111; margin: 0; padding: 0; height: 100%; overflow: hidden; }
+    #app { visibility: hidden; }
+    body.app-ready #app { visibility: visible; }
   </style>
   <script>
 (function () {
@@ -76,6 +78,7 @@
   <link rel="stylesheet" href="/src/styles/calc.css">
   <link rel="stylesheet" href="/src/styles/datatools.css">
   <link rel="stylesheet" href="/src/styles/names.css">
+  <link rel="stylesheet" href="/src/styles/titlebar.css">
 </head>
 <body>
   <div id="app"></div>

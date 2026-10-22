@@ -1,0 +1,44 @@
+#!/usr/bin/env bash
+set -e
+root="$(cd "$(dirname "$0")/.." && pwd)"
+cd "$root/backend"
+# shellcheck disable=SC1091
+source venv/bin/activate
+python -c "import PyInstaller" 2>/dev/null || { echo "PyInstaller missing: pip install pyinstaller in backend/venv" >&2; exit 1; }
+[ -f "$root/frontend/dist/index.html" ] || (cd "$root/frontend" && npm run build)
+triple="${FORMCEL_TARGET:-$(rustc -vV | sed -n 's/^host: //p')}"
+os="$(uname -s)"
+sep=":"
+case "$os" in MINGW*|MSYS*|CYGWIN*) sep=";"; ext=".exe" ;; *) ext="" ;; esac
+extra=()
+[ -z "${FORMCEL_PYI_ARCH:-}" ] || extra+=(--target-arch "$FORMCEL_PYI_ARCH")
+mode=--onefile
+if [ "$os" = Darwin ]; then
+  mode=--onedir
+  [ -z "${APPLE_SIGNING_IDENTITY:-}" ] || extra+=(--codesign-identity "$APPLE_SIGNING_IDENTITY")
+fi
+rm -rf build/pyinstaller dist-engine
+pyinstaller --noconfirm --clean "$mode" --name formcel-engine \
+  --distpath dist-engine --workpath build/pyinstaller --specpath build/pyinstaller \
+  --add-data "$root/frontend/dist${sep}frontend_dist" \
+  --add-data "$root/backend/app/dictionaries${sep}app/dictionaries" \
+  --add-data "$root/backend/app/templates${sep}app/templates" \
+  --add-data "$root/backend/app/services/xlsx/future.json${sep}app/services/xlsx" \
+  --add-data "$root/backend/app/services/pyrun_child.py${sep}app/services" \
+  --add-data "$root/backend/app/services/gas_runner.js${sep}app/services" \
+  --collect-submodules app --collect-submodules uvicorn --hidden-import formcel_engine \
+  "${extra[@]}" \
+  "$root/backend/engine_main.py"
+if [ "$mode" = --onedir ]; then
+  out="$root/src-tauri/engine"
+  rm -rf "$out"
+  cp -R dist-engine/formcel-engine "$out"
+  "$out/formcel-engine" --selfcheck
+  echo "engine folder ready: $out"
+  exit 0
+fi
+mkdir -p "$root/src-tauri/binaries"
+out="$root/src-tauri/binaries/formcel-engine-${triple}${ext}"
+cp "dist-engine/formcel-engine${ext}" "$out"
+"$out" --selfcheck
+echo "sidecar ready: $out"
