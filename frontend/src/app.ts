@@ -266,7 +266,11 @@ export class App {
   private readonly shortcuts = new Shortcuts();
   private readonly say = liveRegion();
   private readonly checker = new Checker({
-    fetch: () => api('GET', `/api/workbooks/${this.open?.id}/accessibility`),
+    fetch: async () => {
+      this.charts.layer.flush();
+      await this.saving;
+      return api('GET', `/api/workbooks/${this.open?.id}/accessibility`);
+    },
     go: (sheet, where) => {
       this.showSheet(sheet);
       if (this.charts.layer.find(where, sheet)) this.charts.layer.focusObject(where);
