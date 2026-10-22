@@ -36,6 +36,7 @@ export function mountShell(root: HTMLElement): ShellParts {
       <span class="fc-group-badge" aria-live="polite" hidden>[Group]</span>
       <span class="fc-save" role="status" aria-live="polite" hidden></span>
       <div class="fc-bar-spacer"></div>
+      ${tool('app.settings', 'settings', 'Preferences (Ctrl+,)')}
       <span class="fc-status" data-state="pending" role="status" aria-live="polite"><span class="fc-status-dot"></span><span class="fc-status-text"></span></span>
     </header>
     <main class="fc-main fc-home" aria-label="Home"></main>

@@ -31,6 +31,20 @@ export interface ObjectsHook {
   shifted?(sheet: number): unknown;
 }
 
+export interface GridOptions {
+  fillHandle: boolean;
+  dragDrop: boolean;
+  enterMove: boolean;
+  enterDir: Dir;
+  editInCell: boolean;
+  gridlines: boolean;
+  gridColor: string;
+  entryFilter: ((raw: string) => string) | null;
+  barEdit: (() => void) | null;
+  defaultFont: string;
+  defaultSize: number;
+}
+
 export interface CellDecor {
   cells(r0: number, r1: number, c0: number, c1: number): [number, number][];
   paint(ctx: CanvasRenderingContext2D, r: number, c: number, x: number, y: number, w: number, h: number): void;
@@ -157,6 +171,8 @@ export interface Presence {
 export class Grid {
   readonly rows = new Axis(MAX_ROWS, 24, 8);
   readonly cols = new Axis(MAX_COLS, 100, 12);
+  opts: GridOptions = { fillHandle: true, dragDrop: true, enterMove: true, enterDir: 'down', editInCell: true, gridlines: true, gridColor: '', entryFilter: null, barEdit: null, defaultFont: '', defaultSize: 10 };
+  private moveTo: { r: number; c: number } | null = null;
   readonly el: HTMLElement;
   private readonly canvas: HTMLCanvasElement;
   private readonly ctx: CanvasRenderingContext2D;
@@ -252,7 +268,7 @@ export class Grid {
   private pointing = false;
   private pointGen = 0;
   private pal!: Palette;
-  private drag: null | { kind: 'cells' | 'rows' | 'cols' | 'fill' | 'split-r' | 'split-c' } | { kind: 'point'; row: number; col: number } | { kind: 'resize-col' | 'resize-row'; index: number; start: number; size: number } | { kind: 'break'; axis: 'row' | 'col'; from: number; to: number } = null;
+  private drag: null | { kind: 'cells' | 'rows' | 'cols' | 'fill' | 'split-r' | 'split-c' } | { kind: 'move'; row: number; col: number } | { kind: 'point'; row: number; col: number } | { kind: 'resize-col' | 'resize-row'; index: number; start: number; size: number } | { kind: 'break'; axis: 'row' | 'col'; from: number; to: number } = null;
 
   constructor(
     host: HTMLElement,
@@ -777,7 +793,7 @@ export class Grid {
 
   private paintCells(r0: number, r1: number, c0: number, c1: number): void {
     const { ctx, pal } = this;
-    ctx.strokeStyle = pal.grid;
+    ctx.strokeStyle = this.opts.gridColor || pal.grid;
     ctx.lineWidth = 1;
     ctx.beginPath();
     for (let r = r0; r <= r1 + 1; r++) {
@@ -790,7 +806,7 @@ export class Grid {
       ctx.moveTo(xx, this.y(r0));
       ctx.lineTo(xx, this.y(r1 + 1));
     }
-    ctx.stroke();
+    if (this.opts.gridlines) ctx.stroke();
     const merged = this.merges.length ? (r: number, c: number) => !!this.mergeAt(r, c) : () => false;
     const shown = this.merges.filter(([a, b, cc, d]) => a <= r1 && cc >= r0 && b <= c1 && d >= c0);
     for (const [mr0, mc0, mr1, mc1] of shown) {
@@ -892,8 +908,9 @@ export class Grid {
   }
 
   private font(st: CellStyle): number {
-    const px = st.size ? Math.round(st.size * 13.333) / 10 : 13;
-    const face = st.font ?? this.look.body;
+    const size = st.size || (this.opts.defaultSize !== 10 ? this.opts.defaultSize : 0);
+    const px = size ? Math.round(size * 13.333) / 10 : 13;
+    const face = st.font ?? (this.opts.defaultFont || this.look.body);
     this.ctx.font = `${st.i ? 'italic ' : ''}${st.b ? '700 ' : ''}${px}px ${face !== 'Inter' ? `"${face}", ` : ''}Inter, system-ui, -apple-system, "Segoe UI", sans-serif`;
     return px;
   }
@@ -1386,7 +1403,16 @@ export class Grid {
           ctx.strokeRect(fx0 + 0.5, fy0 + 0.5, this.x(f.c1 + 1) - fx0 - 1, this.y(f.r1 + 1) - fy0 - 1);
           ctx.setLineDash([]);
         }
-        if (s.r1 < MAX_ROWS - 1 || s.c1 < MAX_COLS - 1) {
+        const mv = this.moveTo;
+        if (mv) {
+          const mx0 = this.x(mv.c);
+          const my0 = this.y(mv.r);
+          ctx.setLineDash([4, 3]);
+          ctx.lineWidth = 2;
+          ctx.strokeRect(mx0 + 0.5, my0 + 0.5, this.x(mv.c + s.c1 - s.c0 + 1) - mx0 - 1, this.y(mv.r + s.r1 - s.r0 + 1) - my0 - 1);
+          ctx.setLineDash([]);
+        }
+        if (this.opts.fillHandle && (s.r1 < MAX_ROWS - 1 || s.c1 < MAX_COLS - 1)) {
           ctx.fillStyle = pal.bg;
           ctx.fillRect(x1 - 4.5, y1 - 4.5, 8, 8);
           ctx.fillStyle = pal.edge;
@@ -2447,7 +2473,7 @@ export class Grid {
   }
 
   async setActive(entered: string): Promise<boolean> {
-    const raw = await this.localise(entered, false);
+    const raw = await this.localise(this.opts.entryFilter ? this.opts.entryFilter(entered) : entered, false);
     if (this.validLines.length && raw !== '') {
       const line = await this.engine.checkInput(this.book, this.sheet, this.ar, this.ac, raw);
       if (line) {
@@ -2734,9 +2760,41 @@ export class Grid {
     return null;
   }
 
+  private onSelEdge(px: number, py: number): boolean {
+    if (!this.opts.dragDrop || px < HEAD_W || py < HEAD_H || this.editing || this.wholeRows() || this.wholeCols() || this.onFillHandle(px, py)) return false;
+    const s = this.sel();
+    const x0 = this.x(s.c0);
+    const x1 = this.x(s.c1 + 1);
+    const y0 = this.y(s.r0);
+    const y1 = this.y(s.r1 + 1);
+    const outer = px >= x0 - 3 && px <= x1 + 3 && py >= y0 - 3 && py <= y1 + 3;
+    const inner = px > x0 + 3 && px < x1 - 3 && py > y0 + 3 && py < y1 - 3;
+    return outer && !inner;
+  }
+
+  private async moveSelection(to: { r: number; c: number }): Promise<void> {
+    const s = this.sel();
+    const h = s.r1 - s.r0 + 1;
+    const w = s.c1 - s.c0 + 1;
+    const r = Math.min(Math.max(0, to.r), MAX_ROWS - h);
+    const c = Math.min(Math.max(0, to.c), MAX_COLS - w);
+    if (r === s.r0 && c === s.c0) return;
+    await this.remember('', s);
+    if (!this.copied) return;
+    const mark = await this.engine.undoMark(this.book);
+    await this.clearSelection();
+    const blank: FormatItem[] = [];
+    for (let i = s.r0; i <= s.r1; i++) for (let j = s.c0; j <= s.c1; j++) blank.push([i, j, '', '']);
+    await this.applyEffect(await this.engine.putFormats(this.book, this.sheet, blank));
+    this.select(r, c, r + h - 1, c + w - 1);
+    await this.pasteSpecial('all');
+    await this.engine.undoGroup(this.book, mark);
+    await this.refreshHistory();
+  }
+
   private onFillHandle(px: number, py: number): boolean {
     const s = this.sel();
-    if (s.r1 === MAX_ROWS - 1 && s.c1 === MAX_COLS - 1) return false;
+    if (!this.opts.fillHandle || (s.r1 === MAX_ROWS - 1 && s.c1 === MAX_COLS - 1)) return false;
     return Math.abs(px - this.x(s.c1 + 1)) <= 5 && Math.abs(py - this.y(s.r1 + 1)) <= 5;
   }
 
@@ -2988,6 +3046,10 @@ export class Grid {
 
   startEdit(initial?: string): void {
     if (this.editing) return;
+    if (initial === undefined && !this.opts.editInCell && this.opts.barEdit) {
+      this.opts.barEdit();
+      return;
+    }
     this.editing = true;
     const k = KEY(this.ar, this.ac);
     this.editor.value = initial ?? (this.masked.has(k) ? this.cache.get(k) : this.fx.get(k) ?? this.cache.get(k)) ?? '';
@@ -3036,6 +3098,12 @@ export class Grid {
     if (move && key) this.step(key, move);
     else if (move) this.move(move, false);
     this.paint();
+  }
+
+  private enterDir(reverse: boolean): Dir {
+    const d = this.opts.enterDir;
+    if (!reverse) return d;
+    return d === 'down' ? 'up' : d === 'up' ? 'down' : d === 'right' ? 'left' : 'right';
   }
 
   private step(key: 'Tab' | 'Enter', dir: Dir): void {
@@ -3134,6 +3202,15 @@ export class Grid {
         this.paint();
         return;
       }
+      if (this.drag?.kind === 'move') {
+        const { row, col } = this.hit(p.x, p.y);
+        const s = this.sel();
+        const r = Math.min(Math.max(0, s.r0 + row - this.drag.row), MAX_ROWS - (s.r1 - s.r0 + 1));
+        const c = Math.min(Math.max(0, s.c0 + col - this.drag.col), MAX_COLS - (s.c1 - s.c0 + 1));
+        this.moveTo = r === s.r0 && c === s.c0 ? null : { r, c };
+        this.paint();
+        return;
+      }
       if (this.drag?.kind === 'point') {
         const { row, col } = this.hit(p.x, p.y);
         void this.pointPut(this.drag.row, this.drag.col, row, col);
@@ -3160,7 +3237,7 @@ export class Grid {
         this.canvas.style.cursor = brk.axis === 'row' ? 'row-resize' : 'col-resize';
         return;
       }
-      this.canvas.style.cursor = bar ? (bar === 'split-r' ? 'row-resize' : 'col-resize') : this.onFillHandle(p.x, p.y) ? 'crosshair' : b ? (b.kind === 'col' ? 'col-resize' : 'row-resize') : 'cell';
+      this.canvas.style.cursor = bar ? (bar === 'split-r' ? 'row-resize' : 'col-resize') : this.onFillHandle(p.x, p.y) ? 'crosshair' : this.onSelEdge(p.x, p.y) ? 'move' : b ? (b.kind === 'col' ? 'col-resize' : 'row-resize') : 'cell';
     });
 
     this.og.addEventListener('pointerdown', (e) => {
@@ -3195,6 +3272,12 @@ export class Grid {
         this.drag = { kind: 'fill' };
         this.fillTo = null;
         this.fillShift = false;
+        return;
+      }
+      if (this.onSelEdge(p.x, p.y)) {
+        const at = this.hit(p.x, p.y);
+        this.drag = { kind: 'move', row: at.row, col: at.col };
+        this.moveTo = null;
         return;
       }
       const b = this.boundary(p.x, p.y);
@@ -3250,6 +3333,11 @@ export class Grid {
       if (d?.kind === 'point') {
         this.editor.focus({ preventScroll: true });
         setTimeout(() => (this.pointing = false), 0);
+      } else if (d?.kind === 'move') {
+        const to = this.moveTo;
+        this.moveTo = null;
+        if (to) this.enqueue(() => this.moveSelection(to));
+        else this.paint();
       } else if (d?.kind === 'break') {
         if (d.to !== d.from) this.events.onBreakMove?.(d.axis, d.from, d.to);
         this.paint();
@@ -3344,12 +3432,12 @@ export class Grid {
     });
   }
 
-  private remember(text: string, s: Range): void {
+  private remember(text: string, s: Range): Promise<void> {
     this.copied = null;
-    if ((s.r1 - s.r0 + 1) * (s.c1 - s.c0 + 1) > 100000) return;
+    if ((s.r1 - s.r0 + 1) * (s.c1 - s.c0 + 1) > 100000) return Promise.resolve();
     const book = this.book;
     const sheet = this.sheet;
-    void Promise.all([
+    return Promise.all([
       this.formatsOf(s),
       this.engine.read(book, s.r0, s.c0, s.r1, s.c1, sheet),
       this.engine.readValues(book, sheet, s.r0, s.c0, s.r1, s.c1),
@@ -3465,8 +3553,8 @@ export class Grid {
     }
     if (e.key === 'Enter' && !e.altKey) {
       e.preventDefault();
-      const dir = e.shiftKey ? 'up' : 'down';
-      this.enqueue(() => this.endEdit(true, dir, 'Enter'));
+      const dir = this.enterDir(e.shiftKey);
+      this.enqueue(() => this.endEdit(true, this.opts.enterMove ? dir : undefined, 'Enter'));
     } else if (e.key === 'Enter' && e.altKey) {
       e.preventDefault();
       const t = this.editor;
@@ -3498,7 +3586,7 @@ export class Grid {
       const before = this.editor.value;
       if (e.key === 'Enter' && mod && e.shiftKey && this.arrayHook) return this.endArray();
       if (e.key === 'Enter' && e.altKey) this.editor.value += '\n';
-      else if (e.key === 'Enter') await this.endEdit(true, e.shiftKey ? 'up' : 'down', 'Enter');
+      else if (e.key === 'Enter') await this.endEdit(true, this.opts.enterMove ? this.enterDir(e.shiftKey) : undefined, 'Enter');
       else if (e.key === 'Tab') await this.endEdit(true, e.shiftKey ? 'left' : 'right', 'Tab');
       else if (e.key === 'Escape') await this.endEdit(false);
       else if (dir && !mod) await this.endEdit(true, dir);
@@ -3561,7 +3649,7 @@ export class Grid {
     }
     switch (e.key) {
       case 'Enter':
-        return this.step('Enter', e.shiftKey ? 'up' : 'down');
+        return this.step('Enter', this.enterDir(e.shiftKey));
       case 'Tab':
         return this.step('Tab', e.shiftKey ? 'left' : 'right');
       case 'Home':
