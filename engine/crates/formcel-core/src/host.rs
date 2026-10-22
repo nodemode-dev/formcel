@@ -170,6 +170,7 @@ impl Workbook {
         if seeds.is_empty() {
             return Vec::new();
         }
-        self.recalc(&seeds)
+        let changed = self.recalc(&seeds);
+        self.present(changed)
     }
 }

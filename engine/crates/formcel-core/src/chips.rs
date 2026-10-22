@@ -159,14 +159,22 @@ impl Workbook {
             return Err(EngineError::NoSheet(sheet));
         }
         let mut n = 0;
+        let mut seeds = Vec::new();
         for (a, t) in cells {
             let kept = self.chip_text(sheet, *a).map(|text| fit(&text, parse(t))).unwrap_or_default();
             if kept.is_empty() {
                 self.chips.remove(&(sheet, *a));
             } else {
-                self.chips.insert((sheet, *a), encode(&kept));
+                let line = encode(&kept);
+                if line.starts_with("stock\t") || line.starts_with("currency\t") {
+                    seeds.push((sheet, *a));
+                }
+                self.chips.insert((sheet, *a), line);
                 n += 1;
             }
+        }
+        if !seeds.is_empty() {
+            self.recalc(&seeds);
         }
         Ok(n)
     }
