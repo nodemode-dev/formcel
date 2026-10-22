@@ -15,6 +15,7 @@ from .calcio import calc_in, render, scan
 from .cf import rules_in
 from .chartex import scan as scan_charts
 from .chartsheets import sheets_in
+from .datatypes import read as datatypes_in
 from .drawings import objects_in
 from .extlinks import books_in, lines_in
 from .formulas import from_file
@@ -251,5 +252,7 @@ def read(data: bytes) -> dict:
     for i, r, c, v in filled:
         if i < len(sheets):
             sheets[i]["cells"].append((r, c, v))
+    for i, found_types in datatypes_in(data, [s["name"] for s in sheets]).items():
+        sheets[i]["chips"] = found_types
     settings = render(calc_in(wb), [e for s in scanned for e in s["ignored"]])
     return {"calc": settings, "externals": lines_in(wb), "sheets": sheets, "names": names, "nameNotes": name_notes, "tables": tables, "pivots": pivots, "whatif": what, "theme": theme_in(wb.loaded_theme), "cellStyles": custom, "vba": vba, "props": read_props(wb, data), "protection": book_in(wb), "notes": [f"{n} {what}" for what, n in sorted(notes.items())]}

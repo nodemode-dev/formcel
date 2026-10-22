@@ -360,6 +360,8 @@ class Store:
             eng.load(s["cells"], i)
             eng.load_merges(s["merges"], i)
             eng.load_links(s["links"], i)
+            if s.get("chips"):
+                eng.load_chips(s["chips"], i)
             if s.get("rules"):
                 kept = eng.load_rules(s["rules"], i)
                 if kept < len(s["rules"]):

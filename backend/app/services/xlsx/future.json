@@ -53,6 +53,7 @@
   "F.INV.RT": "_xlfn.F.INV.RT",
   "F.TEST": "_xlfn.F.TEST",
   "FIELDVALUE": "_xlfn.FIELDVALUE",
+  "STOCKHISTORY": "_xlfn.STOCKHISTORY",
   "FILTER": "_xlfn._xlws.FILTER",
   "FILTERXML": "_xlfn.FILTERXML",
   "FLOOR.MATH": "_xlfn.FLOOR.MATH",

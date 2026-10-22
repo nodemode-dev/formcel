@@ -23,6 +23,15 @@ def _outside(text: str, fn) -> str:
 REF = r"(?:(?:'(?:[^']|'')+'|[A-Za-z_][A-Za-z0-9_.]*)!)?\$?[A-Z]{1,3}\$?\d+"
 ANCHOR_IN = re.compile(rf"ANCHORARRAY\(\s*({REF})\s*\)", re.I)
 ANCHOR_OUT = re.compile(rf"(?<![A-Za-z0-9_.$])({REF})#")
+FIELD_OUT = re.compile(rf"(?<![A-Za-z0-9_.$])({REF})((?:\.(?:\[[^\]]*\]|[A-Za-z_][A-Za-z0-9_]*))+)(?![A-Za-z0-9_(])")
+FIELD_PART = re.compile(r"\.(?:\[([^\]]*)\]|([A-Za-z_][A-Za-z0-9_]*))")
+
+
+def _fields_out(m: re.Match) -> str:
+    expr = m.group(1)
+    for p in FIELD_PART.finditer(m.group(2)):
+        expr = f'_FV({expr},"{p.group(1) if p.group(1) is not None else p.group(2)}")'
+    return expr
 
 
 def _close(s: str, open_at: int) -> int:
@@ -205,6 +214,7 @@ def to_file(formula: str) -> str:
     params = _params(formula)
 
     def fix(s: str) -> str:
+        s = FIELD_OUT.sub(_fields_out, s)
         s = CALL.sub(lambda m: (FUTURE.get(m.group(1).upper(), m.group(1)) if m.group(1).upper() not in params else m.group(1)) + "(", s)
         for p in sorted(params, key=len, reverse=True):
             s = re.sub(r"(?<=[(,])(\s*)\[\s*(" + re.escape(p) + r")\s*\](?=\s*[,)])", lambda m: m.group(1) + "[_xlpm." + m.group(2) + "]", s, flags=re.I)
