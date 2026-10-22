@@ -30,6 +30,7 @@ export interface Var {
   v: any;
   t: TypeRef;
   isConst?: boolean;
+  ev?: { name: string; mod: ModInfo; owner: any };
 }
 
 export class RefArg {
@@ -49,6 +50,7 @@ export class VInstance {
   readonly typeName: string;
   fields = new Map<string, Var>();
   terminated = false;
+  subs: Var[] = [];
   constructor(readonly mod: ModInfo) {
     this.typeName = mod.name;
   }
@@ -99,6 +101,8 @@ const DECLARED: Record<string, string> = { long: 'Long', integer: 'Integer', sin
 const ITEM_MEMBERS =new Set(['cells', 'range', 'item', 'offset', 'resize', 'rows', 'columns']);
 
 export class Interp {
+  private pending = '';
+  private capture: string | null = null;
   mods = new Map<string, ModInfo>();
   globals = new Map<string, (f: Frame) => any>();
   host: VbaHost;
@@ -181,6 +185,10 @@ export class Interp {
   }
 
   out(text: string): void {
+    if (this.capture !== null) {
+      this.capture += `${text}\n`;
+      return;
+    }
     this.emit({ type: 'output', text });
   }
 
@@ -269,6 +277,12 @@ export class Interp {
   }
 
   async makeVar(it: DimItem, f: Frame): Promise<Var> {
+    const v = await this.makeVarBase(it, f);
+    if (it.withEvents) v.ev = { name: it.name, mod: f.mod, owner: f.me };
+    return v;
+  }
+
+  private async makeVarBase(it: DimItem, f: Frame): Promise<Var> {
     if (it.dims) {
       const lb: number[] = [];
       const ub: number[] = [];
@@ -343,6 +357,8 @@ export class Interp {
     } catch (e) {
       if (e instanceof StopRun) return undefined;
       throw e;
+    } finally {
+      this.flushPending();
     }
   }
 
@@ -354,6 +370,8 @@ export class Interp {
       await this.callProc(p, mod, me, args);
     } catch (e) {
       if (!(e instanceof StopRun)) throw e;
+    } finally {
+      this.flushPending();
     }
     return true;
   }
@@ -437,9 +455,7 @@ export class Interp {
     const { parseImmediate, parseExpr } = await import('./parser');
     const f = this.paused ?? this.immediateFrame ?? new Frame([...this.mods.values()].find((m) => m.kind === 'std') ?? new ModInfo('Immediate', 'std', { optionExplicit: false, optionBase: 0, optionText: false, vars: [], procs: [], types: [], enums: [], implementsList: [] }), null, null);
     let captured = '';
-    const off = this.on((e) => {
-      if (e.type === 'output') captured += `${e.text}\n`;
-    });
+    this.capture = '';
     try {
       const t = text.trim();
       let stmts: Stmt[] | null = null;
@@ -458,7 +474,8 @@ export class Interp {
       const err = this.toVbaError(e);
       captured += `Run-time error '${err.number}': ${err.description}\n`;
     } finally {
-      off();
+      captured = this.capture + captured;
+      this.capture = null;
     }
     return captured.replace(/\n$/, '');
   }
@@ -689,6 +706,20 @@ export class Interp {
           f.withs.pop();
         }
       }
+      case 'raise': {
+        const target = s.e.k === 'call' ? s.e.t : s.e;
+        if (target.k !== 'name') fail(1004, 'Invalid RaiseEvent');
+        const args = s.e.k === 'call' ? await this.evalArgs(s.e.a, f) : [];
+        const self = f.me;
+        if (self instanceof VInstance) {
+          for (const ref of [...self.subs]) {
+            const ev = ref.ev;
+            const p = ev?.mod.procs.get(`${ev.name}_${target.n}`)?.[0];
+            if (ev && p) await this.callProc(p, ev.mod, ev.owner, args);
+          }
+        }
+        return undefined;
+      }
       case 'goto':
         return { t: 'goto', label: s.label };
       case 'gosub':
@@ -730,7 +761,8 @@ export class Interp {
 
   private async execPrint(s: Extract<Stmt, { k: 'print' }>, f: Frame): Promise<void> {
     if (!s.debug) fail(52, 'Bad file name or number');
-    let line = '';
+    let line = this.pending;
+    this.pending = '';
     let col = 0;
     for (const it of s.items) {
       if (it.e) {
@@ -751,7 +783,15 @@ export class Interp {
       col = line.length;
       if (it.sep === ',') line += ' '.repeat(14 - (col % 14));
     }
-    this.out(line.replace(/ +$/, ''));
+    const last = s.items[s.items.length - 1];
+    if (last && (last.sep === ';' || last.sep === ',')) this.pending = line;
+    else this.out(line.replace(/ +$/, ''));
+  }
+
+  flushPending(): void {
+    if (!this.pending) return;
+    this.out(this.pending.replace(/ +$/, ''));
+    this.pending = '';
   }
 
   private async execDim(s: Extract<Stmt, { k: 'dim' }>, f: Frame): Promise<void> {
@@ -1025,6 +1065,10 @@ export class Interp {
         if (isSet) {
           if (v === null && ref.v instanceof VInstance) await this.terminate(ref.v);
           if (v !== null && !isObj(v) && ref.t.name !== 'variant') fail(91);
+          if (ref.ev) {
+            if (ref.v instanceof VInstance) ref.v.subs = ref.v.subs.filter((s) => s !== ref);
+            if (v instanceof VInstance) v.subs.push(ref);
+          }
           ref.v = v;
           return;
         }
@@ -1155,6 +1199,10 @@ export class Interp {
     if (ps) {
       const vis = ps.filter((p) => inside || p.vis !== 'private');
       if (vis.length) return this.callByMode(vis, o.mod, o, args, mode, value);
+    }
+    for (const iface of o.mod.ast.implementsList) {
+      const via = o.mod.procs.get(`${iface.toLowerCase()}_${name}`);
+      if (via) return this.callByMode(via, o.mod, o, args, mode, value);
     }
     const fv = o.fields.get(name);
     if (fv && (inside || o.mod.ast.vars.some((s) => s.k === 'dim' && s.scope === 'public' && s.items.some((i) => i.name === name)))) {

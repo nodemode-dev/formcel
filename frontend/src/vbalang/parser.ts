@@ -150,8 +150,13 @@ export class Parser {
         m.vars.push(s as Extract<Stmt, { k: 'const' }>);
       } else if (k === 'dim' || k === 'withevents' || scope !== 'dim' || (k && this.peek(1).k !== 'op')) {
         if (k === 'dim') this.p++;
-        if (this.word() === 'withevents') this.p++;
+        let withEvents = false;
+        if (this.word() === 'withevents') {
+          this.p++;
+          withEvents = true;
+        }
         const s = this.parseDimBody(scope === 'dim' ? 'private' : scope, line);
+        if (withEvents && s.k === 'dim') for (const it of s.items) it.withEvents = true;
         m.vars.push(s as Extract<Stmt, { k: 'dim' }>);
       } else {
         this.err(`Unexpected ${this.t.v || 'end of line'} at module level`);
@@ -418,6 +423,9 @@ export class Parser {
         return this.parseConst('private');
       case 'redim':
         return this.parseRedim();
+      case 'raiseevent':
+        this.p++;
+        return { k: 'raise', e: this.postfix(), line };
       case 'erase': {
         this.p++;
         const names = [this.postfix()];

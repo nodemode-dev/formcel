@@ -21,13 +21,14 @@ export const has = (v: unknown): boolean => v !== undefined && v !== MISSING;
 export class VCollection extends HostObject {
   readonly typeName = 'Collection';
   items: { key: string | null; value: unknown }[] = [];
+  zeroBased = false;
 
   find(k: unknown): number {
     if (typeof k === 'string') {
       const l = k.toLowerCase();
       return this.items.findIndex((x) => x.key !== null && x.key.toLowerCase() === l);
     }
-    const i = toNum(k);
+    const i = toNum(k) + (this.zeroBased ? 1 : 0);
     if (i < 1 || i > this.items.length || i !== Math.floor(i)) fail(9);
     return i - 1;
   }

@@ -26,9 +26,11 @@ export interface DimItem {
   type: TypeRef;
   dims: { lo: Expr | null; hi: Expr }[] | null;
   dynamic: boolean;
+  withEvents?: boolean;
 }
 
 export type Stmt = { line: number } & (
+  | { k: 'raise'; e: Expr }
   | { k: 'dim'; scope: 'dim' | 'static' | 'public' | 'private'; items: DimItem[] }
   | { k: 'redim'; preserve: boolean; items: { target: Expr; dims: { lo: Expr | null; hi: Expr }[]; type: TypeRef | null }[] }
   | { k: 'erase'; names: Expr[] }

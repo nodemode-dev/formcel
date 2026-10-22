@@ -237,6 +237,7 @@ export class VRegExp extends HostObject {
         });
       case 'execute': {
         const col = new VCollection();
+        col.zeroBased = true;
         const rx = new RegExp(this.pattern, `g${this.ignoreCase ? 'i' : ''}${this.multiLine ? 'm' : ''}`);
         const text = str(args[0]);
         let m: RegExpExecArray | null;
@@ -260,7 +261,7 @@ class VMatch extends HostObject {
     this.defaultProp = 'value';
   }
 
-  member(name: string): unknown {
+  member(name: string, args: unknown[] = []): unknown {
     switch (name) {
       case '':
       case 'value':
@@ -271,8 +272,9 @@ class VMatch extends HostObject {
         return this.m[0].length;
       case 'submatches': {
         const c = new VCollection();
+        c.zeroBased = true;
         for (let i = 1; i < this.m.length; i++) c.items.push({ key: null, value: this.m[i] ?? '' });
-        return c;
+        return args.length ? c.member('item', args, 0) : c;
       }
       default:
         return fail(438);
