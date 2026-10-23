@@ -3,7 +3,7 @@ export type TypedKind = 'stock' | 'currency';
 export interface TypedMark {
   kind: TypedKind;
   label: string;
-  payload: string;
+  record: string;
   resolved: boolean;
 }
 
@@ -17,8 +17,7 @@ export function decodeTyped(text: string): TypedMark | null {
   for (const line of text.split('\n')) {
     const p = line.split('\t').map(unesc);
     if (p.length < 4 || !KINDS.includes(p[0] as TypedKind) || !p[2]) continue;
-    const head = p[3].split('\n', 1)[0].split('\t');
-    return { kind: p[0] as TypedKind, label: p[2], payload: p[3], resolved: (head[1] ?? '') !== '' };
+    return { kind: p[0] as TypedKind, label: p[2], record: p[3], resolved: p[3] !== '' };
   }
   return null;
 }

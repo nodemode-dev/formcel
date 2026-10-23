@@ -3,6 +3,7 @@ import { light, parseStyle, PLAIN, themeOf, tint, type CellStyle, type Look } fr
 import type { TimelineView } from '../ui/timeline';
 import { decodeChips, encodeChips, paintChipLine, type ChipHit, type SmartChip } from './smartchips';
 import { decodeTyped, paintTypeIcon, TYPE_PAD, type TypedMark } from './typemarks';
+import { chipLine } from '../datatypes/model';
 
 interface Mark {
   style?: CellStyle;
@@ -237,6 +238,7 @@ export class Grid {
     items: Map<number, [string, string]>;
     raw: Map<number, string>;
     values: Map<number, string>;
+    linked: Map<number, string>;
     widths: number[];
     r0: number;
     c0: number;
@@ -3569,14 +3571,28 @@ export class Grid {
       this.formatsOf(s),
       this.engine.read(book, s.r0, s.c0, s.r1, s.c1, sheet),
       this.engine.readValues(book, sheet, s.r0, s.c0, s.r1, s.c1),
-    ]).then(([items, cells, vals]) => {
+      this.linkedOf(book, sheet, s),
+    ]).then(([items, cells, vals, linked]) => {
       const raw = new Map<number, string>();
       for (const [r, c, t, f] of cells) raw.set(KEY(r - s.r0, c - s.c0), f ?? t);
       const values = new Map<number, string>();
       for (const [r, c, v] of vals) values.set(KEY(r - s.r0, c - s.c0), v);
       const widths = Array.from({ length: s.c1 - s.c0 + 1 }, (_, i) => this.cols.size(s.c0 + i));
-      this.copied = { text, h: s.r1 - s.r0 + 1, w: s.c1 - s.c0 + 1, items, raw, values, widths, r0: s.r0, c0: s.c0, sheet };
+      this.copied = { text, h: s.r1 - s.r0 + 1, w: s.c1 - s.c0 + 1, items, raw, values, linked, widths, r0: s.r0, c0: s.c0, sheet };
     });
+  }
+
+  private async linkedOf(book: number, sheet: number, s: Range): Promise<Map<number, string>> {
+    const out = new Map<number, string>();
+    if (sheet !== this.sheet) return out;
+    for (const [k, mark] of this.typed) {
+      const r = Math.floor(k / MAX_COLS);
+      const c = k % MAX_COLS;
+      if (r < s.r0 || r > s.r1 || c < s.c0 || c > s.c1) continue;
+      const rec = mark.resolved ? await this.engine.recordOf(book, mark.record) : '';
+      out.set(KEY(r - s.r0, c - s.c0), chipLine(mark.kind, mark.label, rec));
+    }
+    return out;
   }
 
   canPasteSpecial(): boolean {
@@ -3616,6 +3632,14 @@ export class Grid {
       const texts = await this.engine.offset(moves);
       texts.forEach((t, n) => (edits[moved[n]][2] = t));
       if (edits.length) await this.commitEdits(await this.engine.apply(this.book, edits, this.sheet));
+      if (kind === 'all' || kind === 'formulas' || kind === 'formulas-formats') {
+        for (let i = 0; i < h && top + i < MAX_ROWS; i++) {
+          for (let j = 0; j < w && left + j < MAX_COLS; j++) {
+            const line = src.linked.get(from(i, j));
+            if (line) await this.applyEffect(await this.engine.setChips(this.book, this.sheet, top + i, left + j, line));
+          }
+        }
+      }
     }
     if (codes) {
       const items: FormatItem[] = [];

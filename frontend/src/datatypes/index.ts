@@ -7,7 +7,7 @@ import { actions, el, makeModal, type Modal } from '../ui/modal';
 import { icon } from '../ui/icons';
 import { fetchRecords, getRefresh, putRefresh, resolveTexts, type RefreshSettings } from './api';
 import { Card } from './card';
-import { chipLine, fieldFormula, matchesExactly, parsePayload, UNRESOLVED_PAYLOAD, type Candidate, type FetchedRecord, type TypedRecord, type TypeKind } from './model';
+import { chipLine, fieldFormula, matchesExactly, parsePayload, UNRESOLVED_RECORD, type Candidate, type FetchedRecord, type TypedRecord, type TypeKind } from './model';
 import { openProviderDialog } from './providers';
 import { Selector } from './selector';
 
@@ -200,7 +200,7 @@ export class DataTypes {
       if (rec) {
         items.push([r, c, rec.name, chipLine(kind, rec.name, rec.payload)]);
         linked++;
-      } else items.push([r, c, t, chipLine(kind, t, UNRESOLVED_PAYLOAD)]);
+      } else items.push([r, c, t, chipLine(kind, t, UNRESOLVED_RECORD)]);
     });
     await g.setTypedCells(items);
     const missed = cells.length - linked;
@@ -215,8 +215,8 @@ export class DataTypes {
     const hit = list.find(([r, c]) => r === row && c === col);
     const mark = hit ? decodeTyped(hit[2]) : null;
     if (!mark) return null;
-    const rec = parsePayload(mark.payload);
-    return rec ? { mark, rec } : null;
+    const rec = mark.resolved ? parsePayload(await engine().recordOf(book, mark.record)) : null;
+    return rec ? { mark, rec } : mark.resolved ? null : { mark, rec: { entity: '', provider: '', at: 0, fields: [] } };
   }
 
   async openCard(row: number, col: number): Promise<void> {
@@ -357,7 +357,7 @@ export class DataTypes {
       for (const kind of ['stock', 'currency'] as TypeKind[]) {
         const of = cells.filter((c) => c.mark.kind === kind);
         if (!of.length) continue;
-        const entities = [...new Set(of.map((c) => parsePayload(c.mark.payload)?.entity ?? ''))].filter(Boolean);
+        const entities = [...new Set(await Promise.all(of.map(async (c) => parsePayload(await engine().recordOf(book, c.mark.record))?.entity ?? '')))].filter(Boolean);
         for (const r of (await fetchRecords(kind, entities, true)).results) {
           if (r.record) fresh.set(`${kind}:${r.entity}`, r.record);
           else note = r.note;
@@ -366,10 +366,10 @@ export class DataTypes {
       let done = 0;
       await this.h.grid.grouped(async () => {
         for (const c of cells) {
-          const ent = parsePayload(c.mark.payload)?.entity ?? '';
+          const ent = parsePayload(await engine().recordOf(book, c.mark.record))?.entity ?? '';
           const rec = fresh.get(`${c.mark.kind}:${ent}`);
           if (!rec) continue;
-          await this.h.grid.applyEffect(await engine().setChips(book, c.sheet, c.row, c.col, chipLine(c.mark.kind, c.mark.label, rec.payload)));
+          await this.h.grid.applyEffect(await engine().putRecords(book, [[c.mark.record, c.mark.kind, rec.payload]]));
           done++;
         }
       });

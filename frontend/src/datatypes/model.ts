@@ -33,13 +33,13 @@ export interface FetchedRecord {
 }
 
 export const PROVIDER_LABEL: Record<string, string> = { stooq: 'Stooq', alphavantage: 'Alpha Vantage', finnhub: 'Finnhub', ecb: 'European Central Bank' };
-export const UNRESOLVED_PAYLOAD = 'v1\t\t\t0';
+export const UNRESOLVED_RECORD = '';
 
 const esc = (s: string) => s.replace(/\\/g, '\\\\').replace(/\t/g, '\\t').replace(/\n/g, '\\n').replace(/\r/g, '\\r');
 const unesc = (s: string) => s.replace(/\\(.)/g, (_, ch: string) => (ch === 't' ? '\t' : ch === 'n' ? '\n' : ch === 'r' ? '\r' : ch));
 
-export function chipLine(kind: TypeKind, label: string, payload: string): string {
-  return [kind, '0', label, payload, ''].map(esc).join('\t');
+export function chipLine(kind: TypeKind, label: string, record: string): string {
+  return [kind, '0', label, record, ''].map(esc).join('\t');
 }
 
 export function parsePayload(payload: string): TypedRecord | null {
