@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.39.6 · 2026-10-23
+
+- Lora, Merriweather, Playfair Display, Raleway and Source Sans 3 ship as their complete original font files instead of subsets, and PDF export embeds them from those files.
+- The desktop engine no longer carries psycopg or chardet, and the installers carry LICENSE and NOTICE.md.
+- NOTICE.md lists the frozen Python packages, the libraries inside Pillow with the FreeType credit, fontTools and the desktop shell crates under other licences.
+
 ## 0.39.5 · 2026-10-23
 
 - The cell style gallery's sections have FormCel's own headings: Status, Inputs and results, Headings and totals, Accent colours and Number styles. Style names are unchanged, so workbooks keep their styles.
