@@ -8,7 +8,7 @@ from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 
 from .. import config
-from . import sysfonts
+from . import full_fonts, sysfonts
 
 DEFAULTS = {"", "inter", "aptos narrow", "helvetica", "arial"}
 
@@ -71,6 +71,13 @@ class PdfFonts:
         try:
             if found and found[0].lower().endswith((".ttf", ".ttc")):
                 pdfmetrics.registerFont(TTFont(fid, found[0], subfontIndex=found[1]))
+                return fid
+        except Exception:
+            pass
+        try:
+            full = full_fonts.face(name, bold, italic)
+            if full is not None:
+                pdfmetrics.registerFont(TTFont(fid, io.BytesIO(full)))
                 return fid
         except Exception:
             pass

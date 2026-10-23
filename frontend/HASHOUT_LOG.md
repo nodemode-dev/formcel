@@ -2,10 +2,18 @@
 
 Living log of comment content and rationale for the window. Source stays comment-free; it lives here.
 
-Current build version: v0.39.2
-Last updated: 2026-10-23 · orange in place of Excel's greens
+Current build version: v0.39.6
+Last updated: 2026-10-23 · full fonts for the Reserved Font Name families
 
 ---
+
+## Full fonts for the Reserved Font Name families · v0.39.6 (2026-10-23)
+
+- refers-to: src/grid/fonts.ts :: loaders for Lora, Merriweather, Playfair Display, Raleway, Source Sans 3; src/grid/full-fonts/*.css; public/fonts/full/*
+- kind: rationale
+- logged: v0.39.6 · 2026-10-23
+
+The family bundle audit found that the Fontsource packages of five families are subsets of fonts whose OFL declares a Reserved Font Name. A subset is a Modified Version under the OFL and may not keep the reserved name. The owner chose to ship the full fonts: the upstream variable TTFs from google/fonts (commit e7db6ca603fd4862010383ff17ffd6cc4ffac1c0) sit unmodified under `public/fonts/full/<dir>` with their OFL.txt, and each sheet in `src/grid/full-fonts` declares the normal and italic faces with the file's weight range. Vite prefixes the base path onto the absolute `/fonts/full/...` URLs. The five `@fontsource` packages were uninstalled; the other 23 families still come from Fontsource.
 
 ## Orange in place of Excel's greens · v0.39.2 (2026-10-23)
 
