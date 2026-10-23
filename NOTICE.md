@@ -53,3 +53,7 @@ FormCel ports code from three sibling repositories by the same owner, all Apache
 | Fontsource packages 5.3.0 of 28 families (Archivo, Bebas Neue, Caveat, Cormorant Garamond, DM Sans, DM Serif Display, Figtree, Fraunces, IBM Plex Sans, Inter, JetBrains Mono, Libre Baskerville, Lora, Manrope, Merriweather, Montserrat, Nunito, Oswald, Outfit, Playfair Display, Plus Jakarta Sans, Poppins, Raleway, Sora, Source Sans 3, Space Grotesk, Syne, Work Sans) | SIL Open Font License 1.1 (the fonts); MIT (the packaging) | window: bundled fonts (`frontend/src/grid/fonts.ts`); PDF export converts them for embedding |
 | fontdb 0.24 | MIT | desktop shell: lists installed fonts (`src-tauri/src/system_fonts.rs`) |
 | Tesseract OCR (system binary, not bundled) | Apache-2.0 | engine process: Data from picture calls a `tesseract` already installed on the computer, if any (`backend/app/services/ocr.py`) |
+
+## Trademarks
+
+Microsoft, Excel and Office are trademarks of the Microsoft group of companies. Google Sheets is a trademark of Google LLC. FormCel is not affiliated with or endorsed by Microsoft or Google; the names describe file formats and compatibility only.

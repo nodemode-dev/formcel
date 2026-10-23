@@ -100,3 +100,7 @@ docs/       functions.json: every function FormCel computes, its arguments, and 
 ## Licence
 
 Apache-2.0. See `LICENSE` and `NOTICE.md`.
+
+## Trademarks
+
+Microsoft, Excel and Office are trademarks of the Microsoft group of companies. Google Sheets is a trademark of Google LLC. FormCel is not affiliated with or endorsed by Microsoft or Google; the names describe file formats and compatibility only.
