@@ -2,10 +2,18 @@
 
 Living log of comment content and rationale for the window. Source stays comment-free; it lives here.
 
-Current build version: v0.15.0
-Last updated: 2026-10-21 · autocomplete under fast typing
+Current build version: v0.39.2
+Last updated: 2026-10-23 · orange in place of Excel's greens
 
 ---
+
+## Orange in place of Excel's greens · v0.39.2 (2026-10-23)
+
+- refers-to: src/styles/tokens.css :: --cell-head-on, --cell-head-on-fg, --cell-head-full, --cell-select, --cell-select-edge; src/styles/backstage.css :: .fc-backstage --bs-rail, --bs-green and the light override; src/ui/a11y.ts :: PROFILES.light; src/ui/backstage.ts and src/ui/settings.ts :: the Theme options
+- kind: rationale
+- logged: v0.39.2 · 2026-10-23
+
+The owner's trademark plan (trade dress, accent choice T4 a) removes Excel's brand greens. Dark: selected header #3b2414 on #fdba74, full header #c2410c with white text, selection rgba(249, 115, 22, 0.16) with a #f97316 edge, File view rail #7c2d12 and accent #f97316. Light profile and File view: accent #ea580c, hover and rail #c2410c, selected header #fed7aa on #7c2d12, selection rgba(234, 88, 12, 0.1) with an #ea580c edge. `--bs-green` keeps its name so no selector changed. The theme option "Light, like Excel" is now "Light". Removed values, for the record: dark #23382d, #6fd3a3, #107c41, rgba(33, 163, 102, 0.16), #21a366, #0e5c31; light #107c41, #107c4126, #0b6a37, #cae9d8, #0e5c31, rgba(16, 124, 65, 0.1). Do not bring back a green or a "like Excel" theme.
 
 ## The family's 28 themes · v0.39.0 (2026-10-22)
 
