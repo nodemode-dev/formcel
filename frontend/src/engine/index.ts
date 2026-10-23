@@ -1,6 +1,6 @@
-import type { Arrow, CalcReply, EvalStep, Area, Cell, CfCell, Changed, Dir, Edit, Effect, FilterList, FormatItem, LinkChange, MergeMode, Name, NameRow, RequestBody, Response, Shift, SortChoices, SortKeySpec, StyleOp, Value, WhatIfReply } from './protocol';
+import type { Arrow, CalcReply, EvalStep, Area, Cell, CfCell, Changed, Dir, Edit, Effect, FilterList, FormatItem, LinkChange, MergeMode, Name, NameRow, RecordItem, RequestBody, Response, Shift, SortChoices, SortKeySpec, StyleOp, Value, WhatIfReply } from './protocol';
 
-export type { Arrow, EvalStep, Area, Cell, CfCell, Changed, Dir, Edit, Effect, FilterList, FormatChange, FormatItem, LinkChange, MergeMode, Name, NameRow, Shift, SortKeySpec, StyleChange, StyleOp } from './protocol';
+export type { Arrow, EvalStep, Area, Cell, CfCell, Changed, Dir, Edit, Effect, FilterList, FormatChange, FormatItem, LinkChange, MergeMode, Name, NameRow, RecordItem, Shift, SortKeySpec, StyleChange, StyleOp } from './protocol';
 
 type Pending = { resolve: (v: Value) => void; reject: (e: Error) => void };
 
@@ -276,6 +276,22 @@ export class EngineClient {
 
   async loadChips(book: number, sheet: number, cells: Edit[]): Promise<void> {
     if (cells.length) await this.call({ op: 'chip.load', book, sheet, cells });
+  }
+
+  async recordOf(book: number, rid: string): Promise<string> {
+    return (await this.call({ op: 'record.get', book, rid })) as string;
+  }
+
+  async putRecords(book: number, records: RecordItem[]): Promise<Effect> {
+    return (await this.call({ op: 'record.put', book, records })) as Effect;
+  }
+
+  async loadRecords(book: number, records: RecordItem[]): Promise<void> {
+    if (records.length) await this.call({ op: 'record.load', book, records });
+  }
+
+  async takeRecords(book: number): Promise<RecordItem[]> {
+    return (await this.call({ op: 'record.take', book })) as RecordItem[];
   }
 
   async rules(book: number, sheet: number): Promise<string[]> {

@@ -84,6 +84,11 @@ export type Request =
   | { id: number; op: 'chip.set'; book: number; sheet: number; row: number; col: number; chips: string }
   | { id: number; op: 'chip.take'; book: number }
   | { id: number; op: 'chip.load'; book: number; sheet: number; cells: Edit[] }
+  | { id: number; op: 'record.get'; book: number; rid: string }
+  | { id: number; op: 'record.put'; book: number; records: RecordItem[] }
+  | { id: number; op: 'record.load'; book: number; records: RecordItem[] }
+  | { id: number; op: 'record.take'; book: number }
+  | { id: number; op: 'record.list'; book: number }
   | { id: number; op: 'undo.mark'; book: number }
   | { id: number; op: 'undo.group'; book: number; mark: number }
   | { id: number; op: 'format.read'; book: number; sheet: number; r0: number; c0: number; r1: number; c1: number }
@@ -110,6 +115,7 @@ export type SortKeySpec = [number, boolean] | [number, boolean, 'list' | 'fill' 
 export type Cell = [row: number, col: number, text: string, formula?: string, numeric?: boolean, color?: string, link?: boolean];
 export type Changed = [sheet: number, row: number, col: number, text: string, formula?: string, numeric?: boolean, color?: string, link?: boolean];
 export type LinkChange = [sheet: number, row: number, col: number, target: string];
+export type RecordItem = [id: string, kind: string, payload: string];
 export type FormatChange = [sheet: number, row: number, col: number, code: string];
 export type StyleOp = [r0: number, c0: number, r1: number, c1: number, patch: string];
 export type Area = [r0: number, c0: number, r1: number, c1: number];
@@ -163,7 +169,7 @@ export interface WhatIfReply {
 export type CalcReply = WhatIfReply;
 export type Arrow = [fromSheet: number, r0: number, c0: number, r1: number, c1: number, toSheet: number, row: number, col: number, level: number];
 export type EvalStep = [before: string, evaluating: string, after: string, into: string];
-export type Value = WhatIfReply | Arrow[] | EvalStep[] | string | number | boolean | number[] | string[] | Cell[] | Changed[] | Name[] | Edit[] | Area[] | CfCell[] | LinkChange[] | [number, number] | Shift | Effect | FilterList | DataValue | null;
+export type Value = WhatIfReply | Arrow[] | EvalStep[] | string | number | boolean | number[] | string[] | Cell[] | Changed[] | Name[] | Edit[] | Area[] | CfCell[] | LinkChange[] | RecordItem[] | [number, number] | Shift | Effect | FilterList | DataValue | null;
 
 export interface SortChoices {
   fills: string[];

@@ -160,8 +160,10 @@ impl Workbook {
         }
         let mut n = 0;
         let mut seeds = Vec::new();
+        let mut staged = Vec::new();
         for (a, t) in cells {
-            let kept = self.chip_text(sheet, *a).map(|text| fit(&text, parse(t))).unwrap_or_default();
+            let parsed = self.intern(parse(t), &mut staged, false);
+            let kept = self.chip_text(sheet, *a).map(|text| fit(&text, parsed)).unwrap_or_default();
             if kept.is_empty() {
                 self.chips.remove(&(sheet, *a));
             } else {
@@ -172,6 +174,9 @@ impl Workbook {
                 self.chips.insert((sheet, *a), line);
                 n += 1;
             }
+        }
+        if !staged.is_empty() {
+            self.apply_records(&staged, true);
         }
         if !seeds.is_empty() {
             self.recalc(&seeds);
@@ -211,14 +216,26 @@ impl Workbook {
     pub fn set_chips(&mut self, sheet: usize, a: Addr, text: &str) -> Result<Effect, EngineError> {
         self.check(sheet, a)?;
         let k = (sheet, a);
-        let after = self.chip_text(sheet, a).map(|t| fit(&t, parse(text))).filter(|c| !c.is_empty()).map(|c| encode(&c));
+        let mut staged = Vec::new();
+        let parsed = self.intern(parse(text), &mut staged, true);
+        let after = self.chip_text(sheet, a).map(|t| fit(&t, parsed)).filter(|c| !c.is_empty()).map(|c| encode(&c));
         let before = self.chips.get(&k).cloned();
-        if before == after {
+        if before == after && staged.is_empty() {
             return Ok(Effect::default());
         }
-        let change = vec![(k, before, after)];
-        let e = self.apply_chips(&change, true);
-        self.record(Tx::Chips(change));
+        let ids = self.apply_records(&staged, true);
+        let change = if before == after { Vec::new() } else { vec![(k, before, after)] };
+        let mut e = if change.is_empty() { Effect::default() } else { self.apply_chips(&change, true) };
+        if !ids.is_empty() {
+            let seeds = self.referencing(&ids);
+            e.cells.extend(self.recalc(&seeds));
+        }
+        let tx = match (staged.is_empty(), change.is_empty()) {
+            (false, false) => Tx::Group(vec![Tx::Records(staged), Tx::Chips(change)]),
+            (false, true) => Tx::Records(staged),
+            _ => Tx::Chips(change),
+        };
+        self.record(tx);
         Ok(Effect { cells: self.present(e.cells), ..e })
     }
 

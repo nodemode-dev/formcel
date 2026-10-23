@@ -13,6 +13,7 @@ pub mod eval;
 pub mod link;
 pub mod chips;
 pub mod datatype;
+pub mod records;
 pub mod filter;
 pub mod formula;
 pub mod host;
@@ -445,6 +446,7 @@ enum Tx {
     Pivots { before: Vec<pivot::Pivot>, after: Vec<pivot::Pivot> },
     Links(Vec<FormatChange>),
     Chips(Vec<FormatChange>),
+    Records(Vec<records::RecChange>),
     WhatIf { before: Vec<String>, after: Vec<String> },
     Arrays { before: Vec<(Key, (u32, u32))>, after: Vec<(Key, (u32, u32))> },
 }
@@ -470,6 +472,8 @@ pub struct Workbook {
     link_log: Vec<(usize, Addr, String)>,
     chips: FastMap<Key, String>,
     chip_log: Vec<(usize, Addr, String)>,
+    records: FastMap<String, records::Record>,
+    record_log: Vec<String>,
     tables: Vec<table::Table>,
     table_quiet: bool,
     wprot: protect::BookProt,
@@ -618,6 +622,8 @@ impl Workbook {
             link_log: Vec::new(),
             chips: FastMap::default(),
             chip_log: Vec::new(),
+            records: FastMap::default(),
+            record_log: Vec::new(),
             tables: Vec::new(),
             table_quiet: false,
             wprot: protect::BookProt::default(),
@@ -1949,6 +1955,11 @@ impl Workbook {
             }
             Tx::Links(changes) => self.apply_links(changes, forward),
             Tx::Chips(changes) => self.apply_chips(changes, forward),
+            Tx::Records(changes) => {
+                let ids = self.apply_records(changes, forward);
+                let seeds = self.referencing(&ids);
+                Effect { cells: self.recalc(&seeds), ..Effect::default() }
+            }
             Tx::Rules { sheet, before, after } => {
                 self.sheets[*sheet].rules = if forward { after.clone() } else { before.clone() };
                 Effect { rules: Some(*sheet), ..Effect::default() }

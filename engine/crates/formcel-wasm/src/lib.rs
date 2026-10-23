@@ -1111,10 +1111,101 @@ pub unsafe extern "C" fn fc_load_chips(id: u32, sheet: u32, lines: *const u8, le
     match with_book(id, |wb| {
         let n = wb.load_chips(sheet as usize, &cells);
         wb.take_chip_changes();
+        wb.take_record_changes();
         n
     }) {
         Some(Ok(n)) => n as i32,
         _ => -1,
+    }
+}
+
+fn record_lines(s: &str) -> Vec<(String, String, String)> {
+    s.split('\n')
+        .filter(|l| !l.is_empty())
+        .filter_map(|l| {
+            let mut p = l.splitn(3, '\t');
+            Some((wire::unescape(p.next()?), wire::unescape(p.next()?), wire::unescape(p.next()?)))
+        })
+        .collect()
+}
+
+/// The payload of one record in the workbook record store, or -1 when the id is not stored.
+///
+/// # Safety
+/// `rid` must point at `len` readable bytes.
+#[no_mangle]
+pub unsafe extern "C" fn fc_record_get(id: u32, rid: *const u8, len: u32) -> i32 {
+    let rid = text(rid, len).to_string();
+    match with_book(id, |wb| wb.record_payload(&rid)) {
+        Some(Some(p)) => emit(&p) as i32,
+        _ => -1,
+    }
+}
+
+/// Replaces records in the store as one undo step, from `id\tkind\tpayload` lines.
+///
+/// # Safety
+/// `lines` must point at `len` readable bytes.
+#[no_mangle]
+pub unsafe extern "C" fn fc_put_records(id: u32, lines: *const u8, len: u32) -> i32 {
+    let items = record_lines(text(lines, len));
+    effect_or(with_book(id, |wb| wb.put_records(&items).map(|e| wb.encode(&e))))
+}
+
+/// Loads `id\tkind\tpayload` lines into the record store without an undo step.
+///
+/// # Safety
+/// `lines` must point at `len` readable bytes.
+#[no_mangle]
+pub unsafe extern "C" fn fc_load_records(id: u32, lines: *const u8, len: u32) -> i32 {
+    let items = record_lines(text(lines, len));
+    match with_book(id, |wb| {
+        let n = wb.load_records(&items);
+        wb.take_record_changes();
+        n
+    }) {
+        Some(n) => n as i32,
+        None => -1,
+    }
+}
+
+/// Records changed since the last call, as `id\tkind\tpayload` lines.
+#[no_mangle]
+pub extern "C" fn fc_take_records(id: u32) -> i32 {
+    match with_book(id, |wb| {
+        let mut s = String::new();
+        for (rid, r) in wb.take_record_changes() {
+            wire::escape(&rid, &mut s);
+            s.push('\t');
+            wire::escape(&r.kind, &mut s);
+            s.push('\t');
+            wire::escape(&r.payload(), &mut s);
+            s.push('\n');
+        }
+        s
+    }) {
+        Some(s) => emit(&s) as i32,
+        None => -1,
+    }
+}
+
+/// The records the cells of the workbook refer to, as `id\tkind\tpayload` lines.
+#[no_mangle]
+pub extern "C" fn fc_records_list(id: u32) -> i32 {
+    match with_book(id, |wb| {
+        let mut s = String::new();
+        for (rid, r) in wb.records_list(None) {
+            wire::escape(&rid, &mut s);
+            s.push('\t');
+            wire::escape(&r.kind, &mut s);
+            s.push('\t');
+            wire::escape(&r.payload(), &mut s);
+            s.push('\n');
+        }
+        s
+    }) {
+        Some(s) => emit(&s) as i32,
+        None => -1,
     }
 }
 

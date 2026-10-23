@@ -1,5 +1,4 @@
 use crate::formula::{Expr, RefKind};
-use crate::wire::unescape;
 use crate::{chips, Addr, ErrKind, Fmt, Value, Workbook};
 
 #[derive(Clone, Debug, PartialEq)]
@@ -11,7 +10,7 @@ pub struct DType {
     pub fields: Vec<(String, Value, char)>,
 }
 
-fn field_value(kind: &str, body: &str) -> (Value, char) {
+pub(crate) fn field_value(kind: &str, body: &str) -> (Value, char) {
     let tag = kind.chars().next().unwrap_or('t');
     let v = match tag {
         'n' | 'p' | 'i' | 'd' | 'm' => body.parse().map_or(Value::Error(ErrKind::Value), Value::Number),
@@ -21,24 +20,6 @@ fn field_value(kind: &str, body: &str) -> (Value, char) {
         _ => Value::Text(body.to_string()),
     };
     (v, tag)
-}
-
-pub fn parse(kind: &str, payload: &str) -> Option<DType> {
-    let mut lines = payload.split('\n');
-    let head: Vec<String> = lines.next()?.split('\t').map(unescape).collect();
-    if head.len() < 4 || head[0] != "v1" {
-        return None;
-    }
-    let mut fields = Vec::new();
-    for l in lines.filter(|l| !l.is_empty()) {
-        let p: Vec<String> = l.split('\t').map(unescape).collect();
-        if p.len() < 3 {
-            continue;
-        }
-        let (v, tag) = field_value(&p[1], &p[2]);
-        fields.push((p[0].clone(), v, tag));
-    }
-    Some(DType { kind: kind.to_string(), entity: head[1].clone(), provider: head[2].clone(), at: head[3].parse().unwrap_or(0), fields })
 }
 
 impl DType {
@@ -55,7 +36,8 @@ impl DType {
 impl Workbook {
     pub fn dtype_at(&self, sheet: usize, a: Addr) -> Option<DType> {
         let text = self.chips.get(&(sheet, a))?;
-        chips::parse(text).into_iter().find(|c| chips::typed_kind(&c.kind)).and_then(|c| parse(&c.kind, &c.value))
+        let chip = chips::parse(text).into_iter().find(|c| chips::typed_kind(&c.kind))?;
+        self.record_of(&chip.value).map(|r| r.dtype())
     }
 
     pub(crate) fn field_fmt(&self, sheet: usize, args: &[Expr]) -> Option<Fmt> {

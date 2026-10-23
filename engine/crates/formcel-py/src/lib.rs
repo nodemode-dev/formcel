@@ -368,6 +368,37 @@ impl Workbook {
         let cells: Vec<(Addr, String)> = cells.into_iter().map(|(row, col, t)| (Addr { row, col }, t)).collect();
         let n = self.inner.load_chips(sheet, &cells).map_err(|e| PyValueError::new_err(e.to_string()));
         self.inner.take_chip_changes();
+        self.inner.take_record_changes();
+        n
+    }
+
+    #[pyo3(signature = (sheet = None))]
+    #[allow(clippy::type_complexity)]
+    fn records(&self, sheet: Option<usize>) -> Vec<(String, String, String, String, i64, Vec<(String, String, String)>)> {
+        self.inner.records_list(sheet).into_iter().map(|(id, r)| (id, r.kind, r.entity, r.provider, r.at, r.fields)).collect()
+    }
+
+    #[allow(clippy::type_complexity)]
+    fn load_records(&mut self, items: Vec<(String, String, String, String, i64, Vec<(String, String, String)>)>) -> usize {
+        let items: Vec<(String, String, String)> = items
+            .into_iter()
+            .map(|(id, kind, entity, provider, at, fields)| {
+                let r = formcel_core::records::Record { kind: kind.clone(), entity, provider, at, fields };
+                (id, kind, r.payload())
+            })
+            .collect();
+        let n = self.inner.load_records(&items);
+        self.inner.take_record_changes();
+        n
+    }
+
+    fn record_payloads(&self) -> Vec<(String, String, String)> {
+        self.inner.records_list(None).into_iter().map(|(id, r)| (id, r.kind.clone(), r.payload())).collect()
+    }
+
+    fn load_record_payloads(&mut self, items: Vec<(String, String, String)>) -> usize {
+        let n = self.inner.load_records(&items);
+        self.inner.take_record_changes();
         n
     }
 

@@ -1,4 +1,4 @@
-import type { Arrow, EvalStep, Cell, CfCell, Changed, Effect, FilterList, FormatChange, LinkChange, Request, Response, Shift, StyleChange, Value } from './protocol';
+import type { Arrow, EvalStep, Cell, CfCell, Changed, Effect, FilterList, FormatChange, LinkChange, RecordItem, Request, Response, Shift, StyleChange, Value } from './protocol';
 
 interface Exports {
   memory: WebAssembly.Memory;
@@ -98,6 +98,11 @@ interface Exports {
   fc_set_chips(book: number, sheet: number, row: number, col: number, p: number, len: number): number;
   fc_take_chips(book: number): number;
   fc_load_chips(book: number, sheet: number, lines: number, len: number): number;
+  fc_record_get(book: number, id: number, len: number): number;
+  fc_put_records(book: number, lines: number, len: number): number;
+  fc_load_records(book: number, lines: number, len: number): number;
+  fc_take_records(book: number): number;
+  fc_records_list(book: number): number;
   fc_undo_mark(book: number): number;
   fc_undo_group(book: number, mark: number): number;
   fc_formats_in(book: number, sheet: number, r0: number, c0: number, r1: number, c1: number): number;
@@ -487,6 +492,23 @@ function run(x: Exports, req: Request): Value {
       const body = req.cells.map(([r, c, t]) => `${r}\t${c}\t${escape(t)}`).join('\n');
       return withStrings(x, [body], ([p, l]) => ok(x.fc_load_chips(req.book, req.sheet, p, l), 'The engine refused those chips.'));
     }
+    case 'record.get':
+      return withStrings(x, [req.rid], ([p, l]) => {
+        const n = x.fc_record_get(req.book, p, l);
+        return n < 0 ? '' : out(x, n);
+      });
+    case 'record.put': {
+      const body = req.records.map(([i, k, t]) => `${escape(i)}\t${escape(k)}\t${escape(t)}`).join('\n');
+      return withStrings(x, [body], ([p, l]) => effect(out(x, x.fc_put_records(req.book, p, l))));
+    }
+    case 'record.load': {
+      const body = req.records.map(([i, k, t]) => `${escape(i)}\t${escape(k)}\t${escape(t)}`).join('\n');
+      return withStrings(x, [body], ([p, l]) => ok(x.fc_load_records(req.book, p, l), 'The engine refused those records.'));
+    }
+    case 'record.take':
+      return lines(out(x, x.fc_take_records(req.book))).map(([i, k, t]) => [unescape(i ?? ''), unescape(k ?? ''), unescape(t ?? '')] as RecordItem);
+    case 'record.list':
+      return lines(out(x, x.fc_records_list(req.book))).map(([i, k, t]) => [unescape(i ?? ''), unescape(k ?? ''), unescape(t ?? '')] as RecordItem);
     case 'rules.get':
       return out(x, x.fc_rules(req.book, req.sheet)).split('\n').filter(Boolean);
     case 'rules.set':
