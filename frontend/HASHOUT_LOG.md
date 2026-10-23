@@ -383,6 +383,13 @@ A merged area paints as one cell: its inner gridlines are covered, its fill, tex
 
 The grid paints the effective style the engine sends and resolves theme colour slots and tints and the `+heading` and `+body` fonts against the workbook theme; the theme's body font is the default for every cell, as GS-EDIT says of Sheets themes. The colour menus offer the theme's colours in a first row, as GS-EDIT describes. Paste special follows MS-PASTE's options: All, Formulas, Values, Formats, Formulas and number formats, Values and number formats, All except borders, Column widths and Transpose; it needs a copy made in FormCel, whose formulas, stored values, styles, codes and column widths are kept with the copy. A plain paste of a FormCel copy now pastes formulas with their relative references moved, as Excel does, instead of the shown text. Transposed formulas move by each cell's new offset; their references are not turned. Paste special's math operations and Skip blanks are not built. Two focus fixes: a toolbar command no longer takes focus back from the menu or box it opened, and Escape on the grid with nothing to cancel no longer starts an edit with the text "Escape".
 
+### Cell style gallery headings (0.39.5)
+- refers-to: src/ui/ribbon-host.ts :: styles gallery sections
+- kind: rationale
+- logged: v0.39.5 · 2026-10-23
+
+The family IP review's originality check (C5) found the cell style gallery's five section headings were the other suite's exact headings. They are now FormCel's own (Status, Inputs and results, Headings and totals, Accent colours, Number styles) and the styles inside are in FormCel's order. The style names themselves (Good, Bad, Neutral, Input, Heading 1, Accent 1, Comma and the rest) stay: they are the built-in cell style names of the .xlsx format, which a workbook must use for its styles to open as built-ins elsewhere. The templates (native, the five galleries and the form.md set) were checked and are FormCel's own descriptive names.
+
 ### Conditional formatting in the window
 - refers-to: src/grid/grid.ts :: cfs, refreshCf, loadRules, styleOf, drawIcon; src/app.ts :: cfMenu, ruleBox, openPanel, fillPanel, addRule, clearRules; src/ui/rules.ts
 - kind: explainer

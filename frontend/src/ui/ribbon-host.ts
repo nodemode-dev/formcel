@@ -293,11 +293,11 @@ export class RibbonHost {
     const known = new Set<string>();
     const take = (names: string[]): string[] => { names.forEach((n) => known.add(n)); return names; };
     const out: MItem[] = [
-      ...section('Good, Bad and Neutral', take(['Normal', 'Bad', 'Good', 'Neutral'])),
-      ...section('Data and Model', take(['Calculation', 'Input', 'Output', 'Warning Text', 'Note'])),
-      ...section('Titles and Headings', take(['Heading 1', 'Heading 2', 'Heading 3', 'Heading 4', 'Title', 'Total'])),
-      ...section('Themed Cell Styles', take(['Accent 1', 'Accent 2', 'Accent 3', 'Accent 4', 'Accent 5', 'Accent 6'])),
-      ...section('Number Format', take(['Comma', 'Currency', 'Percent'])),
+      ...section('Status', take(['Normal', 'Good', 'Neutral', 'Bad'])),
+      ...section('Inputs and results', take(['Input', 'Calculation', 'Output', 'Note', 'Warning Text'])),
+      ...section('Headings and totals', take(['Title', 'Heading 1', 'Heading 2', 'Heading 3', 'Heading 4', 'Total'])),
+      ...section('Accent colours', take(['Accent 1', 'Accent 2', 'Accent 3', 'Accent 4', 'Accent 5', 'Accent 6'])),
+      ...section('Number styles', take(['Comma', 'Currency', 'Percent'])),
     ];
     const custom = lines.map((l) => l[0]).filter((n) => !known.has(n));
     if (custom.length) out.push(...section('Custom', custom));
