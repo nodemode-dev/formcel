@@ -2,8 +2,10 @@
 
 Living log of comment content and rationale for the engine process. Source stays comment-free; it lives here.
 
-Current build version: v0.39.4
-Last updated: 2026-10-23 · the full conformance template, 332 example sheets
+Current build version: v0.39.6
+Last updated: 2026-10-23 · full fonts in PDF export, freeze exclusions
+
+- v0.39.6: `services/full_fonts.py` finds the five full variable fonts (the frozen window's `fonts/full`, else `frontend/public/fonts/full`) and `face(family, bold, italic)` returns a static instance at weight 400 or 700, every other axis at its default, made with fontTools' instancer and cached. `pdf_fonts._register` tries it before the Fontsource files, so exported PDFs embed glyphs from the full original font; a static instance embedded in a document is allowed by the OFL. The freeze now excludes psycopg, psycopg_binary (LGPL-3.0) and chardet, which the engine never imports in a desktop build, so NOTICE.md's claim that psycopg is never shipped is true of the bundle.
 
 - v0.39.4: the owner chose the full regeneration. `conformance.json` is now the output of the fixed `tools/conformance_template/build.py` over the conformance run's `ms_examples.json` and `ms_results.json`: a Summary and 332 example sheets (743 cases, 683 compared, 4 names), up from 67. Same template id, fields and sheet shape as before; no column AE, and no cell equals any of the 569 page descriptions in `ms_examples.json`. Cases where FormCel's result differs from the page's, and prose-only results, show as such in the match column rather than being dropped. Not loaded through the service here, because `formcel_engine` was not built in this session.
 - v0.39.3 (copyright C1): column AE, "Page description", is gone from all 67 example sheets (228 cells, the header included): it copied the function pages' explanations word for word. The owner chose both fixes. (b) The shipped file was rewritten once by a script the owner authorised, because it is one 81 KB line no hand edit can hold; the script only dropped AE and replaced the template's `description` and the Summary's note, so everything else is unchanged (no cell now equals any page description in `ms_examples.json`). (a) The generator `tools/conformance_template/build.py` writes 30 columns and the new wording, so a regeneration cannot bring AE back. A full regeneration now gives 332 sheets (743 cases, 37 failing and 13 prose-only among them), not the shipped 67, so the shipped file was not swapped for it. The Summary keeps the "Microsoft page" link column: a link is not a copy.

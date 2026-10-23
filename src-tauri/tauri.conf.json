@@ -38,6 +38,7 @@
     "longDescription": "FormCel is a local-first spreadsheet. The window runs a Rust calculation engine compiled to WebAssembly, and a local engine process keeps your workbooks on this computer.",
     "license": "../LICENSE",
     "externalBin": ["binaries/formcel-engine"],
+    "resources": { "../LICENSE": "LICENSE", "../NOTICE.md": "NOTICE.md" },
     "windows": {
       "webviewInstallMode": { "type": "downloadBootstrapper" },
       "nsis": { "installMode": "currentUser", "displayLanguageSelector": false },

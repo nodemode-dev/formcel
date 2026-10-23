@@ -27,6 +27,7 @@ pyinstaller --noconfirm --clean "$mode" --name formcel-engine \
   --add-data "$root/backend/app/services/pyrun_child.py${sep}app/services" \
   --add-data "$root/backend/app/services/gas_runner.js${sep}app/services" \
   --collect-submodules app --collect-submodules uvicorn --hidden-import formcel_engine \
+  --exclude-module psycopg --exclude-module psycopg_binary --exclude-module chardet \
   "${extra[@]}" \
   "$root/backend/engine_main.py"
 if [ "$mode" = --onedir ]; then
