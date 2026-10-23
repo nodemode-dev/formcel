@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.39.2 · 2026-10-23
+
+- A trademark notice in the README and NOTICE: Microsoft, Excel and Office belong to the Microsoft group of companies, Google Sheets to Google LLC, and FormCel is not affiliated with either.
+- The light theme and the File view use the family orange instead of green, and the theme option is called "Light".
+- CLAUDE.md carries the trademark, copyright and licence rules for agents.
+
 ## 0.39.1 · 2026-10-22
 
 - The repository's GitHub Actions now run basic checks (frontend, backend and scripts) on main, on pull requests and on `compile_vX.Y.Z` branches.
