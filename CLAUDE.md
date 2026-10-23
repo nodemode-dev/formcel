@@ -29,6 +29,18 @@ cd frontend && npx tsc --noEmit           typecheck
 - Commits as `nodemode-ai <mackin@nodemode.ai>`. Versions read `v` digit dot digit dot digit and match across `frontend/package.json` (and its lockfile), `frontend/src/version.ts`, `backend/app/version.py` and `engine/Cargo.toml`.
 - No tests unless the owner asks for them; describe them in `TEST_PLAN.md` instead.
 
+## Linked data types and related features (declined for patent risk, 2026-10-23)
+
+- Linked records (Stocks, Currencies) live in the workbook record store (`engine/crates/formcel-core/src/records.rs`, saved as `records` in the .fcel and as the records list in `formcel/datatypes.json`). A cell holds only the record id and its display label, never the record or any of its fields. Field access (`=A1.Price`), the card, Insert Data, refresh and copy and paste resolve through the store. Text that still carries a whole record is accepted only to move it into the store.
+- No per-field show or hide properties on linked records: the card and the cell never keep a visibility flag per field.
+- Sparklines have no in-app group edit or ungroup. Group membership is not editable from the window.
+- Data Model relationships are always explicit, created by the person. Never infer one from a formula or from names, and never add a relationship because a formula uses RELATED.
+- Flash Fill stays a single synthesis pass. No relaxed second pass, and no loops over the examples.
+- No action that collapses a range into one cell as an array. Each range stays in its own cells.
+- No blur, sharpen or glow image functions driven by cell values.
+- Ribbon groups collapse whole. Never move part of a group into an overflow pane.
+- These rules are docs only for now and may move into the repository's checks later.
+
 ## Trademarks, copyright and licences
 
 - Other vendors' product and feature names appear only to name a file format, a key set or compatibility ("Excel Workbook (.xlsx)", "opens files from"). Never as a FormCel command, menu, panel, tool, ribbon group, preset or agent tool name, and never as "like Excel" or "Excel's" in UI text, READMEs or changelogs. The notice in `README.md` and `NOTICE.md` lists every vendor mark named.

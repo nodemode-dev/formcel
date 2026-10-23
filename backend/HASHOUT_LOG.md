@@ -536,7 +536,7 @@ The dir stream's project information and references are kept verbatim on rewrite
 - kind: explainer
 - logged: v0.37.0 · 2026-10-22
 
-The model is stored as lines in the .fcel document. In .xlsx, CUBE formulas get cached values, connections.xml gains ThisWorkbookDataModel and the definition goes into a customXml item; Excel sees formulas and values but not a refreshable model. Writer finishing order is now calc, pivots, app, review and objects, slicers, queries, model, data types, chart sheets. Data type cells are written as display text and plain formulas with a formcel/datatypes.json part (Excel's richData is not written); field formulas use _xlfn.FIELDVALUE. Quote providers (Stooq, Alpha Vantage, Finnhub) need the user's key and ECB rates are free; settings live under "quotes" in settings.json and keys never enter a workbook.
+The model is stored as lines in the .fcel document. In .xlsx, CUBE formulas get cached values, connections.xml gains ThisWorkbookDataModel and the definition goes into a customXml item; Excel sees formulas and values but not a refreshable model. Writer finishing order is now calc, pivots, app, review and objects, slicers, queries, model, data types, chart sheets. Data type cells are written as display text and plain formulas with a formcel/datatypes.json part that, since 0.40.0, lists the records once and each cell's record id (Excel's richData is not written); field formulas use _xlfn.FIELDVALUE. Quote providers (Stooq, Alpha Vantage, Finnhub) need the user's key and ECB rates are free; settings live under "quotes" in settings.json and keys never enter a workbook.
 
 ## v0.37.1 entries
 
@@ -568,4 +568,13 @@ grid(..., "typed") used to parse the displayed text, so a number with a currency
 - kind: explainer
 - logged: v0.38.0 · 2026-10-22
 
-GET /api/fonts scans the operating system's font folders (fc-list on Linux when present) and reads family names from the name tables of TTF, OTF and TTC files with a small reader, cached; no new dependency. PDF export embeds a used font when its file is found, else a bundled face converted from WOFF to TTF, else falls back to Helvetica and names the missing fonts in the X-FormCel-Note header, which the File view shows.
+GET /api/fonts scans the operating system's font folders (fc-list on Linux when present) and reads family names from the name tables of TTF, OTF and TTC files with a small reader, cached; no new dependency. PDF export embeds a used font when its file is found, else a bundled face converted from WOFF
+
+## v0.40.0 entries
+
+### Records in the .fcel and in .xlsx
+- refers-to: services/records.py, services/store.py (_write, _build, get, set_chips, set_records, copy_sheet), routers/workbooks.py (cellchips, records), services/xlsx/datatypes.py, xlsx/reader.py, xlsx/writer.py
+- kind: decision
+- logged: v0.40.0 · 2026-10-23
+
+workbook.json gains a top-level "records" list (id, kind, entity, provider, at, fields as name, tag, value), format version 2, and each sheet's "chips" now carry the id. Records load before sheets, so cells resolve at once; a file whose chips still carry whole records loads through the engine's conversion and is written in the new form on the next save. POST /api/workbooks/{id}/records and the records field of cellchips take the window's changes as id, kind and v1 text. copy_sheet carries the records its chips use. The .xlsx part formcel/datatypes.json is version 2: records once, and per cell sheet, ref, kind, label and record id; the reader still takes version 1 cells whose value is the whole record. Display text, FIELDVALUE formulas and the hyperlink handling did not change. Not checked in another spreadsheet application. to TTF, else falls back to Helvetica and names the missing fonts in the X-FormCel-Note header, which the File view shows.

@@ -726,7 +726,7 @@ CUBE arguments are normalised to MDX text in the evaluator and parsed on the mod
 - kind: explainer
 - logged: v0.37.0 · 2026-10-22
 
-#FIELD! is ErrKind::Field (ERROR.TYPE 13). The parser turns A2.Price into an internal _FV call and prints it back in dot form. The data type payload is line based: v1, entity, provider, epoch, then name, tag and value lines. Stock and currency chips recalc the cells that read them when loaded. GOOGLEFINANCE and STOCKHISTORY are host functions with d: and m: date tokens, so their dates display as dates. FUNCTIONS has 438 names.
+#FIELD! is ErrKind::Field (ERROR.TYPE 13). The parser turns A2.Price into an internal _FV call and prints it back in dot form. The record text (the payload) is line based: v1, entity, provider, epoch, then name, tag and value lines. Since v0.40.0 it is the transport form only: the record lives in the workbook record store (records.rs) and a stock or currency chip holds just its id (see "Record store" below). Stock and currency chips recalc the cells that read them when loaded. GOOGLEFINANCE and STOCKHISTORY are host functions with d: and m: date tokens, so their dates display as dates. FUNCTIONS has 438 names.
 
 ## v0.37.1 entries
 
@@ -745,3 +745,12 @@ Cargo's release profile strips debug info by default. On macOS rustc before 1.98
 - logged: v0.38.0 · 2026-10-22
 
 read applies each cell's number format (shown); read_raw returns the stored result unformatted. The Python module's raw_values gives (row, col, kind, text) with kind n, b, e or t, so the engine process can hand out numbers without parsing display text.
+
+## v0.40.0 entries
+
+### Record store
+- refers-to: crates/formcel-core/src/records.rs, chips.rs (set_chips, load_chips), datatype.rs (dtype_at), lib.rs (Tx::Records), formcel-wasm fc_record_get, fc_put_records, fc_load_records, fc_take_records, formcel-py records, load_records, record_payloads, load_record_payloads
+- kind: decision
+- logged: v0.40.0 · 2026-10-23
+
+The compound record of a Stocks or Currencies cell (entity, provider, time, fields of name, tag and value) lives in Workbook.records, keyed by an id of the form kind:entity, never in the cell. The cell's chip line keeps kind, label and the id as its value; the chip map stays per cell and holds nothing else. dtype_at, so =A1.Price and the card, resolves chip value to record. Cells that share an entity share one record, so a refresh updates all of them. Records are undoable (Tx::Records, grouped with the chip change that caused them) and a change recalculates the cells whose chip refers to the id. Text that still carries a whole record (value starting v1 and a tab) is taken in by intern() when chips are set or loaded: the record goes to the store, the newer time wins when the id already exists, and the cell keeps only the id; an empty entity means unresolved and leaves an empty value. set_chips drops an id the store does not hold; load_chips keeps it so records can arrive after cells. Only records some chip refers to are listed for saving, so unreferenced ones are dropped at the next save. The v1 text stays the wire form to the window; the Python module also hands records out as structured tuples for the file.

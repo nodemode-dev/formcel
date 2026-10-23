@@ -683,7 +683,7 @@ vba/runtime.ts returns the language runtime registered by automation through vba
 - kind: explainer
 - logged: v0.37.0 · 2026-10-22
 
-The Data Model window talks to the engine through one command channel (model.run, model.lines, model.load). Data type cells carry a payload drawn by typemarks.ts with an icon pad in the cell; the card, selector and Insert Data are DOM patched in place. Refresh all data also refreshes data types. Provider errors come back as #N/A with a note through the refusal banner.
+The Data Model window talks to the engine through one command channel (model.run, model.lines, model.load). Data type cells carry a record id (not the record) and typemarks.ts draws the icon pad in the cell; the card, Insert Data and refresh fetch the record from the engine's record store by that id; the card, selector and Insert Data are DOM patched in place. Refresh all data also refreshes data types. Provider errors come back as #N/A with a note through the refusal banner.
 
 ## v0.38.0 entries
 
@@ -707,3 +707,12 @@ A card whose template lists visuals fetches /api/templates/{id}/thumb when it sc
 - logged: v0.38.0 · 2026-10-22
 
 y2Fmt formats the secondary axis of a combo chart and sizes its label column. refs draws reference lines on scatter and bubble charts at a number or at a cell's value. Error bars of kind column take each point's amount from a column of the chart's range. None of these three is written to .xlsx yet (the charts are; these details are dropped). A Gantt-mode timeline whose first column is a label draws one row per task coloured by that label. Bubble domains are padded 12 percent. Columns and lines whose category labels will tilt reserve 26 px at the bottom (two builders made the same fix; one was kept at merge).
+
+## v0.40.0 entries
+
+### Linked data types resolve through the record store
+- refers-to: src/datatypes/index.ts, model.ts, src/grid/typemarks.ts, grid/grid.ts (linkedOf, pasteSpecial, applyEffect), engine/index.ts (recordOf, putRecords, loadRecords, takeRecords), app.ts (sendRecords, openWorkbook)
+- kind: decision
+- logged: v0.40.0 · 2026-10-23
+
+TypedMark holds the record id, and resolved means the id is not empty. Converting a cell and choosing a match still pass the fetched record text in the chip line once; the engine takes it into the store and the cell keeps the id, so no cell holds a record. Refresh calls putRecords with the id read from the cell, one undo step through grouped. applyEffect drains the engine's record changes and app.ts posts them to the engine process in order with the chip changes. Copy collects a portable chip line (record text included) per linked cell in the range, and pasting all, formulas, or formulas and formats sets it on the destination, which takes the record into that workbook's store; the line exists only in the in-memory copy buffer, not on the system clipboard, so a paste from another window brings the cell's text only. Opening a workbook loads its records before its sheets.
