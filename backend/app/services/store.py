@@ -15,11 +15,12 @@ from .. import config
 from . import calcstate
 from . import collab as cb
 from . import gastriggers
+from . import records as linked
 from . import templates
 from .xlsx.props import clean as clean_props
 
 FORMAT = "fcel"
-FORMAT_VERSION = 1
+FORMAT_VERSION = 2
 PREVIEW_ROWS = 8
 PREVIEW_COLS = 6
 
@@ -128,7 +129,7 @@ class Store:
         doc = {"format": FORMAT, "version": FORMAT_VERSION, "id": b.id, "title": b.title, "created": b.created,
                "modified": b.modified, "template": b.template, "locale": b.locale, "preview": b.preview(),
                "names": [list(n) for n in b.engine.names()], "nameNotes": [list(n) for n in b.engine.name_notes()], "tables": b.engine.tables(), "pivots": b.engine.pivots(), "model": b.engine.model_lines(), "whatif": b.whatif,
-               "theme": b.engine.theme(), "cellStyles": b.engine.cell_styles(), "collab": b.collab, "protection": b.protection(),
+               "theme": b.engine.theme(), "cellStyles": b.engine.cell_styles(), "collab": b.collab, "protection": b.protection(), "records": linked.to_doc(b.engine.records()),
                "sheets": [{"name": n, "view": b.views[i] if i < len(b.views) else {}, "cells": b.engine.cells(i), "formats": b.engine.formats(i), "styles": b.engine.styles(i), "merges": [list(m) for m in b.engine.merges(i)], "rules": b.engine.rules(i), "filter": b.engine.filter(i), "validations": b.engine.validations(i), "links": b.engine.links(i), "chips": b.engine.chips(i), "objects": b.fit_objects()[i]} for i, n in enumerate(b.sheet_names())]}
         doc["watches"] = b.watches
         doc["props"] = b.props
@@ -196,6 +197,7 @@ class Store:
                 eng.load_theme(doc["theme"])
             if doc.get("cellStyles"):
                 eng.load_cell_styles(doc["cellStyles"])
+            eng.load_records(linked.from_doc(doc.get("records")))
             for i, s in enumerate(doc["sheets"]):
                 if i:
                     eng.add_sheet(s["name"])
@@ -366,6 +368,7 @@ class Store:
             notes.append("1 theme left out")
         if book["cellStyles"]:
             eng.load_cell_styles(eng.cell_styles() + book["cellStyles"])
+        eng.load_records(book.get("records", []))
         for i, s in enumerate(book["sheets"] or [{"name": "Sheet1", "cells": [], "formats": [], "styles": [], "merges": [], "links": [], "view": {}}]):
             if i:
                 eng.add_sheet(s["name"])
@@ -541,7 +544,7 @@ class Store:
         b = self._load(wid)
         with b.lock:
             n = len(b.sheet_names())
-            return {**b.meta(), "watches": b.watches, "names": [list(x) for x in b.engine.names()], "nameNotes": [list(x) for x in b.engine.name_notes()], "theme": b.engine.theme(), "cellStyles": b.engine.cell_styles(), "cells": [b.engine.cells(i) for i in range(n)], "formats": [b.engine.formats(i) for i in range(n)], "styles": [b.engine.styles(i) for i in range(n)], "merges": [[list(m) for m in b.engine.merges(i)] for i in range(n)], "rules": [b.engine.rules(i) for i in range(n)], "filters": [b.engine.filter(i) for i in range(n)], "validations": [b.engine.validations(i) for i in range(n)], "tables": b.engine.tables(), "pivots": b.engine.pivots(), "model": b.engine.model_lines(), "whatif": b.whatif, "links": [b.engine.links(i) for i in range(n)], "chips": [b.engine.chips(i) for i in range(n)], "collab": {"notes": b.collab["notes"], "threads": b.collab["threads"]}, "protection": b.protection(), "automation": b.auto, **calcstate.save(b.engine, n)}
+            return {**b.meta(), "watches": b.watches, "names": [list(x) for x in b.engine.names()], "nameNotes": [list(x) for x in b.engine.name_notes()], "theme": b.engine.theme(), "cellStyles": b.engine.cell_styles(), "cells": [b.engine.cells(i) for i in range(n)], "formats": [b.engine.formats(i) for i in range(n)], "styles": [b.engine.styles(i) for i in range(n)], "merges": [[list(m) for m in b.engine.merges(i)] for i in range(n)], "rules": [b.engine.rules(i) for i in range(n)], "filters": [b.engine.filter(i) for i in range(n)], "validations": [b.engine.validations(i) for i in range(n)], "tables": b.engine.tables(), "pivots": b.engine.pivots(), "model": b.engine.model_lines(), "whatif": b.whatif, "links": [b.engine.links(i) for i in range(n)], "chips": [b.engine.chips(i) for i in range(n)], "records": [list(x) for x in b.engine.record_payloads()], "collab": {"notes": b.collab["notes"], "threads": b.collab["threads"]}, "protection": b.protection(), "automation": b.auto, **calcstate.save(b.engine, n)}
 
     def calc_command(self, wid: str, cmd: str) -> dict:
         b = self._load(wid)
@@ -625,12 +628,22 @@ class Store:
             self._write(b)
             return {"id": b.id, "modified": b.modified}
 
-    def set_chips(self, wid: str, sheet: int, cells: list[tuple[int, int, str]]) -> dict:
+    def set_chips(self, wid: str, sheet: int, cells: list[tuple[int, int, str]], records: list[tuple[str, str, str]] | None = None) -> dict:
         b = self._load(wid)
         with b.lock:
             if sheet >= len(b.sheet_names()):
                 raise IndexError(sheet)
+            if records:
+                b.engine.load_record_payloads(records)
             b.engine.load_chips(cells, sheet)
+            b.modified = now()
+            self._write(b)
+            return {"id": b.id, "modified": b.modified}
+
+    def set_records(self, wid: str, records: list[tuple[str, str, str]]) -> dict:
+        b = self._load(wid)
+        with b.lock:
+            b.engine.load_record_payloads(records)
             b.modified = now()
             self._write(b)
             return {"id": b.id, "modified": b.modified}
@@ -995,7 +1008,7 @@ class Store:
                 raise IndexError(sheet)
             eng = src.engine
             part = {"cells": eng.cells(sheet), "formats": eng.formats(sheet), "styles": eng.styles(sheet), "merges": eng.merges(sheet), "rules": eng.rules(sheet), "filter": eng.filter(sheet),
-                    "validations": eng.validations(sheet), "links": eng.links(sheet), "chips": eng.chips(sheet), "view": json.loads(json.dumps(src.views[sheet])), "objects": json.loads(json.dumps(src.objects[sheet]))}
+                    "validations": eng.validations(sheet), "links": eng.links(sheet), "chips": eng.chips(sheet), "records": eng.records(sheet), "view": json.loads(json.dumps(src.views[sheet])), "objects": json.loads(json.dumps(src.objects[sheet]))}
             notes = [(int(k.split(":")[1]), int(k.split(":")[2]), v["text"], v.get("author", "")) for k, v in src.collab["notes"].items() if int(k.split(":")[0]) == sheet]
             original = names[sheet]
         with target.lock:
@@ -1013,6 +1026,7 @@ class Store:
             e.load_validations(part["validations"], idx)
             e.load_links([tuple(c) for c in part["links"]], idx)
             e.load([tuple(c) for c in part["cells"]], idx)
+            e.load_records(part["records"])
             e.load_chips([tuple(c) for c in part["chips"]], idx)
             target.views.append({**part["view"], "hidden": None})
             target.objects.append(part["objects"])

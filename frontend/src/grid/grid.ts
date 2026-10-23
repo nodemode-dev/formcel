@@ -1,4 +1,4 @@
-import type { Area, Cell, Changed, Dir, Effect, EngineClient, FormatChange, FormatItem, LinkChange, MergeMode, Shift, SortKeySpec, StyleChange, StyleOp } from '../engine';
+import type { Area, Cell, Changed, Dir, Effect, EngineClient, FormatChange, FormatItem, LinkChange, MergeMode, RecordItem, Shift, SortKeySpec, StyleChange, StyleOp } from '../engine';
 import { light, parseStyle, PLAIN, themeOf, tint, type CellStyle, type Look } from './style';
 import type { TimelineView } from '../ui/timeline';
 import { decodeChips, encodeChips, paintChipLine, type ChipHit, type SmartChip } from './smartchips';
@@ -160,6 +160,7 @@ export interface GridEvents {
   onTableKey(): void;
   onLinks(changes: LinkChange[]): void;
   onChips(changes: LinkChange[]): void;
+  onRecords(items: RecordItem[]): void;
   onChipOpen?(row: number, col: number, chip: SmartChip): void;
   onTypeIcon?(row: number, col: number): void;
   onOpenLink(): void;
@@ -2562,6 +2563,8 @@ export class Grid {
     if (changed.length && this.circles.size) void this.refreshCircles();
     const links = await this.engine.takeLinks(this.book);
     if (links.length) this.events.onLinks(links);
+    const records = await this.engine.takeRecords(this.book);
+    if (records.length) this.events.onRecords(records);
     const chips = await this.engine.takeChips(this.book);
     if (chips.length) {
       for (const [s, r, c, t] of chips) {

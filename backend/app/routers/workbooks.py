@@ -319,14 +319,32 @@ def set_links(wid: str, body: EditIn) -> dict:
         raise HTTPException(422, f"Those links could not be saved: {e}")
 
 
+class ChipsIn(EditIn):
+    records: list[tuple[str, str, str]] = Field(default_factory=list, max_length=5000)
+
+
+class RecordsIn(BaseModel):
+    records: list[tuple[str, str, str]] = Field(default_factory=list, max_length=5000)
+
+
 @router.post("/workbooks/{wid}/cellchips")
-def set_chips(wid: str, body: EditIn) -> dict:
+def set_chips(wid: str, body: ChipsIn) -> dict:
     try:
-        return store().set_chips(wid, body.sheet, body.cells)
+        return store().set_chips(wid, body.sheet, body.cells, body.records)
     except (KeyError, FileNotFoundError):
         raise missing(wid)
     except (IndexError, ValueError) as e:
         raise HTTPException(422, f"Those chips could not be saved: {e}")
+
+
+@router.post("/workbooks/{wid}/records")
+def set_records(wid: str, body: RecordsIn) -> dict:
+    try:
+        return store().set_records(wid, body.records)
+    except (KeyError, FileNotFoundError):
+        raise missing(wid)
+    except ValueError as e:
+        raise HTTPException(422, f"Those records could not be saved: {e}")
 
 
 class RulesIn(BaseModel):

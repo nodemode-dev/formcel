@@ -1,4 +1,4 @@
-import { engine, type Area, type Changed, type Effect, type FormatChange, type LinkChange, type Name, type Shift, type SortKeySpec } from './engine';
+import { engine, type Area, type Changed, type Effect, type FormatChange, type LinkChange, type Name, type RecordItem, type Shift, type SortKeySpec } from './engine';
 import { loadSortLists, saveSortList } from './ui/sortlists';
 import { cascadeDates, collectDates, dateTree, DATE_FILTERS, iconSwatch } from './ui/filterx';
 import { colName, parseRef, type Range } from './grid/a1';
@@ -444,6 +444,7 @@ export class App {
       onTableKey: () => void runCommand('table.create'),
       onLinks: (changes) => this.sendLinks(changes),
       onChips: (changes) => this.sendChips(changes),
+      onRecords: (items) => this.sendRecords(items),
       onChipOpen: (_r, _c, chip) => {
         const href = chipHref(chip);
         if (href) window.open(href, '_blank', 'noopener');
@@ -2484,6 +2485,7 @@ export class App {
     const book = await e.newWorkbook();
     await e.loadTheme(book, doc.theme ?? '');
     await e.loadNamed(book, doc.cellStyles ?? []);
+    await e.loadRecords(book, (doc as { records?: RecordItem[] }).records ?? []);
     for (let i = 0; i < doc.sheets.length; i++) {
       if (i) await e.addSheet(book, doc.sheets[i]);
       else if (doc.sheets[0] !== 'Sheet1') await e.renameSheet(book, 0, doc.sheets[0]);
@@ -2777,6 +2779,19 @@ export class App {
       }
     });
     this.linkChip();
+  }
+
+  private sendRecords(items: RecordItem[]): void {
+    const o = this.open;
+    if (!o) return;
+    this.saving = this.saving.then(async () => {
+      try {
+        await api('POST', `/api/workbooks/${o.id}/records`, { records: items });
+      } catch (err) {
+        this.status('Not saved', true);
+        this.p.save.title = err instanceof Error ? err.message : '';
+      }
+    });
   }
 
   private sendChips(changes: LinkChange[]): void {
