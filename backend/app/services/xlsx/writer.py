@@ -17,7 +17,7 @@ from .calcio import calc_out, finish as calc_finish
 from .cf import rules_out
 from .chartex import inject
 from .chartsheets import finish as sheets_finish
-from .datatypes import collect as datatype_cells, finish as datatypes_finish
+from .datatypes import collect as datatype_part, finish as datatypes_finish
 from .drawings import objects_out, pivot_ranges
 from .extlinks import links_out
 from .imagefn import collect as image_cells
@@ -208,5 +208,5 @@ def write(eng, views: list[dict], vba: dict[str, bytes] | None = None, objects: 
     data = slicers_finish(data, views, eng.tables(), eng.pivots())
     data = queries_finish(data, queries)
     data = model_finish(data, eng)
-    data = datatypes_finish(data, datatype_cells(eng))
+    data = datatypes_finish(data, datatype_part(eng))
     return sheets_finish(data,[wb.worksheets[i].title for i, plan in plans.items() if plan["alts"]["charts"] and i < len(views) and views[i].get("chartSheet")])

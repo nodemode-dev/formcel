@@ -256,7 +256,8 @@ def read(data: bytes) -> dict:
     for i, r, c, v in filled:
         if i < len(sheets):
             sheets[i]["cells"].append((r, c, v))
-    for i, found_types in datatypes_in(data, [s["name"] for s in sheets]).items():
+    typed_cells, typed_records = datatypes_in(data, [s["name"] for s in sheets])
+    for i, found_types in typed_cells.items():
         sheets[i]["chips"] = found_types
     settings = render(calc_in(wb), [e for s in scanned for e in s["ignored"]])
     model, conns, excel_model = model_in(data)
@@ -266,4 +267,4 @@ def read(data: bytes) -> dict:
         notes["Data Model brought in from FormCel's own definition part (Excel's Data Model is a binary part FormCel cannot write, so Excel sees the CUBE formulas and cached values but not a model it can refresh; OLAP connection definitions are kept but untested)"] += 1
     if excel_model:
         notes["Excel Data Model not read (it is a binary part FormCel cannot open), so CUBE formulas against it show errors until the model is rebuilt in FormCel"] += 1
-    return {"model": model, "calc": settings, "externals": lines_in(wb), "sheets": sheets, "names": names, "nameNotes": name_notes, "tables": tables, "pivots": pivots, "whatif": what, "theme": theme_in(wb.loaded_theme), "cellStyles": custom, "vba": vba, "props": read_props(wb, data), "protection": book_in(wb), "notes": [f"{n} {what}" for what, n in sorted(notes.items())]}
+    return {"records": typed_records, "model": model, "calc": settings, "externals": lines_in(wb), "sheets": sheets, "names": names, "nameNotes": name_notes, "tables": tables, "pivots": pivots, "whatif": what, "theme": theme_in(wb.loaded_theme), "cellStyles": custom, "vba": vba, "props": read_props(wb, data), "protection": book_in(wb), "notes": [f"{n} {what}" for what, n in sorted(notes.items())]}

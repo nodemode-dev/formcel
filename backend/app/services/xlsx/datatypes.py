@@ -5,6 +5,8 @@ import zipfile
 
 from openpyxl.utils import get_column_letter
 
+from .. import records as linked
+
 PART = "formcel/datatypes.json"
 CTYPE = "application/vnd.formcel.datatypes+json"
 RTYPE = "http://schemas.formcel.app/2026/relationships/datatypes"
@@ -26,20 +28,20 @@ def typed(chips: list[tuple[int, int, str]]) -> list[tuple[int, int, str, str, s
     return out
 
 
-def collect(eng) -> list[dict]:
-    out = []
+def collect(eng) -> dict:
+    cells = []
     for i, name in enumerate(eng.sheet_names()):
         for r, c, kind, label, value in typed(eng.chips(i)):
-            out.append({"sheet": name, "ref": f"{get_column_letter(c + 1)}{r + 1}", "kind": kind, "label": label, "value": value})
-    return out
+            cells.append({"sheet": name, "ref": f"{get_column_letter(c + 1)}{r + 1}", "kind": kind, "label": label, "record": value})
+    return {"format": "formcel-datatypes", "version": 2, "records": linked.to_doc(eng.records()), "cells": cells}
 
 
-def finish(data: bytes, cells: list[dict]) -> bytes:
-    if not cells:
+def finish(data: bytes, part: dict) -> bytes:
+    if not part["cells"]:
         return data
     with zipfile.ZipFile(io.BytesIO(data)) as z:
         files = {n: z.read(n) for n in z.namelist()}
-    files[PART] = json.dumps({"format": "formcel-datatypes", "version": 1, "cells": cells}, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+    files[PART] = json.dumps(part, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
     ct = files["[Content_Types].xml"].decode("utf-8")
     files["[Content_Types].xml"] = ct.replace("</Types>", f'<Override PartName="/{PART}" ContentType="{CTYPE}"/></Types>').encode("utf-8")
     rels = files["xl/_rels/workbook.xml.rels"].decode("utf-8")
@@ -53,21 +55,22 @@ def finish(data: bytes, cells: list[dict]) -> bytes:
     return out.getvalue()
 
 
-def read(data: bytes, names: list[str]) -> dict[int, list[tuple[int, int, str]]]:
+def read(data: bytes, names: list[str]) -> tuple[dict[int, list[tuple[int, int, str]]], list[tuple]]:
     try:
         with zipfile.ZipFile(io.BytesIO(data)) as z:
             if PART not in z.namelist():
-                return {}
+                return {}, []
             doc = json.loads(z.read(PART).decode("utf-8"))
     except (zipfile.BadZipFile, ValueError, KeyError):
-        return {}
+        return {}, []
     out: dict[int, list[tuple[int, int, str]]] = {}
     lower = [n.lower() for n in names]
+    records = linked.from_doc(doc.get("records")) if isinstance(doc, dict) else []
     for c in doc.get("cells", []) if isinstance(doc, dict) else []:
         try:
             idx = lower.index(str(c["sheet"])[:31].lower())
             m = re.fullmatch(r"([A-Z]{1,3})(\d+)", str(c["ref"]))
-            kind, label, value = str(c["kind"]), str(c["label"]), str(c["value"])
+            kind, label, value = str(c["kind"]), str(c["label"]), str(c["record"] if "record" in c else c["value"])
         except (KeyError, ValueError):
             continue
         if not m or kind not in KINDS or not label:
@@ -81,4 +84,4 @@ def read(data: bytes, names: list[str]) -> dict[int, list[tuple[int, int, str]]]
 
         text = "\t".join([kind, "0", esc(label), esc(value), ""])
         out.setdefault(idx, []).append((int(m.group(2)) - 1, col - 1, text))
-    return out
+    return out, records
