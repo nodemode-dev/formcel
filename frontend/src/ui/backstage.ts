@@ -1069,7 +1069,7 @@ export class Backstage {
     ic2.insertAdjacentHTML('afterbegin', icon('theme'));
     const t2 = h('div', 'fc-bs-btext');
     t2.append(h('h3', '', 'Theme'));
-    const ts = select([['dark', 'Dark (default)'], ['light', 'Light, like Excel'], ['contrast', 'High contrast']], theme(), (v) => setTheme(v as ThemeName));
+    const ts = select([['dark', 'Dark (default)'], ['light', 'Light'], ['contrast', 'High contrast']], theme(), (v) => setTheme(v as ThemeName));
     ts.className = 'fc-bs-select';
     t2.append(ts);
     th.append(ic2, t2);

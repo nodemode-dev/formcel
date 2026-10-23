@@ -23,14 +23,14 @@
   --cell-grid: color-mix(in srgb, var(--border-color) 82%, var(--text-muted));
   --cell-head-bg: var(--bg-secondary);
   --cell-head-fg: var(--text-secondary);
-  --cell-head-on: #23382d;
-  --cell-head-on-fg: #6fd3a3;
-  --cell-head-full: #107c41;
+  --cell-head-on: #3b2414;
+  --cell-head-on-fg: #fdba74;
+  --cell-head-full: #c2410c;
   --cell-head-full-fg: #ffffff;
   --cell-bg: var(--canvas-bg);
   --cell-fg: var(--text-primary);
-  --cell-select: rgba(33, 163, 102, 0.16);
-  --cell-select-edge: #21a366;
+  --cell-select: rgba(249, 115, 22, 0.16);
+  --cell-select-edge: #f97316;
   --cell-link: #60a5fa;
 
   --font-ui: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;

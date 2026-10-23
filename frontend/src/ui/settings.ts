@@ -205,7 +205,7 @@ export class SettingsDialog extends Dialog {
     const view = selectRow('Default view for new sheets', [['normal', 'Normal'], ['pagebreak', 'Page Break Preview']], (v) => this.change({ defaultView: v as Prefs['defaultView'] }));
     const sheets = numberRow('Sheets in a new workbook', 1, 50, 1, (v) => this.change({ newSheets: Math.round(v) }));
     const start = toggleRow('Show the Home screen when FormCel starts', (v) => this.change({ startScreen: v }));
-    const themeRow = selectRow('Theme', [['dark', 'Form family theme'], ['light', 'Light, like Excel'], ['contrast', 'High contrast']], (v) => {
+    const themeRow = selectRow('Theme', [['dark', 'Form family theme'], ['light', 'Light'], ['contrast', 'High contrast']], (v) => {
       setTheme(v as ThemeName);
       applyAccent();
     });

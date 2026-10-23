@@ -36,11 +36,11 @@ function save(): void {
 
 const PROFILES: Record<'light' | 'contrast', Record<string, string>> = {
   light: {
-    '--accent-color': '#107c41', '--accent-color-dim': '#107c4126', '--accent-color-hover': '#0b6a37',
+    '--accent-color': '#ea580c', '--accent-color-dim': '#ea580c26', '--accent-color-hover': '#c2410c',
     '--bg-primary': '#ffffff', '--bg-secondary': '#f3f3f3', '--bg-tertiary': '#e6e6e6', '--bg-node': '#fafafa',
     '--border-color': '#d1d1d1', '--border-light': '#bdbdbd', '--text-primary': '#242424', '--text-secondary': '#444444', '--text-muted': '#616161',
     '--canvas-bg': '#ffffff', '--grid-color': '#a1a1aa', '--cell-grid': '#d4d4d4', '--cell-head-bg': '#f3f3f3', '--cell-head-fg': '#444444',
-    '--cell-head-on': '#cae9d8', '--cell-head-on-fg': '#0e5c31', '--cell-select': 'rgba(16, 124, 65, 0.1)', '--cell-select-edge': '#107c41',
+    '--cell-head-on': '#fed7aa', '--cell-head-on-fg': '#7c2d12', '--cell-select': 'rgba(234, 88, 12, 0.1)', '--cell-select-edge': '#ea580c',
     '--cell-bg': '#ffffff', '--cell-fg': '#242424', '--cell-link': '#0563c1', '--ok': '#15803d', '--warn': '#a16207', '--bad': '#b91c1c',
   },
   contrast: {

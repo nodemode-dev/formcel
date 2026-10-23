@@ -1,8 +1,8 @@
 .fc-backstage {
-  --bs-rail: #0e5c31;
+  --bs-rail: #7c2d12;
   --bs-rail-hover: rgba(255, 255, 255, 0.1);
   --bs-rail-on: rgba(0, 0, 0, 0.28);
-  --bs-green: #21a366;
+  --bs-green: #f97316;
   --card-w: 190px;
   position: fixed;
   z-index: var(--z-scrim);
@@ -13,7 +13,7 @@
   color: var(--text-primary);
 }
 
-:root[data-theme="light"] .fc-backstage { --bs-rail: #107c41; --bs-green: #107c41; }
+:root[data-theme="light"] .fc-backstage { --bs-rail: #c2410c; --bs-green: #c2410c; }
 
 .fc-backstage[hidden] { display: none; }
 
