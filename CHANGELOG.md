@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.40.0 · 2026-10-23
+
+- Stocks and Currencies data types keep their records in a workbook record store instead of inside each cell. A cell holds only its record id and the label it shows; the card, Insert Data, field formulas such as `=A2.Price`, refresh, and copy and paste all work as before. Cells that share a company or pair share one record, so a refresh updates them together.
+- Workbooks saved by earlier versions open as before: the records in their cells move into the store as the workbook loads, and the next save writes the new form (file format version 2).
+- Copying a linked cell into another workbook brings its record along. Excel export and import keep the display text, the field formulas and the data type part, which now lists each record once.
+
 ## 0.39.6 · 2026-10-23
 
 - Lora, Merriweather, Playfair Display, Raleway and Source Sans 3 ship as their complete original font files instead of subsets, and PDF export embeds them from those files.

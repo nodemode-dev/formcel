@@ -2,7 +2,7 @@
 
 Living log of comment content and rationale for the window. Source stays comment-free; it lives here.
 
-Current build version: v0.39.6
+Current build version: v0.40.0
 Last updated: 2026-10-23 · full fonts for the Reserved Font Name families
 
 ---
