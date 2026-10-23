@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.39.3 · 2026-10-23
+
+- The Function conformance template no longer carries the function pages' descriptions: column AE is gone from every example sheet, and the template's description and the Summary note are in FormCel's own words. The Summary still links each function page.
+
 ## 0.39.2 · 2026-10-23
 
 - A trademark notice in the README and NOTICE: Microsoft, Excel and Office belong to the Microsoft group of companies, Google Sheets to Google LLC, and FormCel is not affiliated with either.

@@ -3,7 +3,7 @@ resolver = "2"
 members = ["crates/formcel-core", "crates/formcel-wasm", "crates/formcel-py"]
 
 [workspace.package]
-version = "0.39.2"
+version = "0.39.3"
 edition = "2021"
 license = "Apache-2.0"
 authors = ["nodemode-ai <mackin@nodemode.ai>"]
