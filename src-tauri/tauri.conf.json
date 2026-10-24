@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "FormCel",
-  "version": "0.40.0",
+  "version": "0.40.1",
   "identifier": "ai.nodemode.formcel",
   "build": {
     "frontendDist": "../frontend/dist"

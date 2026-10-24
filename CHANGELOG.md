@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.40.1 · 2026-10-24
+
+- The copyright holder in LICENSE, NOTICE.md and the README is NodeAgentc, Inc.
+- The Home screen credit reads "by nodemode.ai".
+
 ## 0.40.0 · 2026-10-23
 
 - Stocks and Currencies data types keep their records in a workbook record store instead of inside each cell. A cell holds only its record id and the label it shows; the card, Insert Data, field formulas such as `=A2.Price`, refresh, and copy and paste all work as before. Cells that share a company or pair share one record, so a refresh updates them together.
