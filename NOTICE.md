@@ -1,7 +1,7 @@
 # NOTICE
 
 FormCel
-Copyright 2026 nodemode-ai
+Copyright 2026 NodeAgentc, Inc.
 
 Licensed under the Apache License, Version 2.0. See `LICENSE`.
 

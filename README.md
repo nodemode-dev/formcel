@@ -99,7 +99,7 @@ docs/       functions.json: every function FormCel computes, its arguments, and 
 
 ## Licence
 
-Apache-2.0. See `LICENSE` and `NOTICE.md`.
+Apache-2.0. Copyright 2026 NodeAgentc, Inc. See `LICENSE` and `NOTICE.md`.
 
 ## Trademarks
 
