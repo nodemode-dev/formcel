@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.40.2 · 2026-10-25
+
+- The engine answers only this computer's own FormCel window and agents. A web page open in a browser can no longer import a workbook into your library or read your workbooks.
+
 ## 0.40.1 · 2026-10-24
 
 - The copyright holder in LICENSE, NOTICE.md and the README is NodeAgentc, Inc.
