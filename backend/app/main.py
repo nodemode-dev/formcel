@@ -3,6 +3,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from . import config
+from .local_guard import LocalGuard
 import asyncio
 
 from .routers import automation, collab, commands, fonts, printpreview, quotes, review, share, spell, tplthumb, workbooks
@@ -24,6 +25,7 @@ async def lifespan(_: FastAPI):
 
 
 app = FastAPI(title="FormCel engine", version=VERSION, lifespan=lifespan, docs_url="/api/docs", openapi_url="/api/openapi.json", redoc_url=None)
+app.add_middleware(LocalGuard, origins=config.window_origins())
 app.include_router(tplthumb.router)
 app.include_router(workbooks.router)
 app.include_router(printpreview.router)
