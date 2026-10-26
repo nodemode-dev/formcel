@@ -2,7 +2,7 @@
 
 Living log of comment content and rationale for the engine process. Source stays comment-free; it lives here.
 
-Current build version: v0.40.4
+Current build version: v0.40.5
 Last updated: 2026-10-26 · scripts run with no file, process or network reach (FB-043), and the test suite. Before: LocalGuard refuses cross-site requests that carry no Origin (FB-035). Before: only this computer's own window and agents reach the engine (FB-030), and full fonts in PDF export, freeze exclusions
 
 - v0.39.6: `services/full_fonts.py` finds the five full variable fonts (the frozen window's `fonts/full`, else `frontend/public/fonts/full`) and `face(family, bold, italic)` returns a static instance at weight 400 or 700, every other axis at its default, made with fontTools' instancer and cached. `pdf_fonts._register` tries it before the Fontsource files, so exported PDFs embed glyphs from the full original font; a static instance embedded in a document is allowed by the OFL. The freeze now excludes psycopg, psycopg_binary (LGPL-3.0) and chardet, which the engine never imports in a desktop build, so NOTICE.md's claim that psycopg is never shipped is true of the bundle.

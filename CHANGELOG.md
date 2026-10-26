@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.40.5 · 2026-10-26
+
+- A test opens the built window under a slow network and a slow processor and fails if it shifts, logs an error, or has a request fail or refused; it runs on every change.
+
 ## 0.40.4 · 2026-10-26
 
 - Scripts in a workbook (Apps Script, JavaScript cell functions and VBA macros) now run with no access to your files, programs or the network beyond what the workbook offers them. Before this, an Apps Script or cell function could reach outside the workbook, and an onOpen script ran when the workbook opened. Scripts need Node.js 22 or later.
