@@ -7,6 +7,13 @@ Last updated: 2026-10-24 · Home credit reads by nodemode.ai (text only, `ui/hom
 
 ---
 
+## The window smoke (F7) · v0.40.5 (2026-10-26)
+
+- refers-to: tests/window/test_window.py
+- kind: test
+
+`test_window.py` serves the built window (`frontend/dist`, via `FORMCEL_WINDOW_DIR`) from the engine on a free port with an empty data folder and home, opens `/` and `/splash.html` (the second HTML document, the desktop splash) in Chromium at 4x CPU slowdown and a slow network, and fails on a missing title, any request refused by the guard (403), any failed request or 4xx/5xx answer, any console or page error, or layout shift above 0 after load, network idle and a 3 s settle. Measured shift on both pages: 0. `IGNORED_REQUESTS` is empty. The build needs `engine/build_wasm` first, because the window fetches `/engine/formcel.wasm` from `public/engine` (git-ignored) and the engine process needs the formcel_engine module. Proven on a scratch copy: a late moved fixed element (shift 0.0082), a console error, a fetch of a missing route (404) and a guard refusing same-origin fetches (403 on the window's own requests) each fail it.
+
 ## Full fonts for the Reserved Font Name families · v0.39.6 (2026-10-23)
 
 - refers-to: src/grid/fonts.ts :: loaders for Lora, Merriweather, Playfair Display, Raleway, Source Sans 3; src/grid/full-fonts/*.css; public/fonts/full/*
