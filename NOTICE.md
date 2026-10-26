@@ -21,6 +21,7 @@ FormCel ports code from three sibling repositories by the same owner, all Apache
 | --- | --- | --- |
 | Vite | MIT | frontend build tool |
 | TypeScript | Apache-2.0 | frontend build tool |
+| pytest 9.1.1, httpx 0.28.1 (`backend/requirements-test.txt`) | MIT, BSD-3-Clause | the test suite in `backend/tests` and CI only, never shipped |
 | FastAPI | MIT | engine process |
 | Uvicorn | BSD-3-Clause | engine process |
 | PyO3 | MIT or Apache-2.0 | Python build of the engine |
