@@ -27,7 +27,7 @@ cd frontend && npx tsc --noEmit           typecheck
 - No emoji, no icon libraries (inline `currentColor` SVG in `src/ui/icons.ts`), no em dashes in markdown.
 - Near-zero comments in code; explanations go in the side's `HASHOUT_LOG.md`.
 - Commits as `nodemode-ai <mackin@nodemode.ai>`. Versions read `v` digit dot digit dot digit and match across `frontend/package.json` (and its lockfile), `frontend/src/version.ts`, `backend/app/version.py` and `engine/Cargo.toml`.
-- No tests unless the owner asks for them; describe them in `TEST_PLAN.md` instead.
+- Tests live in `tests/` folders and run in CI; write only tests this plan or its successor names. The plan is `FAMILY_TEST_PLAN.md` in the formai_dev sidecar; `cd backend && python -m pytest tests` runs them (after the engine module is built).
 
 ## Linked data types and related features (declined for patent risk, 2026-10-23)
 
