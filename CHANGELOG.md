@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.40.4 · 2026-10-26
+
+- Scripts in a workbook (Apps Script, JavaScript cell functions and VBA macros) now run with no access to your files, programs or the network beyond what the workbook offers them. Before this, an Apps Script or cell function could reach outside the workbook, and an onOpen script ran when the workbook opened. Scripts need Node.js 22 or later.
+- A test suite checks the engine's guard, formulas, opening and saving .xlsx and .fcel files, and the script runners; it runs on every change.
+
 ## 0.40.3 · 2026-10-25
 
 - A web page can no longer reach the engine through an image or a link.
