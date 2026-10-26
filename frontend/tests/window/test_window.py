@@ -30,8 +30,14 @@ NETWORK = {"offline": False, "latency": 150, "downloadThroughput": 1_600_000 / 8
 
 CLS_PROBE = """
 window.__cls = 0;
+window.__shifts = [];
 new PerformanceObserver((list) => {
-  for (const e of list.getEntries()) if (!e.hadRecentInput) window.__cls += e.value;
+  for (const e of list.getEntries()) {
+    if (e.hadRecentInput) continue;
+    window.__cls += e.value;
+    const who = (e.sources || []).map((s) => s.node ? `${s.node.nodeName}.${String(s.node.className || '').trim().split(/\\s+/)[0]}` : '?');
+    window.__shifts.push(`${Math.round(e.startTime)}ms ${e.value.toExponential(2)} ${who.join(',')}`);
+  }
 }).observe({ type: 'layout-shift', buffered: true });
 """
 
@@ -101,10 +107,11 @@ def test_window_loads_throttled_without_shift_errors_or_refusals(engine, path):
         page.wait_for_load_state("networkidle", timeout=120_000)
         page.wait_for_timeout(SETTLE_MS)
         cls = page.evaluate("window.__cls")
+        shifts = page.evaluate("window.__shifts")
         title = page.title()
         browser.close()
     assert title, "the window has a title"
     assert not [f for f in failed if " 403" in f], f"requests refused by the guard: {failed}"
     assert not failed, f"failed requests: {failed}"
     assert not errors, f"console errors: {errors}"
-    assert cls <= CLS_LIMIT, f"layout shift {cls}"
+    assert cls <= CLS_LIMIT, f"layout shift {cls}: {shifts}"
