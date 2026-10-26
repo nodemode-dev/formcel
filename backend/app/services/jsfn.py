@@ -17,6 +17,10 @@ process.stdin.on("data", (d) => (input += d)).on("end", async () => {
     class CfError extends Error { constructor(code, message) { super(message || String(code)); this.excelCode = String(code); } }
     const codes = { invalidValue: "#VALUE!", notAvailable: "#N/A", divisionByZero: "#DIV/0!", invalidNumber: "#NUM!", nullReference: "#NULL!", invalidName: "#NAME?", invalidReference: "#REF!" };
     const ctx = vm.createContext({ console: quiet, CustomFunctions: { Error: CfError, ErrorCode: codes }, __args: JSON.stringify(req.args), setTimeout, setInterval, clearTimeout, clearInterval }, { codeGeneration: { strings: false, wasm: false } });
+    for (const k of ["fetch", "WebSocket", "EventSource", "require", "module", "exports"]) delete globalThis[k];
+    process.mainModule = undefined;
+    process.getBuiltinModule = undefined;
+    process.kill = undefined;
     const extra = req.stream ? ", { setResult(v) { last = v; has = true; if (wake) wake(); }, onCanceled: null, address: '' }" : "";
     const hold = req.stream ? "if (!has) await new Promise((res) => { wake = res; setTimeout(res, 3000); });" : "";
     const src = '"use strict";\n' + req.js + "\n;(async () => { const a = JSON.parse(__args); let last, wake, has = false; const v = await " + req.name + "(...a" + extra + "); " + hold + " const r = has ? last : v; return JSON.stringify(r === undefined ? '' : r); })()";
@@ -90,9 +94,15 @@ def call(js: str, name: str, args: list, stream: bool = False):
     exe = node()
     if not exe:
         raise JsUnavailable(status()["note"])
+    from .gasrun import RunError, locked_down
+
+    try:
+        flags = locked_down(exe)
+    except RunError as e:
+        raise JsUnavailable(str(e)) from None
     with tempfile.TemporaryDirectory() as d:
         try:
-            p = subprocess.run([exe, "--max-old-space-size=192", "-e", RUNNER], input=json.dumps({"js": js, "name": name, "args": args, "stream": stream}), capture_output=True, text=True, timeout=TIMEOUT, cwd=d, env={"PATH": "/usr/bin:/bin:/usr/local/bin"})
+            p = subprocess.run([exe, *flags, "--max-old-space-size=192", "-e", RUNNER], input=json.dumps({"js": js, "name": name, "args": args, "stream": stream}), capture_output=True, text=True, timeout=TIMEOUT, cwd=d, env={"PATH": "/usr/bin:/bin:/usr/local/bin"})
         except subprocess.TimeoutExpired:
             raise JsError("the function ran longer than 5 seconds")
     if p.returncode != 0:

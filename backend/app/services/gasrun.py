@@ -35,6 +35,27 @@ def available() -> bool:
     return shutil.which("node") is not None
 
 
+_PERMISSION: dict[str, str | None] = {}
+OLD_NODE = "This Node.js cannot run scripts with file and process access turned off. Install Node.js 22 or later (MIT) so scripts can run."
+
+
+def locked_down(exe: str, readable: Path | None = None) -> list[str]:
+    if exe not in _PERMISSION:
+        _PERMISSION[exe] = None
+        for flag in ("--permission", "--experimental-permission"):
+            try:
+                ok = subprocess.run([exe, flag, "-e", "0"], capture_output=True, timeout=10, cwd="/", env={"PATH": "/usr/bin:/bin"}).returncode == 0
+            except (OSError, subprocess.SubprocessError):
+                ok = False
+            if ok:
+                _PERMISSION[exe] = flag
+                break
+    flag = _PERMISSION[exe]
+    if flag is None:
+        raise RunError(OLD_NODE)
+    return [flag] + ([f"--allow-fs-read={readable}"] if readable is not None else [])
+
+
 def is_gas(s: dict) -> bool:
     code = s.get("code") or ""
     if re.search(r"\bfunction\s+main\s*\(\s*\w+\s*:\s*ExcelScript", code) or "ExcelScript." in code:
@@ -209,7 +230,7 @@ def run(wid: str, fn: str, args: list | None = None, event: dict | None = None, 
         "props": {k: dict(state["props"].get(k) or {}) for k in ("script", "user", "document")},
     }
     started = time.time()
-    p = subprocess.Popen([exe, "--max-old-space-size=192", str(RUNNER)], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, cwd="/", env={"PATH": "/usr/bin:/bin:/usr/local/bin:" + os.path.dirname(exe)})
+    p = subprocess.Popen([exe, *locked_down(exe, RUNNER), "--max-old-space-size=192", str(RUNNER)], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, cwd="/", env={"PATH": "/usr/bin:/bin:/usr/local/bin:" + os.path.dirname(exe)})
     timer = threading.Timer(LIMIT, p.kill)
     timer.start()
     final: dict | None = None

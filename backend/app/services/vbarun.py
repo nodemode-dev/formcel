@@ -255,9 +255,13 @@ def spawn(wid: str, req: dict, limit: int) -> dict:
         raise VbaError("No JavaScript runtime was found on the PATH. Install Node.js (MIT) so macros can run in the engine process.")
     if not RUNNER.is_file():
         raise VbaError("The VBA runner is not built. Run npm run build:vba in the frontend folder.")
+    try:
+        flags = gasrun.locked_down(exe, RUNNER)
+    except gasrun.RunError as e:
+        raise VbaError(str(e)) from None
     state: dict = {}
     started = time.time()
-    p = subprocess.Popen([exe, "--max-old-space-size=256", str(RUNNER)], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, cwd="/", env={"PATH": "/usr/bin:/bin:/usr/local/bin:" + str(Path(exe).parent)})
+    p = subprocess.Popen([exe, *flags, "--max-old-space-size=256", str(RUNNER)], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, cwd="/", env={"PATH": "/usr/bin:/bin:/usr/local/bin:" + str(Path(exe).parent)})
     timer = threading.Timer(limit, p.kill)
     timer.start()
     final: dict | None = None

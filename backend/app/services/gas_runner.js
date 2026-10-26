@@ -388,6 +388,10 @@ const Browser = { msgBox(m) { alerts.push(String(m)); return "ok"; } };
 
 const sandbox = { Logger, console: quiet, SpreadsheetApp, PropertiesService, UrlFetchApp, Utilities, Session, ScriptApp, Browser, ContentService: { createTextOutput: (t) => ({ getContent: () => t }) } };
 const ctx = vm.createContext(sandbox, { codeGeneration: { strings: false, wasm: false } });
+for (const k of ["fetch", "WebSocket", "EventSource", "require", "module", "exports"]) delete globalThis[k];
+process.mainModule = undefined;
+process.getBuiltinModule = undefined;
+process.kill = undefined;
 
 function eventOf(e) {
   if (!e) return undefined;
