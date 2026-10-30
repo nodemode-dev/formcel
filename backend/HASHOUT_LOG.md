@@ -3,7 +3,16 @@
 Living log of comment content and rationale for the engine process. Source stays comment-free; it lives here.
 
 Current build version: v0.40.5
-Last updated: 2026-10-26 · scripts run with no file, process or network reach (FB-043), and the test suite. Before: LocalGuard refuses cross-site requests that carry no Origin (FB-035). Before: only this computer's own window and agents reach the engine (FB-030), and full fonts in PDF export, freeze exclusions
+Last updated: 2026-10-30 · the Windows install stops on a failed step and never on a missing Tesseract. Before: 2026-10-26 · scripts run with no file, process or network reach (FB-043), and the test suite. Before: LocalGuard refuses cross-site requests that carry no Origin (FB-035). Before: only this computer's own window and agents reach the engine (FB-030), and full fonts in PDF export, freeze exclusions
+
+## v0.40.6 entries
+
+### Windows install: failures stop it, a missing Tesseract does not
+- refers-to: oc_install.bat; ../formcel_oc_install.bat; ../frontend/oc_install.bat
+- kind: rationale
+- logged: v0.40.6 · 2026-10-30
+
+`oc_install.bat` stops with exit code 1 when the venv, its activation, the pip upgrade, the requirements, the engine module or its import fails, and ends with `exit /b 0` after the Tesseract checks. Tesseract is optional (only Data from a picture needs it), and before this the last command was `where winget`, which leaves ERRORLEVEL 1 on a machine with neither Tesseract nor winget, such as the Windows build runner. The batch returned that 1, `pushd backend && call oc_install.bat && popd` in `formcel_oc_install.bat` skipped `popd` and the window install, and `build_app.bat` stopped. pip runs as `python -m pip` so the venv's own interpreter is the one that installs. `formcel_oc_install.bat` now runs each side with `pushd`, `call`, then `if errorlevel 1` to `popd` and `exit /b 1`, so a failed side restores the folder and stops the install with a non-zero code, and it ends with `exit /b 0`. `frontend/oc_install.bat` stops when `npm install` or `engine\build_wasm.bat` fails and ends with `exit /b 0`.
 
 - v0.39.6: `services/full_fonts.py` finds the five full variable fonts (the frozen window's `fonts/full`, else `frontend/public/fonts/full`) and `face(family, bold, italic)` returns a static instance at weight 400 or 700, every other axis at its default, made with fontTools' instancer and cached. `pdf_fonts._register` tries it before the Fontsource files, so exported PDFs embed glyphs from the full original font; a static instance embedded in a document is allowed by the OFL. The freeze now excludes psycopg, psycopg_binary (LGPL-3.0) and chardet, which the engine never imports in a desktop build, so NOTICE.md's claim that psycopg is never shipped is true of the bundle.
 

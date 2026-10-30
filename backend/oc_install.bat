@@ -1,17 +1,17 @@
 @echo off
 cd /d "%~dp0"
 
-python -m venv venv
-call venv\Scripts\activate.bat
-python -m pip install --upgrade pip
-pip install -r requirements.txt
+python -m venv venv || exit /b 1
+call venv\Scripts\activate.bat || exit /b 1
+python -m pip install --upgrade pip || exit /b 1
+python -m pip install -r requirements.txt || exit /b 1
 
 where cargo >nul 2>nul
 if errorlevel 1 (
   echo FormCel needs Rust to build its engine. Install it from https://rustup.rs, then run this again.
   exit /b 1
 )
-pip install --force-reinstall --no-deps ..\engine\crates\formcel-py || exit /b 1
+python -m pip install --force-reinstall --no-deps ..\engine\crates\formcel-py || exit /b 1
 python -c "import formcel_engine" || (
   echo The FormCel engine module was built but does not load. Run: rustup update stable, then formcel_oc_install.bat again.
   exit /b 1
@@ -30,3 +30,4 @@ if errorlevel 1 (
 ) else (
   echo Tesseract found.
 )
+exit /b 0
