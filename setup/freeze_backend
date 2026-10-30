@@ -13,9 +13,34 @@ case "$os" in MINGW*|MSYS*|CYGWIN*) sep=";"; ext=".exe" ;; *) ext="" ;; esac
 extra=()
 [ -z "${FORMCEL_PYI_ARCH:-}" ] || extra+=(--target-arch "$FORMCEL_PYI_ARCH")
 mode=--onefile
+entitlements="$root/src-tauri/entitlements.plist"
+needs_sign() {
+  local info
+  info="$(codesign -dvv "$1" 2>&1)" || return 0
+  case "$info" in *"Signature=adhoc"*) return 0 ;; esac
+  printf '%s\n' "$info" | grep -q '^CodeDirectory .*flags=.*runtime' || return 0
+  printf '%s\n' "$info" | grep -q '^Timestamp=' || return 0
+  return 1
+}
+sign_macho() {
+  codesign --force --options runtime --timestamp --entitlements "$entitlements" -s "$APPLE_SIGNING_IDENTITY" "$1"
+}
+sign_engine() {
+  local dir="$1" main="$1/formcel-engine" f count=0
+  while IFS= read -r f; do
+    file -b "$f" | grep -q 'Mach-O' || continue
+    if needs_sign "$f"; then sign_macho "$f"; count=$((count + 1)); fi
+  done < <(find "$dir" -type f ! -path "$main" -print | awk -F/ '{print NF "\t" $0}' | sort -rn | cut -f2-)
+  if needs_sign "$main" || ! codesign -d --entitlements - "$main" 2>/dev/null | grep -q disable-library-validation; then
+    sign_macho "$main"
+    count=$((count + 1))
+  fi
+  codesign --verify --strict "$main"
+  echo "engine signed: $count Mach-O files re-signed with $APPLE_SIGNING_IDENTITY"
+}
 if [ "$os" = Darwin ]; then
   mode=--onedir
-  [ -z "${APPLE_SIGNING_IDENTITY:-}" ] || extra+=(--codesign-identity "$APPLE_SIGNING_IDENTITY")
+  [ -z "${APPLE_SIGNING_IDENTITY:-}" ] || extra+=(--codesign-identity "$APPLE_SIGNING_IDENTITY" --osx-entitlements-file "$entitlements")
 fi
 rm -rf build/pyinstaller dist-engine
 pyinstaller --noconfirm --clean "$mode" --name formcel-engine \
@@ -34,6 +59,7 @@ if [ "$mode" = --onedir ]; then
   out="$root/src-tauri/engine"
   rm -rf "$out"
   cp -R dist-engine/formcel-engine "$out"
+  [ -z "${APPLE_SIGNING_IDENTITY:-}" ] || sign_engine "$out"
   "$out/formcel-engine" --selfcheck
   echo "engine folder ready: $out"
   exit 0
