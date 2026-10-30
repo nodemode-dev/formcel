@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.40.6 · 2026-10-30
+
+- On Windows, `formcel_oc_install.bat` no longer stops when Tesseract is missing; Data from a picture stays optional. A step that does fail (the Python packages, the engine module, npm or the window's engine) now stops the install with an error, and `build_app.bat` with it.
+- The macOS app's engine folder is signed with the Developer ID, hardened runtime and a secure timestamp, so the app can be notarized. The app and its engine carry an entitlements file that lets the bundled Python runtime load its own libraries.
+- Line endings are fixed in the repository, so Windows checkouts get CRLF batch files and LF everywhere else.
+
 ## 0.40.5 · 2026-10-26
 
 - A test opens the built window under a slow network and a slow processor and fails if it shifts, logs an error, or has a request fail or refused; it runs on every change.
