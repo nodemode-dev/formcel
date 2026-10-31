@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.40.7 · 2026-10-31
+
+- The Windows desktop app no longer opens to a blank window on PCs where an installer set the `.js` file type to `text/plain` in the registry: the engine now serves scripts and stylesheets with their real types.
+
 ## 0.40.6 · 2026-10-30
 
 - On Windows, `formcel_oc_install.bat` no longer stops when Tesseract is missing; Data from a picture stays optional. A step that does fail (the Python packages, the engine module, npm or the window's engine) now stops the install with an error, and `build_app.bat` with it.

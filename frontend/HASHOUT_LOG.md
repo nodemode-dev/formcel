@@ -2,8 +2,8 @@
 
 Living log of comment content and rationale for the window. Source stays comment-free; it lives here.
 
-Current build version: v0.40.6
-Last updated: 2026-10-24 · Home credit reads by nodemode.ai (text only, `ui/home.ts` brand span); full fonts for the Reserved Font Name families
+Current build version: v0.40.7
+Last updated: 2026-10-31 · no frontend change in 0.40.7 (version string only). Before: 2026-10-24 · Home credit reads by nodemode.ai (text only, `ui/home.ts` brand span); full fonts for the Reserved Font Name families
 
 ---
 
