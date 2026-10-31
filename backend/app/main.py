@@ -1,3 +1,4 @@
+import mimetypes
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -9,6 +10,10 @@ import asyncio
 from .routers import automation, collab, commands, fonts, printpreview, quotes, review, share, spell, tplthumb, workbooks
 from .services import scheduler
 from .version import VERSION
+
+mimetypes.add_type("text/javascript", ".js")
+mimetypes.add_type("text/javascript", ".mjs")
+mimetypes.add_type("text/css", ".css")
 
 try:
     import formcel_engine
