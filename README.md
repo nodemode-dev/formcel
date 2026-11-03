@@ -28,9 +28,9 @@
 <br>
 
 <p align="center">
-  <img src="docs/images/formcel-hero.png" alt="FormCel with a studio sales workbook open: a formatted table with data bars and colour scales beside a stacked column chart of revenue by product line" width="100%">
+  <img src="docs/images/formcel-hero.jpg" alt="FormCel's Templates view on the Sales and marketing tab: workbook cards with live charts for campaign ROI, a sales pipeline funnel, A/B test results, cohort retention, lead scoring and price elasticity" width="100%">
   <br>
-  <sub>A small studio's sales workbook: formulas, conditional formatting and a chart that follows the data.</sub>
+  <sub>Templates: finished workbooks with real data, charts and formulas that update as you edit.</sub>
 </p>
 
 <p align="center">
