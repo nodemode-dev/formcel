@@ -2,7 +2,7 @@
 
 Living log of comment content and rationale for the engine process. Source stays comment-free; it lives here.
 
-Current build version: v0.40.7
+Current build version: v0.40.8
 Last updated: 2026-10-31 · .js, .mjs and .css keep their types on Windows (app/main.py). Before: 2026-10-30 · the Windows install stops on a failed step and never on a missing Tesseract. Before: 2026-10-26 · scripts run with no file, process or network reach (FB-043), and the test suite. Before: LocalGuard refuses cross-site requests that carry no Origin (FB-035). Before: only this computer's own window and agents reach the engine (FB-030), and full fonts in PDF export, freeze exclusions
 
 ## v0.40.6 entries
