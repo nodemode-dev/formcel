@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.40.9 · 2026-11-03
+
+- The README follows the Form family layout and ships real screenshots of a workbook, its summary sheet, the Insert ribbon and the template gallery.
+
+## 0.40.8 · 2026-11-03
+
+- The app icon is the unified family icon on the desktop, the web app and the splash, and the browser tab icon is a PNG instead of the old SVG.
+- The repository names its owners in `.github/CODEOWNERS`.
+
 ## 0.40.7 · 2026-10-31
 
 - The Windows desktop app no longer opens to a blank window on PCs where an installer set the `.js` file type to `text/plain` in the registry: the engine now serves scripts and stylesheets with their real types.
