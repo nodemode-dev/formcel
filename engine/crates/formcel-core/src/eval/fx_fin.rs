@@ -190,7 +190,7 @@ impl Eval<'_> {
             _ => {
                 self.arity(a, 6, 6)?;
                 let (r, n, pv, s, e, t) = (self.n(a, 0)?, self.n(a, 1)?.trunc(), self.n(a, 2)?, self.n(a, 3)?.trunc(), self.n(a, 4)?.trunc(), self.n(a, 5)?);
-                if r <= 0.0 || n <= 0.0 || pv <= 0.0 || s < 1.0 || e < s || e > n || (t != 0.0 && t != 1.0) {
+                if r <= 0.0 || n <= 0.0 || pv <= 0.0 || s < 1.0 || e < s || e > n || e - s > 1e6 || (t != 0.0 && t != 1.0) {
                     return Err(ErrKind::Num);
                 }
                 let mut sum = 0.0;
@@ -302,7 +302,7 @@ impl Eval<'_> {
                 self.arity(a, 4, 5)?;
                 let (cost, salv, life, per) = (self.n(a, 0)?, self.n(a, 1)?, self.n(a, 2)?.trunc(), self.n(a, 3)?.trunc());
                 let month = self.opt(a, 4, 12.0)?.trunc();
-                if cost < 0.0 || salv < 0.0 || life <= 0.0 || per <= 0.0 || !(1.0..=12.0).contains(&month) || per > life + if month < 12.0 { 1.0 } else { 0.0 } {
+                if cost < 0.0 || salv < 0.0 || life <= 0.0 || per <= 0.0 || per > 1e6 || !(1.0..=12.0).contains(&month) || per > life + if month < 12.0 { 1.0 } else { 0.0 } {
                     return Err(ErrKind::Num);
                 }
                 if cost == 0.0 {
@@ -329,7 +329,7 @@ impl Eval<'_> {
                 self.arity(a, 4, 5)?;
                 let (cost, salv, life, per) = (self.n(a, 0)?, self.n(a, 1)?, self.n(a, 2)?, self.n(a, 3)?);
                 let factor = self.opt(a, 4, 2.0)?;
-                if cost < 0.0 || salv < 0.0 || life <= 0.0 || per <= 0.0 || per > life || factor <= 0.0 {
+                if cost < 0.0 || salv < 0.0 || life <= 0.0 || per <= 0.0 || per > life || per > 1e6 || factor <= 0.0 {
                     return Err(ErrKind::Num);
                 }
                 let mut total = 0.0;
@@ -347,7 +347,7 @@ impl Eval<'_> {
                 let (cost, salv, life, s, e) = (self.n(a, 0)?, self.n(a, 1)?, self.n(a, 2)?, self.n(a, 3)?, self.n(a, 4)?);
                 let factor = self.opt(a, 5, 2.0)?;
                 let no_switch = if self.has(a, 6) { bool_of(&self.scalar(&a[6]))? } else { false };
-                if cost < 0.0 || salv < 0.0 || life <= 0.0 || s < 0.0 || e < s || e > life || factor <= 0.0 {
+                if cost < 0.0 || salv < 0.0 || life <= 0.0 || s < 0.0 || e < s || e > life || e > 1e6 || factor <= 0.0 {
                     return Err(ErrKind::Num);
                 }
                 let mut book = cost;
