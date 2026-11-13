@@ -66,6 +66,10 @@ function nice(lo: number, hi: number, count = 5): { min: number; max: number; ti
   const mag = 10 ** Math.floor(Math.log10(raw));
   const norm = raw / mag;
   const step = (norm <= 1 ? 1 : norm <= 2 ? 2 : norm <= 5 ? 5 : 10) * mag;
+  if (!(step > 0) || lo + step === lo || hi + step === hi) {
+    const top = hi > lo ? hi : lo + Math.max(1, Math.abs(lo) * 1e-9);
+    return { min: lo, max: top, ticks: [lo, top] };
+  }
   const min = Math.floor(lo / step + 1e-9) * step;
   const max = Math.ceil(hi / step - 1e-9) * step;
   const ticks: number[] = [];
