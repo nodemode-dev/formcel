@@ -18,6 +18,12 @@ export class EngineClient {
       if (e.data.ok) p.resolve(e.data.value);
       else p.reject(new Error(e.data.error));
     };
+    const fail = (why: string): void => {
+      for (const p of this.pending.values()) p.reject(new Error(why));
+      this.pending.clear();
+    };
+    this.worker.onerror = (e) => fail(e.message || 'The engine stopped. Reload the window to start it again.');
+    this.worker.onmessageerror = () => fail('The engine sent a reply the window could not read.');
   }
 
   private call(body: RequestBody): Promise<Value> {
