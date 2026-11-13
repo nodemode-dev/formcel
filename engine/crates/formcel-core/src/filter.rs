@@ -284,7 +284,7 @@ impl Workbook {
             return Ok(Effect::default());
         }
         s.hand_hidden = rows;
-        let seeds: Vec<(usize, Addr)> = self.formulas.iter().filter(|(_, f)| f.src.to_ascii_uppercase().contains("SUBTOTAL(")).map(|(k, _)| *k).collect();
+        let seeds: Vec<(usize, Addr)> = self.formulas.iter().filter(|(_, f)| { let s = f.src.to_ascii_uppercase(); s.contains("SUBTOTAL(") || s.contains("AGGREGATE(") }).map(|(k, _)| *k).collect();
         if seeds.is_empty() {
             return Ok(Effect::default());
         }
