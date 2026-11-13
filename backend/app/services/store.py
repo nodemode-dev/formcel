@@ -179,16 +179,16 @@ class Store:
         return parts or None
 
     def _load(self, wid: str) -> Book:
-        with self.guard:
-            if wid in self.open:
-                return self.open[wid]
-            doc = self._read(self.path(wid))
-            ENGINE.acquire()
-            formcel_engine.set_locale(doc.get("locale") or "en-US")
-            try:
+        b = self.open.get(wid)
+        if b is not None:
+            return b
+        with ENGINE:
+            with self.guard:
+                if wid in self.open:
+                    return self.open[wid]
+                doc = self._read(self.path(wid))
+                formcel_engine.set_locale(doc.get("locale") or "en-US")
                 return self._build(wid, doc)
-            finally:
-                ENGINE.release()
 
     def _build(self, wid: str, doc: dict) -> Book:
         if True:
