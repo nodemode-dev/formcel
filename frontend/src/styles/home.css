@@ -10,7 +10,11 @@
   --card-h: 182px;
 }
 
-.fc-home-nav { display: flex; flex-direction: column; gap: 2px; min-height: 0; padding: 14px 10px 12px; background: var(--bg-secondary); border-right: 1px solid var(--border-color); overflow-y: auto; }
+.fc-home-nav { display: flex; flex-direction: column; gap: 2px; min-height: 0; padding: 14px 10px 12px; background: var(--bg-secondary); border-right: 1px solid var(--border-color); overflow: hidden; }
+.fc-home-nav-scroll { display: flex; flex-direction: column; gap: 2px; flex: 1 1 auto; min-height: 0; margin: -4px -10px; padding: 4px 10px; overflow-y: auto; overscroll-behavior: contain; }
+.fc-home-nav-scroll[data-more="below"] { mask-image: linear-gradient(to bottom, var(--bg-secondary) calc(100% - 28px), transparent); }
+.fc-home-nav-scroll[data-more="above"] { mask-image: linear-gradient(to top, var(--bg-secondary) calc(100% - 28px), transparent); }
+.fc-home-nav-scroll[data-more="both"] { mask-image: linear-gradient(to bottom, transparent, var(--bg-secondary) 28px, var(--bg-secondary) calc(100% - 28px), transparent); }
 .fc-home-brand { display: flex; align-items: center; gap: 10px; flex: none; height: 36px; margin-bottom: 14px; padding: 0 8px; color: var(--text-primary); font-size: 15px; font-weight: 600; letter-spacing: -0.005em; }
 .fc-home-brand span { color: var(--text-muted); font-size: 12px; font-weight: 400; letter-spacing: 0; }
 .fc-home-brand .fc-mark { flex: none; display: block; }

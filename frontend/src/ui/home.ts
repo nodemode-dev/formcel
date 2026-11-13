@@ -100,13 +100,13 @@ export class Home {
     root.innerHTML = `
       <nav class="fc-home-nav" aria-label="Home">
         <div class="fc-home-brand">${brandMark(26)}formcel <span translate="no">by nodemode.ai</span></div>
-        ${navItem('start', 'home', 'Start')}${navItem('recent', 'clock', 'Recent')}${navItem('templates', 'template', 'Templates')}${navItem('trash', 'trash', 'Trash')}
+        <div class="fc-home-nav-scroll">${navItem('start', 'home', 'Start')}${navItem('recent', 'clock', 'Recent')}${navItem('templates', 'template', 'Templates')}${navItem('trash', 'trash', 'Trash')}
         <div class="fc-home-nav-sep"></div>
         <div class="fc-home-nav-title">Create</div>
         ${cmdItem('data-a="blank"', 'newFile', 'New workbook')}${cmdItem('data-a="openfile"', 'folderOpen', 'Open')}${cmdItem('data-a="pastedata"', 'clipboard', 'Paste data')}
         <div class="fc-home-nav-sep"></div>
         <div class="fc-home-nav-title">Agents</div>
-        ${cmdItem('data-cmd="claude-code"', 'agent', 'Claude Code')}${cmdItem('data-cmd="claude-chat"', 'agentChat', 'Chat')}${cmdItem('data-cmd="terminal-toggle"', 'terminal', 'Terminal')}
+        ${cmdItem('data-cmd="claude-code"', 'agent', 'Claude Code')}${cmdItem('data-cmd="claude-chat"', 'agentChat', 'Chat')}${cmdItem('data-cmd="terminal-toggle"', 'terminal', 'Terminal')}</div>
         <div class="fc-home-nav-foot"><button class="fc-home-nav-item fc-home-back" type="button" data-a="back" hidden>${icon('chevronLeft')}<span>Back to workbook</span></button>${cmdItem('data-cmd="app.settings"', 'settings', 'Preferences')}${cmdItem('data-cmd="a11y.shortcuts"', 'info', 'Help')}</div>
       </nav>
       <div class="fc-home-resizer" role="separator" aria-orientation="vertical" aria-label="Resize the side panel"></div>
@@ -220,6 +220,17 @@ export class Home {
     } catch { void 0; }
     root.querySelector('.fc-home-nav-hide')!.addEventListener('click', () => hide(true));
     root.querySelector('.fc-home-nav-show')!.addEventListener('click', () => hide(false));
+    const list = root.querySelector<HTMLElement>('.fc-home-nav-scroll')!;
+    const more = (): void => {
+      const above = list.scrollTop > 1;
+      const below = list.scrollTop + list.clientHeight < list.scrollHeight - 1;
+      const v = above && below ? 'both' : above ? 'above' : below ? 'below' : '';
+      if ((list.dataset.more ?? '') === v) return;
+      if (v) list.dataset.more = v;
+      else delete list.dataset.more;
+    };
+    list.addEventListener('scroll', more, { passive: true });
+    new ResizeObserver(more).observe(list);
     bar.addEventListener('pointerdown', (e) => {
       e.preventDefault();
       const x0 = e.clientX;
