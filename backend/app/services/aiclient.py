@@ -1,7 +1,10 @@
 import json
 import os
+import tempfile
+import threading
 import urllib.error
 import urllib.request
+from pathlib import Path
 
 from .. import config
 from . import secrets
@@ -28,14 +31,21 @@ def load_settings() -> dict:
         return {}
 
 
+SETTINGS = threading.RLock()
+
+
 def save_settings(data: dict) -> None:
     config.ensure_data_dir()
     p = settings_path()
-    tmp = p.with_suffix(".tmp")
-    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-    with os.fdopen(fd, "w", encoding="utf-8") as f:
-        json.dump(data, f)
-    os.replace(tmp, p)
+    with SETTINGS:
+        fd, tmp = tempfile.mkstemp(dir=p.parent, prefix=".settings-", suffix=".tmp")
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                json.dump(data, f)
+            os.replace(tmp, p)
+        except BaseException:
+            Path(tmp).unlink(missing_ok=True)
+            raise
 
 
 def _file_secret(group: str | None, field: str):
@@ -44,16 +54,18 @@ def _file_secret(group: str | None, field: str):
         return ((s.get(group) or {}) if group else s).get(field) or None
 
     def write(value: str) -> None:
-        s = load_settings()
-        (s.setdefault(group, {}) if group else s)[field] = value
-        save_settings(s)
+        with SETTINGS:
+            s = load_settings()
+            (s.setdefault(group, {}) if group else s)[field] = value
+            save_settings(s)
 
     def clear() -> None:
-        s = load_settings()
-        box = (s.get(group) or {}) if group else s
-        if field in box:
-            box.pop(field)
-            save_settings(s)
+        with SETTINGS:
+            s = load_settings()
+            box = (s.get(group) or {}) if group else s
+            if field in box:
+                box.pop(field)
+                save_settings(s)
 
     return read, write, clear
 
@@ -90,18 +102,19 @@ def public() -> dict:
 
 
 def update(kind: str, url: str, model: str, key: str | None) -> dict:
-    s = load_settings()
     if kind not in ("openai", "anthropic"):
         raise ValueError("the endpoint is openai or anthropic")
     if url and not url.lower().startswith(("http://", "https://")):
         raise ValueError("the endpoint address starts with http:// or https://")
-    old_key = (s.get("ai") or {}).get("key")
-    s["ai"] = {"kind": kind, "url": url.strip(), "model": model.strip()}
-    if old_key:
-        s["ai"]["key"] = old_key
-    if not url.strip():
-        s.pop("ai")
-    save_settings(s)
+    with SETTINGS:
+        s = load_settings()
+        old_key = (s.get("ai") or {}).get("key")
+        s["ai"] = {"kind": kind, "url": url.strip(), "model": model.strip()}
+        if old_key:
+            s["ai"]["key"] = old_key
+        if not url.strip():
+            s.pop("ai")
+        save_settings(s)
     if key is not None:
         set_ai_key(key.strip())
     if not url.strip():

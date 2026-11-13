@@ -1201,7 +1201,7 @@ impl<'a> Eval<'a> {
                         1 | 17 => w,
                         2 | 11 => (w + 5) % 7 + 1,
                         3 => (w + 5) % 7,
-                        12..=16 => (w - (t - 10) + 7) % 7 + 1,
+                        12..=16 => (w - (t - 9) + 7) % 7 + 1,
                         _ => return Err(ErrKind::Num),
                     };
                     Value::Number(r as f64)
@@ -1700,7 +1700,7 @@ impl Eval<'_> {
                     }
                 };
                 let (rows, cols) = (dim(0)?, dim(1)?);
-                if (rows as u64) * (cols as u64) > MAX_ARRAY {
+                if (rows as u64).checked_mul(cols as u64).is_none_or(|n| n > MAX_ARRAY) {
                     return Err(ErrKind::Value);
                 }
                 let f = self.lambda(&a[2], 2)?;
@@ -1840,7 +1840,7 @@ impl Eval<'_> {
                     }
                 };
                 let (rows, cols) = (size(1, g.rows)?, size(2, g.cols)?);
-                if (rows as u64) * (cols as u64) > MAX_ARRAY {
+                if (rows as u64).checked_mul(cols as u64).is_none_or(|n| n > MAX_ARRAY) {
                     return Err(ErrKind::Num);
                 }
                 let pad = if a.len() > 3 && !matches!(a[3], Expr::Missing) { self.scalar(&a[3]) } else { err(ErrKind::Na) };

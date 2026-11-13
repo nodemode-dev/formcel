@@ -126,6 +126,8 @@ class Store:
         return (self.trash if trashed else self.dir) / f"{wid}.fcel"
 
     def _write(self, b: Book) -> None:
+        if self.open.get(b.id) is not b:
+            raise FileNotFoundError(f"{b.id} was moved to the Trash or replaced by a restored version")
         doc = {"format": FORMAT, "version": FORMAT_VERSION, "id": b.id, "title": b.title, "created": b.created,
                "modified": b.modified, "template": b.template, "locale": b.locale, "preview": b.preview(),
                "names": [list(n) for n in b.engine.names()], "nameNotes": [list(n) for n in b.engine.name_notes()], "tables": b.engine.tables(), "pivots": b.engine.pivots(), "model": b.engine.model_lines(), "whatif": b.whatif,
@@ -146,7 +148,14 @@ class Store:
                 for s in scripts:
                     z.writestr(f"scripts/{s['id']}.ts", s.get("code", ""))
                 z.writestr("automation.json", json.dumps({**b.auto, "scripts": [{k: v for k, v in s.items() if k != "code"} for s in scripts]}, ensure_ascii=False, separators=(",", ":")))
-        os.replace(tmp, target)
+        for attempt in range(10):
+            try:
+                os.replace(tmp, target)
+                break
+            except PermissionError as e:
+                if attempt == 9:
+                    raise OSError(f"{target.name} is in use and could not be saved: {e}") from None
+                time.sleep(0.05)
         try:
             self.versions.snapshot(b.id, target)
         except OSError:
@@ -179,16 +188,16 @@ class Store:
         return parts or None
 
     def _load(self, wid: str) -> Book:
-        with self.guard:
-            if wid in self.open:
-                return self.open[wid]
-            doc = self._read(self.path(wid))
-            ENGINE.acquire()
-            formcel_engine.set_locale(doc.get("locale") or "en-US")
-            try:
+        b = self.open.get(wid)
+        if b is not None:
+            return b
+        with ENGINE:
+            with self.guard:
+                if wid in self.open:
+                    return self.open[wid]
+                doc = self._read(self.path(wid))
+                formcel_engine.set_locale(doc.get("locale") or "en-US")
                 return self._build(wid, doc)
-            finally:
-                ENGINE.release()
 
     def _build(self, wid: str, doc: dict) -> Book:
         if True:
@@ -820,14 +829,14 @@ class Store:
         with b.lock:
             self._write(b)
             self.versions.snapshot(wid, self.path(wid), name="Before restore", user=user, force=True, why="before restore")
-        shutil.copyfile(src, self.path(wid))
-        with self.guard:
-            self.open.pop(wid, None)
-        b = self._load(wid)
-        with b.lock:
-            b.modified = now()
-            self._write(b)
-            made = self.versions.snapshot(wid, self.path(wid), name=f"Restored from {self.versions.find(wid, vid)['time']}", user=user, force=True, why="restore")
+            shutil.copyfile(src, self.path(wid))
+            with self.guard:
+                self.open.pop(wid, None)
+            b = self._load(wid)
+            with b.lock:
+                b.modified = now()
+                self._write(b)
+                made = self.versions.snapshot(wid, self.path(wid), name=f"Restored from {self.versions.find(wid, vid)['time']}", user=user, force=True, why="restore")
         self.hub.publish(wid, {"type": "reload"}, client)
         return made or {}
 
@@ -1051,15 +1060,17 @@ class Store:
             return b.meta()
 
     def to_trash(self, wid: str) -> None:
-        with self.guard:
-            self.open.pop(wid, None)
-        shutil.move(self.path(wid), self.path(wid, trashed=True))
+        with ENGINE:
+            with self.guard:
+                self.open.pop(wid, None)
+            shutil.move(self.path(wid), self.path(wid, trashed=True))
 
     def restore(self, wid: str) -> None:
         shutil.move(self.path(wid, trashed=True), self.path(wid))
 
     def purge(self, wid: str) -> None:
         self.path(wid, trashed=True).unlink()
+        shutil.rmtree(self.versions.folder(wid), ignore_errors=True)
 
 
 _store: Store | None = None

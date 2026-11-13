@@ -18,6 +18,7 @@ import { metaOf, suggestion, type FnMeta } from './customMeta';
 import { isAppsScript } from './scriptCheck';
 import { strip } from './tsStrip';
 import { setVbaRuntime } from '../vbalang/bridge';
+import { macroAllowed } from '../vbalang/types';
 import { VbaService } from '../vbalang/service';
 
 export interface AppHooks {
@@ -92,9 +93,10 @@ export class Automation {
       book: () => h.book(),
       workbook: () => h.id(),
       patch: (c) => h.grid.patch(c),
-      custom: (name, args, stream) => {
+      custom: async (name, args, stream) => {
         const f = this.fns.get(name.toUpperCase());
         if (!f) return this.vba.call(name, args);
+        if (!(await macroAllowed('function', h.id()))) throw Object.assign(new Error('Macros are disabled.'), { excelCode: '#NAME?' });
         return this.runner.call(f[0].code, f[1], args, stream);
       },
       cancel: () => this.runner.cancelStreams(),

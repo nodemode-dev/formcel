@@ -513,6 +513,12 @@ export class Range {
     const tr = Math.ceil(this.getRowCount() / rows) || 1;
     const tc = Math.ceil(this.getColumnCount() / cols) || 1;
     const reps = (this.getRowCount() > rows || this.getColumnCount() > cols) ? [tr, tc] : [1, 1];
+    const buf = Array.from({ length: h }, (_, i) =>
+      Array.from({ length: w }, (_, j) => {
+        const k = (src.r0 + i) * KEY + src.c0 + j;
+        return { cell: sd.cells.get(k), st: sd.styles.get(k), code: sd.formats.get(k) };
+      }),
+    );
     for (let br = 0; br < reps[0]; br++) {
       for (let bc = 0; bc < reps[1]; bc++) {
         for (let i = 0; i < h; i++) {
@@ -521,7 +527,7 @@ export class Range {
             const tj = transpose ? i : j;
             const r = this.r0 + br * rows + ti;
             const c = this.c0 + bc * cols + tj;
-            const cell = sd.cells.get((src.r0 + i) * KEY + src.c0 + j);
+            const cell = buf[i][j].cell;
             if (vals) {
               if (!cell) {
                 if (!skipBlanks) this.write(r, c, '');
@@ -529,11 +535,11 @@ export class Range {
               else this.write(r, c, cell.v);
             }
             if (sty) {
-              const st = sd.styles.get((src.r0 + i) * KEY + src.c0 + j);
+              const st = buf[i][j].st;
               this.ctx.ops.push({ k: 'style', sheet: this.sheet, r0: r, c0: c, r1: r, c1: c, patch: st ? `${CLEAR_STYLE};${st}` : CLEAR_STYLE });
               if (st) this.data().styles.set(r * KEY + c, st);
               else this.data().styles.delete(r * KEY + c);
-              const code = sd.formats.get((src.r0 + i) * KEY + src.c0 + j) ?? 'General';
+              const code = buf[i][j].code ?? 'General';
               this.ctx.ops.push({ k: 'format', sheet: this.sheet, r0: r, c0: c, r1: r, c1: c, code });
             }
           }

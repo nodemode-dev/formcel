@@ -845,7 +845,7 @@ dependencies = [
 
 [[package]]
 name = "formcel-desktop"
-version = "0.40.9"
+version = "0.41.0"
 dependencies = [
  "fontdb",
  "objc2",

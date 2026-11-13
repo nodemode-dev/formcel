@@ -88,7 +88,7 @@ def compress(data: bytes) -> bytes:
     for start in range(0, len(data), CHUNK):
         src = data[start : start + CHUNK]
         body = _chunk(src)
-        if len(src) == CHUNK and len(body) > CHUNK - 2 or len(body) > CHUNK + 2:
+        if len(src) == CHUNK and len(body) > CHUNK - 2 or len(body) > CHUNK:
             out += (0x3000 | (CHUNK - 1)).to_bytes(2, "little") + src.ljust(CHUNK, b"\0")
         else:
             out += (0xB000 | (len(body) + 2 - 3)).to_bytes(2, "little") + body

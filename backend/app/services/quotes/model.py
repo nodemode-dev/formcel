@@ -68,6 +68,9 @@ def parse_date(v) -> date:
         except ValueError:
             continue
     try:
-        return from_serial(float(s))
+        n = float(s)
     except ValueError:
         raise BadArgument(f"{s!r} is not a date")
+    if not 1 <= n <= 2958465:
+        raise BadArgument("the date is out of range")
+    return from_serial(n)

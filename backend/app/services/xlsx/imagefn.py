@@ -4,6 +4,8 @@ import urllib.request
 
 from openpyxl.utils import get_column_letter
 
+from .. import appsettings
+
 MARK = "IMG\t"
 LIMIT = 8_000_000
 KINDS = {"image/png": "png", "image/jpeg": "jpeg", "image/gif": "gif", "image/bmp": "bmp", "image/webp": "webp"}
@@ -51,7 +53,7 @@ def collect(eng, plans: dict[int, dict]) -> None:
                 continue
             source = text.split("\t", 5)[-1]
             if source not in cache:
-                cache[source] = _data(source) if source.lower().startswith("data:") else _fetch(source)
+                cache[source] = _data(source) if source.lower().startswith("data:") else (_fetch(source) if appsettings.external_allowed() else None)
             got = cache[source]
             if got is None:
                 continue

@@ -1071,6 +1071,9 @@ export class App {
       p.nameBox.value = this.currentRef;
     });
     p.formulaToggle.addEventListener('click', () => this.toggleFormulaBar());
+    p.formulaBar.addEventListener('pointerdown', () => {
+      if (!this.grid.editor.hidden && p.formulaBar.value !== this.grid.editor.value) p.formulaBar.value = this.grid.editor.value;
+    });
     p.formulaGrip.addEventListener('pointerdown', (e) => {
       e.preventDefault();
       const y0 = e.clientY;
@@ -3949,7 +3952,7 @@ export class App {
     const o = this.open;
     const t = this.p.tabs.querySelector<HTMLElement>(`[data-sheet="${i}"]`);
     const name = raw.replace(/[\\/?*[\]:]/g, '').trim().slice(0, 31);
-    if (!o || !name || name === o.sheets[i] || o.sheets.some((s) => s.toLowerCase() === name.toLowerCase())) return;
+    if (!o || !name || name === o.sheets[i] || o.sheets.some((s, k) => k !== i && s.toLowerCase() === name.toLowerCase())) return;
     this.grid.recorder?.({ k: 'sheetop', op: 'rename', sheet: i, name: o.sheets[i], to: name });
     o.sheets[i] = name;
     if (t) t.textContent = name;
@@ -3970,7 +3973,7 @@ export class App {
       t.removeEventListener('blur', onBlur);
       t.contentEditable = 'false';
       const name = (t.textContent ?? '').replace(/[\\/?*[\]:]/g, '').trim().slice(0, 31);
-      if (!commit || !name || name === before || o.sheets.includes(name)) {
+      if (!commit || !name || name === before || o.sheets.some((s, k) => k !== i && s.toLowerCase() === name.toLowerCase())) {
         t.textContent = before;
       } else {
         this.grid.recorder?.({ k: 'sheetop', op: 'rename', sheet: i, name: before, to: name });
@@ -3999,6 +4002,8 @@ export class App {
     await api('POST', `/api/workbooks/${o.id}/sheets/${from}/move`, { to });
     o.sheets.splice(to, 0, o.sheets.splice(from, 1)[0]);
     o.views.splice(to, 0, o.views.splice(from, 1)[0]);
+    o.pages.splice(to, 0, o.pages.splice(from, 1)[0]);
+    this.grouped.clear();
     await this.charts.layer.open();
     this.renderTabs();
     this.showSheet(to);
@@ -4069,6 +4074,8 @@ export class App {
     await api('DELETE', `/api/workbooks/${o.id}/sheets/${i}`);
     o.sheets.splice(i, 1);
     o.views.splice(i, 1);
+    o.pages.splice(i, 1);
+    this.grouped.clear();
     await this.charts.layer.open();
     this.renderTabs();
     this.showSheet(Math.min(i, o.sheets.length - 1));
@@ -4112,7 +4119,7 @@ export class App {
     const o = this.open;
     if (!o) throw new Error('No workbook is open.');
     let name = base;
-    for (let n = 2; o.sheets.includes(name); n++) name = `${base} ${n}`;
+    for (let n = 2; o.sheets.some((s) => s.toLowerCase() === name.toLowerCase()); n++) name = `${base} ${n}`;
     await api('POST', `/api/workbooks/${o.id}/sheets`, { name });
     const i = await engine().addSheet(o.book, name);
     o.sheets.push(name);

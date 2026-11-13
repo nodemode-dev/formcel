@@ -281,9 +281,10 @@ export function shapeSvg(spec: ShapeSpec, w: number, h: number): string {
   const def = shapeDef(spec.shape);
   const geo = def.draw(Math.max(1, w), Math.max(1, h));
   const lw = Math.max(0, pt(spec.lw, 1)) * (96 / 72);
-  const stroke = spec.noLine ? 'none' : spec.stroke || '#2f4b6e';
+  const paint = (c: string | undefined, d: string) => (c && (/^#[0-9a-f]{3,8}$/i.test(c) || c === 'currentColor') ? c : d);
+  const stroke = spec.noLine ? 'none' : paint(spec.stroke, '#2f4b6e');
   const dash = dashArray(spec.dash, lw);
-  const fill = def.line || spec.noFill ? 'none' : spec.fill || '#4e79a7';
+  const fill = def.line || spec.noFill ? 'none' : paint(spec.fill, '#4e79a7');
   const op = typeof spec.opacity === 'number' && spec.opacity < 1 ? ` fill-opacity="${spec.opacity}"` : '';
   const sw = stroke === 'none' ? '' : ` stroke="${stroke}" stroke-width="${r2(lw)}"${dash ? ` stroke-dasharray="${dash}"` : ''} stroke-linejoin="round"`;
   let defs = '';

@@ -1,7 +1,8 @@
 import mimetypes
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
 
 from . import config
 from .local_guard import LocalGuard
@@ -43,6 +44,11 @@ app.include_router(fonts.router)
 app.include_router(automation.router)
 app.include_router(automation.v1)
 app.include_router(quotes.router)
+
+
+@app.exception_handler(OverflowError)
+async def out_of_range(_: Request, e: OverflowError) -> JSONResponse:
+    return JSONResponse({"detail": f"A sheet, row or column number is out of range: {e}"}, status_code=422)
 
 
 def engine_info() -> dict:

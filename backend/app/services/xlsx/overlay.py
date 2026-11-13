@@ -420,12 +420,13 @@ def _sheet_parts(files: dict[str, bytes]) -> list[str]:
         return []
     wb = ET.fromstring(files["xl/workbook.xml"])
     rels = ET.fromstring(files["xl/_rels/workbook.xml.rels"]) if "xl/_rels/workbook.xml.rels" in files else None
-    targets = {r.get("Id"): r.get("Target", "") for r in rels} if rels is not None else {}
+    targets = {r.get("Id"): (r.get("Target", ""), r.get("Type", "")) for r in rels} if rels is not None else {}
     out = []
     for el in wb.iter():
         if _tag(el) == "sheet":
-            path = _target("xl/workbook.xml", targets.get(el.get(f"{{{NS_REL}}}id"), ""))
-            if path.startswith("xl/worksheets/"):
+            target, kind = targets.get(el.get(f"{{{NS_REL}}}id"), ("", ""))
+            path = _target("xl/workbook.xml", target)
+            if target and not kind.endswith("/chartsheet") and path in files:
                 out.append(path)
     return out
 

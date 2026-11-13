@@ -2,6 +2,7 @@ import io
 import zipfile
 
 from openpyxl import Workbook
+from openpyxl.cell.cell import ILLEGAL_CHARACTERS_RE
 from openpyxl.styles import Font, NamedStyle
 from openpyxl.utils import get_column_letter
 from openpyxl.workbook.defined_name import DefinedName
@@ -90,7 +91,7 @@ def write(eng, views: list[dict], vba: dict[str, bytes] | None = None, objects: 
             cell = ws.cell(row=r + 1, column=c + 1)
             if kind == "f":
                 qualified = eng.file_formula(cell.coordinate, i) if "[" in text or has_tables else None
-                cell.value = to_file(qualified or text)
+                cell.value = ILLEGAL_CHARACTERS_RE.sub("", to_file(qualified or text))
             elif kind == "n":
                 cell.value = _number(text)
             elif kind == "b":
@@ -99,7 +100,7 @@ def write(eng, views: list[dict], vba: dict[str, bytes] | None = None, objects: 
                 cell.value = text
                 cell.data_type = "e"
             elif text:
-                cell.value = text
+                cell.value = ILLEGAL_CHARACTERS_RE.sub("", text)
                 cell.data_type = "s"
         dynamic.append(write_out(eng, ws, i))
         for r, c, code in eng.auto_formats(i) + eng.formats(i):

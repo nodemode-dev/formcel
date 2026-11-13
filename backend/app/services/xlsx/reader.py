@@ -1,6 +1,7 @@
 import datetime as dt
 import io
 import re
+import zipfile
 from collections import Counter
 
 from formcel_engine import Workbook, reads_as_text
@@ -38,6 +39,15 @@ from .validation import validations_in
 ZOOMS = [0.5, 0.67, 0.75, 0.9, 1, 1.1, 1.25, 1.5, 1.75, 2]
 BUILTIN_DATE = {"mm-dd-yy": "m/d/yyyy"}
 WIDE_TO = 26
+MAX_UNPACKED = 1_000_000_000
+MAX_PART = 100_000_000
+
+
+def check_unpacked(data: bytes) -> None:
+    with zipfile.ZipFile(io.BytesIO(data)) as z:
+        infos = z.infolist()
+    if sum(i.file_size for i in infos) > MAX_UNPACKED or any(i.file_size > MAX_PART and i.file_size > 200 * max(i.compress_size, 1) for i in infos):
+        raise ValueError("the file unpacks to more than FormCel reads (1 GB in all, or one part over 100 MB packed more than 200 to 1)")
 
 
 def _px_width(w: float) -> int:
@@ -57,7 +67,7 @@ def _value(cell, epoch, notes: Counter) -> str | None:
     if isinstance(v, bool):
         return "TRUE" if v else "FALSE"
     if isinstance(v, (dt.datetime, dt.date, dt.time)):
-        return repr(float(to_excel(v, epoch)))
+        return repr(float(to_excel(v)))
     if isinstance(v, dt.timedelta):
         return repr(v.total_seconds() / 86400)
     if isinstance(v, (int, float)):
@@ -130,6 +140,7 @@ def _named(wb, default_font) -> tuple[dict[str, tuple[set[str], str]], list[str]
 
 
 def read(data: bytes) -> dict:
+    check_unpacked(data)
     wb = load_workbook(io.BytesIO(data), data_only=False, rich_text=False, keep_links=True, keep_vba=True)
     books_in(wb)
     scanned = scan(data)

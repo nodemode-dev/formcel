@@ -20,7 +20,15 @@ def _outside(text: str, fn) -> str:
     return "".join(out)
 
 
-REF = r"(?:(?:'(?:[^']|'')+'|[A-Za-z_][A-Za-z0-9_.]*)!)?\$?[A-Z]{1,3}\$?\d+"
+QUOTED = r"'(?:[^']|'')*'"
+
+
+def _sub(pattern, repl, s: str, flags: int = 0) -> str:
+    src = pattern.pattern if isinstance(pattern, re.Pattern) else pattern
+    return re.sub(rf"(?:{src})|{QUOTED}", lambda m: m.group(0) if m.group(1) is None else repl(m), s, flags=flags)
+
+
+REF =r"(?:(?:'(?:[^']|'')+'|[A-Za-z_][A-Za-z0-9_.]*)!)?\$?[A-Z]{1,3}\$?\d+"
 ANCHOR_IN = re.compile(rf"ANCHORARRAY\(\s*({REF})\s*\)", re.I)
 ANCHOR_OUT = re.compile(rf"(?<![A-Za-z0-9_.$])({REF})#")
 FIELD_OUT = re.compile(rf"(?<![A-Za-z0-9_.$])({REF})((?:\.(?:\[[^\]]*\]|[A-Za-z_][A-Za-z0-9_]*))+)(?![A-Za-z0-9_(])")
@@ -72,10 +80,10 @@ def _singles_out(s: str) -> str:
     out, i = [], 0
     while i < len(s):
         ch = s[i]
-        if ch == '"':
+        if ch in "\"'":
             j = i + 1
-            while j < len(s) and not (s[j] == '"' and (j + 1 >= len(s) or s[j + 1] != '"')):
-                j += 2 if s[j] == '"' else 1
+            while j < len(s) and not (s[j] == ch and (j + 1 >= len(s) or s[j + 1] != ch)):
+                j += 2 if s[j] == ch else 1
             out.append(s[i:j + 1])
             i = j + 1
             continue
@@ -222,12 +230,12 @@ def to_file(formula: str) -> str:
     params = _params(formula)
 
     def fix(s: str) -> str:
-        s = FIELD_OUT.sub(_fields_out, s)
-        s = CALL.sub(lambda m: (FUTURE.get(m.group(1).upper(), m.group(1)) if m.group(1).upper() not in params else m.group(1)) + "(", s)
+        s = _sub(FIELD_OUT, _fields_out, _ext_out(s))
+        s = _sub(CALL, lambda m: (FUTURE.get(m.group(1).upper(), m.group(1)) if m.group(1).upper() not in params else m.group(1)) + "(", s)
         for p in sorted(params, key=len, reverse=True):
-            s = re.sub(r"(?<=[(,])(\s*)\[\s*(" + re.escape(p) + r")\s*\](?=\s*[,)])", lambda m: m.group(1) + "[_xlpm." + m.group(2) + "]", s, flags=re.I)
-            s = re.sub(WORD.format(re.escape(p)), lambda m: "_xlpm." + m.group(1), s, flags=re.I)
-            s = re.sub(r"(?<![A-Za-z0-9_.$!])(" + re.escape(p) + r")(?=\s*\()", lambda m: "_xlpm." + m.group(1), s, flags=re.I)
-        return ANCHOR_OUT.sub(lambda m: f"_xlfn.ANCHORARRAY({m.group(1)})", _ext_out(s))
+            s = _sub(r"(?<=[(,])(\s*)\[\s*(" + re.escape(p) + r")\s*\](?=\s*[,)])", lambda m: m.group(1) + "[_xlpm." + m.group(2) + "]", s, flags=re.I)
+            s = _sub(WORD.format(re.escape(p)), lambda m: "_xlpm." + m.group(1), s, flags=re.I)
+            s = _sub(r"(?<![A-Za-z0-9_.$!])(" + re.escape(p) + r")(?=\s*\()", lambda m: "_xlpm." + m.group(1), s, flags=re.I)
+        return _sub(ANCHOR_OUT, lambda m: f"_xlfn.ANCHORARRAY({m.group(1)})", s)
 
     return _field_names(_singles_out(_outside(formula, fix)))

@@ -1,6 +1,6 @@
 import re
 
-from ..xlsx.formulas import FUTURE, unwrap_arrayformula
+from ..xlsx.formulas import FUTURE, _sub, unwrap_arrayformula
 
 STRING = re.compile(r'"(?:[^"]|"")*"')
 ODF_NATIVE = {"DAYS", "IFNA", "XOR"}
@@ -43,11 +43,13 @@ def _ref_in(inner: str) -> str:
 
 
 def _seps(s: str, to_file: bool) -> str:
-    out, depth, quoted = [], 0, False
+    out, depth, quoted, named = [], 0, False, False
     for ch in s:
-        if ch == '"':
+        if ch == '"' and not named:
             quoted = not quoted
-        if quoted or ch == '"':
+        elif ch == "'" and not quoted:
+            named = not named
+        if quoted or named or ch in "\"'":
             out.append(ch)
             continue
         if ch == "{":
@@ -98,8 +100,8 @@ def to_file(f: str) -> str:
 
     def fix(s: str) -> str:
         s = REF_OUT.sub(_ref_out, s)
-        s = CALL.sub(lambda m: (m.group(1) if m.group(1).upper() in ODF_NATIVE or m.group(1).upper() not in FUTURE else "COM.MICROSOFT." + m.group(1).upper()) + "(", s)
-        return BOOL_OUT.sub(lambda m: m.group(1).upper() + "()", s)
+        s = _sub(CALL, lambda m: (m.group(1) if m.group(1).upper() in ODF_NATIVE or m.group(1).upper() not in FUTURE else "COM.MICROSOFT." + m.group(1).upper()) + "(", s)
+        return _sub(BOOL_OUT, lambda m: m.group(1).upper() + "()", s)
 
     return "of:=" + _seps(_outside(body, fix), True)
 

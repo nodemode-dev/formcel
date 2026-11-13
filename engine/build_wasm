@@ -4,4 +4,4 @@ cd "$(dirname "$0")"
 rustup target add wasm32-unknown-unknown >/dev/null 2>&1 || true
 cargo build -p formcel-wasm --release --target wasm32-unknown-unknown
 mkdir -p ../frontend/public/engine
-cp target/wasm32-unknown-unknown/release/formcel_wasm.wasm ../frontend/public/engine/formcel.wasm
+cp "${CARGO_TARGET_DIR:-target}/wasm32-unknown-unknown/release/formcel_wasm.wasm" ../frontend/public/engine/formcel.wasm

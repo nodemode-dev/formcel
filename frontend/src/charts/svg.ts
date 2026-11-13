@@ -15,10 +15,13 @@ interface Box {
   h: number;
 }
 
-const esc = (s: string): string => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
+export const esc = (s: string): string => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
 const r1 = (n: number): string => String(Math.round(n * 10) / 10);
 let COLORS: string[] | undefined;
-const color = (i: number): string => COLORS?.[i] || PALETTE[i % PALETTE.length];
+const color = (i: number): string => {
+  const c = COLORS?.[i];
+  return c && /^#[0-9a-f]{3,8}$/i.test(c) ? c : PALETTE[i % PALETTE.length];
+};
 const shown = (code: string | undefined, n: number): string => FORMATS.text(code, n, fmt);
 
 interface Axis {
@@ -63,6 +66,10 @@ function nice(lo: number, hi: number, count = 5): { min: number; max: number; ti
   const mag = 10 ** Math.floor(Math.log10(raw));
   const norm = raw / mag;
   const step = (norm <= 1 ? 1 : norm <= 2 ? 2 : norm <= 5 ? 5 : 10) * mag;
+  if (!(step > 0) || lo + step === lo || hi + step === hi) {
+    const top = hi > lo ? hi : lo + Math.max(1, Math.abs(lo) * 1e-9);
+    return { min: lo, max: top, ticks: [lo, top] };
+  }
   const min = Math.floor(lo / step + 1e-9) * step;
   const max = Math.ceil(hi / step - 1e-9) * step;
   const ticks: number[] = [];
@@ -366,14 +373,14 @@ function cartesian(spec: ChartSpec, d0: ChartData, b: Box): string {
   const lineSeries = isLine ? d.series.map((s, i) => ({ s, i })) : sec;
   const cum = new Array<number>(n).fill(0);
   lineSeries.forEach(({ s, i }) => {
-    const pts: [number, number, number][] = [];
+    const pts: [number, number, number, number][] = [];
     const lower: [number, number][] = [];
     s.vals.forEach((v, k) => {
       if (!num(v)) return;
       const x = p.x + band * (k + 0.5);
       const below = area && stacked ? cum[k] : 0;
       if (area && stacked) cum[k] += v;
-      pts.push([x, secIdx.has(i) && sscale ? toSec(v) : toPx(area && stacked ? cum[k] : v), v]);
+      pts.push([x, secIdx.has(i) && sscale ? toSec(v) : toPx(area && stacked ? cum[k] : v), v, k]);
       lower.push([x, area && stacked ? toPx(below) : baseV]);
     });
     if (!pts.length) return;
@@ -383,9 +390,9 @@ function cartesian(spec: ChartSpec, d0: ChartData, b: Box): string {
     const eb = stacked ? undefined : (spec.errBars ?? []).find((e) => e.series === i || e.series < 0);
     const yOf = (v: number) => (secIdx.has(i) && sscale ? toSec(v) : toPx(v));
     const all = eb ? s.vals.filter(num) : [];
-    for (const [x, y, v] of pts) {
+    for (const [x, y, v, k] of pts) {
       if (eb) {
-        const [dn, up] = errAmount(eb, v, all);
+        const [dn, up] = errAmount(eb, v, all, k);
         out.push(errV(x, y, yOf(v - dn), yOf(v + up)));
       }
       out.push(`<circle cx="${r1(x)}" cy="${r1(y)}" r="3" fill="${color(i)}"/>`);
@@ -413,8 +420,9 @@ function xy(spec: ChartSpec, d: ChartData, b: Box): string {
   ys.forEach((s, i) => {
     const eb = (spec.errBars ?? []).find((e) => e.series === i || e.series < 0);
     if (!eb) return;
-    for (const v of s.vals.filter(num)) {
-      const [dn, up] = errAmount(eb, v, all);
+    for (const [k, v] of s.vals.entries()) {
+      if (!num(v)) continue;
+      const [dn, up] = errAmount(eb, v, all, k);
       ylo = Math.min(ylo, v - dn);
       yhi = Math.max(yhi, v + up);
     }
@@ -455,7 +463,7 @@ function xy(spec: ChartSpec, d: ChartData, b: Box): string {
       if (!num(v)) return;
       const r = bubble ? 5 + 20 * Math.sqrt(Math.max(0, sizes[k] ?? 0) / maxSize) : 4;
       if (eb) {
-        const [dn, up] = errAmount(eb, v, own);
+        const [dn, up] = errAmount(eb, v, own, k);
         out.push(errV(px(xs[k]), py(v), py(v - dn), py(v + up)));
       }
       out.push(`<circle cx="${r1(px(xs[k]))}" cy="${r1(py(v))}" r="${r1(r)}" fill="${color(i)}" fill-opacity="${bubble ? 0.55 : 0.85}"/>`);
@@ -562,7 +570,7 @@ function waterfall(spec: ChartSpec, d: ChartData, b: Box): string {
   const steps: { a: number; z: number; total: boolean; v: number }[] = [];
   let run = 0;
   vals.forEach((v, i) => {
-    const total = spec.totals ? spec.totals.includes(i) : /total|net|sum|end/i.test(d.cats[i]) && i > 0;
+    const total = spec.totals ? spec.totals.includes(i) : /\b(sub)?totals?\b|\bnet\b|\bsum\b|\bend\b/i.test(d.cats[i]) && i > 0;
     if (total) steps.push({ a: 0, z: run, total, v: run });
     else {
       steps.push({ a: run, z: run + v, total: false, v });

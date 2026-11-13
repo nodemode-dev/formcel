@@ -160,7 +160,7 @@ export class NoticesPane {
       const row = el('div', 'fc-row');
       const label = `${sheets[x.sheet] ?? 'Sheet'}!${this.host.colName(x.c0)}${x.r0 + 1}:${this.host.colName(x.c1)}${x.r1 + 1}`;
       const del = button('Stop', 'fc-link');
-      del.addEventListener('click', () => void call('DELETE', `/api/workbooks/${this.host.id()}/watch/${x.id}`).then(() => this.reload()));
+      del.addEventListener('click', () => void call('DELETE', `/api/workbooks/${this.host.id()}/watch/${x.id}`).then(() => this.reload(), (err: unknown) => this.host.refused(err instanceof Error ? err.message : 'Still watching.')));
       row.append(el('span', '', label), del);
       return [x.id, row];
     });
@@ -319,26 +319,32 @@ export class SharePane {
     const open = button('Open');
     open.addEventListener('click', () => window.open(s.url, '_blank', 'noopener'));
     const revoke = button('Revoke');
-    revoke.addEventListener('click', () => void call('DELETE', `/api/workbooks/${this.host.id()}/shares/${s.token}`).then(() => this.load()));
+    revoke.addEventListener('click', () => void call('DELETE', `/api/workbooks/${this.host.id()}/shares/${s.token}`).then(() => this.load(), (err: unknown) => this.refuse(err)));
     row.append(copy, open);
     if (s.kind === 'share') {
       const p = el('select', 'fc-fmt-input');
       for (const [v, l] of [['view', 'View'], ['comment', 'Comment'], ['edit', 'Edit']]) p.appendChild(Object.assign(el('option'), { value: v, textContent: l }));
       p.value = s.perm;
       p.setAttribute('aria-label', 'Permission');
-      p.addEventListener('change', () => void call('PATCH', `/api/workbooks/${this.host.id()}/shares/${s.token}`, { perm: p.value }).then(() => this.load()));
+      p.addEventListener('change', () => void call('PATCH', `/api/workbooks/${this.host.id()}/shares/${s.token}`, { perm: p.value }).then(() => this.load(), (err: unknown) => {
+        p.value = s.perm;
+        this.refuse(err);
+      }));
       row.appendChild(p);
     } else {
       const auto = el('label', 'fc-sort-check');
       const box = el('input');
       box.type = 'checkbox';
       box.checked = s.live;
-      box.addEventListener('change', () => void call('PATCH', `/api/workbooks/${this.host.id()}/shares/${s.token}`, { live: box.checked }).then(() => this.load()));
+      box.addEventListener('change', () => void call('PATCH', `/api/workbooks/${this.host.id()}/shares/${s.token}`, { live: box.checked }).then(() => this.load(), (err: unknown) => {
+        box.checked = s.live;
+        this.refuse(err);
+      }));
       auto.append(box, document.createTextNode(' Republish automatically'));
       row.appendChild(auto);
       if (!s.live) {
         const again = button('Republish now');
-        again.addEventListener('click', () => void call('POST', `/api/workbooks/${this.host.id()}/shares/${s.token}/republish`).then(() => this.load()));
+        again.addEventListener('click', () => void call('POST', `/api/workbooks/${this.host.id()}/shares/${s.token}/republish`).then(() => this.load(), (err: unknown) => this.refuse(err)));
         row.appendChild(again);
       }
     }
@@ -439,5 +445,10 @@ export class SharePane {
     } catch {
       this.host.status('Could not copy; select the text and copy it', true);
     }
+  }
+
+  private refuse(err: unknown): void {
+    this.host.refused(err instanceof Error ? err.message : 'That did not change.');
+    void this.load();
   }
 }

@@ -31,12 +31,13 @@ def save(url: str, key: str, require_signature: bool) -> dict:
             raise MarketError("the publisher key must be base64 text")
         if len(raw) != 32:
             raise MarketError("the publisher key must be a 32 byte Ed25519 public key")
-    all_ = aiclient.load_settings()
-    if url or key:
-        all_["registry"] = {"url": url, "key": key, "require_signature": require_signature}
-    else:
-        all_.pop("registry", None)
-    aiclient.save_settings(all_)
+    with aiclient.SETTINGS:
+        all_ = aiclient.load_settings()
+        if url or key:
+            all_["registry"] = {"url": url, "key": key, "require_signature": require_signature}
+        else:
+            all_.pop("registry", None)
+        aiclient.save_settings(all_)
     return settings()
 
 

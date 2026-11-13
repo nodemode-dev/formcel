@@ -8,7 +8,7 @@ import { OrgEditor } from './orgedit';
 import { makeBar, syncBar } from './pivotbar';
 import { FILTER_BAR, pivotChartData } from './pivotchart';
 import { contrast, isLine, shapeSvg } from './shapes';
-import { renderChartAsync, setChartFont } from './svg';
+import { esc, renderChartAsync, setChartFont } from './svg';
 import { isFloat, newId, type ChartSpec, type FloatObject, type ShapeSpec } from './types';
 
 export interface LayerIo {
@@ -651,15 +651,15 @@ export class ObjectLayer implements ObjectsHook {
     if (spec.pivot) {
       def = this.io.pivots?.().find((p) => p.name === spec.pivot) ?? null;
       const data = def ? await pivotChartData(this.eng, this.io.book(), def) : null;
-      if (!def) html = `<div class="fc-chart-empty">The PivotTable ${spec.pivot} no longer exists. Delete this chart or edit it to pick another source.</div>`;
+      if (!def) html = `<div class="fc-chart-empty">The PivotTable ${esc(spec.pivot)} no longer exists. Delete this chart or edit it to pick another source.</div>`;
       else if (!data) html = '<div class="fc-chart-empty">The PivotTable has no values to chart yet. Add fields to its Rows and Values.</div>';
       else html = await renderChartAsync(this.eng, spec, data, n.obj.w, Math.max(40, n.obj.h - (spec.pivotButtons === false ? 0 : FILTER_BAR)));
     } else {
       const ref = await resolveRange(this.eng, this.io.book(), spec.range);
-      if (!ref) html = `<div class="fc-chart-empty">The data range ${spec.range ? `"${spec.range}"` : ''} is not a range. Edit the chart to pick one.</div>`;
+      if (!ref) html = `<div class="fc-chart-empty">The data range ${spec.range ? `"${esc(spec.range)}"` : ''} is not a range. Edit the chart to pick one.</div>`;
       else {
         const sheet = ref.sheet ? this.io.sheetNames().indexOf(ref.sheet) : this.sheetNo;
-        if (sheet < 0) html = `<div class="fc-chart-empty">There is no sheet named ${ref.sheet}.</div>`;
+        if (sheet < 0) html = `<div class="fc-chart-empty">There is no sheet named ${esc(ref.sheet ?? '')}.</div>`;
         else {
           const m = await readMatrix(this.eng, this.io.book(), sheet, ref.range);
           html = await renderChartAsync(this.eng, await this.liveRefs(spec), build(m, spec.byRows, spec.type), n.obj.w, n.obj.h);

@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "FormCel",
-  "version": "0.40.9",
+  "version": "0.41.0",
   "identifier": "ai.nodemode.formcel",
   "build": {
     "frontendDist": "../frontend/dist"
@@ -36,7 +36,8 @@
     "category": "Productivity",
     "shortDescription": "A local-first spreadsheet",
     "longDescription": "FormCel is a local-first spreadsheet. The window runs a Rust calculation engine compiled to WebAssembly, and a local engine process keeps your workbooks on this computer.",
-    "license": "../LICENSE",
+    "license": "Apache-2.0",
+    "licenseFile": "../LICENSE",
     "externalBin": ["binaries/formcel-engine"],
     "resources": { "../LICENSE": "LICENSE", "../NOTICE.md": "NOTICE.md" },
     "windows": {

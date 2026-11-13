@@ -314,7 +314,7 @@ def resolve(key: str, books, fresh: bool = False, auto: dict | None = None, wid:
         return error("#ERROR!"), str(e)
     except quote_model.QuoteError as e:
         return error(e.code), f"{name}: {e}"
-    except (webdata.FetchError, ValueError, KeyError, IndexError, TypeError, OSError) as e:
+    except (webdata.FetchError, ValueError, KeyError, IndexError, TypeError, OSError, OverflowError) as e:
         code = "#VALUE!" if name in ("WEBSERVICE", "FILTERXML") else "#N/A"
         return error(code), f"{name}: {e}"
     return error("#NAME?"), f"{name} is not a connected function"

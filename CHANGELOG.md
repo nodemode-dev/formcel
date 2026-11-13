@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.41.0 · 2026-11-12
+
+A full review of the engine process, the file formats, the grid, the panels, charts, scripts, VBA and the build scripts. Fixes only; nothing new.
+
+- Editing: a value typed in one cell is no longer saved into the cell you click next; copying the whole sheet no longer freezes the window; double-clicking the fill handle stops at the end of the neighbouring data; cut then paste keeps formula references; AltGr and Option characters can be typed straight into a cell; filling up or left keeps the filled cells selected; sheet names cannot repeat in another letter case; page setups follow a sheet that is moved or deleted.
+- Opening files safely: a sheet name, chart colour or shape colour from an opened workbook can no longer inject markup into the window; script custom functions run only when macros are allowed for the workbook; packed .xlsx and .ods files that unpack to gigabytes, or expand to millions of repeated cells, are refused.
+- Saving as .xlsx and .ods: sheet and workbook passwords still work after a save; formulas that name sheets such as 'Filter (2)' keep the name; 1904-system dates open on the right day; text with control characters saves; IMAGE addresses are not fetched when external content is blocked; macro sheets no longer shift other sheets' comments and shapes.
+- The engine process: opening a workbook during an import no longer freezes everything; imports and live streams no longer stall other requests; a published CSV link with a huge range answers at once; Delete forever also deletes saved versions; two settings changed at once no longer lose one; Python cells and the scheduled refresh work in the desktop app; the engine stops when the desktop window's process ends.
+- Formulas: WEEKDAY return types 12 to 16 are right; EXPAND and MAKEARRAY with enormous sizes give an error instead of ending the engine; REPLACE with a huge count replaces to the end.
+- Charts and scripts: waterfall totals match whole words only; very large close values no longer hang a chart; error bars from a column draw on line and scatter charts; overlapping range copies keep their values; VBA loops with an empty body can be stopped, Resume continues inside a loop, array assignment fills only its target, and `\`, Mod and InStrRev follow VBA.
+- Panels: comments keep the reply you are typing when someone else comments; Replace moves on from the match it replaced; Escape ends the password prompts; sharing controls report a refused change.
+- Scripts and builds: `./formcel` stops both processes on exit; `formcel.bat` starts the window after a first engine build; `build_app --clean` really rebuilds the engines and uses the Python it found; `build_wasm` honours CARGO_TARGET_DIR; the installers carry the licence.
+
 ## 0.40.9 · 2026-11-03
 
 - The README follows the Form family layout and ships real screenshots of a workbook, its summary sheet, the Insert ribbon and the template gallery.

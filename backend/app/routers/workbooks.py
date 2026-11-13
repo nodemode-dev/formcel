@@ -5,6 +5,7 @@ import xlrd
 
 from fastapi import APIRouter, HTTPException, Request, Response
 from pydantic import BaseModel, Field
+from starlette.concurrency import run_in_threadpool
 
 from ..services import crypto, csvio, templates
 from ..services.store import store
@@ -89,7 +90,10 @@ async def preview_file(request: Request, name: str, delimiter: str | None = None
         raise HTTPException(413, "That file is over 100 MB.")
     if name.rpartition(".")[2].lower() not in TEXT_FILES:
         raise HTTPException(415, "A preview is only for .csv, .tsv and .txt files.")
-    return csvio.preview(data, name, delimiter)
+    try:
+        return await run_in_threadpool(csvio.preview, data, name, delimiter)
+    except ValueError as e:
+        raise HTTPException(422, f"FormCel could not read {name}: {e}")
 
 
 @router.post("/import", status_code=201)
@@ -101,22 +105,25 @@ async def import_file(request: Request, name: str = "Imported workbook.xlsx", de
     ext = ext.lower()
     if ext in TEXT_FILES:
         cols = {int(x) for x in text.split(",") if x.strip().isdigit()}
-        return store().import_csv(data, name, delimiter, cols, max_rows)
+        try:
+            return await run_in_threadpool(store().import_csv, data, name, delimiter, cols, max_rows)
+        except ValueError as e:
+            raise HTTPException(422, f"FormCel could not read {name}: {e}")
     if ext in ("pdf", "html", "htm", "paste"):
         try:
-            return store().import_tables(data, stem or name, {"pdf": "pdf", "paste": "paste"}.get(ext, "html"))
+            return await run_in_threadpool(store().import_tables, data, stem or name, {"pdf": "pdf", "paste": "paste"}.get(ext, "html"))
         except ValueError as e:
             raise HTTPException(422, str(e))
     if ext not in ("xlsx", "xlsm", "xls", "ods"):
         raise HTTPException(415, "FormCel opens .xlsx, .xlsm, .xls, .ods, .csv, .tsv, .txt, .html and .pdf files.")
     try:
-        data = crypto.unlock(data, request.headers.get("x-formcel-password"))
+        data = await run_in_threadpool(crypto.unlock, data, request.headers.get("x-formcel-password"))
     except crypto.PasswordNeeded:
         raise HTTPException(401, f"{name} is protected with a password.")
     except crypto.WrongPassword:
         raise HTTPException(403, "That password does not open the file.")
     try:
-        return store().import_xlsx(data, stem or name, "xlsx" if ext == "xlsm" else ext)
+        return await run_in_threadpool(store().import_xlsx, data, stem or name, "xlsx" if ext == "xlsm" else ext)
     except (KeyError, ValueError, OSError, zipfile.BadZipFile, xlrd.XLRDError) as e:
         raise HTTPException(422, f"FormCel could not read {name}: {e}")
 

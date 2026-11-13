@@ -261,7 +261,7 @@ def spawn(wid: str, req: dict, limit: int) -> dict:
         raise VbaError(str(e)) from None
     state: dict = {}
     started = time.time()
-    p = subprocess.Popen([exe, *flags, "--max-old-space-size=256", str(RUNNER)], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, cwd="/", env={"PATH": "/usr/bin:/bin:/usr/local/bin:" + str(Path(exe).parent)})
+    p = subprocess.Popen([exe, *flags, "--max-old-space-size=256", str(RUNNER)], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding="utf-8", errors="replace", cwd="/", env=gasrun.child_env(str(Path(exe).parent)))
     timer = threading.Timer(limit, p.kill)
     timer.start()
     final: dict | None = None

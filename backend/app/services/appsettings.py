@@ -34,13 +34,14 @@ def public() -> dict:
 
 
 def update(patch: dict) -> dict:
-    s = aiclient.load_settings()
-    app = dict(s.get("app") or {})
-    for k, (lo, hi) in LIMITS.items():
-        if k in patch and patch[k] is not None:
-            app[k] = max(lo, min(hi, int(patch[k])))
-    if patch.get("external_content") is not None:
-        app["external_content"] = bool(patch["external_content"])
-    s["app"] = app
-    aiclient.save_settings(s)
+    with aiclient.SETTINGS:
+        s = aiclient.load_settings()
+        app = dict(s.get("app") or {})
+        for k, (lo, hi) in LIMITS.items():
+            if k in patch and patch[k] is not None:
+                app[k] = max(lo, min(hi, int(patch[k])))
+        if patch.get("external_content") is not None:
+            app["external_content"] = bool(patch["external_content"])
+        s["app"] = app
+        aiclient.save_settings(s)
     return public()

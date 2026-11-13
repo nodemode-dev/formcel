@@ -14,6 +14,7 @@ import {
   VError,
   VUdt,
   type TypeRef,
+  bankers,
   coerce,
   compare,
   defaultOf,
@@ -83,7 +84,7 @@ export class Frame {
   withs: any[] = [];
   onErr: { mode: 'none' | 'goto' | 'next'; label: string } = { mode: 'none', label: '' };
   inHandler = false;
-  failed: { block: Stmt[]; idx: number } | null = null;
+  failed: { block: Stmt[]; idx: number; inline?: boolean } | null = null;
   line = 0;
   topIdx = 0;
   failedTop = 0;
@@ -589,8 +590,8 @@ export class Interp {
     return m;
   }
 
-  async execBlock(stmts: Stmt[], f: Frame): Promise<Signal | undefined> {
-    let i = 0;
+  async execBlock(stmts: Stmt[], f: Frame, start = 0): Promise<Signal | undefined> {
+    let i = start;
     while (i < stmts.length) {
       const s = stmts[i];
       let sig: Signal | undefined;
@@ -614,6 +615,17 @@ export class Interp {
         f.failedTop = f.topIdx;
         f.inHandler = true;
         sig = { t: 'goto', label: f.onErr.label };
+        const top = f.proc?.body;
+        const at = top && top !== stmts ? this.labels(top).get(f.onErr.label) : undefined;
+        if (top && at !== undefined) {
+          f.failed.inline = true;
+          const hs = await this.execBlock(top, f, at);
+          if (hs && hs.t === 'jump' && hs.block === stmts) {
+            i = hs.idx;
+            continue;
+          }
+          return hs ?? { t: 'exit', what: 'sub' };
+        }
       }
       if (sig) {
         if (sig.t === 'goto') {
@@ -633,18 +645,21 @@ export class Interp {
     return undefined;
   }
 
+  private async pulse(): Promise<void> {
+    if ((++this.ticks & 0x1ff) !== 0) return;
+    if (this.aborted) throw new StopRun('stop');
+    const now = Date.now();
+    if (this.deadline && now > this.deadline) {
+      this.aborted = true;
+      fail(1004, 'The macro ran longer than its time limit and was stopped.');
+    }
+    if (now - this.lastYield > 40) await this.yieldNow();
+  }
+
   private async exec(s: Stmt, f: Frame): Promise<Signal | undefined> {
     f.line = s.line;
     this.curLine = s.line;
-    if ((++this.ticks & 0x1ff) === 0) {
-      if (this.aborted) throw new StopRun('stop');
-      const now = Date.now();
-      if (this.deadline && now > this.deadline) {
-        this.aborted = true;
-        fail(1004, 'The macro ran longer than its time limit and was stopped.');
-      }
-      if (now - this.lastYield > 40) await this.yieldNow();
-    }
+    await this.pulse();
     if (this.stepMode !== 'run' || this.breakpoints.size) await this.checkpoint(s, f);
     switch (s.k) {
       case 'nop':
@@ -739,7 +754,7 @@ export class Interp {
         if (!fl) fail(20);
         f.failed = null;
         const top = f.proc ? f.proc.body : fl.block;
-        if (fl.block !== top) return { t: 'jump', block: top, idx: s.mode === 'next' ? f.failedTop + 1 : f.failedTop };
+        if (fl.block !== top && !fl.inline) return { t: 'jump', block: top, idx: s.mode === 'next' ? f.failedTop + 1 : f.failedTop };
         return { t: 'jump', block: fl.block, idx: s.mode === 'next' ? fl.idx + 1 : fl.idx };
       }
       case 'exit':
@@ -896,7 +911,7 @@ export class Interp {
       await this.endMark(s.endLine, f);
       const next = toNum(ref.v) + step;
       ref.v = t.name === 'variant' ? next : coerce(next, t);
-      if (step === 0 && (++this.ticks & 0xfff) === 0) await this.yieldNow();
+      await this.pulse();
     }
     return undefined;
   }
@@ -961,7 +976,7 @@ export class Interp {
         const c = toBool(await this.val(await this.eval(s.cond, f)));
         if (s.until ? c : !c) break;
       }
-      if (!s.cond && (++this.ticks & 0xfff) === 0) await this.yieldNow();
+      await this.pulse();
     }
     return undefined;
   }
@@ -1545,15 +1560,15 @@ export class Interp {
       }
       case '\\': {
         if (l === NULLV || r === NULLV) return NULLV;
-        const d = Math.round(toNum(r));
+        const d = bankers(toNum(r));
         if (d === 0) fail(11);
-        return Math.trunc(Math.round(toNum(l)) / d);
+        return Math.trunc(bankers(toNum(l)) / d);
       }
       case 'mod': {
         if (l === NULLV || r === NULLV) return NULLV;
-        const d = Math.round(toNum(r));
+        const d = bankers(toNum(r));
         if (d === 0) fail(11);
-        const n = Math.round(toNum(l));
+        const n = bankers(toNum(l));
         return n % d;
       }
       case '^': {

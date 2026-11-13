@@ -1361,10 +1361,11 @@ export class DataTools {
           visit(0);
           return;
         }
-        const [s, r, c] = this.findState.hits[this.findState.at];
+        const at = this.findState.at;
+        const [s, r, c] = this.findState.hits[at];
         await this.c.grid.runTool(...base('replace', `${s},${r},${c}`));
         await scan();
-        visit(Math.max(0, this.findState.at));
+        visit(at);
       });
       else if (a === 'every') void guard(async () => {
         const msg = await this.c.grid.runTool(...base('replaceall'));

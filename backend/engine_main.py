@@ -28,6 +28,30 @@ def selfcheck() -> int:
 
 
 def watch_parent() -> None:
+    raw = os.environ.get("FORMCEL_PARENT_PID", "").strip()
+    if raw.isdigit() and int(raw) > 0:
+        pid = int(raw)
+
+        def watch() -> None:
+            if os.name == "nt":
+                import ctypes
+
+                kernel = ctypes.windll.kernel32
+                handle = kernel.OpenProcess(0x00100000, False, pid)
+                if handle:
+                    kernel.WaitForSingleObject(handle, 0xFFFFFFFF)
+                os._exit(0)
+            while True:
+                try:
+                    os.kill(pid, 0)
+                except ProcessLookupError:
+                    os._exit(0)
+                except PermissionError:
+                    pass
+                time.sleep(2)
+
+        threading.Thread(target=watch, name="formcel-parent-watch", daemon=True).start()
+        return
     if os.name != "posix":
         return
     parent = os.getppid()
@@ -63,7 +87,17 @@ def announce_port(server) -> None:
 def main() -> int:
     if "--selfcheck" in sys.argv:
         return selfcheck()
-    bundled = os.path.join(resource_dir(), "frontend_dist")
+    if sys.argv[1:2] == ["-I"] and len(sys.argv) > 2:
+        import runpy
+
+        sys.argv = sys.argv[2:]
+        runpy.run_path(sys.argv[0], run_name="__main__")
+        return 0
+    if sys.argv[1:3] == ["-m", "app.refresh_cli"]:
+        from app.services import ossched
+
+        return ossched.main()
+    bundled =os.path.join(resource_dir(), "frontend_dist")
     if os.path.isdir(bundled):
         os.environ.setdefault("FORMCEL_WINDOW_DIR", bundled)
     watch_parent()

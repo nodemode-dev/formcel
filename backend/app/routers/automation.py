@@ -268,6 +268,8 @@ def v1_put_values(wid: str, sheet: str, body: ValuesIn, range: str = "A1") -> di
             cells.append((r0 + dr, c0 + dc, raw))
     try:
         store().edit(wid, i, cells)
+    except PermissionError as e:
+        raise HTTPException(403, str(e))
     except (IndexError, ValueError) as e:
         raise HTTPException(422, f"Those cells could not be saved: {e}")
     w = max((len(r) for r in body.values), default=0)

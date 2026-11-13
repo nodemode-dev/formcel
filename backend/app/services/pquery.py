@@ -3,6 +3,7 @@ import re
 import sqlite3
 from datetime import date, datetime
 from pathlib import Path
+from urllib.parse import quote
 
 from . import ranges, webdata
 
@@ -122,7 +123,7 @@ def sqlite_table(path: str, sql: str, params: dict | None = None) -> Table:
         raise QueryError(f"no database file at {path}")
     s, args = qparams.bind(qparams.one_statement(sql), params, "named")
     try:
-        con = sqlite3.connect(f"file:{p.as_posix()}?mode=ro", uri=True)
+        con = sqlite3.connect(f"file:{quote(p.resolve().as_posix(), safe='/:')}?mode=ro", uri=True)
         try:
             con.execute("PRAGMA query_only = ON")
             cur = con.execute(s, args or {})

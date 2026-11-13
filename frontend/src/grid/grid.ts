@@ -243,6 +243,8 @@ export class Grid {
     r0: number;
     c0: number;
     sheet: number;
+    book: number;
+    cut: boolean;
   } | null = null;
   private overlay: ((ctx: CanvasRenderingContext2D, box: (r0: number, c0: number, r1: number, c1: number) => [number, number, number, number]) => void) | null = null;
   private calcDraw: ((ctx: CanvasRenderingContext2D, box: (r0: number, c0: number, r1: number, c1: number) => [number, number, number, number], view: { z: number; ox: number; oy: number }) => void) | null = null;
@@ -261,6 +263,7 @@ export class Grid {
   private w = 0;
   private h = 0;
   private dpr = 1;
+  private dprWatch = 0;
   private sx = 0;
   private sy = 0;
   private fr = 0;
@@ -334,6 +337,10 @@ export class Grid {
   private resize(): void {
     const r = this.el.getBoundingClientRect();
     this.dpr = window.devicePixelRatio || 1;
+    if (this.dprWatch !== this.dpr) {
+      this.dprWatch = this.dpr;
+      window.matchMedia(`(resolution: ${this.dpr}dppx)`).addEventListener('change', () => this.resize(), { once: true });
+    }
     this.gw = gutter(this.rows);
     this.gh = gutter(this.cols);
     const fw = Math.max(1, Math.floor(r.width) - SCROLL_W);
@@ -1825,7 +1832,7 @@ export class Grid {
 
   async pasteWith(what: string, op: string, skip: boolean, transpose: boolean): Promise<string> {
     const src = this.copied;
-    if (!src || this.book < 0) return '';
+    if (!src || this.book < 0 || src.book !== this.book) return '';
     const area = `${src.r0},${src.c0},${src.r0 + src.h - 1},${src.c0 + src.w - 1}`;
     return this.runTool('pastespecial', area, String(this.ar), String(this.ac), what, op, skip ? '1' : '0', transpose ? '1' : '0', String(src.sheet));
   }
@@ -1885,7 +1892,7 @@ export class Grid {
 
   copiedSource(): { sheet: number; r0: number; c0: number; r1: number; c1: number } | null {
     const s = this.copied;
-    return s ? { sheet: s.sheet, r0: s.r0, c0: s.c0, r1: s.r0 + s.h - 1, c1: s.c0 + s.w - 1 } : null;
+    return s && s.book === this.book ? { sheet: s.sheet, r0: s.r0, c0: s.c0, r1: s.r0 + s.h - 1, c1: s.c0 + s.w - 1 } : null;
   }
 
   async pasteLayers(layers: string, transpose: boolean): Promise<string> {
@@ -2595,12 +2602,14 @@ export class Grid {
   }
 
   async setActive(entered: string): Promise<boolean> {
+    const [pr, pc] = [this.ar, this.ac];
     const raw = await this.localise(this.opts.entryFilter ? this.opts.entryFilter(entered) : entered, false);
     if (this.validLines.length && raw !== '') {
-      const line = await this.engine.checkInput(this.book, this.sheet, this.ar, this.ac, raw);
+      const line = await this.engine.checkInput(this.book, this.sheet, pr, pc, raw);
       if (line) {
         const choice = await this.events.onInvalid(line.split('\t').map(unescapeField));
         if (choice === 'retry') {
+          if (this.ar !== pr || this.ac !== pc) this.select(pr, pc);
           this.startEdit(entered);
           this.editor.select();
           return false;
@@ -2611,11 +2620,12 @@ export class Grid {
         }
       }
     }
-    if (this.tableList.length && raw !== '' && this.activeTable()) {
-      const typed = await this.engine.tool(this.book, this.sheet, 'typecheck', String(this.ar), String(this.ac), raw);
+    if (this.tableList.length && raw !== '' && this.tableList.some((t) => pr >= t.area[0] && pr <= t.area[2] && pc >= t.area[1] && pc <= t.area[3])) {
+      const typed = await this.engine.tool(this.book, this.sheet, 'typecheck', String(pr), String(pc), raw);
       if (typed.message) {
         const choice = await this.events.onInvalid(['', 'custom', '', '', '', 'e', 'warning', '', '', 'Column type', typed.message]);
         if (choice === 'retry') {
+          if (this.ar !== pr || this.ac !== pc) this.select(pr, pc);
           this.startEdit(entered);
           this.editor.select();
           return false;
@@ -2626,10 +2636,9 @@ export class Grid {
         }
       }
     }
-    this.recorder?.({ k: 'edit', sheet: this.sheet, r: this.ar, c: this.ac, raw });
+    this.recorder?.({ k: 'edit', sheet: this.sheet, r: pr, c: pc, raw });
     const pend = this.editChips;
     this.editChips = [];
-    const [pr, pc] = [this.ar, this.ac];
     try {
       const mark = pend.length ? await this.engine.undoMark(this.book) : -1;
       await this.commitEdits(await this.engine.apply(this.book, [[pr, pc, raw]], this.sheet));
@@ -2901,7 +2910,7 @@ export class Grid {
     const r = Math.min(Math.max(0, to.r), MAX_ROWS - h);
     const c = Math.min(Math.max(0, to.c), MAX_COLS - w);
     if (r === s.r0 && c === s.c0) return;
-    await this.remember('', s);
+    await this.remember('', s, true);
     if (!this.copied) return;
     const mark = await this.engine.undoMark(this.book);
     await this.clearSelection();
@@ -2991,8 +3000,6 @@ export class Grid {
     }
     await this.engine.undoGroup(this.book, mark);
     this.select(Math.min(s.r0, target.r0), Math.min(s.c0, target.c0), Math.max(s.r1, target.r1), Math.max(s.c1, target.c1), false);
-    this.ar = s.r0;
-    this.ac = s.c0;
   }
 
   private pointStart(e: PointerEvent): boolean {
@@ -3035,19 +3042,24 @@ export class Grid {
     const s = this.sel();
     const probe = s.c0 > 0 ? s.c0 - 1 : s.c1 + 1;
     if (probe >= MAX_COLS) return;
-    const bottom = await this.engine.edge(this.book, s.r1, probe, 'down', this.sheet);
-    const last = this.cache.get(KEY(s.r1 + 1, probe)) !== undefined || bottom[0] > s.r1 ? bottom[0] : s.r1;
-    if (last > s.r1) await this.fill({ r0: s.r1 + 1, r1: last, c0: s.c0, c1: s.c1 });
+    if (s.r1 + 1 >= MAX_ROWS) return;
+    const below = await this.engine.read(this.book, s.r1 + 1, probe, Math.min(MAX_ROWS - 1, s.r1 + 2), probe, this.sheet);
+    if (!below.some(([r]) => r === s.r1 + 1)) return;
+    const last = below.some(([r]) => r === s.r1 + 2) ? (await this.engine.edge(this.book, s.r1 + 1, probe, 'down', this.sheet))[0] : s.r1 + 1;
+    await this.fill({ r0: s.r1 + 1, r1: last, c0: s.c0, c1: s.c1 });
   }
 
   private async selectionTSV(): Promise<string> {
     const s = this.sel();
-    const cells = await this.engine.read(this.book, s.r0, s.c0, s.r1, s.c1, this.sheet);
+    const ext = await this.engine.extent(this.book, this.sheet);
+    const r1 = Math.max(s.r0, Math.min(s.r1, ext ? ext[0] : s.r0));
+    const c1 = Math.max(s.c0, Math.min(s.c1, ext ? ext[1] : s.c0));
+    const cells = await this.engine.read(this.book, s.r0, s.c0, r1, c1, this.sheet);
     const map = new Map(cells.map(([r, c, t]) => [KEY(r, c), t]));
     const out: string[] = [];
-    for (let r = s.r0; r <= s.r1; r++) {
+    for (let r = s.r0; r <= r1; r++) {
       const row: string[] = [];
-      for (let c = s.c0; c <= s.c1; c++) row.push(tsvCell(map.get(KEY(r, c)) ?? ''));
+      for (let c = s.c0; c <= c1; c++) row.push(tsvCell(map.get(KEY(r, c)) ?? ''));
       out.push(row.join('\t'));
     }
     return out.join('\n');
@@ -3544,7 +3556,7 @@ export class Grid {
 
     document.addEventListener('cut', (e) => {
       if (document.activeElement !== el) return;
-      this.writeClipboard(e);
+      this.writeClipboard(e, true);
       void this.clearSelection();
     });
 
@@ -3562,7 +3574,7 @@ export class Grid {
     });
   }
 
-  private remember(text: string, s: Range): Promise<void> {
+  private remember(text: string, s: Range, cut = false): Promise<void> {
     this.copied = null;
     if ((s.r1 - s.r0 + 1) * (s.c1 - s.c0 + 1) > 100000) return Promise.resolve();
     const book = this.book;
@@ -3578,7 +3590,7 @@ export class Grid {
       const values = new Map<number, string>();
       for (const [r, c, v] of vals) values.set(KEY(r - s.r0, c - s.c0), v);
       const widths = Array.from({ length: s.c1 - s.c0 + 1 }, (_, i) => this.cols.size(s.c0 + i));
-      this.copied = { text, h: s.r1 - s.r0 + 1, w: s.c1 - s.c0 + 1, items, raw, values, linked, widths, r0: s.r0, c0: s.c0, sheet };
+      this.copied = { text, h: s.r1 - s.r0 + 1, w: s.c1 - s.c0 + 1, items, raw, values, linked, widths, r0: s.r0, c0: s.c0, sheet, book, cut };
     });
   }
 
@@ -3624,7 +3636,7 @@ export class Grid {
           const formulas = kind === 'all' || kind === 'formulas' || kind === 'formulas-formats' || kind === 'no-borders';
           if (formulas && raw.startsWith('=')) {
             moved.push(edits.length);
-            moves.push([raw, top + i - (src.r0 + si), left + j - (src.c0 + sj)]);
+            moves.push(src.cut ? [raw, 0, 0] : [raw, top + i - (src.r0 + si), left + j - (src.c0 + sj)]);
           }
           edits.push([top + i, left + j, formulas ? raw : src.values.get(k) ?? '']);
         }
@@ -3659,10 +3671,11 @@ export class Grid {
       this.emitView();
     }
     await this.engine.undoGroup(this.book, mark);
+    if (src.cut && this.copied === src) this.copied = null;
     this.select(top, left, Math.min(MAX_ROWS - 1, top + h - 1), Math.min(MAX_COLS - 1, left + w - 1));
   }
 
-  private writeClipboard(e: ClipboardEvent): void {
+  private writeClipboard(e: ClipboardEvent, cut = false): void {
     {
       const s = this.sel();
       const inCache = this.wins.some((w) => !!w && s.r0 >= w.r0 && s.r1 <= w.r1 && s.c0 >= w.c0 && s.c1 <= w.c1) && (s.r1 - s.r0 + 1) * (s.c1 - s.c0 + 1) <= 100000;
@@ -3675,10 +3688,10 @@ export class Grid {
           out.push(row.join('\t'));
         }
         e.clipboardData.setData('text/plain', out.join('\n'));
-        this.remember(out.join('\n'), s);
+        this.remember(out.join('\n'), s, cut);
       } else {
         void this.selectionTSV().then((t) => {
-          this.remember(t, s);
+          this.remember(t, s, cut);
           return navigator.clipboard?.writeText(t);
         }).catch(() => undefined);
       }
@@ -3723,7 +3736,7 @@ export class Grid {
   }
 
   private async gridKey(e: KeyboardEvent): Promise<void> {
-    const mod = e.ctrlKey || e.metaKey;
+    const mod = (e.ctrlKey || e.metaKey) && !typedChar(e);
     const dir = ARROWS[e.key];
     if (this.ghost.size && !this.editing) {
       if ((e.key === 'Enter' || (e.key === 'Tab' && !e.shiftKey)) && !mod) {
@@ -3933,8 +3946,17 @@ export const SHORT_FORMATS: Record<string, string> = {
   Digit6: '0.00E+00',
 };
 
+const MAC = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
+
+function typedChar(e: KeyboardEvent): boolean {
+  if (e.key.length !== 1 || e.metaKey) return false;
+  if (e.getModifierState('AltGraph') || (e.ctrlKey && e.altKey && !/^[a-z0-9]$/i.test(e.key))) return true;
+  return !e.ctrlKey && (!e.altKey || MAC);
+}
+
 function wants(e: KeyboardEvent): boolean {
   if (ARROWS[e.key]) return true;
+  if (typedChar(e)) return true;
   const mod = e.ctrlKey || e.metaKey;
   if (mod && e.altKey && e.code === 'KeyV') return true;
   if (mod) return !e.altKey && (['z', 'y', 'a', 'home', 'end', '+', '=', '-', '_', 'g', 'k', 'e', 'f', 'h'].includes(e.key.toLowerCase()) || (e.shiftKey && e.code === 'KeyL') || (!e.shiftKey && e.code === 'KeyT') || e.code === 'Digit9' || e.code === 'Digit0' || (e.shiftKey && (e.code in SHORT_FORMATS || e.code === 'Digit7')) || (!e.shiftKey && e.code in TOGGLE_KEYS));

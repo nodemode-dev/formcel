@@ -139,7 +139,7 @@ def _color(el: ET.Element | None) -> str | None:
     if el is None:
         return None
     srgb = _child(el, "srgbClr")
-    if srgb is not None and srgb.get("val"):
+    if srgb is not None and re.fullmatch(r"[0-9a-fA-F]{6}", srgb.get("val") or ""):
         return "#" + srgb.get("val", "").lower()
     scheme = _child(el, "schemeClr")
     if scheme is not None and scheme.get("val") in SCHEME:

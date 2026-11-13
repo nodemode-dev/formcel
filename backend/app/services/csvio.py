@@ -36,10 +36,14 @@ def sniff(text: str, name: str) -> str:
 
 def rows_of(text: str, delimiter: str) -> list[list[str]]:
     out = []
-    for rec in csv.reader(io.StringIO(text, newline=""), delimiter=delimiter):
-        if len(out) >= MAX_ROWS:
-            break
-        out.append(rec[:MAX_COLS])
+    reader = csv.reader(io.StringIO(text, newline=""), delimiter=delimiter)
+    try:
+        for rec in reader:
+            if len(out) >= MAX_ROWS:
+                break
+            out.append(rec[:MAX_COLS])
+    except csv.Error as e:
+        raise ValueError(f"line {reader.line_num}: {e}. Check for a quote that is never closed.") from None
     while out and not any(v.strip() for v in out[-1]):
         out.pop()
     return out

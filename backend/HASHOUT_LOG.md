@@ -2,8 +2,61 @@
 
 Living log of comment content and rationale for the engine process. Source stays comment-free; it lives here.
 
-Current build version: v0.40.9
-Last updated: 2026-10-31 · .js, .mjs and .css keep their types on Windows (app/main.py). Before: 2026-10-30 · the Windows install stops on a failed step and never on a missing Tesseract. Before: 2026-10-26 · scripts run with no file, process or network reach (FB-043), and the test suite. Before: LocalGuard refuses cross-site requests that carry no Origin (FB-035). Before: only this computer's own window and agents reach the engine (FB-030), and full fonts in PDF export, freeze exclusions
+Current build version: v0.41.0
+Last updated: 2026-11-12 · the v0.41.0 review fixes (entries below). Before: 2026-10-31 · .js, .mjs and .css keep their types on Windows (app/main.py). Before: 2026-10-30 · the Windows install stops on a failed step and never on a missing Tesseract. Before: 2026-10-26 · scripts run with no file, process or network reach (FB-043), and the test suite. Before: LocalGuard refuses cross-site requests that carry no Origin (FB-035). Before: only this computer's own window and agents reach the engine (FB-030), and full fonts in PDF export, freeze exclusions
+
+## v0.41.0 entries · review fixes (2026-11-12)
+
+Each line names the file and symbol, then what changed and why. The commit of the same subject carries the full reasoning and what was run.
+
+### Engine process and store
+
+- services/store.py :: `Store._load` · takes `ENGINE` before `self.guard`, the order every other path uses. It was the one place that took them the other way round, so an import in one thread and a first open in another deadlocked the whole engine. kind: rationale.
+- services/store.py :: `_write` · retries `os.replace` on `PermissionError` (Windows readers hold the file without FILE_SHARE_DELETE) and then raises a plain `OSError`, so routes do not report it as a protection refusal. Not reproduced on Windows.
+- services/store.py :: `purge` · also removes `Versions/{id}/`; Delete forever left every saved version on disk.
+- services/store.py :: `to_trash`, `restore_version` · hold `ENGINE` across the file move or copy and the `open.pop`, so a save already under way cannot undo them.
+- routers/workbooks.py, printpreview.py, collab.py, share.py · the import, preview and event-stream handlers run their blocking engine and file work in a thread (`run_in_threadpool`, `asyncio.to_thread`); a large import stalled every route and keepalive.
+- services/collab.py :: `csv_of` · clamps the range to the used extent, as `render_sheet` already does; a published CSV link with `range=A1:XFD1048576` looped over the whole grid under the engine lock.
+- services/collab.py :: `Hub.leave`, routers/collab.py and share.py `events` · a subscription is removed only when the queue passed in is the one registered, so an old stream ending cannot unsubscribe the reconnect that reused its client id.
+- engine_main.py :: `main` · handles `-I <script>` and `-m app.refresh_cli` before starting the server. In the frozen app `sys.executable` is the engine itself, so Python cells and the OS refresh schedule were launching a second engine server.
+- engine_main.py :: `watch_parent` · watches the pid in `FORMCEL_PARENT_PID` when the shell sets it (POSIX: `os.kill(pid, 0)` every 2 s; Windows: `OpenProcess` and `WaitForSingleObject`). The direct parent is the onefile bootloader, which outlives a crashed shell. Without the variable the old behaviour stays.
+- services/pysand.py :: `run`, `status` · on a non-POSIX system a PY cell answers a clear note; `os.killpg` and `resource` do not exist on Windows and the request failed with 500.
+- services/gasrun.py, vbarun.py, jsfn.py, ocr.py · child output is decoded as UTF-8 with replacement and Windows children get `SYSTEMROOT`. Not reproduced on Windows.
+- services/csvio.py :: `rows_of`, routers/workbooks.py · `csv.Error` becomes a `ValueError` with the line number and the routes answer 422.
+- app/main.py · `OverflowError` from a negative sheet, row or column index answers 422 instead of 500.
+- routers/automation.py :: `v1_put_values`, routers/queries.py :: `refresh_queries` · `PermissionError` from protected cells answers 403 and no longer stops the remaining queries.
+- services/aiclient.py :: `save_settings` and the callers in appsettings.py, extmarket.py, ossched.py, pysand.py · one module lock around each load, modify and save, and a unique temp file; two concurrent settings writes could lose one or leave invalid JSON, which wiped the stored REST token.
+- services/pquery.py :: `sqlite_table` · the path is percent-quoted in the `file:` URI, so `#`, `?` and `%` in a file name no longer open another file.
+- services/hostcalls.py :: `resolve` · `OverflowError` joins the caught errors so one bad key does not fail the batch.
+
+### File formats
+
+- services/xlsx/protect.py :: `sheet_out`, `book_out` · the stored value is already the legacy hash, so it is set with `already_hashed=True`; openpyxl's plain setters hashed it a second time and the password stopped working after a save.
+- services/xlsx/formulas.py, services/ods/formulas.py · the protected spans now cover single-quoted sheet names, so `'Filter (2)'`, `'Q1#2'`, `'a@b'` and `'a,b'` are no longer rewritten as function calls, anchors or separators on export.
+- services/xlsx/reader.py :: `_value` · dates are converted with the 1900 epoch whatever the workbook's date system; a 1904 workbook opened four years early.
+- services/xlsx/reader.py :: `read`, services/ods/__init__.py :: `read` · refuse an archive whose members unpack past the limit (zip bomb); ods also keeps a per-sheet budget of 2,000,000 cells for repeated rows and columns and notes what was left out.
+- services/xlsx/writer.py, arrays.py, services/ods/__init__.py · characters XML 1.0 forbids are stripped from text on export; one control character failed the .xlsx save and produced an .ods that would not open.
+- services/xlsx/imagefn.py :: `collect` · remote IMAGE sources are fetched only when external content is allowed in Preferences; `data:` sources are unaffected.
+- services/ods/__init__.py :: `_value_attrs` · a number outside the date range under a date format is written as a float.
+- services/xlsx/calcio.py, overlay.py, review.py · the per-sheet scanners accept every sheet part that is not a chartsheet, matching openpyxl, so a macro sheet or dialog sheet no longer shifts flags, shapes and comments onto the wrong sheet.
+- services/xlsx/shapexml.py :: `_color`, services/xlsx/chartex.py · a colour read from a file is kept only when it is six hex digits.
+- services/quotes/model.py :: `parse_date` · a numeric date text outside 1 to 2958465 is a bad argument.
+- services/vba/mlz.py :: `compress` · a chunk whose compressed body is longer than the chunk is written raw; 4097 and 4098 byte bodies overflowed the 12-bit size field.
+
+### Scripts and desktop shell (no log of their own)
+
+- formcel :: exit trap · kills the process group, so uvicorn and vite stop with the launcher.
+- frontend/boot_frontend.bat, engine/build_wasm.bat · the window starts after a first engine build (the called script changed the working directory) and a failed build stops the boot.
+- engine/build_wasm, build_wasm.bat · copy the built engine from `CARGO_TARGET_DIR` when it is set.
+- build_app :: `--clean` · removes the window's engine and reinstalls the Python engine module; build_app passes the Python it found to backend/oc_install as `FORMCEL_PYTHON`.
+- src-tauri/src/main.rs :: `spawn_engine` · sets `FORMCEL_HOST=127.0.0.1` and `FORMCEL_PARENT_PID`.
+- src-tauri/tauri.conf.json :: `bundle` · `license` is the SPDX id and `licenseFile` the path.
+
+### Open, recorded and not changed in 0.41.0
+
+- src-tauri/capabilities/default.json grants IPC to every 127.0.0.1 port; narrowing it needs a runtime capability once the port is known.
+- src-tauri/tauri.conf.json has `csp: null`; a real policy needs checking against workers, wasm and inline styles.
+- frontend/src/automation/scriptWorker.ts filters `import()` by source text only.
 
 ## v0.40.6 entries
 

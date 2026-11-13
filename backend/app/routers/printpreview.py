@@ -5,6 +5,7 @@ import zipfile
 
 from fastapi import APIRouter, HTTPException, Request, Response
 from pydantic import BaseModel, Field
+from starlette.concurrency import run_in_threadpool
 
 from ..services.store import FORMAT, now, store
 
@@ -46,7 +47,7 @@ async def import_fcel(request: Request, name: str = "Workbook.fcel") -> dict:
     data = await request.body()
     try:
         with zipfile.ZipFile(io.BytesIO(data)) as z:
-            return rewrite(z, name.rpartition(".")[0] or name)
+            return await run_in_threadpool(rewrite, z, name.rpartition(".")[0] or name)
     except (KeyError, ValueError, zipfile.BadZipFile):
         raise HTTPException(422, f"FormCel could not read {name}.")
 

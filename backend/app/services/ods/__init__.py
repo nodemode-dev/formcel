@@ -7,9 +7,11 @@ from xml.etree import ElementTree as ET
 from xml.sax.saxutils import escape, quoteattr
 
 from formcel_engine import reads_as_text
+from openpyxl.cell.cell import ILLEGAL_CHARACTERS_RE
 from openpyxl.utils import get_column_letter
 
 from ..xlsx.autofilter import filtered_rows
+from ..xlsx.reader import check_unpacked
 from . import cf, filters, numfmt, valid
 from .formulas import from_file, range_in, to_file
 
@@ -25,6 +27,7 @@ NS = {
 O, T, X, S, F, L = (f"{{{NS[k]}}}" for k in ("office", "table", "text", "style", "fo", "xlink"))
 EPOCH = dt.datetime(1899, 12, 30)
 MAX_REPEAT = 1000
+MAX_CELLS = 2_000_000
 UNITS = {"in": 96.0, "cm": 96 / 2.54, "mm": 96 / 25.4, "pt": 96 / 72, "pc": 16.0, "px": 1.0}
 LINES = {"solid": "thin", "dashed": "dashed", "dotted": "dotted", "double": "double"}
 
@@ -161,6 +164,7 @@ def _num(n: float) -> str:
 
 
 def read(data: bytes) -> dict:
+    check_unpacked(data)
     z = zipfile.ZipFile(io.BytesIO(data))
     root = ET.fromstring(z.read("content.xml"))
     styles_root = ET.fromstring(z.read("styles.xml")) if "styles.xml" in z.namelist() else None
@@ -201,6 +205,7 @@ def read(data: bytes) -> dict:
                 for key in (st.get(f"{S}name"), st.get(f"{S}display-name")):
                     if key:
                         cf_styles[key] = toks
+    budget = MAX_CELLS
     for tb in root.iter(f"{T}table"):
         cells, formats, styles, merges, links = [], [], [], [], []
         sizes, hidden_cols = [], []
@@ -219,7 +224,9 @@ def read(data: bytes) -> dict:
         for row in _rows(tb):
             rep = int(row.get(f"{T}number-rows-repeated", "1"))
             filled = any(ch.get(f"{O}value-type") or ch.get(f"{T}formula") or len(ch) for ch in row)
-            copies = min(rep, MAX_REPEAT) if filled else 0
+            copies = min(rep, MAX_REPEAT) if filled and budget > 0 else 0
+            if filled and budget <= 0:
+                notes["rows past the 2,000,000-cell limit left out"] += min(rep, MAX_REPEAT)
             h = row_px.get(row.get(f"{T}style-name") or "")
             for k in range(min(rep, MAX_REPEAT)):
                 if h:
@@ -235,7 +242,12 @@ def read(data: bytes) -> dict:
                         continue
                     crep = int(cell.get(f"{T}number-columns-repeated", "1"))
                     has = cell.get(f"{O}value-type") or cell.get(f"{T}formula") or len(cell) or cell.get(f"{T}style-name")
-                    for j in range(min(crep, MAX_REPEAT) if has else 0):
+                    want = min(crep, MAX_REPEAT) if has else 0
+                    take = min(want, budget)
+                    budget -= take
+                    if take < want:
+                        notes["cells beyond 2,000,000 left out"] += want - take
+                    for j in range(take):
                         rr, ccol = r + k, cc + j
                         if cell.tag == f"{T}table-cell":
                             raw, code, link = _cell(cell, notes)
@@ -522,6 +534,8 @@ def _value_attrs(kind: str, text: str, code: str | None, data_style) -> str:
     if kind == "n":
         vt = data_style(code)[1] if code else "float"
         n = float(text)
+        if vt == "date" and not -693593 < n < 2958466:
+            return f'office:value-type="float" office:value="{text}"'
         if vt == "date":
             d = EPOCH + dt.timedelta(days=n)
             return f'office:value-type="date" office:date-value="{d.isoformat(timespec="seconds")}"'
@@ -554,10 +568,12 @@ def _cell_xml(r, c, vals, res, codes, sts, merges, covered, links, cell_style, d
         h, w = merges[(r, c)]
         attrs.append(f'table:number-columns-spanned="{w}" table:number-rows-spanned="{h}"')
     kind, text = vals.get((r, c), ("", ""))
+    text = ILLEGAL_CHARACTERS_RE.sub("", text)
     shown = text
     if kind == "f":
         attrs.append(f"table:formula={quoteattr(to_file(text))}")
         rk, rt = res.get((r, c), ("t", ""))
+        rt = ILLEGAL_CHARACTERS_RE.sub("", rt)
         attrs.append(_value_attrs(rk, rt, code, data_style) if rk in ("n", "b") else 'office:value-type="string"' + (f" office:string-value={quoteattr(rt)}" if rk == "t" else ""))
         shown = rt
     elif kind in ("n", "b", "t", "e"):

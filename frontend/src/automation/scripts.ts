@@ -45,6 +45,7 @@ const a1 = (r0: number, c0: number, r1: number, c1: number) => `${colName(c0)}${
 export class ScriptRunner {
   private worker: Worker | null = null;
   private fnWorker: Worker | null = null;
+  private feeds = new Set<(ev: MessageEvent<Out>) => void>();
   private seq = 0;
   private current: { id: number; stop: (err: string) => void } | null = null;
   busy = false;
@@ -394,6 +395,8 @@ export class ScriptRunner {
 
   cancelStreams(): void {
     this.fnWorker?.postMessage({ t: 'cancel' } satisfies In);
+    for (const feed of this.feeds) this.fnWorker?.removeEventListener('message', feed);
+    this.feeds.clear();
   }
 
   async call(code: string, name: string, args: unknown[], stream?: (v: unknown) => void): Promise<unknown> {
@@ -404,6 +407,7 @@ export class ScriptRunner {
         if (ev.data.t === 'streamed' && ev.data.id === id) stream(ev.data.value);
       };
       w.addEventListener('message', feed);
+      this.feeds.add(feed);
     }
     return new Promise((resolve, reject) => {
       const timer = window.setTimeout(() => {
