@@ -889,7 +889,8 @@ impl Workbook {
             if !formulas && self.formulas.contains_key(&(s, ad)) {
                 continue;
             }
-            let text = if formulas { self.input(s, ad) } else { self.txt(s, ad) };
+            let typed = !formulas && !matches!(self.cell_val(s, ad), Value::Text(_));
+            let text = if formulas || typed { self.input(s, ad) } else { self.txt(s, ad) };
             let hay: Vec<char> = text.chars().collect();
             let mut out = String::new();
             let mut pos = 0;
@@ -905,7 +906,7 @@ impl Workbook {
                 }
                 out.extend(&hay[pos..]);
             }
-            let raw = if formulas { out } else { quote(&out) };
+            let raw = if formulas || (typed && !out.starts_with('=')) { out } else { quote(&out) };
             match by_sheet.iter_mut().find(|e| e.0 == s) {
                 Some(e) => e.1.push((ad, raw)),
                 None => by_sheet.push((s, vec![(ad, raw)])),
