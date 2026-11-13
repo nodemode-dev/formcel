@@ -60,6 +60,8 @@ def pandas_ready() -> bool:
 
 
 def run(code: str, args: list, reader=None, memory: int = 1536, before: list[str] | None = None) -> dict:
+    if os.name != "posix":
+        raise PyError("Python cells run on Linux and macOS only")
     if len(code) > MAX_CODE:
         raise PyError(f"the code is over {MAX_CODE} characters")
     cmd = [sys.executable, "-I", str(CHILD)]
