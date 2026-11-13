@@ -1067,6 +1067,7 @@ class Store:
 
     def purge(self, wid: str) -> None:
         self.path(wid, trashed=True).unlink()
+        shutil.rmtree(self.versions.folder(wid), ignore_errors=True)
 
 
 _store: Store | None = None
