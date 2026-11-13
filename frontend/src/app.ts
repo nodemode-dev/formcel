@@ -350,7 +350,7 @@ export class App {
         await this.saving;
       },
       openWorkbook: (id) => void this.openWorkbook(id),
-      create: (template) => void this.create(template),
+      create: (template) => void this.create(template).catch((e) => this.status(e instanceof Error ? e.message : 'The workbook could not be created.', true)),
       importFile: (file) => void this.importFile(file),
       page: (sheet) => this.pageOf(sheet),
       setPage: async (sheet, page) => {

@@ -281,12 +281,12 @@ export class Home {
     if (!act) return;
     const id = act.closest<HTMLElement>('[data-key]')?.dataset.key ?? '';
     switch (act.dataset.a) {
-      case 'blank': return void this.hooks.create();
+      case 'blank': return this.make();
       case 'openfile': return void runCommand('file.open');
       case 'back': return this.lastId ? this.hooks.open(this.lastId) : undefined;
       case 'pastedata': return this.hooks.pasteData();
       case 'open': return this.hooks.open(id);
-      case 'use': return void this.hooks.create(id);
+      case 'use': return this.make(id);
       case 'trash': return this.hooks.trash(id);
       case 'restore': return this.hooks.restore(id);
       case 'purge':
@@ -299,6 +299,10 @@ export class Home {
         }, 3000);
         return;
     }
+  }
+
+  private make(template?: string): void {
+    void Promise.resolve(this.hooks.create(template)).catch(() => this.say('The workbook could not be created.', true));
   }
 
   say(text: string, error = false): void {
@@ -327,7 +331,7 @@ export class Home {
     const card = el(`<div class="fc-card"><button type="button" class="fc-card-open"><span class="fc-card-body"><span class="fc-card-name"></span><span class="fc-card-meta"></span></span></button></div>`);
     const open = card.querySelector<HTMLElement>('.fc-card-open')!;
     open.prepend(thumbBox());
-    onPreviewGesture(open, () => openPreview(t, (id) => this.hooks.create(id)), () => this.hooks.create(t.id));
+    onPreviewGesture(open, () => openPreview(t, (id) => this.make(id)), () => this.make(t.id));
     return card;
   };
 
