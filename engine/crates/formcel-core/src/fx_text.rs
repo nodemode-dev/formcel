@@ -257,7 +257,7 @@ impl Eval<'_> {
                         return Err(ErrKind::Value);
                     }
                     let at = (st as usize - 1).min(s.len());
-                    let to = (at + k as usize).min(s.len());
+                    let to = at.saturating_add(k as usize).min(s.len());
                     let mut out: String = s[..at].iter().collect();
                     out.push_str(&self.t(a, 3)?);
                     out.extend(s[to..].iter());
