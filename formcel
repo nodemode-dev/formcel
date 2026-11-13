@@ -12,5 +12,10 @@ if [ -d frontend ]; then
   pids+=($!)
 fi
 
-trap 'kill "${pids[@]}" 2>/dev/null' EXIT
+kill_tree() {
+  local p
+  for p in $(pgrep -P "$1"); do kill_tree "$p"; done
+  kill "$1" 2>/dev/null || true
+}
+trap 'for p in "${pids[@]}"; do kill_tree "$p"; done' EXIT
 wait
