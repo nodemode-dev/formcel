@@ -1,6 +1,7 @@
 export type Request =
   | { id: number; op: 'version' }
   | { id: number; op: 'workbook.new' }
+  | { id: number; op: 'workbook.drop'; book: number }
   | { id: number; op: 'cell.set'; book: number; sheet: number; a1: string; raw: string }
   | { id: number; op: 'cell.get'; book: number; sheet: number; a1: string }
   | { id: number; op: 'apply'; book: number; sheet: number; edits: Edit[]; remote?: boolean }

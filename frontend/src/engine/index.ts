@@ -42,6 +42,10 @@ export class EngineClient {
     return Number(await this.call({ op: 'workbook.new' }));
   }
 
+  async dropWorkbook(book: number): Promise<void> {
+    await this.call({ op: 'workbook.drop', book });
+  }
+
   async setCell(book: number, a1: string, raw: string, sheet = 0): Promise<string> {
     return String(await this.call({ op: 'cell.set', book, sheet, a1, raw }));
   }

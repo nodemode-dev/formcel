@@ -7,6 +7,7 @@ interface Exports {
   fc_free(ptr: number, len: number): void;
   fc_version(): number;
   fc_workbook_new(): number;
+  fc_workbook_drop(book: number): void;
   fc_set(book: number, sheet: number, a1: number, a1Len: number, raw: number, rawLen: number): number;
   fc_get(book: number, sheet: number, a1: number, a1Len: number): number;
   fc_apply(book: number, sheet: number, edits: number, len: number): number;
@@ -337,6 +338,10 @@ function run(x: Exports, req: Request): Value {
       return out(x, x.fc_version());
     case 'workbook.new':
       return x.fc_workbook_new();
+    case 'workbook.drop':
+      x.fc_workbook_drop(req.book);
+      rcBooks.delete(req.book);
+      return null;
     case 'cell.set':
       return withStrings(x, [req.a1, req.raw], ([a, al, r, rl]) => out(x, x.fc_set(req.book, req.sheet, a, al, r, rl)));
     case 'cell.get':
