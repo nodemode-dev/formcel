@@ -103,6 +103,19 @@
 - **No icon libraries:** the window is vanilla TypeScript with inline `currentColor` SVG icons and token-driven dark and light themes.
 - **Tested:** Python tests for the guard, formulas, the .xlsx round trip and script runners, and a window test under a slow network and processor.
 
+## Built for agents
+
+The window, the command line and the MCP server call the same command catalogue, so what you can click an agent can run. The terminal dock (Mod+J) opens shells, Claude Code tabs with FormCel's tools attached, and a Chat tab; the engine runs them and Claude Code is your own install.
+
+```sh
+./formcel cli list sort             # the open window's commands, filtered by a word
+./formcel cli run ribbon.collapse   # run one by id
+./formcel mcp                       # MCP server on stdio for Claude Code, Codex and Cursor
+./formcel agents install            # register FormCel with Claude Code, Codex and Cursor for your account
+```
+
+`.mcp.json`, `.codex/config.toml` and `.cursor/mcp.json` are already wired in this repo. The first command an outside agent runs asks you once, in the window, to allow outside agents. See [`AGENTS.md`](AGENTS.md).
+
 ## Download
 
 | Platform | Download | Release |
