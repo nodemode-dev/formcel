@@ -84,7 +84,7 @@ export class Frame {
   withs: any[] = [];
   onErr: { mode: 'none' | 'goto' | 'next'; label: string } = { mode: 'none', label: '' };
   inHandler = false;
-  failed: { block: Stmt[]; idx: number } | null = null;
+  failed: { block: Stmt[]; idx: number; inline?: boolean } | null = null;
   line = 0;
   topIdx = 0;
   failedTop = 0;
@@ -590,8 +590,8 @@ export class Interp {
     return m;
   }
 
-  async execBlock(stmts: Stmt[], f: Frame): Promise<Signal | undefined> {
-    let i = 0;
+  async execBlock(stmts: Stmt[], f: Frame, start = 0): Promise<Signal | undefined> {
+    let i = start;
     while (i < stmts.length) {
       const s = stmts[i];
       let sig: Signal | undefined;
@@ -615,6 +615,17 @@ export class Interp {
         f.failedTop = f.topIdx;
         f.inHandler = true;
         sig = { t: 'goto', label: f.onErr.label };
+        const top = f.proc?.body;
+        const at = top && top !== stmts ? this.labels(top).get(f.onErr.label) : undefined;
+        if (top && at !== undefined) {
+          f.failed.inline = true;
+          const hs = await this.execBlock(top, f, at);
+          if (hs && hs.t === 'jump' && hs.block === stmts) {
+            i = hs.idx;
+            continue;
+          }
+          return hs ?? { t: 'exit', what: 'sub' };
+        }
       }
       if (sig) {
         if (sig.t === 'goto') {
@@ -743,7 +754,7 @@ export class Interp {
         if (!fl) fail(20);
         f.failed = null;
         const top = f.proc ? f.proc.body : fl.block;
-        if (fl.block !== top) return { t: 'jump', block: top, idx: s.mode === 'next' ? f.failedTop + 1 : f.failedTop };
+        if (fl.block !== top && !fl.inline) return { t: 'jump', block: top, idx: s.mode === 'next' ? f.failedTop + 1 : f.failedTop };
         return { t: 'jump', block: fl.block, idx: s.mode === 'next' ? fl.idx + 1 : fl.idx };
       }
       case 'exit':
