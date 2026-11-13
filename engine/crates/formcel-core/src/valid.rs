@@ -172,6 +172,11 @@ pub(crate) fn carve(m: Area, cut: Area) -> Vec<Area> {
     out
 }
 
+pub(crate) fn moved_to(v: &Validation, area: Area, dr: i64, dc: i64) -> Validation {
+    let shift = |s: &String| if (dr != 0 || dc != 0) && s.trim_start().starts_with('=') { formula::offset_text(s, dr, dc) } else { s.clone() };
+    Validation { area, a: shift(&v.a), b: shift(&v.b), ..v.clone() }
+}
+
 fn same(x: &Value, y: &Value) -> bool {
     match (x, y) {
         (Value::Number(a), Value::Number(b)) => (a - b).abs() <= 1e-9 * b.abs().max(1.0),
@@ -225,7 +230,7 @@ impl Workbook {
         let mut after: Vec<Validation> = Vec::new();
         for v in &before {
             for piece in carve(v.area, area) {
-                after.push(Validation { area: piece, ..v.clone() });
+                after.push(moved_to(v, piece, i64::from(piece.r0) - i64::from(v.area.r0), i64::from(piece.c0) - i64::from(v.area.c0)));
             }
         }
         after.extend(new);
