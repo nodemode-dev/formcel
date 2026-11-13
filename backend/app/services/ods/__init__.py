@@ -26,6 +26,7 @@ NS = {
 O, T, X, S, F, L = (f"{{{NS[k]}}}" for k in ("office", "table", "text", "style", "fo", "xlink"))
 EPOCH = dt.datetime(1899, 12, 30)
 MAX_REPEAT = 1000
+MAX_CELLS = 2_000_000
 UNITS = {"in": 96.0, "cm": 96 / 2.54, "mm": 96 / 25.4, "pt": 96 / 72, "pc": 16.0, "px": 1.0}
 LINES = {"solid": "thin", "dashed": "dashed", "dotted": "dotted", "double": "double"}
 
@@ -203,6 +204,7 @@ def read(data: bytes) -> dict:
                 for key in (st.get(f"{S}name"), st.get(f"{S}display-name")):
                     if key:
                         cf_styles[key] = toks
+    budget = MAX_CELLS
     for tb in root.iter(f"{T}table"):
         cells, formats, styles, merges, links = [], [], [], [], []
         sizes, hidden_cols = [], []
@@ -221,7 +223,9 @@ def read(data: bytes) -> dict:
         for row in _rows(tb):
             rep = int(row.get(f"{T}number-rows-repeated", "1"))
             filled = any(ch.get(f"{O}value-type") or ch.get(f"{T}formula") or len(ch) for ch in row)
-            copies = min(rep, MAX_REPEAT) if filled else 0
+            copies = min(rep, MAX_REPEAT) if filled and budget > 0 else 0
+            if filled and budget <= 0:
+                notes["rows past the 2,000,000-cell limit left out"] += min(rep, MAX_REPEAT)
             h = row_px.get(row.get(f"{T}style-name") or "")
             for k in range(min(rep, MAX_REPEAT)):
                 if h:
@@ -237,7 +241,12 @@ def read(data: bytes) -> dict:
                         continue
                     crep = int(cell.get(f"{T}number-columns-repeated", "1"))
                     has = cell.get(f"{O}value-type") or cell.get(f"{T}formula") or len(cell) or cell.get(f"{T}style-name")
-                    for j in range(min(crep, MAX_REPEAT) if has else 0):
+                    want = min(crep, MAX_REPEAT) if has else 0
+                    take = min(want, budget)
+                    budget -= take
+                    if take < want:
+                        notes["cells beyond 2,000,000 left out"] += want - take
+                    for j in range(take):
                         rr, ccol = r + k, cc + j
                         if cell.tag == f"{T}table-cell":
                             raw, code, link = _cell(cell, notes)
