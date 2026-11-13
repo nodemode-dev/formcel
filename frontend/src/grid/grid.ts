@@ -243,6 +243,7 @@ export class Grid {
     r0: number;
     c0: number;
     sheet: number;
+    book: number;
   } | null = null;
   private overlay: ((ctx: CanvasRenderingContext2D, box: (r0: number, c0: number, r1: number, c1: number) => [number, number, number, number]) => void) | null = null;
   private calcDraw: ((ctx: CanvasRenderingContext2D, box: (r0: number, c0: number, r1: number, c1: number) => [number, number, number, number], view: { z: number; ox: number; oy: number }) => void) | null = null;
@@ -1825,7 +1826,7 @@ export class Grid {
 
   async pasteWith(what: string, op: string, skip: boolean, transpose: boolean): Promise<string> {
     const src = this.copied;
-    if (!src || this.book < 0) return '';
+    if (!src || this.book < 0 || src.book !== this.book) return '';
     const area = `${src.r0},${src.c0},${src.r0 + src.h - 1},${src.c0 + src.w - 1}`;
     return this.runTool('pastespecial', area, String(this.ar), String(this.ac), what, op, skip ? '1' : '0', transpose ? '1' : '0', String(src.sheet));
   }
@@ -1885,7 +1886,7 @@ export class Grid {
 
   copiedSource(): { sheet: number; r0: number; c0: number; r1: number; c1: number } | null {
     const s = this.copied;
-    return s ? { sheet: s.sheet, r0: s.r0, c0: s.c0, r1: s.r0 + s.h - 1, c1: s.c0 + s.w - 1 } : null;
+    return s && s.book === this.book ? { sheet: s.sheet, r0: s.r0, c0: s.c0, r1: s.r0 + s.h - 1, c1: s.c0 + s.w - 1 } : null;
   }
 
   async pasteLayers(layers: string, transpose: boolean): Promise<string> {
@@ -3585,7 +3586,7 @@ export class Grid {
       const values = new Map<number, string>();
       for (const [r, c, v] of vals) values.set(KEY(r - s.r0, c - s.c0), v);
       const widths = Array.from({ length: s.c1 - s.c0 + 1 }, (_, i) => this.cols.size(s.c0 + i));
-      this.copied = { text, h: s.r1 - s.r0 + 1, w: s.c1 - s.c0 + 1, items, raw, values, linked, widths, r0: s.r0, c0: s.c0, sheet };
+      this.copied = { text, h: s.r1 - s.r0 + 1, w: s.c1 - s.c0 + 1, items, raw, values, linked, widths, r0: s.r0, c0: s.c0, sheet, book };
     });
   }
 
