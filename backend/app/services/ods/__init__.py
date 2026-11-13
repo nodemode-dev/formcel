@@ -534,6 +534,8 @@ def _value_attrs(kind: str, text: str, code: str | None, data_style) -> str:
     if kind == "n":
         vt = data_style(code)[1] if code else "float"
         n = float(text)
+        if vt == "date" and not -693593 < n < 2958466:
+            return f'office:value-type="float" office:value="{text}"'
         if vt == "date":
             d = EPOCH + dt.timedelta(days=n)
             return f'office:value-type="date" office:date-value="{d.isoformat(timespec="seconds")}"'
