@@ -705,6 +705,9 @@ export class Collab {
         d.form.hidden = true;
         resolve(null);
       };
+      d.form.onkeydown = (e) => {
+        if (e.key === 'Escape') resolve(null);
+      };
       d.show();
     });
   }
