@@ -633,18 +633,21 @@ export class Interp {
     return undefined;
   }
 
+  private async pulse(): Promise<void> {
+    if ((++this.ticks & 0x1ff) !== 0) return;
+    if (this.aborted) throw new StopRun('stop');
+    const now = Date.now();
+    if (this.deadline && now > this.deadline) {
+      this.aborted = true;
+      fail(1004, 'The macro ran longer than its time limit and was stopped.');
+    }
+    if (now - this.lastYield > 40) await this.yieldNow();
+  }
+
   private async exec(s: Stmt, f: Frame): Promise<Signal | undefined> {
     f.line = s.line;
     this.curLine = s.line;
-    if ((++this.ticks & 0x1ff) === 0) {
-      if (this.aborted) throw new StopRun('stop');
-      const now = Date.now();
-      if (this.deadline && now > this.deadline) {
-        this.aborted = true;
-        fail(1004, 'The macro ran longer than its time limit and was stopped.');
-      }
-      if (now - this.lastYield > 40) await this.yieldNow();
-    }
+    await this.pulse();
     if (this.stepMode !== 'run' || this.breakpoints.size) await this.checkpoint(s, f);
     switch (s.k) {
       case 'nop':
@@ -896,7 +899,7 @@ export class Interp {
       await this.endMark(s.endLine, f);
       const next = toNum(ref.v) + step;
       ref.v = t.name === 'variant' ? next : coerce(next, t);
-      if (step === 0 && (++this.ticks & 0xfff) === 0) await this.yieldNow();
+      await this.pulse();
     }
     return undefined;
   }
@@ -961,7 +964,7 @@ export class Interp {
         const c = toBool(await this.val(await this.eval(s.cond, f)));
         if (s.until ? c : !c) break;
       }
-      if (!s.cond && (++this.ticks & 0xfff) === 0) await this.yieldNow();
+      await this.pulse();
     }
     return undefined;
   }
