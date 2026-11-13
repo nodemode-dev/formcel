@@ -373,14 +373,14 @@ function cartesian(spec: ChartSpec, d0: ChartData, b: Box): string {
   const lineSeries = isLine ? d.series.map((s, i) => ({ s, i })) : sec;
   const cum = new Array<number>(n).fill(0);
   lineSeries.forEach(({ s, i }) => {
-    const pts: [number, number, number][] = [];
+    const pts: [number, number, number, number][] = [];
     const lower: [number, number][] = [];
     s.vals.forEach((v, k) => {
       if (!num(v)) return;
       const x = p.x + band * (k + 0.5);
       const below = area && stacked ? cum[k] : 0;
       if (area && stacked) cum[k] += v;
-      pts.push([x, secIdx.has(i) && sscale ? toSec(v) : toPx(area && stacked ? cum[k] : v), v]);
+      pts.push([x, secIdx.has(i) && sscale ? toSec(v) : toPx(area && stacked ? cum[k] : v), v, k]);
       lower.push([x, area && stacked ? toPx(below) : baseV]);
     });
     if (!pts.length) return;
@@ -390,9 +390,9 @@ function cartesian(spec: ChartSpec, d0: ChartData, b: Box): string {
     const eb = stacked ? undefined : (spec.errBars ?? []).find((e) => e.series === i || e.series < 0);
     const yOf = (v: number) => (secIdx.has(i) && sscale ? toSec(v) : toPx(v));
     const all = eb ? s.vals.filter(num) : [];
-    for (const [x, y, v] of pts) {
+    for (const [x, y, v, k] of pts) {
       if (eb) {
-        const [dn, up] = errAmount(eb, v, all);
+        const [dn, up] = errAmount(eb, v, all, k);
         out.push(errV(x, y, yOf(v - dn), yOf(v + up)));
       }
       out.push(`<circle cx="${r1(x)}" cy="${r1(y)}" r="3" fill="${color(i)}"/>`);
@@ -420,8 +420,9 @@ function xy(spec: ChartSpec, d: ChartData, b: Box): string {
   ys.forEach((s, i) => {
     const eb = (spec.errBars ?? []).find((e) => e.series === i || e.series < 0);
     if (!eb) return;
-    for (const v of s.vals.filter(num)) {
-      const [dn, up] = errAmount(eb, v, all);
+    for (const [k, v] of s.vals.entries()) {
+      if (!num(v)) continue;
+      const [dn, up] = errAmount(eb, v, all, k);
       ylo = Math.min(ylo, v - dn);
       yhi = Math.max(yhi, v + up);
     }
@@ -462,7 +463,7 @@ function xy(spec: ChartSpec, d: ChartData, b: Box): string {
       if (!num(v)) return;
       const r = bubble ? 5 + 20 * Math.sqrt(Math.max(0, sizes[k] ?? 0) / maxSize) : 4;
       if (eb) {
-        const [dn, up] = errAmount(eb, v, own);
+        const [dn, up] = errAmount(eb, v, own, k);
         out.push(errV(px(xs[k]), py(v), py(v - dn), py(v + up)));
       }
       out.push(`<circle cx="${r1(px(xs[k]))}" cy="${r1(py(v))}" r="${r1(r)}" fill="${color(i)}" fill-opacity="${bubble ? 0.55 : 0.85}"/>`);
