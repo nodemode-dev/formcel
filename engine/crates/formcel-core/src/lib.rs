@@ -116,7 +116,9 @@ impl Value {
         }
         if let Some(p) = plain.strip_suffix('%') {
             if let Ok(n) = p.trim().parse::<f64>() {
-                return Value::Number(n / 100.0);
+                if n.is_finite() {
+                    return Value::Number(n / 100.0);
+                }
             }
         }
         let (neg, body) = match plain.strip_prefix('-') {
