@@ -18,7 +18,7 @@ SUPPORTED = ("2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05")
 INSTRUCTIONS = ("FormCel is a spreadsheet app open on this computer. Every action in its window is a command: find one with "
                 "list_commands, read it with describe_command, and run it in the open window with run_command. The person sees "
                 "every change happen. The terminal, Claude Code and chat commands are the person's own and are refused.")
-SWITCH = "Allow outside agents in FormCel's Preferences"
+SWITCH = "Allow outside agents in FormCel's Preferences, Trust Center"
 DECLINE_SECONDS = 600
 _sessions: dict[str, str] = {}
 _declined_until = 0.0
