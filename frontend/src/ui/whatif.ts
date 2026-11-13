@@ -20,7 +20,8 @@ const rows = (t: string): string[][] => t.split('\n').filter(Boolean).map((l) =>
 
 const input = (k: string, label: string, hint = '') => `<label class="fc-fmt-label">${label}<input class="fc-fmt-input" data-k="${k}" spellcheck="false" autocomplete="off"${hint ? ` placeholder="${hint}"` : ''}></label>`;
 const area = (k: string, label: string, hint = '') => `<label class="fc-fmt-label">${label}<textarea class="fc-fmt-input fc-wi-text" data-k="${k}" spellcheck="false" rows="4"${hint ? ` placeholder="${hint}"` : ''}></textarea></label>`;
-const pick = (k: string, label: string, opts: [string, string][]) => `<label class="fc-fmt-label">${label}<select class="fc-fmt-input" data-k="${k}">${opts.map(([v, t]) => `<option value="${v}">${t}</option>`).join('')}</select></label>`;
+const html = (s: string): string => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
+const pick = (k: string, label: string, opts: [string, string][]) => `<label class="fc-fmt-label">${label}<select class="fc-fmt-input" data-k="${k}">${opts.map(([v, t]) => `<option value="${html(v)}">${html(t)}</option>`).join('')}</select></label>`;
 const check = (k: string, label: string, on = false) => `<label class="fc-sort-check"><input type="checkbox" data-k="${k}"${on ? ' checked' : ''}>${label}</label>`;
 const OUT = pick('dest', 'Output options', [['ply', 'New worksheet ply'], ['book', 'New workbook'], ['range', 'Output range']]) + input('plyname', 'New worksheet ply name, optional') + input('outcell', 'Output range, a cell such as Sheet2!B3', 'A1');
 const settle = (): Promise<void> => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(() => done())));
@@ -475,7 +476,7 @@ export class WhatIf {
 
   private mergeForm(): void {
     const names = this.host.sheetNames();
-    const b = this.box('scmerge', () => new Box('Merge Scenarios', pick('from', 'Merge scenarios from sheet', names.map((n, i) => [String(i), n] as [string, string])), [], 'Merge', async (bx) => {
+    const b = this.box('scmerge', () => new Box('Merge Scenarios', pick('from', 'Merge scenarios from sheet', []), [], 'Merge', async (bx) => {
       const from = bx.get('from');
       if (from === this.sheet()) return bx.say('Choose a different sheet to merge from.', true);
       const r = this.result(await this.run(['sc.merge', from, this.sheet()]));
