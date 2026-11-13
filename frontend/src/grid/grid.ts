@@ -244,6 +244,7 @@ export class Grid {
     c0: number;
     sheet: number;
     book: number;
+    cut: boolean;
   } | null = null;
   private overlay: ((ctx: CanvasRenderingContext2D, box: (r0: number, c0: number, r1: number, c1: number) => [number, number, number, number]) => void) | null = null;
   private calcDraw: ((ctx: CanvasRenderingContext2D, box: (r0: number, c0: number, r1: number, c1: number) => [number, number, number, number], view: { z: number; ox: number; oy: number }) => void) | null = null;
@@ -2904,7 +2905,7 @@ export class Grid {
     const r = Math.min(Math.max(0, to.r), MAX_ROWS - h);
     const c = Math.min(Math.max(0, to.c), MAX_COLS - w);
     if (r === s.r0 && c === s.c0) return;
-    await this.remember('', s);
+    await this.remember('', s, true);
     if (!this.copied) return;
     const mark = await this.engine.undoMark(this.book);
     await this.clearSelection();
@@ -3552,7 +3553,7 @@ export class Grid {
 
     document.addEventListener('cut', (e) => {
       if (document.activeElement !== el) return;
-      this.writeClipboard(e);
+      this.writeClipboard(e, true);
       void this.clearSelection();
     });
 
@@ -3570,7 +3571,7 @@ export class Grid {
     });
   }
 
-  private remember(text: string, s: Range): Promise<void> {
+  private remember(text: string, s: Range, cut = false): Promise<void> {
     this.copied = null;
     if ((s.r1 - s.r0 + 1) * (s.c1 - s.c0 + 1) > 100000) return Promise.resolve();
     const book = this.book;
@@ -3586,7 +3587,7 @@ export class Grid {
       const values = new Map<number, string>();
       for (const [r, c, v] of vals) values.set(KEY(r - s.r0, c - s.c0), v);
       const widths = Array.from({ length: s.c1 - s.c0 + 1 }, (_, i) => this.cols.size(s.c0 + i));
-      this.copied = { text, h: s.r1 - s.r0 + 1, w: s.c1 - s.c0 + 1, items, raw, values, linked, widths, r0: s.r0, c0: s.c0, sheet, book };
+      this.copied = { text, h: s.r1 - s.r0 + 1, w: s.c1 - s.c0 + 1, items, raw, values, linked, widths, r0: s.r0, c0: s.c0, sheet, book, cut };
     });
   }
 
@@ -3632,7 +3633,7 @@ export class Grid {
           const formulas = kind === 'all' || kind === 'formulas' || kind === 'formulas-formats' || kind === 'no-borders';
           if (formulas && raw.startsWith('=')) {
             moved.push(edits.length);
-            moves.push([raw, top + i - (src.r0 + si), left + j - (src.c0 + sj)]);
+            moves.push(src.cut ? [raw, 0, 0] : [raw, top + i - (src.r0 + si), left + j - (src.c0 + sj)]);
           }
           edits.push([top + i, left + j, formulas ? raw : src.values.get(k) ?? '']);
         }
@@ -3667,10 +3668,11 @@ export class Grid {
       this.emitView();
     }
     await this.engine.undoGroup(this.book, mark);
+    if (src.cut && this.copied === src) this.copied = null;
     this.select(top, left, Math.min(MAX_ROWS - 1, top + h - 1), Math.min(MAX_COLS - 1, left + w - 1));
   }
 
-  private writeClipboard(e: ClipboardEvent): void {
+  private writeClipboard(e: ClipboardEvent, cut = false): void {
     {
       const s = this.sel();
       const inCache = this.wins.some((w) => !!w && s.r0 >= w.r0 && s.r1 <= w.r1 && s.c0 >= w.c0 && s.c1 <= w.c1) && (s.r1 - s.r0 + 1) * (s.c1 - s.c0 + 1) <= 100000;
@@ -3683,10 +3685,10 @@ export class Grid {
           out.push(row.join('\t'));
         }
         e.clipboardData.setData('text/plain', out.join('\n'));
-        this.remember(out.join('\n'), s);
+        this.remember(out.join('\n'), s, cut);
       } else {
         void this.selectionTSV().then((t) => {
-          this.remember(t, s);
+          this.remember(t, s, cut);
           return navigator.clipboard?.writeText(t);
         }).catch(() => undefined);
       }
