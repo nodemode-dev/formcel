@@ -725,8 +725,8 @@ impl Workbook {
         };
         let mut best: (f64, f64) = (x0, f64::INFINITY);
         let note = |x: f64, f: f64, best: &mut (f64, f64)| {
-            if f.abs() < best.1 {
-                *best = (x, f.abs());
+            if f.abs() < best.1.abs() {
+                *best = (x, f);
             }
         };
         let f0 = probe(self, x0);
@@ -793,8 +793,8 @@ impl Workbook {
         self.set_raw(change.0, change.1, &original);
         self.recalc(&[change]);
         let ok = match tol {
-            Some(t) => best.1 <= t,
-            None => best.1 <= 1e-3 * target.abs().max(1.0).min(1e3) || best.1 <= 1e-3,
+            Some(t) => best.1.abs() <= t,
+            None => best.1.abs() <= 1e-3 * target.abs().max(1.0).min(1e3) || best.1.abs() <= 1e-3,
         };
         let status = if ok { "ok" } else if iters >= cap { "stop" } else { "fail" };
         let force = a.get(6).is_some_and(|s| s == "force");
