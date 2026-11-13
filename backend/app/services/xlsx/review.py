@@ -190,8 +190,10 @@ def sheet_paths(z: zipfile.ZipFile) -> list[str]:
     out = []
     for m in re.finditer(r"<(?:\w+:)?sheet\b([^>]*)/?>", wb):
         rid = re.search(r'r:id="([^"]+)"', m.group(1)) or re.search(r'\bid="([^"]+)"', m.group(1))
-        if rid and rid.group(1) in rels and "worksheet" in rels[rid.group(1)][0]:
-            out.append(_resolve("xl/workbook.xml", rels[rid.group(1)][1]))
+        if rid and rid.group(1) in rels and not rels[rid.group(1)][0].endswith("/chartsheet"):
+            path = _resolve("xl/workbook.xml", rels[rid.group(1)][1])
+            if path in z.namelist():
+                out.append(path)
     return out
 
 

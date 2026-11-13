@@ -125,8 +125,9 @@ def _sheet_paths(zf: zipfile.ZipFile) -> list[str]:
         a = {k.decode(): v.decode() for k, v in ATTR.findall(m.group(1))}
         rid = next((v for k, v in a.items() if k.endswith(":id") or k == "id"), None)
         t, kind = target.get(rid, ("", ""))
-        if kind.endswith("/worksheet"):
-            out.append(t.lstrip("/") if t.startswith("/") else "xl/" + t)
+        path = t.lstrip("/") if t.startswith("/") else "xl/" + t
+        if t and not kind.endswith("/chartsheet") and path in zf.namelist():
+            out.append(path)
     return out
 
 
