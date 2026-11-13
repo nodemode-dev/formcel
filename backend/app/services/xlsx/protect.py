@@ -58,7 +58,7 @@ def sheet_out(ws, lines: list[str]) -> None:
             for name, attr in ACTIONS.items():
                 setattr(p, attr, name not in allow)
             if f[3]:
-                p.password = f[3]
+                p.set_password(f[3], already_hashed=True)
         elif f[0] == "C" and len(f) >= 4:
             r, c, v = int(f[1]), int(f[2]), int(f[3])
             ws.cell(row=r + 1, column=c + 1).protection = Protection(locked=not v & 1, hidden=bool(v & 2))
@@ -80,6 +80,8 @@ def book_out(wb, lines: list[str]) -> None:
         if f[0] != "B" or len(f) < 5:
             continue
         if f[1] == "1":
-            wb.security = WorkbookProtection(lockStructure=True, workbookPassword=f[3] or None)
+            wb.security = WorkbookProtection(lockStructure=True)
+            if f[3]:
+                wb.security.set_workbook_password(f[3], already_hashed=True)
         if f[4] == "1":
             wb.custom_doc_props.append(BoolProperty(name="_MarkAsFinal", value=True))
