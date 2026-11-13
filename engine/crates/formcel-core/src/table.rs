@@ -44,7 +44,11 @@ fn overlaps(a: Area, b: Area) -> bool {
 
 impl Table {
     pub fn data(&self) -> (u32, u32) {
-        (self.area.r0 + u32::from(self.header), self.area.r1 - u32::from(self.totals))
+        (self.area.r0 + u32::from(self.header), self.area.r1.saturating_sub(u32::from(self.totals)))
+    }
+
+    fn has_body(&self) -> bool {
+        self.area.r1 - self.area.r0 >= u32::from(self.header) + u32::from(self.totals)
     }
 
     pub fn filter_area(&self) -> Area {
@@ -114,7 +118,7 @@ impl Table {
             button: flags.contains('b'),
             types: if p.len() >= 6 + 4 * count { (0..count).map(|i| p[6 + 3 * count + i].clone()).collect() } else { Vec::new() },
         };
-        (t.data().0 <= t.data().1).then_some(t)
+        t.has_body().then_some(t)
     }
 
     fn col_index(&self, name: &str) -> Option<usize> {
@@ -481,7 +485,7 @@ impl Workbook {
                 t.types.resize(w, String::new());
             }
             t.area = want.area;
-            if t.data().0 > t.data().1 {
+            if !t.has_body() {
                 self.undo_group(mark);
                 return Err(EngineError::BadStyle("a table needs a header row and a data row".into()));
             }
@@ -881,7 +885,7 @@ impl Workbook {
                 t.cols = unique_names(&t.cols);
             }
             t.area = area;
-            if t.data().0 > t.data().1 || (t.area.c1 - t.area.c0 + 1) as usize != t.cols.len() {
+            if !t.has_body() || (t.area.c1 - t.area.c0 + 1) as usize != t.cols.len() {
                 continue;
             }
             out.push(t);
