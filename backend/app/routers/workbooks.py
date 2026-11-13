@@ -90,7 +90,10 @@ async def preview_file(request: Request, name: str, delimiter: str | None = None
         raise HTTPException(413, "That file is over 100 MB.")
     if name.rpartition(".")[2].lower() not in TEXT_FILES:
         raise HTTPException(415, "A preview is only for .csv, .tsv and .txt files.")
-    return await run_in_threadpool(csvio.preview, data, name, delimiter)
+    try:
+        return await run_in_threadpool(csvio.preview, data, name, delimiter)
+    except ValueError as e:
+        raise HTTPException(422, f"FormCel could not read {name}: {e}")
 
 
 @router.post("/import", status_code=201)
@@ -102,7 +105,10 @@ async def import_file(request: Request, name: str = "Imported workbook.xlsx", de
     ext = ext.lower()
     if ext in TEXT_FILES:
         cols = {int(x) for x in text.split(",") if x.strip().isdigit()}
-        return await run_in_threadpool(store().import_csv, data, name, delimiter, cols, max_rows)
+        try:
+            return await run_in_threadpool(store().import_csv, data, name, delimiter, cols, max_rows)
+        except ValueError as e:
+            raise HTTPException(422, f"FormCel could not read {name}: {e}")
     if ext in ("pdf", "html", "htm", "paste"):
         try:
             return await run_in_threadpool(store().import_tables, data, stem or name, {"pdf": "pdf", "paste": "paste"}.get(ext, "html"))
