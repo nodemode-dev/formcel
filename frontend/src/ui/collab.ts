@@ -998,7 +998,12 @@ export class Collab {
   }
 
   private async restoreVersion(v: Version): Promise<void> {
-    await call('POST', `/api/workbooks/${this.id}/versions/${v.id}/restore`).catch((e: unknown) => this.refused(e instanceof Error ? e.message : 'Not restored.'));
+    try {
+      await call('POST', `/api/workbooks/${this.id}/versions/${v.id}/restore`);
+    } catch (e) {
+      this.refused(e instanceof Error ? e.message : 'Not restored.');
+      return;
+    }
     this.host.reload();
   }
 
