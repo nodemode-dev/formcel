@@ -859,6 +859,9 @@ impl Workbook {
                         t.cols.insert(k, String::new());
                         t.calc.insert(k, String::new());
                         t.kept.insert(k, String::new());
+                        if !t.types.is_empty() {
+                            t.types.insert(k.min(t.types.len()), String::new());
+                        }
                     }
                 } else if d < 0 {
                     let (x0, x1) = (at.max(lo), (at - d - 1).min(hi));
@@ -867,6 +870,9 @@ impl Workbook {
                         t.cols.drain(k0..=k1);
                         t.calc.drain(k0..=k1);
                         t.kept.drain(k0..=k1);
+                        if k0 < t.types.len() {
+                            t.types.drain(k0..=k1.min(t.types.len() - 1));
+                        }
                     }
                 }
                 if t.cols.is_empty() {
