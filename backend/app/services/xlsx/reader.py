@@ -57,7 +57,7 @@ def _value(cell, epoch, notes: Counter) -> str | None:
     if isinstance(v, bool):
         return "TRUE" if v else "FALSE"
     if isinstance(v, (dt.datetime, dt.date, dt.time)):
-        return repr(float(to_excel(v, epoch)))
+        return repr(float(to_excel(v)))
     if isinstance(v, dt.timedelta):
         return repr(v.total_seconds() / 86400)
     if isinstance(v, (int, float)):
