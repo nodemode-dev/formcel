@@ -136,8 +136,13 @@ jobs:
         run: |
           for f in formcel formcel_oc_install build_app backend/oc_install backend/boot_backend frontend/oc_install frontend/boot_frontend setup/*; do
             case "$f" in *.bat|*.py) continue ;; esac
+            [ -d "$f" ] && continue
             bash -n "$f"
           done
+      - name: Agent kit (skills mirror, skill format, MCP configs)
+        run: ./formcel agents check
+      - name: Claude Desktop extension manifest
+        run: ./formcel mcpb check
       - name: No em dash or emoji in tracked markdown
         run: |
           python3 - <<'PY'

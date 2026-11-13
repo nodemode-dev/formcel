@@ -1,0 +1,14 @@
+{
+  "name": "formcel",
+  "description": "Work in FormCel, the spreadsheet app: the formcel MCP server and the skill that drives it.",
+  "author": { "name": "nodemode-ai", "email": "mackin@nodemode.ai" },
+  "license": "Apache-2.0",
+  "keywords": ["spreadsheet", "workbook", "formulas", "mcp"],
+  "skills": ["./.claude/skills/formcel-driving"],
+  "mcpServers": {
+    "formcel": {
+      "command": "${CLAUDE_PLUGIN_ROOT}/formcel",
+      "args": ["mcp"]
+    }
+  }
+}
