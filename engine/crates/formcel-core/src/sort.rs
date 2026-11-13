@@ -306,6 +306,9 @@ impl Workbook {
             self.record(Tx::Chips(moves));
             out = out.join(Effect { cells: self.present(e.cells), ..e });
         }
+        if !across && self.sheets[sheet].filter.as_ref().is_some_and(|f| hits(&f.area)) {
+            out = out.join(self.reapply_filter(sheet)?);
+        }
         self.undo_group(mark);
         Ok(out)
     }

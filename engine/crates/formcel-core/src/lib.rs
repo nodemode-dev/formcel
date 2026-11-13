@@ -116,7 +116,9 @@ impl Value {
         }
         if let Some(p) = plain.strip_suffix('%') {
             if let Ok(n) = p.trim().parse::<f64>() {
-                return Value::Number(n / 100.0);
+                if n.is_finite() {
+                    return Value::Number(n / 100.0);
+                }
             }
         }
         let (neg, body) = match plain.strip_prefix('-') {
@@ -1469,7 +1471,22 @@ impl Workbook {
             }
         }
         let mut out: Changed = seeds.iter().filter(|k| !self.formulas.contains_key(k)).map(|k| (k.0, k.1, self.sheets[k.0].cells.get(k.1).cloned().unwrap_or(Value::Empty))).collect();
+        let again: Vec<Key> = if volatile {
+            dirty
+                .iter()
+                .filter(|k| {
+                    self.formulas.get(k).is_some_and(|f| f.volatile && {
+                        let src = f.src.to_ascii_uppercase();
+                        src.contains("INDIRECT(") || src.contains("OFFSET(")
+                    })
+                })
+                .copied()
+                .collect()
+        } else {
+            Vec::new()
+        };
         out.extend(self.evaluate(dirty));
+        self.touched.extend(again);
         out
     }
 
@@ -1668,9 +1685,6 @@ impl Workbook {
             }
         }
         lost_fmt.chips = self.move_chips(s.sheet, &moved);
-        if s.delta > 0 && s.at > 0 {
-            self.inherit(s);
-        }
         self.recalc_all();
         (dropped, rewritten, lost_fmt)
     }
@@ -1788,10 +1802,13 @@ impl Workbook {
     }
 
     fn inherit(&mut self, s: Shift) {
+        if s.delta <= 0 || s.at == 0 {
+            return;
+        }
         let src = s.at - 1;
         let line = |a: &Addr| if s.rows { a.row } else { a.col };
         let at = |a: Addr, i: u32| if s.rows { Addr { row: s.at + i, ..a } } else { Addr { col: s.at + i, ..a } };
-        let n = s.delta as u32;
+        let n = (s.delta as u32).min((if s.rows { MAX_ROWS } else { MAX_COLS }).saturating_sub(s.at));
         let codes: Vec<(Addr, std::sync::Arc<(String, fmtcode::Code)>)> = self.codes.iter().filter(|((sh, a), _)| *sh == s.sheet && line(a) == src).map(|((_, a), c)| (*a, c.clone())).collect();
         let styles: Vec<(Addr, StyleRef)> = self.styles.iter().filter(|((sh, a), _)| *sh == s.sheet && line(a) == src).map(|((_, a), st)| (*a, st.clone())).collect();
         if u64::from(n) * (codes.len() + styles.len()) as u64 > FORMAT_LIMIT {
@@ -1859,6 +1876,7 @@ impl Workbook {
         let shift = Shift { sheet, rows, at, delta: i64::from(n) };
         self.check_shift_arrays(shift).map_err(EngineError::Protected)?;
         let (dropped, rewritten, lost) = self.do_shift(shift);
+        self.inherit(shift);
         self.record(Tx::Shift { shift, dropped, rewritten, lost: Box::new(lost) });
         Ok(shift)
     }
@@ -2018,6 +2036,7 @@ impl Workbook {
             Tx::Shift { shift, dropped, rewritten, lost } => {
                 if forward {
                     self.do_shift(*shift);
+                    self.inherit(*shift);
                     return Effect { shift: Some(*shift), merges: Some(shift.sheet), objects: Some(shift.sheet), ..Effect::default() };
                 }
                 let back = Shift { delta: -shift.delta, ..*shift };

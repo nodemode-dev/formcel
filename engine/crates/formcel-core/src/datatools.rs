@@ -41,6 +41,39 @@ fn quote(s: &str) -> String {
     }
 }
 
+fn block_pieces(m: Area, b: crate::cellshift::Block) -> Vec<(Area, Area)> {
+    let k = b.area;
+    let strip = if b.vertical { Area { r0: 0, r1: crate::MAX_ROWS - 1, ..k } } else { Area { c0: 0, c1: crate::MAX_COLS - 1, ..k } };
+    if m.r1 < strip.r0 || m.r0 > strip.r1 || m.c1 < strip.c0 || m.c0 > strip.c1 {
+        return vec![(m, m)];
+    }
+    let inside = Area { r0: m.r0.max(strip.r0), c0: m.c0.max(strip.c0), r1: m.r1.min(strip.r1), c1: m.c1.min(strip.c1) };
+    let (lo, hi, at, n, limit) = if b.vertical { (inside.r0, inside.r1, k.r0, k.r1 - k.r0 + 1, crate::MAX_ROWS) } else { (inside.c0, inside.c1, k.c0, k.c1 - k.c0 + 1, crate::MAX_COLS) };
+    let moved = crate::formula::shift_span(lo, hi, at, if b.insert { i64::from(n) } else { -i64::from(n) }, limit);
+    if moved == Some((lo, hi)) {
+        return vec![(m, m)];
+    }
+    let mut out: Vec<(Area, Area)> = crate::valid::carve(m, strip).into_iter().map(|p| (p, p)).collect();
+    if let Some((x, y)) = moved {
+        out.push((inside, if b.vertical { Area { r0: x, r1: y, ..inside } } else { Area { c0: x, c1: y, ..inside } }));
+    }
+    out
+}
+
+fn block_text(s: &str, always: bool, dr: i64, dc: i64, own: &str, b: crate::cellshift::Block) -> String {
+    let body = match s.trim_start().strip_prefix('=') {
+        Some(x) => x,
+        None if always => s,
+        None => return s.to_string(),
+    };
+    let Some(mut e) = crate::formula::parse(body) else { return s.to_string() };
+    crate::formula::offset(&mut e, dr, dc);
+    if !crate::cellshift::remap(&mut e, own, own, b) && dr == 0 && dc == 0 {
+        return s.to_string();
+    }
+    format!("={}", crate::formula::to_text(&e))
+}
+
 fn say(text: &str) -> String {
     let mut out = String::new();
     escape(text, &mut out);
@@ -252,6 +285,7 @@ impl Workbook {
     fn relocate(&mut self, sheet: usize, moves: &[(Addr, Addr)], clears: &[Addr], offset: bool) -> Result<Effect, EngineError> {
         let mut edits = Vec::new();
         let mut formats = Vec::new();
+        let mut marks = Vec::new();
         for (from, to) in moves {
             let raw = self.input(sheet, *from);
             let raw = if offset && raw.starts_with('=') { offset_text(&raw, i64::from(to.row) - i64::from(from.row), i64::from(to.col) - i64::from(from.col)) } else { raw };
@@ -259,16 +293,36 @@ impl Workbook {
             let style = self.styles.get(&(sheet, *from)).map(|s| s.0.clone()).unwrap_or_default();
             let code = self.codes.get(&(sheet, *from)).map(|c| c.0.clone()).unwrap_or_default();
             formats.push((*to, Some(style), Some(code)));
+            marks.push(((sheet, *to), self.links.get(&(sheet, *from)).cloned(), self.chips.get(&(sheet, *from)).cloned()));
         }
         let landed: HashSet<Addr> = moves.iter().map(|m| m.1).collect();
         for c in clears {
             if !landed.contains(c) {
                 edits.push((*c, String::new()));
                 formats.push((*c, Some(String::new()), Some(String::new())));
+                marks.push(((sheet, *c), None, None));
             }
         }
         let mut out = Effect { cells: self.apply(sheet, &edits)?, ..Effect::default() };
         out = out.join(self.put_formats(sheet, &formats)?);
+        let links: Vec<_> = marks.iter().filter_map(|(k, after, _)| {
+            let before = self.links.get(k).cloned();
+            (before != *after).then(|| (*k, before, after.clone()))
+        }).collect();
+        if !links.is_empty() {
+            let e = self.apply_links(&links, true);
+            self.record(Tx::Links(links));
+            out = out.join(Effect { cells: self.present(e.cells), ..e });
+        }
+        let chips: Vec<_> = marks.iter().filter_map(|(k, _, after)| {
+            let before = self.chips.get(k).cloned();
+            (before != *after).then(|| (*k, before, after.clone()))
+        }).collect();
+        if !chips.is_empty() {
+            let e = self.apply_chips(&chips, true);
+            self.record(Tx::Chips(chips));
+            out = out.join(Effect { cells: self.present(e.cells), ..e });
+        }
         Ok(out)
     }
 
@@ -290,6 +344,53 @@ impl Workbook {
             }
         }
         Ok(out)
+    }
+
+    fn shift_block_layers(&mut self, sheet: usize, b: crate::cellshift::Block) -> Effect {
+        let own = self.sheets[sheet].name.clone();
+        let mut out = Effect::default();
+        let before = self.sheets[sheet].valid.clone();
+        let mut after = Vec::new();
+        for v in &before {
+            for (pre, fin) in block_pieces(v.area, b) {
+                let (dr, dc) = (i64::from(pre.r0) - i64::from(v.area.r0), i64::from(pre.c0) - i64::from(v.area.c0));
+                after.push(crate::valid::Validation { area: fin, a: block_text(&v.a, false, dr, dc, &own, b), b: block_text(&v.b, false, dr, dc, &own, b), ..v.clone() });
+            }
+        }
+        if before != after {
+            self.sheets[sheet].valid = after.clone();
+            self.record(Tx::Valid { sheet, before, after });
+            out.valid = Some(sheet);
+        }
+        let before = self.sheets[sheet].rules.clone();
+        let mut after = Vec::new();
+        for r in &before {
+            for (pre, fin) in block_pieces(r.area, b) {
+                let (dr, dc) = (i64::from(pre.r0) - i64::from(r.area.r0), i64::from(pre.c0) - i64::from(r.area.c0));
+                let mut m = crate::cf::Rule { area: fin, ..r.clone() };
+                match &mut m.kind {
+                    crate::cf::Kind::Formula(f) => *f = block_text(f, true, dr, dc, &own, b),
+                    crate::cf::Kind::Cell { a: x, b: y, .. } => (*x, *y) = (block_text(x, false, dr, dc, &own, b), block_text(y, false, dr, dc, &own, b)),
+                    _ => {}
+                }
+                after.push(m);
+            }
+        }
+        if before != after {
+            self.sheets[sheet].rules = after.clone();
+            self.record(Tx::Rules { sheet, before, after });
+            out.rules = Some(sheet);
+        }
+        let mut named = false;
+        for (_, e) in self.names.values_mut() {
+            named |= crate::cellshift::remap(e, "\u{0}", &own, b);
+        }
+        if named {
+            self.graph.built = false;
+            let changed = self.recalc_all();
+            out.cells = self.present(changed);
+        }
+        out
     }
 
     pub fn tool(&mut self, sheet: usize, cmd: &str) -> Out {
@@ -889,7 +990,8 @@ impl Workbook {
             if !formulas && self.formulas.contains_key(&(s, ad)) {
                 continue;
             }
-            let text = if formulas { self.input(s, ad) } else { self.txt(s, ad) };
+            let typed = !formulas && !matches!(self.cell_val(s, ad), Value::Text(_));
+            let text = if formulas || typed { self.input(s, ad) } else { self.txt(s, ad) };
             let hay: Vec<char> = text.chars().collect();
             let mut out = String::new();
             let mut pos = 0;
@@ -905,7 +1007,7 @@ impl Workbook {
                 }
                 out.extend(&hay[pos..]);
             }
-            let raw = if formulas { out } else { quote(&out) };
+            let raw = if formulas || (typed && !out.starts_with('=')) { out } else { quote(&out) };
             match by_sheet.iter_mut().find(|e| e.0 == s) {
                 Some(e) => e.1.push((ad, raw)),
                 None => by_sheet.push((s, vec![(ad, raw)])),
@@ -958,7 +1060,9 @@ impl Workbook {
             }
         }
         let mut e = self.relocate(sheet, &moves, &clears, false)?;
-        e = e.join(self.rewrite_block_refs(sheet, crate::cellshift::Block { area, vertical, insert })?);
+        let b = crate::cellshift::Block { area, vertical, insert };
+        e = e.join(self.rewrite_block_refs(sheet, b)?);
+        e = e.join(self.shift_block_layers(sheet, b));
         Ok((e, say(&format!("Shifted {} cells.", moves.len()))))
     }
 

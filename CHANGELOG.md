@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.41.1 · 2026-11-13
+
+The second pass of fixes from the full review, in the calculation engine and its bridge to the window; nothing new.
+
+- Formulas: INDIRECT and OFFSET show the new value of the cell they point at right away; numbers compare to 15 significant digits, so `=0.1+0.2=0.3` is TRUE and lookups and COUNTIF find such values; `=SUM(B:B 2:2)` works as an intersection; AGGREGATE's ignore-hidden options also leave out rows hidden by hand; fraction formats with a long denominator, BESSELJ and the depreciation and loan functions no longer hang on extreme input; `inf%` and `nan%` stay text.
+- Data tools: Find and Replace in values no longer rounds a formatted number or turns it into text; sorting a filtered range hides the right rows; Remove Duplicates and Insert or Delete Cells keep hyperlinks and chips with their rows, and Insert or Delete Cells moves defined names, validation and conditional formatting; Goal Seek reports the value it really came closest to.
+- Rules and tables: conditional formatting formulas that use ROW() or COLUMN() work; rules split or pasted keep pointing at their own cells; table column types stay on their columns when a column is inserted or deleted.
+- Undo: undoing a row or column delete no longer gives the restored rows the format of the row above.
+- The window: if the calculation engine hits an internal error it restarts and says so instead of refusing every edit; opening another workbook frees the previous one from memory; a failed engine worker ends waiting operations with a message.
+- Builds: building the app always picks up engine changes, and the Python engine package carries the FormCel version.
+
 ## 0.41.0 · 2026-11-12
 
 A full review of the engine process, the file formats, the grid, the panels, charts, scripts, VBA and the build scripts. Fixes only; nothing new.

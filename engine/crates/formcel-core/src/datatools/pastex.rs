@@ -16,6 +16,10 @@ fn landing(piece: Area, src: Area, dr: u32, dc: u32, transpose: bool) -> Area {
     }
 }
 
+fn reach(piece: Area, anchor: Area, src: Area, dr: u32, dc: u32) -> (i64, i64) {
+    (i64::from(piece.r0) - i64::from(anchor.r0) + i64::from(dr) - i64::from(src.r0), i64::from(piece.c0) - i64::from(anchor.c0) + i64::from(dc) - i64::from(src.c0))
+}
+
 fn sheet_prefix(name: &str) -> String {
     if name.chars().all(|c| c.is_alphanumeric() || c == '_') {
         name.to_string()
@@ -42,14 +46,15 @@ impl Workbook {
             let mut after: Vec<valid::Validation> = Vec::new();
             for v in &before {
                 for piece in valid::carve(v.area, dest) {
-                    after.push(valid::Validation { area: piece, ..v.clone() });
+                    after.push(valid::moved_to(v, piece, i64::from(piece.r0) - i64::from(v.area.r0), i64::from(piece.c0) - i64::from(v.area.c0)));
                 }
             }
             let mut n = 0;
             let from: Vec<valid::Validation> = self.sheets[ss].valid.clone();
             for v in &from {
                 if let Some(piece) = clip(v.area, src) {
-                    after.push(valid::Validation { area: landing(piece, src, dr, dc, transpose), ..v.clone() });
+                    let (er, ec) = if transpose { (0, 0) } else { reach(piece, v.area, src, dr, dc) };
+                    after.push(valid::moved_to(v, landing(piece, src, dr, dc, transpose), er, ec));
                     n += 1;
                 }
             }
@@ -69,9 +74,13 @@ impl Workbook {
                 if let Some(piece) = clip(r.area, src) {
                     let mut moved = r.clone();
                     moved.area = landing(piece, src, dr, dc, transpose);
-                    if let cf::Kind::Formula(f) = &moved.kind {
-                        if !transpose {
-                            moved.kind = cf::Kind::Formula(offset_text(&format!("={f}"), i64::from(dr) - i64::from(src.r0), i64::from(dc) - i64::from(src.c0)).trim_start_matches('=').to_string());
+                    if !transpose {
+                        let (er, ec) = reach(piece, r.area, src, dr, dc);
+                        let sh = |s: &String| if s.trim_start().starts_with('=') { offset_text(s, er, ec) } else { s.clone() };
+                        match &mut moved.kind {
+                            cf::Kind::Formula(f) => *f = offset_text(f, er, ec),
+                            cf::Kind::Cell { a: x, b: y, .. } => (*x, *y) = (sh(x), sh(y)),
+                            _ => {}
                         }
                     }
                     after.push(moved);

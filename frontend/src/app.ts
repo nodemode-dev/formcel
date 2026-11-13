@@ -1193,7 +1193,10 @@ export class App {
 
   private showHome(): void {
     const p = this.p;
-    if (this.open) this.home.setLast(this.open.id);
+    if (this.open) {
+      this.home.setLast(this.open.id);
+      void engine().dropWorkbook(this.open.book).catch(() => undefined);
+    }
     this.open = null;
     this.collab.detach();
     this.dtypes.closed();
@@ -2517,6 +2520,7 @@ export class App {
     const names = doc.names?.length ? await e.names(book) : [];
     this.grouped.clear();
     this.grid.localForms = ((doc as { locale?: string }).locale ?? 'en-US') !== 'en-US';
+    const prev = this.open?.book;
     this.open = { id, book, title: doc.title, sheets: doc.sheets, views: doc.sheets.map((_, i) => doc.views?.[i] ?? {}), names, macros: !!doc.macros, pages: doc.sheets.map((_, i) => cleanPage((doc.views?.[i] as { page?: unknown } | undefined)?.page)), locale: (doc as { locale?: string }).locale ?? 'en-US' };
     this.preview = false;
     this.viewState = 'normal';
@@ -2541,6 +2545,7 @@ export class App {
     this.tools.resetTemp();
     await this.calc.load(book, calcDoc);
     this.showSheet(0);
+    if (prev !== undefined && prev !== book) void e.dropWorkbook(prev).catch(() => undefined);
     if (prefs().defaultView === 'pagebreak') {
       this.preview = true;
       void this.refreshBreaks();

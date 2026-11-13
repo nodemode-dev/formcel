@@ -265,18 +265,18 @@ impl Workbook {
         self.sheets[sheet].cells.get(a).cloned().unwrap_or(Value::Empty)
     }
 
-    fn eval_text(&self, sheet: usize, src: &str, dr: i64, dc: i64) -> Value {
+    fn eval_text(&self, sheet: usize, src: &str, at: Addr, dr: i64, dc: i64) -> Value {
         let body = src.trim_start().strip_prefix('=').unwrap_or(src);
         let Some(mut e): Option<Expr> = formula::parse(body) else { return Value::Empty };
         if dr != 0 || dc != 0 {
             formula::offset(&mut e, dr, dc);
         }
-        eval::Eval::new(self, sheet).scalar(&e)
+        eval::Eval::new(self, sheet).placed(at).scalar(&e)
     }
 
-    fn operand(&self, sheet: usize, s: &str, dr: i64, dc: i64) -> Value {
+    fn operand(&self, sheet: usize, s: &str, at: Addr, dr: i64, dc: i64) -> Value {
         if s.trim_start().starts_with('=') {
-            self.eval_text(sheet, s, dr, dc)
+            self.eval_text(sheet, s, at, dr, dc)
         } else {
             Value::parse_input(s)
         }
@@ -342,8 +342,8 @@ impl Workbook {
                             if matches!(v, Value::Empty) {
                                 false
                             } else {
-                                let x = self.operand(sheet, x, dr, dc);
-                                let y = self.operand(sheet, y, dr, dc);
+                                let x = self.operand(sheet, x, at, dr, dc);
+                                let y = self.operand(sheet, y, at, dr, dc);
                                 let cmp = |p: &Value, q: &Value| eval::compare(p, q);
                                 match op.as_str() {
                                     "gt" => cmp(&v, &x).is_gt(),
@@ -384,7 +384,7 @@ impl Workbook {
                             "error" => matches!(v, Value::Error(_)),
                             _ => !matches!(v, Value::Error(_)),
                         },
-                        Kind::Formula(f) => matches!(self.eval_text(sheet, f, dr, dc), Value::Bool(true)) || num(&self.eval_text(sheet, f, dr, dc)).is_some_and(|n| n != 0.0),
+                        Kind::Formula(f) => matches!(self.eval_text(sheet, f, at, dr, dc), Value::Bool(true)) || num(&self.eval_text(sheet, f, at, dr, dc)).is_some_and(|n| n != 0.0),
                         Kind::Scale { points, colors } => {
                             if let Some(n) = num(&v) {
                                 let pts: Vec<f64> = points.iter().map(|p| resolve(p, &sorted)).collect();

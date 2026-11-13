@@ -437,10 +437,12 @@ fn lex(src: &str) -> Option<Vec<Tok>> {
             let ends = match out.last() {
                 Some(Tok::Ident(_) | Tok::Bracket(_) | Tok::Hash) => true,
                 Some(Tok::RParen) => true,
+                Some(Tok::Num(_)) => out.len() >= 2 && out[out.len() - 2] == Tok::Colon,
                 _ => false,
             };
             let starts = match s.get(j) {
                 Some('(') => !matches!(out.last(), Some(Tok::Ident(_))),
+                Some(n) if n.is_ascii_digit() => s[j..].iter().find(|d| !d.is_ascii_digit()) == Some(&':'),
                 Some(n) => n.is_alphabetic() || matches!(n, '_' | '$' | '\'' | '['),
                 None => false,
             };

@@ -18,6 +18,12 @@ export class EngineClient {
       if (e.data.ok) p.resolve(e.data.value);
       else p.reject(new Error(e.data.error));
     };
+    const fail = (why: string): void => {
+      for (const p of this.pending.values()) p.reject(new Error(why));
+      this.pending.clear();
+    };
+    this.worker.onerror = (e) => fail(e.message || 'The engine stopped. Reload the window to start it again.');
+    this.worker.onmessageerror = () => fail('The engine sent a reply the window could not read.');
   }
 
   private call(body: RequestBody): Promise<Value> {
@@ -34,6 +40,10 @@ export class EngineClient {
 
   async newWorkbook(): Promise<number> {
     return Number(await this.call({ op: 'workbook.new' }));
+  }
+
+  async dropWorkbook(book: number): Promise<void> {
+    await this.call({ op: 'workbook.drop', book });
   }
 
   async setCell(book: number, a1: string, raw: string, sheet = 0): Promise<string> {

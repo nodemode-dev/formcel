@@ -7,6 +7,7 @@ interface Exports {
   fc_free(ptr: number, len: number): void;
   fc_version(): number;
   fc_workbook_new(): number;
+  fc_workbook_drop(book: number): void;
   fc_set(book: number, sheet: number, a1: number, a1Len: number, raw: number, rawLen: number): number;
   fc_get(book: number, sheet: number, a1: number, a1Len: number): number;
   fc_apply(book: number, sheet: number, edits: number, len: number): number;
@@ -292,9 +293,26 @@ function pair(s: string): [number, number] | null {
 const enc = new TextEncoder();
 const dec = new TextDecoder();
 
-const ready: Promise<Exports> = WebAssembly.instantiateStreaming(fetch('/engine/formcel.wasm'), {}).then(
-  (r) => r.instance.exports as unknown as Exports,
-);
+const dead = new WeakSet<object>();
+
+function load(): Promise<Exports> {
+  return WebAssembly.instantiateStreaming(fetch('/engine/formcel.wasm'), {}).then((r) => {
+    const x: Record<string, unknown> = {};
+    for (const [k, f] of Object.entries(r.instance.exports)) {
+      x[k] = typeof f !== 'function' ? f : (...a: number[]) => {
+        try {
+          return (f as (...a: number[]) => number)(...a);
+        } catch (err) {
+          dead.add(x);
+          throw err;
+        }
+      };
+    }
+    return x as unknown as Exports;
+  });
+}
+
+let ready = load();
 
 function out(x: Exports, len: number): string {
   if (len < 0) throw new Error('The engine refused that cell address or sheet.');
@@ -337,6 +355,10 @@ function run(x: Exports, req: Request): Value {
       return out(x, x.fc_version());
     case 'workbook.new':
       return x.fc_workbook_new();
+    case 'workbook.drop':
+      x.fc_workbook_drop(req.book);
+      rcBooks.delete(req.book);
+      return null;
     case 'cell.set':
       return withStrings(x, [req.a1, req.raw], ([a, al, r, rl]) => out(x, x.fc_set(req.book, req.sheet, a, al, r, rl)));
     case 'cell.get':
@@ -703,13 +725,23 @@ function run(x: Exports, req: Request): Value {
 self.onmessage = async (e: MessageEvent<Request>) => {
   const req = e.data;
   let res: Response;
+  const from = ready;
+  let x: Exports | undefined;
   try {
-    const x = await ready;
+    x = await from;
     x.fc_set_clock(localSerial());
     rcNow = 'book' in req && rcBooks.has(req.book) ? { x, book: req.book } : null;
     res = { id: req.id, ok: true, value: run(x, req) };
   } catch (err) {
     res = { id: req.id, ok: false, error: err instanceof Error ? err.message : String(err) };
+    if (x && dead.has(x)) {
+      if (ready === from) {
+        ready = load();
+        rcBooks.clear();
+        rcNow = null;
+      }
+      res = { id: req.id, ok: false, error: 'The engine stopped on an internal error and restarted. Open the workbook again to go on.' };
+    }
   }
   (self as unknown as Worker).postMessage(res);
 };

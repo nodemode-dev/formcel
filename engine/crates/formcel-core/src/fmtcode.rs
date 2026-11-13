@@ -294,13 +294,31 @@ fn fill_frac(slots: &[char], digits: &str) -> Vec<String> {
 
 fn best_fraction(x: f64, max_den: u64) -> (u64, u64) {
     let (mut best, mut err) = ((0u64, 1u64), x);
-    for den in 1..=max_den {
-        let num = (x * den as f64).round() as u64;
+    let mut take = |num: u64, den: u64| {
         let e = (x - num as f64 / den as f64).abs();
         if e < err - 1e-12 {
             best = (num, den);
             err = e;
         }
+    };
+    let (mut p0, mut q0, mut p1, mut q1) = (0u64, 1u64, 1u64, 0u64);
+    let mut v = x;
+    for _ in 0..64 {
+        let a = v.floor() as u64;
+        let q2 = a.saturating_mul(q1).saturating_add(q0);
+        if q2 > max_den {
+            let k = max_den.saturating_sub(q0) / q1.max(1);
+            take(k.saturating_mul(p1).saturating_add(p0), k * q1 + q0);
+            break;
+        }
+        let p2 = a.saturating_mul(p1).saturating_add(p0);
+        (p0, q0, p1, q1) = (p1, q1, p2, q2);
+        take(p1, q1);
+        let f = v - v.floor();
+        if f == 0.0 {
+            break;
+        }
+        v = 1.0 / f;
     }
     best
 }
@@ -410,7 +428,7 @@ fn fraction(toks: &[Tok], si: usize, x: f64) -> String {
     let den_slots: Vec<char> = den_toks.iter().filter_map(|t| if let Tok::Digit(d) = t { Some(*d) } else { None }).collect();
     let a = x.abs();
     let (whole, rest) = if int_slots.is_empty() { (0.0, a) } else { (a.trunc(), a - a.trunc()) };
-    let (mut n, d) = if let Ok(fd) = fixed.parse::<u64>() { ((rest * fd as f64).round() as u64, fd) } else { best_fraction(rest, 10u64.pow(den_slots.len().max(1) as u32) - 1) };
+    let (mut n, d) = if let Ok(fd) = fixed.parse::<u64>() { ((rest * fd as f64).round() as u64, fd) } else { best_fraction(rest, 10u64.saturating_pow(den_slots.len().max(1) as u32) - 1) };
     let mut whole = whole;
     if n == d && !int_slots.is_empty() {
         whole += 1.0;
