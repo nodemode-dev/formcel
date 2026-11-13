@@ -3037,9 +3037,11 @@ export class Grid {
     const s = this.sel();
     const probe = s.c0 > 0 ? s.c0 - 1 : s.c1 + 1;
     if (probe >= MAX_COLS) return;
-    const bottom = await this.engine.edge(this.book, s.r1, probe, 'down', this.sheet);
-    const last = this.cache.get(KEY(s.r1 + 1, probe)) !== undefined || bottom[0] > s.r1 ? bottom[0] : s.r1;
-    if (last > s.r1) await this.fill({ r0: s.r1 + 1, r1: last, c0: s.c0, c1: s.c1 });
+    if (s.r1 + 1 >= MAX_ROWS) return;
+    const below = await this.engine.read(this.book, s.r1 + 1, probe, Math.min(MAX_ROWS - 1, s.r1 + 2), probe, this.sheet);
+    if (!below.some(([r]) => r === s.r1 + 1)) return;
+    const last = below.some(([r]) => r === s.r1 + 2) ? (await this.engine.edge(this.book, s.r1 + 1, probe, 'down', this.sheet))[0] : s.r1 + 1;
+    await this.fill({ r0: s.r1 + 1, r1: last, c0: s.c0, c1: s.c1 });
   }
 
   private async selectionTSV(): Promise<string> {
