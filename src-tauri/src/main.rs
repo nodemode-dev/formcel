@@ -29,7 +29,7 @@ fn port_in(line: &str) -> Option<u16> {
 
 fn spawn_engine() -> Option<(Child, mpsc::Receiver<u16>)> {
     let mut command = packaged::engine_command()?;
-    command.env("FORMCEL_PORT", "0").stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped());
+    command.env("FORMCEL_PORT", "0").env("FORMCEL_HOST", "127.0.0.1").stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped());
     #[cfg(windows)]
     {
         use std::os::windows::process::CommandExt;
