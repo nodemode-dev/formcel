@@ -1043,7 +1043,10 @@ export class Backstage {
             const [copy, emb, revoke] = [...n.querySelectorAll('button')] as HTMLButtonElement[];
             copy.onclick = () => void navigator.clipboard.writeText(s.url).then(() => this.noteOn(kind, 'Link copied.'), () => this.noteOn(kind, 'The link could not be copied.', true));
             emb.onclick = () => void navigator.clipboard.writeText(s.embed).then(() => this.noteOn(kind, 'Embed code copied.'), () => this.noteOn(kind, 'The code could not be copied.', true));
-            revoke.onclick = () => void api('DELETE', `/workbooks/${cur.id}/shares/${s.token}`).then(() => ref.update());
+            revoke.onclick = () => void api('DELETE', `/workbooks/${cur.id}/shares/${s.token}`).then(() => ref.update(), (e: unknown) => {
+              this.noteOn(kind, e instanceof Error ? e.message : 'The link was not revoked.', true);
+              void ref.update();
+            });
           });
           none.hidden = mine.length > 0;
         } catch (e) {
