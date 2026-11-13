@@ -1,4 +1,5 @@
 import { icon } from './icons';
+import { brandMark } from './brand';
 import { HomeFiles } from './home-files';
 import { runCommand } from './commands';
 import { drawThumb } from './thumb';
@@ -97,13 +98,19 @@ export class Home {
     const formats = ['XLSX', 'XLSM', 'XLS', 'ODS', 'CSV', 'TSV', 'HTML', 'PDF'].map((f) => `<span class="fc-home-format">${f}</span>`).join('');
     root.innerHTML = `
       <nav class="fc-home-nav" aria-label="Home">
-        <div class="fc-home-brand"><img class="fc-home-logo" src="/icons/logo-64.png" width="24" height="24" alt="" draggable="false">FormCel <span>by nodemode.ai</span></div>
+        <div class="fc-home-brand">${brandMark(26)}formcel <span translate="no">by nodemode.ai</span></div>
         ${navItem('start', 'home', 'Start')}${navItem('recent', 'clock', 'Recent')}${navItem('templates', 'template', 'Templates')}${navItem('trash', 'trash', 'Trash')}
         <div class="fc-home-nav-sep"></div>
         <div class="fc-home-nav-title">Create</div>
         ${cmdItem('data-a="blank"', 'newFile', 'New workbook')}${cmdItem('data-a="openfile"', 'folderOpen', 'Open')}${cmdItem('data-a="pastedata"', 'clipboard', 'Paste data')}
+        <div class="fc-home-nav-sep"></div>
+        <div class="fc-home-nav-title">Agents</div>
+        ${cmdItem('data-cmd="claude-code"', 'agent', 'Claude Code')}${cmdItem('data-cmd="claude-chat"', 'agentChat', 'Chat')}${cmdItem('data-cmd="terminal-toggle"', 'terminal', 'Terminal')}
         <div class="fc-home-nav-foot"><button class="fc-home-nav-item fc-home-back" type="button" data-a="back" hidden>${icon('chevronLeft')}<span>Back to workbook</span></button>${cmdItem('data-cmd="app.settings"', 'settings', 'Preferences')}${cmdItem('data-cmd="a11y.shortcuts"', 'info', 'Help')}</div>
       </nav>
+      <div class="fc-home-resizer" role="separator" aria-orientation="vertical" aria-label="Resize the side panel"></div>
+      <button class="fc-home-nav-hide" type="button" title="Hide the side panel" aria-label="Hide the side panel">${icon('chevronLeft')}</button>
+      <button class="fc-home-nav-show" type="button" title="Show the side panel" aria-label="Show the side panel">${icon('chevronRight')}</button>
       <div class="fc-home-body">
         <div class="fc-home-narrow">${navItem('start', 'home', 'Start')}${navItem('recent', 'clock', 'Recent')}${navItem('templates', 'template', 'Templates')}${navItem('trash', 'trash', 'Trash')}</div>
         <div class="fc-home-page" data-page="start">
@@ -168,8 +175,48 @@ export class Home {
       this.query = (e.target as HTMLInputElement).value.trim().toLowerCase();
       this.renderTemplates();
     });
+    this.sidePanel();
     this.paint();
     this.go(this.page);
+  }
+
+  private sidePanel(): void {
+    const root = this.root;
+    const bar = root.querySelector<HTMLElement>('.fc-home-resizer')!;
+    const save = (): void => {
+      try {
+        localStorage.setItem('formcel.homeNav', root.style.getPropertyValue('--fc-home-nav-w'));
+        localStorage.setItem('formcel.homeNavHidden', root.classList.contains('is-nav-hidden') ? '1' : '0');
+      } catch { return; }
+    };
+    const hide = (on: boolean): void => { root.classList.toggle('is-nav-hidden', on); save(); };
+    try {
+      const w = localStorage.getItem('formcel.homeNav');
+      if (w) root.style.setProperty('--fc-home-nav-w', w.trim());
+      if (localStorage.getItem('formcel.homeNavHidden') === '1') root.classList.add('is-nav-hidden');
+    } catch { void 0; }
+    root.querySelector('.fc-home-nav-hide')!.addEventListener('click', () => hide(true));
+    root.querySelector('.fc-home-nav-show')!.addEventListener('click', () => hide(false));
+    bar.addEventListener('pointerdown', (e) => {
+      e.preventDefault();
+      const x0 = e.clientX;
+      const start = root.querySelector('.fc-home-nav')!.getBoundingClientRect().width || 232;
+      bar.classList.add('is-dragging');
+      const mv = (ev: PointerEvent): void => {
+        const raw = start + ev.clientX - x0;
+        const collapse = raw < 120;
+        if (root.classList.contains('is-nav-hidden') !== collapse) root.classList.toggle('is-nav-hidden', collapse);
+        if (!collapse) root.style.setProperty('--fc-home-nav-w', `${Math.round(Math.max(180, Math.min(420, raw)))}px`);
+      };
+      const up = (): void => {
+        bar.classList.remove('is-dragging');
+        window.removeEventListener('pointermove', mv);
+        window.removeEventListener('pointerup', up);
+        save();
+      };
+      window.addEventListener('pointermove', mv);
+      window.addEventListener('pointerup', up);
+    });
   }
 
   private paint(): void {
