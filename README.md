@@ -116,6 +116,15 @@ The window, the command line and the MCP server call the same command catalogue,
 
 `.mcp.json`, `.codex/config.toml` and `.cursor/mcp.json` are already wired in this repo. The first command an outside agent runs asks you once, in the window, to allow outside agents. See [`AGENTS.md`](AGENTS.md).
 
+## Demo
+
+[`demo/index.html`](demo/index.html) is an offline demo that opens from `file://` or any static server and runs the real FormCel window with its calculation engine: A year of bike sales, an invented shop's 1,200 orders with a dashboard of formulas, a PivotTable, charts and sparklines that recalculate as you edit. See [`demo/README.md`](demo/README.md).
+
+- [`demos/whatif/index.html`](demos/whatif/index.html): Loan and savings what-if, with named inputs, LAMBDA, a data table, scenarios and a schedule. See [`demos/whatif/README.md`](demos/whatif/README.md).
+- [`demos/lab/index.html`](demos/lab/index.html): Lab measurements, a messy export cleaned, then statistics, a trendline and flagged outliers. See [`demos/lab/README.md`](demos/lab/README.md).
+
+The pages replay the engine's recorded answers that open each workbook; saving and everything else that needs the engine process says so. The same three demos open inside the app from Home, from Help > Demos, or with the `demo-sales`, `demo-whatif` and `demo-lab` commands, each as a new workbook.
+
 ## Download
 
 | Platform | Download | Release |
