@@ -1670,9 +1670,6 @@ impl Workbook {
             }
         }
         lost_fmt.chips = self.move_chips(s.sheet, &moved);
-        if s.delta > 0 && s.at > 0 {
-            self.inherit(s);
-        }
         self.recalc_all();
         (dropped, rewritten, lost_fmt)
     }
@@ -1790,6 +1787,9 @@ impl Workbook {
     }
 
     fn inherit(&mut self, s: Shift) {
+        if s.delta <= 0 || s.at == 0 {
+            return;
+        }
         let src = s.at - 1;
         let line = |a: &Addr| if s.rows { a.row } else { a.col };
         let at = |a: Addr, i: u32| if s.rows { Addr { row: s.at + i, ..a } } else { Addr { col: s.at + i, ..a } };
@@ -1861,6 +1861,7 @@ impl Workbook {
         let shift = Shift { sheet, rows, at, delta: i64::from(n) };
         self.check_shift_arrays(shift).map_err(EngineError::Protected)?;
         let (dropped, rewritten, lost) = self.do_shift(shift);
+        self.inherit(shift);
         self.record(Tx::Shift { shift, dropped, rewritten, lost: Box::new(lost) });
         Ok(shift)
     }
@@ -2020,6 +2021,7 @@ impl Workbook {
             Tx::Shift { shift, dropped, rewritten, lost } => {
                 if forward {
                     self.do_shift(*shift);
+                    self.inherit(*shift);
                     return Effect { shift: Some(*shift), merges: Some(shift.sheet), objects: Some(shift.sheet), ..Effect::default() };
                 }
                 let back = Shift { delta: -shift.delta, ..*shift };
