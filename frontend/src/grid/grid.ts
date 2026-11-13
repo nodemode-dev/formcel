@@ -263,6 +263,7 @@ export class Grid {
   private w = 0;
   private h = 0;
   private dpr = 1;
+  private dprWatch = 0;
   private sx = 0;
   private sy = 0;
   private fr = 0;
@@ -336,6 +337,10 @@ export class Grid {
   private resize(): void {
     const r = this.el.getBoundingClientRect();
     this.dpr = window.devicePixelRatio || 1;
+    if (this.dprWatch !== this.dpr) {
+      this.dprWatch = this.dpr;
+      window.matchMedia(`(resolution: ${this.dpr}dppx)`).addEventListener('change', () => this.resize(), { once: true });
+    }
     this.gw = gutter(this.rows);
     this.gh = gutter(this.cols);
     const fw = Math.max(1, Math.floor(r.width) - SCROLL_W);
