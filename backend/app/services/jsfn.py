@@ -94,7 +94,7 @@ def call(js: str, name: str, args: list, stream: bool = False):
     exe = node()
     if not exe:
         raise JsUnavailable(status()["note"])
-    from .gasrun import RunError, locked_down
+    from .gasrun import RunError, child_env, locked_down
 
     try:
         flags = locked_down(exe)
@@ -102,7 +102,7 @@ def call(js: str, name: str, args: list, stream: bool = False):
         raise JsUnavailable(str(e)) from None
     with tempfile.TemporaryDirectory() as d:
         try:
-            p = subprocess.run([exe, *flags, "--max-old-space-size=192", "-e", RUNNER], input=json.dumps({"js": js, "name": name, "args": args, "stream": stream}), capture_output=True, text=True, timeout=TIMEOUT, cwd=d, env={"PATH": "/usr/bin:/bin:/usr/local/bin"})
+            p = subprocess.run([exe, *flags, "--max-old-space-size=192", "-e", RUNNER], input=json.dumps({"js": js, "name": name, "args": args, "stream": stream}), capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=TIMEOUT, cwd=d, env=child_env())
         except subprocess.TimeoutExpired:
             raise JsError("the function ran longer than 5 seconds")
     if p.returncode != 0:

@@ -39,12 +39,19 @@ _PERMISSION: dict[str, str | None] = {}
 OLD_NODE = "This Node.js cannot run scripts with file and process access turned off. Install Node.js 22 or later (MIT) so scripts can run."
 
 
+def child_env(*dirs: str) -> dict:
+    env = {"PATH": os.pathsep.join(["/usr/bin", "/bin", "/usr/local/bin", *dirs])}
+    if os.name == "nt":
+        env["SYSTEMROOT"] = os.environ.get("SYSTEMROOT", r"C:\Windows")
+    return env
+
+
 def locked_down(exe: str, readable: Path | None = None) -> list[str]:
     if exe not in _PERMISSION:
         _PERMISSION[exe] = None
         for flag in ("--permission", "--experimental-permission"):
             try:
-                ok = subprocess.run([exe, flag, "-e", "0"], capture_output=True, timeout=10, cwd="/", env={"PATH": "/usr/bin:/bin"}).returncode == 0
+                ok = subprocess.run([exe, flag, "-e", "0"], capture_output=True, timeout=10, cwd="/", env=child_env()).returncode == 0
             except (OSError, subprocess.SubprocessError):
                 ok = False
             if ok:
@@ -230,7 +237,7 @@ def run(wid: str, fn: str, args: list | None = None, event: dict | None = None, 
         "props": {k: dict(state["props"].get(k) or {}) for k in ("script", "user", "document")},
     }
     started = time.time()
-    p = subprocess.Popen([exe, *locked_down(exe, RUNNER), "--max-old-space-size=192", str(RUNNER)], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, cwd="/", env={"PATH": "/usr/bin:/bin:/usr/local/bin:" + os.path.dirname(exe)})
+    p = subprocess.Popen([exe, *locked_down(exe, RUNNER), "--max-old-space-size=192", str(RUNNER)], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding="utf-8", errors="replace", cwd="/", env=child_env(os.path.dirname(exe)))
     timer = threading.Timer(LIMIT, p.kill)
     timer.start()
     final: dict | None = None

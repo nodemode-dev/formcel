@@ -61,7 +61,7 @@ def words(data: bytes, lang: str) -> list[dict]:
         src = Path(d) / f"in{ext}"
         src.write_bytes(data)
         try:
-            run = subprocess.run([exe, str(src), "stdout", "-l", lang, "--psm", "6", "tsv"], capture_output=True, text=True, timeout=90, cwd=d)
+            run = subprocess.run([exe, str(src), "stdout", "-l", lang, "--psm", "6", "tsv"], capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=90, cwd=d)
         except subprocess.TimeoutExpired:
             raise OcrError("the picture took too long to read")
         if run.returncode != 0:
