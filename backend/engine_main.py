@@ -28,6 +28,30 @@ def selfcheck() -> int:
 
 
 def watch_parent() -> None:
+    raw = os.environ.get("FORMCEL_PARENT_PID", "").strip()
+    if raw.isdigit() and int(raw) > 0:
+        pid = int(raw)
+
+        def watch() -> None:
+            if os.name == "nt":
+                import ctypes
+
+                kernel = ctypes.windll.kernel32
+                handle = kernel.OpenProcess(0x00100000, False, pid)
+                if handle:
+                    kernel.WaitForSingleObject(handle, 0xFFFFFFFF)
+                os._exit(0)
+            while True:
+                try:
+                    os.kill(pid, 0)
+                except ProcessLookupError:
+                    os._exit(0)
+                except PermissionError:
+                    pass
+                time.sleep(2)
+
+        threading.Thread(target=watch, name="formcel-parent-watch", daemon=True).start()
+        return
     if os.name != "posix":
         return
     parent = os.getppid()
