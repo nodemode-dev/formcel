@@ -285,6 +285,7 @@ impl Workbook {
     fn relocate(&mut self, sheet: usize, moves: &[(Addr, Addr)], clears: &[Addr], offset: bool) -> Result<Effect, EngineError> {
         let mut edits = Vec::new();
         let mut formats = Vec::new();
+        let mut marks = Vec::new();
         for (from, to) in moves {
             let raw = self.input(sheet, *from);
             let raw = if offset && raw.starts_with('=') { offset_text(&raw, i64::from(to.row) - i64::from(from.row), i64::from(to.col) - i64::from(from.col)) } else { raw };
@@ -292,16 +293,36 @@ impl Workbook {
             let style = self.styles.get(&(sheet, *from)).map(|s| s.0.clone()).unwrap_or_default();
             let code = self.codes.get(&(sheet, *from)).map(|c| c.0.clone()).unwrap_or_default();
             formats.push((*to, Some(style), Some(code)));
+            marks.push(((sheet, *to), self.links.get(&(sheet, *from)).cloned(), self.chips.get(&(sheet, *from)).cloned()));
         }
         let landed: HashSet<Addr> = moves.iter().map(|m| m.1).collect();
         for c in clears {
             if !landed.contains(c) {
                 edits.push((*c, String::new()));
                 formats.push((*c, Some(String::new()), Some(String::new())));
+                marks.push(((sheet, *c), None, None));
             }
         }
         let mut out = Effect { cells: self.apply(sheet, &edits)?, ..Effect::default() };
         out = out.join(self.put_formats(sheet, &formats)?);
+        let links: Vec<_> = marks.iter().filter_map(|(k, after, _)| {
+            let before = self.links.get(k).cloned();
+            (before != *after).then(|| (*k, before, after.clone()))
+        }).collect();
+        if !links.is_empty() {
+            let e = self.apply_links(&links, true);
+            self.record(Tx::Links(links));
+            out = out.join(Effect { cells: self.present(e.cells), ..e });
+        }
+        let chips: Vec<_> = marks.iter().filter_map(|(k, _, after)| {
+            let before = self.chips.get(k).cloned();
+            (before != *after).then(|| (*k, before, after.clone()))
+        }).collect();
+        if !chips.is_empty() {
+            let e = self.apply_chips(&chips, true);
+            self.record(Tx::Chips(chips));
+            out = out.join(Effect { cells: self.present(e.cells), ..e });
+        }
         Ok(out)
     }
 
