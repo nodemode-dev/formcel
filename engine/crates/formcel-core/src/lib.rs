@@ -1793,7 +1793,7 @@ impl Workbook {
         let src = s.at - 1;
         let line = |a: &Addr| if s.rows { a.row } else { a.col };
         let at = |a: Addr, i: u32| if s.rows { Addr { row: s.at + i, ..a } } else { Addr { col: s.at + i, ..a } };
-        let n = s.delta as u32;
+        let n = (s.delta as u32).min((if s.rows { MAX_ROWS } else { MAX_COLS }).saturating_sub(s.at));
         let codes: Vec<(Addr, std::sync::Arc<(String, fmtcode::Code)>)> = self.codes.iter().filter(|((sh, a), _)| *sh == s.sheet && line(a) == src).map(|((_, a), c)| (*a, c.clone())).collect();
         let styles: Vec<(Addr, StyleRef)> = self.styles.iter().filter(|((sh, a), _)| *sh == s.sheet && line(a) == src).map(|((_, a), st)| (*a, st.clone())).collect();
         if u64::from(n) * (codes.len() + styles.len()) as u64 > FORMAT_LIMIT {
