@@ -126,6 +126,8 @@ class Store:
         return (self.trash if trashed else self.dir) / f"{wid}.fcel"
 
     def _write(self, b: Book) -> None:
+        if self.open.get(b.id) is not b:
+            raise FileNotFoundError(f"{b.id} was moved to the Trash or replaced by a restored version")
         doc = {"format": FORMAT, "version": FORMAT_VERSION, "id": b.id, "title": b.title, "created": b.created,
                "modified": b.modified, "template": b.template, "locale": b.locale, "preview": b.preview(),
                "names": [list(n) for n in b.engine.names()], "nameNotes": [list(n) for n in b.engine.name_notes()], "tables": b.engine.tables(), "pivots": b.engine.pivots(), "model": b.engine.model_lines(), "whatif": b.whatif,
@@ -827,14 +829,14 @@ class Store:
         with b.lock:
             self._write(b)
             self.versions.snapshot(wid, self.path(wid), name="Before restore", user=user, force=True, why="before restore")
-        shutil.copyfile(src, self.path(wid))
-        with self.guard:
-            self.open.pop(wid, None)
-        b = self._load(wid)
-        with b.lock:
-            b.modified = now()
-            self._write(b)
-            made = self.versions.snapshot(wid, self.path(wid), name=f"Restored from {self.versions.find(wid, vid)['time']}", user=user, force=True, why="restore")
+            shutil.copyfile(src, self.path(wid))
+            with self.guard:
+                self.open.pop(wid, None)
+            b = self._load(wid)
+            with b.lock:
+                b.modified = now()
+                self._write(b)
+                made = self.versions.snapshot(wid, self.path(wid), name=f"Restored from {self.versions.find(wid, vid)['time']}", user=user, force=True, why="restore")
         self.hub.publish(wid, {"type": "reload"}, client)
         return made or {}
 
@@ -1058,9 +1060,10 @@ class Store:
             return b.meta()
 
     def to_trash(self, wid: str) -> None:
-        with self.guard:
-            self.open.pop(wid, None)
-        shutil.move(self.path(wid), self.path(wid, trashed=True))
+        with ENGINE:
+            with self.guard:
+                self.open.pop(wid, None)
+            shutil.move(self.path(wid), self.path(wid, trashed=True))
 
     def restore(self, wid: str) -> None:
         shutil.move(self.path(wid, trashed=True), self.path(wid))
