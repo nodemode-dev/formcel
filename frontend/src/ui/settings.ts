@@ -11,6 +11,7 @@ import { buttonRow, colorRow, note, numberRow, selectRow, textRow, toggleRow, ty
 import { Dialog } from './dialog';
 import { icon, type IconName } from './icons';
 import { CHANGED, DEFAULT_AC, prefs, resetPrefs, updatePrefs, type Prefs } from './prefs';
+import { agentsPanel } from './agents-allow';
 import { assistantPanel, dictionaryPanel, extensionsPanel, externalPanel, folderPanel, lanPanel, pythonPanel, recoveryPanel, schedulerPanel, tokenPanel, type Panel } from './settings-engine';
 
 export interface SettingsHost {
@@ -499,6 +500,7 @@ export class SettingsDialog extends Dialog {
       this.grp('Trusted locations', list, path.el, bar),
       this.grp('Python cells', this.panel(pythonPanel())),
       this.grp('External content', this.panel(externalPanel())),
+      this.grp('Outside agents', this.panel(agentsPanel())),
     ];
   }
 

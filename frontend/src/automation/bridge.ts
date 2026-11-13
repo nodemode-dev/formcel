@@ -1,3 +1,4 @@
+import { askConsent } from '../ui/agents-allow';
 import { commandInfo, listCommands, runCommand } from '../ui/commands';
 import { asAgent } from './actor';
 import { api } from './dom';
@@ -32,7 +33,7 @@ export function connectBridge(): void {
       try { msg = JSON.parse(String(ev.data)); } catch { return; }
       if (msg.t !== 'run' || !msg.id || !msg.command) return;
       try {
-        const result = await run(msg.command);
+        const result = msg.command === '__consent__' ? { allowed: await askConsent(String(msg.params?.client ?? '')) } : await run(msg.command);
         ws.send(JSON.stringify({ t: 'result', id: msg.id, ok: true, result: safe(result) }));
       } catch (e) {
         ws.send(JSON.stringify({ t: 'result', id: msg.id, ok: false, error: (e as Error).message }));
