@@ -2,8 +2,60 @@
 
 Living log of comment content and rationale for the window. Source stays comment-free; it lives here.
 
-Current build version: v0.40.9
-Last updated: 2026-10-31 · no frontend change in 0.40.7 (version string only). Before: 2026-10-24 · Home credit reads by nodemode.ai (text only, `ui/home.ts` brand span); full fonts for the Reserved Font Name families
+Current build version: v0.40.10
+Last updated: 2026-11-12 · the v0.40.10 review fixes (section below). Before: 2026-10-31 · no frontend change in 0.40.7 (version string only). Before: 2026-10-24 · Home credit reads by nodemode.ai (text only, `ui/home.ts` brand span); full fonts for the Reserved Font Name families
+
+---
+
+## Review fixes · v0.40.10 (2026-11-12)
+
+Each line names the file and symbol, then what changed and why. The commit of the same subject carries the full reasoning and what was run. None of these was run in a browser unless the line says so.
+
+### Grid and app
+
+- grid/grid.ts :: `setActive`, pointerdown · the edited cell is captured before the first await and the commit is queued ahead of the click's select; with a validation rule, a table or a non en-US formula the typed value landed in the clicked cell.
+- grid/grid.ts :: `selectionTSV` · clamps to the used extent; Ctrl+A then Ctrl+C looped over the whole grid.
+- grid/grid.ts :: `fillDownToData` · fills to the end of the neighbour's block only; an empty cell below made it fill to the last row.
+- grid/grid.ts :: `copied`, `pasteWith`, `pasteLayers`, `copiedSource` · the copy records its workbook, and paste special from another workbook is refused instead of reading this one.
+- grid/grid.ts :: `remember`, `pasteSpecial`, `moveSelection` · a cut is remembered, pastes with offset 0,0 and is cleared after one paste, so references are kept as in a move.
+- grid/grid.ts :: `fill` · the two lines that reset `ar`/`ac` after a fill are removed; they shrank the selection back to the source for fills up and left.
+- grid/grid.ts :: `wants`, `gridKey` · AltGr (ctrl and alt together) and Option characters count as typing.
+- grid/grid.ts :: `resize` · re-arms a one-shot `matchMedia` resolution listener so a move to a screen of another pixel density re-sizes the canvas.
+- app.ts :: `moveSheet`, `deleteSheet` · splice `pages` with the sheets and clear `grouped`.
+- app.ts :: formula bar focus · takes the in-cell editor's text, so Enter there no longer writes the old value back.
+- app.ts :: tab rename · duplicate names are compared without case and exclude the sheet itself.
+
+### Panels
+
+- ui/whatif.ts :: `pick`, `mergeForm` · option text is escaped and the merge list starts empty and is filled through `textContent`; a sheet name with markup ran script.
+- ui/datatools.ts :: Replace · keeps its position across the rescan.
+- ui/backstage.ts :: Info versions list · the stale empty-state text node is removed before patching.
+- ui/collab.ts :: `password` · Escape resolves the promise.
+- ui/collab.ts :: restore · reloads only when the restore succeeded.
+- ui/review.ts, ui/backstage.ts :: share and publish controls · a refused change is reported and the state reloaded.
+- ui/collab.ts :: `paintThreads` · cards are reconciled by thread id, so a remote event no longer replaces the reply box being typed in (law two).
+- ui/datamodel.ts :: `drawLines` · relationship paths are kept per relationship and only their `d` is set while dragging (law two).
+
+### Charts, scripts and VBA
+
+- charts/svg.ts :: `color`, charts/shapes.ts :: `shapeSvg`, charts/layer.ts · series and shape colours must be hex and the three message strings are escaped before `innerHTML`.
+- charts/svg.ts :: waterfall · totals are categories named total, net, sum or end as whole words, not any text containing them.
+- charts/svg.ts :: `nice` · returns two ticks when the step no longer changes the value (values near 1e16).
+- charts/svg.ts :: error bars · the point index is passed for line, area, scatter and bubble charts, so amounts from a column draw.
+- automation/officeApi.ts :: `Range.copyFrom` · buffers the source before writing, so an overlapping copy or move keeps the source values.
+- automation/index.ts :: `custom`, `customSoon` · script custom functions check `macroAllowed('function')` like VBA functions.
+- automation/scripts.ts :: `ScriptRunner.call` · the `feed` listener is removed with `on`.
+- vbalang/interp.ts :: `pulse`, `execDo`, `execFor` · every loop iteration checks the deadline and abort and yields; an empty loop body skipped all three.
+- vbalang/interp.ts :: `\` and `Mod` · operands round half to even (`bankers`), as `CLng` does.
+- vbalang/interp.ts :: `resume` · Resume and Resume Next after an error inside a loop continue inside that loop.
+- vbalang/excel.ts :: `XRange.setValue` · an array fills only the target range and a single row or column repeats.
+- vbalang/builtins.ts :: `InStrRev` · returns 0 when the match would end after start or start is past the text.
+- backend/app/services/vba_runner.mjs · rebuilt from the vbalang sources with `npm run build:vba` in the same commits.
+
+### Open, recorded and not changed in 0.40.10
+
+- grid/grid.ts :: `writeClipboard` · a copy of a range outside the cached window writes the clipboard after a worker round trip, which WebKit may refuse outside the gesture.
+- engine/worker.ts, engine/index.ts · a wasm trap leaves the module unusable until reload; workbooks are never dropped from wasm memory; the worker has no error handler.
 
 ---
 
