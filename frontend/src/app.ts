@@ -3999,6 +3999,8 @@ export class App {
     await api('POST', `/api/workbooks/${o.id}/sheets/${from}/move`, { to });
     o.sheets.splice(to, 0, o.sheets.splice(from, 1)[0]);
     o.views.splice(to, 0, o.views.splice(from, 1)[0]);
+    o.pages.splice(to, 0, o.pages.splice(from, 1)[0]);
+    this.grouped.clear();
     await this.charts.layer.open();
     this.renderTabs();
     this.showSheet(to);
@@ -4069,6 +4071,8 @@ export class App {
     await api('DELETE', `/api/workbooks/${o.id}/sheets/${i}`);
     o.sheets.splice(i, 1);
     o.views.splice(i, 1);
+    o.pages.splice(i, 1);
+    this.grouped.clear();
     await this.charts.layer.open();
     this.renderTabs();
     this.showSheet(Math.min(i, o.sheets.length - 1));
