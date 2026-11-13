@@ -11,6 +11,7 @@ import type { FloatObject } from './charts/types';
 import { Automation } from './automation';
 import type { ScriptHost } from './automation/scripts';
 import { connectBridge } from './automation/bridge';
+import { mountDock } from './ui/dock-mount';
 import { Grid, type BorderKind, type MenuKind, type PasteKind, type SheetView } from './grid/grid';
 import { paint } from './grid/style';
 import { TABLE_STYLES, customId, parseCustom, parseTable } from './grid/tables';
@@ -766,6 +767,7 @@ export class App {
       },
       toast: (t) => this.status(t),
     });
+    mountDock(document.getElementById('app')!, document.querySelector<HTMLElement>('.fc-titlebar')!);
     connectBridge();
     setCommandState('page.preview', { checked: () => this.viewState === 'break' });
     setCommandState('edit.undo', { enabled: () => this.canUndo });

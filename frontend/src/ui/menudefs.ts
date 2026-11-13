@@ -350,6 +350,11 @@ export function excelMenus(): MenuDef[] {
       items: [
         { cmd: 'file.home', label: 'Home' },
         '-',
+        { cmd: 'claude-code', label: 'Claude Code' },
+        { cmd: 'claude-chat', label: 'Chat with Claude' },
+        { cmd: 'terminal-toggle', label: 'Terminal', keys: 'Mod+J' },
+        { cmd: 'terminal-new', label: 'New Terminal' },
+        '-',
         { cmd: 'view.freeze-panes', label: 'Freeze Panes' },
         { cmd: 'view.unfreeze', label: 'Unfreeze Panes' },
         { cmd: 'view.split', label: 'Split' },
