@@ -1071,6 +1071,9 @@ export class App {
       p.nameBox.value = this.currentRef;
     });
     p.formulaToggle.addEventListener('click', () => this.toggleFormulaBar());
+    p.formulaBar.addEventListener('pointerdown', () => {
+      if (!this.grid.editor.hidden && p.formulaBar.value !== this.grid.editor.value) p.formulaBar.value = this.grid.editor.value;
+    });
     p.formulaGrip.addEventListener('pointerdown', (e) => {
       e.preventDefault();
       const y0 = e.clientY;
