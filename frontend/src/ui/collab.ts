@@ -137,6 +137,8 @@ export class Collab {
   private readonly panes = new Map<string, HTMLElement>();
   private readonly tabs = new Map<string, HTMLButtonElement>();
   private readonly threadList = el('div', 'fc-side-list');
+  private readonly threadCards = new Map<string, HTMLElement>();
+  private readonly noThreads = el('span', 'fc-muted', 'No comments on this sheet yet. Select a cell and write one above.');
   private readonly composer = el('textarea', 'fc-text');
   private readonly assign = el('input');
   private readonly mentionRow = el('div', 'fc-people');
@@ -546,9 +548,34 @@ export class Collab {
     this.paintMentions();
     const sheet = this.host.grid.sheetIndex;
     const mine = this.snap.threads.filter((t) => t.sheet === sheet).sort((a, b) => a.row - b.row || a.col - b.col);
-    const cards = mine.map((t) => this.card(t));
-    if (!cards.length) cards.push(el('span', 'fc-muted', 'No comments on this sheet yet. Select a cell and write one above.'));
-    this.threadList.replaceChildren(...cards);
+    const extra = `\n${this.snap.people.join('\n')}\n${userName()}`;
+    const keep = new Set(mine.map((t) => t.id));
+    for (const [id, c] of this.threadCards) {
+      if (!keep.has(id)) {
+        c.remove();
+        this.threadCards.delete(id);
+      }
+    }
+    const cards = mine.map((t) => {
+      const sig = JSON.stringify(t) + extra;
+      let c = this.threadCards.get(t.id);
+      if (!c || c.dataset.sig !== sig) {
+        const fresh = this.card(t);
+        fresh.dataset.sig = sig;
+        c?.replaceWith(fresh);
+        c = fresh;
+        this.threadCards.set(t.id, c);
+      }
+      return c;
+    });
+    if (!cards.length) cards.push(this.noThreads);
+    let prev: Element | null = null;
+    for (const c of cards) {
+      const want: Element | null = prev ? prev.nextElementSibling : this.threadList.firstElementChild;
+      if (want !== c) this.threadList.insertBefore(c, want);
+      prev = c;
+    }
+    while (prev?.nextElementSibling) prev.nextElementSibling.remove();
   }
 
   private card(t: Thread): HTMLElement {
