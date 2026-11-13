@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.43.0 · 2026-11-13
+
+- The three demos also open as offline browser pages (`demo/index.html`, `demos/whatif/index.html`, `demos/lab/index.html`) that run the real FormCel window and recalculate as you edit.
+- The title bar, the About dialog and the About block under File, Account show the same crisp formcel mark as Home.
+- Home's side panel keeps the brand and Preferences and Help in view when the terminal dock is open; only the pages and groups between them scroll, with a soft fade where more is hidden.
+- When a new workbook cannot be created, Home says so.
+
 ## 0.42.0 · 2026-11-13
 
 FormCel joins the Form family standard for Home, agents and demos.
