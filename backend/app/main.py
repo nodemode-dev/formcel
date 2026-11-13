@@ -8,7 +8,7 @@ from . import config
 from .local_guard import LocalGuard
 import asyncio
 
-from .routers import automation, collab, commands, fonts, live, printpreview, quotes, review, share, spell, tplthumb, workbooks
+from .routers import automation, collab, commands, fonts, live, mcp, printpreview, quotes, review, share, spell, tplthumb, workbooks
 from .services import scheduler
 from .version import VERSION
 
@@ -37,6 +37,7 @@ app.include_router(workbooks.router)
 app.include_router(printpreview.router)
 app.include_router(commands.router)
 app.include_router(live.router)
+app.include_router(mcp.router)
 app.include_router(collab.router)
 app.include_router(review.router)
 app.include_router(share.router)
