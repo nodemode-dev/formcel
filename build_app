@@ -64,7 +64,7 @@ fc_say "building FormCel $version from $(pwd)"
 fc_say "python $("$py" -c 'import platform; print(platform.python_version())'), node $(node -v), $(rustc -V), $(cargo -V | awk '{print $1, $2}') from $(dirname "$(command -v rustc)")"
 
 step "installing the engine and the window"
-if [ -f backend/venv/bin/activate ] && [ -d frontend/node_modules ] && backend/venv/bin/python -c "import formcel_engine" >/dev/null 2>&1; then
+if [ "$clean" = 0 ] && [ -f backend/venv/bin/activate ] && [ -d frontend/node_modules ] && backend/venv/bin/python -c "import formcel_engine" >/dev/null 2>&1; then
   fc_say "already installed; ./formcel_oc_install rebuilds it"
 else
   ./formcel_oc_install
