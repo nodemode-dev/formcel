@@ -522,7 +522,7 @@ impl Eval<'_> {
                         return Err(ErrKind::Na);
                     }
                     let (x, n) = (self.n(a, 0)?, self.n(a, 1)?.trunc());
-                    if n < 0.0 || n > 134217727.0 || x.abs() > 134217727.0 {
+                    if !(0.0..=134217727.0).contains(&n) || x.abs() > 134217727.0 {
                         return Err(ErrKind::Num);
                     }
                     num(bessel_j(x, n as i64))
