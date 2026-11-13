@@ -2,10 +2,40 @@
 
 Living log of comment content and rationale for the window. Source stays comment-free; it lives here.
 
-Current build version: v0.42.0
-Last updated: 2026-11-13 · the family release pass of v0.42.0 (Home, terminal dock and Claude Code, demos, no sparkle icon; section below). Before: 2026-11-13 · the engine bridge fixes of v0.41.1. Before: 2026-11-12 · the v0.41.0 review fixes (section below). Before: 2026-10-31 · no frontend change in 0.40.7 (version string only). Before: 2026-10-24 · Home credit reads by nodemode.ai (text only, `ui/home.ts` brand span); full fonts for the Reserved Font Name families
+Current build version: v0.43.0
+Last updated: 2026-11-13 · v0.43.0: browser demo pages, the inline mark in the title bar and About, Home's side panel scrolls only its middle, a failed create says so (section below). Before: 2026-11-13 · the family release pass of v0.42.0 (Home, terminal dock and Claude Code, demos, no sparkle icon; section below). Before: 2026-11-13 · the engine bridge fixes of v0.41.1. Before: 2026-11-12 · the v0.41.0 review fixes (section below). Before: 2026-10-31 · no frontend change in 0.40.7 (version string only). Before: 2026-10-24 · Home credit reads by nodemode.ai (text only, `ui/home.ts` brand span); full fonts for the Reserved Font Name families
 
 ---
+
+## Open items closed · v0.43.0 (2026-11-13)
+
+### The demos as browser pages
+- refers-to: frontend/vite.demo.config.ts (inlineWorkers, tsWorker, wasmFromPage, sharedEngine, quietFonts, sharedBundle, demoPage, classicScript, escapeSymbols); demo/src/shim/api.ts (route, create, QuietSocket, QuietSource); demo/src/shim/workers.ts (withWasm, sharedWorker, sharedScript); demo/src/session.ts (openSession); scripts/demo-record.py; demo/, demos/whatif, demos/lab
+- kind: decision
+- logged: v0.43.0 · 2026-11-13
+
+Each page is the real window and its WebAssembly engine, opened from `file://`. The in-app demos get their workbook from the engine service (`POST /api/workbooks {template}`, then the workbook and its objects), so `scripts/demo-record.py` records exactly those three answers per demo into `demo/assets/workbooks.js` with an in-process client, and the shim replays them with a fresh id; a rerun writes identical bytes. Every other `/api` call answers 503 with the needs-the-engine message, so the title bar reads Not saved and the status bar Engine offline. Editing and recalculation are real: they run in the page's own engine. `file://` cannot fetch `.wasm`, so `workers.ts` hands the engine worker its bytes from `engine.js`; the TypeScript worker loads on first use through a queueing bootstrap worker. The bundle is byte-identical for the three modes, so everything large lives once in `demo/assets` and the whatif and lab builds write only `index.html`, failing if their bundle would differ. Fonts are woff2 only; the five full variable fonts are left out and fall back to a system font. The hide rule is `opacity: 0`, not `visibility: hidden`: a hidden grid cannot take focus and the session waits for `grid.focus()`. The build needs `frontend/public/engine/formcel.wasm` or `FORMCEL_DEMO_WASM`. About 16.6 MB committed. Seen in the page and not chased: after PivotTable Refresh the pivot values lost their currency format; not checked against the real app.
+
+### The inline mark in the title bar and both About views
+- refers-to: src/ui/shell.ts (mountShell); src/styles/titlebar.css (.fc-brand .fc-mark); src/ui/backstage.ts (buildAccount About block); src/ui/shell-mount.ts (aboutDialog)
+- kind: hashed-out
+- logged: v0.43.0 · 2026-11-13
+
+All three draw `brandMark(size)` from `ui/brand.ts` (20, 32 and 72 px), written in the same step as their surroundings, so there is no image load. Removed from the title bar: `<img class="fc-brand-logo" src="/icons/logo-64.png" width="20" height="20" alt="" draggable="false">` and the rule `.fc-brand-logo { display: block; flex: none; width: 20px; height: 20px; }`. Removed from the backstage: `ic3.insertAdjacentHTML('afterbegin', '<img src="/icons/logo-64.png" width="32" height="32" alt="" draggable="false">');`. Removed from the About dialog: `const logo = el('img', 'fc-about-logo') as HTMLImageElement; logo.src = '/icons/logo-128.png'; logo.width = logo.height = 72; logo.alt = '';`. The icon files stay for the desktop shell and the README.
+
+### Home's side panel scrolls only its middle
+- refers-to: src/ui/home.ts (Home constructor markup, Home.sidePanel more()); src/styles/home.css (.fc-home-nav, .fc-home-nav-scroll, [data-more])
+- kind: decision
+- logged: v0.43.0 · 2026-11-13
+
+The panel already ended at the terminal dock's top (grid rows), but its contents need 636 px and with the dock open the panel is shorter, and every scrollbar is hidden app-wide, so the foot and the Agents group looked cut off. Now the pages, Create and Agents are wrapped once at build time in `.fc-home-nav-scroll`, the only scrolling part; `.fc-home-nav` went from `overflow-y: auto` to `overflow: hidden`, so the brand and the foot stay in view. `more()` sets `data-more` (below, above, both, or absent) from a passive scroll listener and a ResizeObserver, and that switches a 28 px `mask-image` fade at the edge with hidden content. When everything fits the attribute is absent and nothing looks different. The region has a -4px -10px margin with matching padding so focus rings are not clipped. This was the orchestrator's choice among pin, tighter spacing or a thin scrollbar; none is in the references.
+
+### A workbook that cannot be created says so
+- refers-to: src/ui/home.ts (Home.make, onClick blank and use, templateCard); src/app.ts (Backstage create hook)
+- kind: fix
+- logged: v0.43.0 · 2026-11-13
+
+New workbook, Use this template and the template preview called `hooks.create` and dropped its promise, and the backstage hook did the same, so a refusal from the engine showed nothing and logged an uncaught rejection. `make()` catches and shows the message in Home's status line; the backstage hook shows it in the save status. `openDemo` already had its own catch.
 
 ## Family release pass · v0.42.0 (2026-11-13)
 
