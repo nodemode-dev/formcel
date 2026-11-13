@@ -360,6 +360,7 @@ export const BUILTINS: Record<string, Fn> = {
     const h = text ? hay.toLowerCase() : hay;
     const n = text ? needle.toLowerCase() : needle;
     if (n === '') return start;
+    if (start > hay.length || start - n.length < 0) return 0;
     return h.lastIndexOf(n, start - n.length) + 1;
   },
   replace: (a, c) => {
