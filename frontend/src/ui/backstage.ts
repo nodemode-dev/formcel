@@ -643,6 +643,7 @@ export class Backstage {
           set('tags', props.props.tags ?? '');
           const n = (l: string) => a11y.filter((x) => x.level === l).length;
           setText(found, a11y.length ? `Accessibility: ${n('error')} errors, ${n('warning')} warnings, ${n('tip')} tips. Run the checker to see where.` : 'Accessibility: no issues found.');
+          for (const t of [...vlist.childNodes]) if (t.nodeType !== Node.ELEMENT_NODE) t.remove();
           patch(vlist, vers.versions.slice(0, 5), (v) => v.id, () => h('li'), (li, v) => setText(li, `${new Date(v.time).toLocaleString()}${v.name ? ` · ${v.name}` : ''}${v.why === 'autosave' ? ' · autosave' : ''}`));
           if (!vers.versions.length) setText(vlist, 'No earlier versions yet.');
         } catch (e) {
