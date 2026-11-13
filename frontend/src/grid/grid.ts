@@ -2595,12 +2595,14 @@ export class Grid {
   }
 
   async setActive(entered: string): Promise<boolean> {
+    const [pr, pc] = [this.ar, this.ac];
     const raw = await this.localise(this.opts.entryFilter ? this.opts.entryFilter(entered) : entered, false);
     if (this.validLines.length && raw !== '') {
-      const line = await this.engine.checkInput(this.book, this.sheet, this.ar, this.ac, raw);
+      const line = await this.engine.checkInput(this.book, this.sheet, pr, pc, raw);
       if (line) {
         const choice = await this.events.onInvalid(line.split('\t').map(unescapeField));
         if (choice === 'retry') {
+          if (this.ar !== pr || this.ac !== pc) this.select(pr, pc);
           this.startEdit(entered);
           this.editor.select();
           return false;
@@ -2611,11 +2613,12 @@ export class Grid {
         }
       }
     }
-    if (this.tableList.length && raw !== '' && this.activeTable()) {
-      const typed = await this.engine.tool(this.book, this.sheet, 'typecheck', String(this.ar), String(this.ac), raw);
+    if (this.tableList.length && raw !== '' && this.tableList.some((t) => pr >= t.area[0] && pr <= t.area[2] && pc >= t.area[1] && pc <= t.area[3])) {
+      const typed = await this.engine.tool(this.book, this.sheet, 'typecheck', String(pr), String(pc), raw);
       if (typed.message) {
         const choice = await this.events.onInvalid(['', 'custom', '', '', '', 'e', 'warning', '', '', 'Column type', typed.message]);
         if (choice === 'retry') {
+          if (this.ar !== pr || this.ac !== pc) this.select(pr, pc);
           this.startEdit(entered);
           this.editor.select();
           return false;
@@ -2626,10 +2629,9 @@ export class Grid {
         }
       }
     }
-    this.recorder?.({ k: 'edit', sheet: this.sheet, r: this.ar, c: this.ac, raw });
+    this.recorder?.({ k: 'edit', sheet: this.sheet, r: pr, c: pc, raw });
     const pend = this.editChips;
     this.editChips = [];
-    const [pr, pc] = [this.ar, this.ac];
     try {
       const mark = pend.length ? await this.engine.undoMark(this.book) : -1;
       await this.commitEdits(await this.engine.apply(this.book, [[pr, pc, raw]], this.sheet));
