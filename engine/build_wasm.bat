@@ -1,4 +1,5 @@
 @echo off
+setlocal
 cd /d "%~dp0"
 rustup target add wasm32-unknown-unknown >nul 2>nul
 cargo build -p formcel-wasm --release --target wasm32-unknown-unknown || exit /b 1
