@@ -2995,8 +2995,6 @@ export class Grid {
     }
     await this.engine.undoGroup(this.book, mark);
     this.select(Math.min(s.r0, target.r0), Math.min(s.c0, target.c0), Math.max(s.r1, target.r1), Math.max(s.c1, target.c1), false);
-    this.ar = s.r0;
-    this.ac = s.c0;
   }
 
   private pointStart(e: PointerEvent): boolean {
