@@ -46,6 +46,7 @@ FormCel ports code from three sibling repositories by the same owner, all Apache
 | pdfplumber 0.11.10 | MIT | engine process: tables from PDF files (start a workbook from PDF tables); with pdfminer.six (MIT) and pypdfium2 (Apache-2.0 or BSD-3-Clause, bundling PDFium under BSD-3-Clause) |
 | pandas 2.3.3 and numpy 2.5.4 | BSD-3-Clause | engine process: Python cells (=PY), run in a separate restricted process |
 | TypeScript 5.9.3 (npm alias typescript5) | Apache-2.0 | window: type checking in the Office Scripts editor, loaded on demand in a worker |
+| xterm.js (@xterm/xterm 6.0.0) and its fit addon (@xterm/addon-fit 0.11.0) | MIT | window: the terminal dock (Window > Terminal) |
 | hunspell en_US dictionary (SCOWL) | permissive, see `backend/app/dictionaries/LICENSE-en_US.txt` | engine process: spell check word list |
 | ECMA-376 preset table styles (presetTableStyles, taken from Apache POI's copy) | Apache-2.0 for POI's file; the style definitions are from the published ECMA-376 standard | `frontend/src/grid/tablestyledata.ts`: Excel's built-in table style colours |
 | Natural Earth 1:50m and 1:10m admin 1 states and provinces | public domain | `frontend/src/charts/regions.ts` and `regions_more.ts`: regions for the map chart, from naturalearthdata.com |
