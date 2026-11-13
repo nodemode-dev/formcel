@@ -3,7 +3,7 @@ from functools import lru_cache
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent.parent / "templates"
-SOURCES = ("native.json", "formmd.json", "conformance.json", "formatcheck.json")
+SOURCES = ("native.json", "formmd.json", "conformance.json", "formatcheck.json", "demos.json")
 ORDER = ("Spreadsheets", "Data & charts", "Finance", "Sales & marketing", "Operations", "Personal & education", "Example projects")
 PREVIEW_ROWS = 8
 PREVIEW_COLS = 6
@@ -97,7 +97,7 @@ def summary(t: dict) -> dict:
 
 
 def listing() -> dict:
-    items = sorted(catalog().values(), key=lambda t: (ORDER.index(t["category"]) if t["category"] in ORDER else len(ORDER), not t.get("featured"), t["name"]))
+    items = sorted((t for t in catalog().values() if t["category"] != "Demos"), key=lambda t: (ORDER.index(t["category"]) if t["category"] in ORDER else len(ORDER), not t.get("featured"), t["name"]))
     cats = [{"name": c, "count": sum(1 for t in items if t["category"] == c)} for c in ORDER]
     return {"categories": cats, "templates": [summary(t) for t in items]}
 

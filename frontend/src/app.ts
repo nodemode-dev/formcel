@@ -336,7 +336,7 @@ export class App {
     initPrefs();
     this.home = new Home(p.home, {
       open: (id) => void this.openWorkbook(id),
-      create: (template) => void this.create(template),
+      create: (template) => this.create(template),
       importFile: (file) => void withJob(`Opening ${file.name}`, () => this.importFile(file)),
       pasteData: (text, html) => this.pasteData(text, html),
       trash: (id) => void this.act(() => api('DELETE', `/api/workbooks/${id}`)),

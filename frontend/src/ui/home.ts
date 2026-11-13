@@ -1,5 +1,6 @@
 import { icon } from './icons';
 import { brandMark } from './brand';
+import { DEMOS, demoTemplate, registerDemoCommands, type DemoId } from '../demos';
 import { HomeFiles } from './home-files';
 import { runCommand } from './commands';
 import { drawThumb } from './thumb';
@@ -30,7 +31,7 @@ export interface TemplateMeta {
 
 export interface HomeHooks {
   open(id: string): void;
-  create(template?: string): void;
+  create(template?: string): void | Promise<void>;
   importFile(file: File): void;
   pasteData(text?: string, html?: string): void;
   trash(id: string): void;
@@ -127,6 +128,7 @@ export class Home {
               <input type="file" class="fc-file" accept=".xlsx,.xlsm,.xls,.ods,.csv,.tsv,.txt,.html,.htm,.pdf" hidden>
             </div>
           </div>
+          <section class="fc-home-section" data-home-section="demos"><div class="fc-home-section-head"><h2 class="fc-home-section-title">Demos</h2><span class="fc-home-section-note">Each opens as a new workbook. Nothing of yours is changed.</span></div><div class="fc-home-demos">${DEMOS.map((d) => `<button class="fc-home-demo" type="button" data-demo="${d.id}" aria-busy="false"><span class="fc-home-demo-pic">${d.cover()}</span><span class="fc-home-demo-title">${d.title}</span><span class="fc-home-demo-blurb">${d.blurb}</span></button>`).join('')}</div></section>
           <section class="fc-home-section"><div class="fc-home-section-head"><h2 class="fc-home-section-title">Recent</h2><button class="fc-btn fc-btn-ghost" type="button" data-v="recent">See all</button></div><div class="fc-home-slot" data-slot="start"></div></section>
           <section class="fc-home-section"><div class="fc-home-section-head"><h2 class="fc-home-section-title">New workbook</h2><button class="fc-btn fc-btn-ghost" type="button" data-v="templates">More templates...</button></div><div class="fc-home-sizes"><button class="fc-home-size" type="button" data-a="blank" data-key="__blank"><span class="fc-home-size-box"><span class="fc-home-blank" style="aspect-ratio: 4 / 3"></span></span><span class="fc-home-size-name">Blank workbook</span><span class="fc-home-size-meta">One empty sheet</span></button><span class="fc-home-tpls"></span></div></section>
         </div>
@@ -176,8 +178,29 @@ export class Home {
       this.renderTemplates();
     });
     this.sidePanel();
+    registerDemoCommands((id) => void this.openDemo(id));
     this.paint();
     this.go(this.page);
+  }
+
+  private demoBusy = false;
+
+  async openDemo(id: DemoId): Promise<void> {
+    const d = DEMOS.find((x) => x.id === id);
+    if (!d || this.demoBusy) return;
+    this.demoBusy = true;
+    const card = this.root.querySelector<HTMLElement>(`[data-demo="${id}"]`);
+    card?.setAttribute('aria-busy', 'true');
+    this.say(`Opening the ${d.title} demo as a new workbook`);
+    try {
+      await this.hooks.create(demoTemplate(id));
+      this.say('');
+    } catch {
+      this.say(`The ${d.title} demo could not open.`, true);
+    } finally {
+      card?.setAttribute('aria-busy', 'false');
+      this.demoBusy = false;
+    }
   }
 
   private sidePanel(): void {
@@ -236,6 +259,8 @@ export class Home {
     if (nav) return this.go(nav.dataset.v as Page);
     const cmd = t.closest<HTMLElement>('[data-cmd]');
     if (cmd) return void runCommand(cmd.dataset.cmd!);
+    const demo = t.closest<HTMLElement>('[data-demo]');
+    if (demo) return void this.openDemo(demo.dataset.demo as DemoId);
     const chip = t.closest<HTMLElement>('[data-cat]');
     if (chip) {
       this.cat = chip.dataset.cat!;
@@ -245,12 +270,12 @@ export class Home {
     if (!act) return;
     const id = act.closest<HTMLElement>('[data-key]')?.dataset.key ?? '';
     switch (act.dataset.a) {
-      case 'blank': return this.hooks.create();
+      case 'blank': return void this.hooks.create();
       case 'openfile': return void runCommand('file.open');
       case 'back': return this.lastId ? this.hooks.open(this.lastId) : undefined;
       case 'pastedata': return this.hooks.pasteData();
       case 'open': return this.hooks.open(id);
-      case 'use': return this.hooks.create(id);
+      case 'use': return void this.hooks.create(id);
       case 'trash': return this.hooks.trash(id);
       case 'restore': return this.hooks.restore(id);
       case 'purge':
