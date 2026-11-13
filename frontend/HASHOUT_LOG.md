@@ -2,10 +2,17 @@
 
 Living log of comment content and rationale for the window. Source stays comment-free; it lives here.
 
-Current build version: v0.41.0
-Last updated: 2026-11-12 · the v0.41.0 review fixes (section below). Before: 2026-10-31 · no frontend change in 0.40.7 (version string only). Before: 2026-10-24 · Home credit reads by nodemode.ai (text only, `ui/home.ts` brand span); full fonts for the Reserved Font Name families
+Current build version: v0.41.1
+Last updated: 2026-11-13 · the engine bridge fixes of v0.41.1 (section below). Before: 2026-11-12 · the v0.41.0 review fixes (section below). Before: 2026-10-31 · no frontend change in 0.40.7 (version string only). Before: 2026-10-24 · Home credit reads by nodemode.ai (text only, `ui/home.ts` brand span); full fonts for the Reserved Font Name families
 
 ---
+
+## The engine bridge · v0.41.1 (2026-11-13)
+
+- engine/worker.ts :: `load`, `dead`, `ready`, `self.onmessage` · every exported wasm function is wrapped; when a call into wasm throws, that instance is marked dead, the module is loaded again, the per-book state is cleared and the request answers "The engine stopped on an internal error and restarted. Open the workbook again to go on." After a trap the engine's book table stays borrowed and its stack pointer is not restored, so every later call failed until the page reloaded. The check is not by error class: a stack overflow inside wasm surfaces as a RangeError. Removed: `const ready: Promise<Exports> = WebAssembly.instantiateStreaming(...).then((r) => r.instance.exports as unknown as Exports);`
+- engine/worker.ts :: `Exports.fc_workbook_drop`, `run` 'workbook.drop'; engine/protocol.ts; engine/index.ts :: `EngineClient.dropWorkbook`; app.ts :: `openWorkbook`, `showHome` · the previous workbook is dropped from wasm memory once the grid reads the new one, and on going Home. In a scratch run of twelve opens memory stayed at 20 MB instead of growing to 144 MB.
+- engine/index.ts :: `EngineClient` · `onerror` and `onmessageerror` reject and clear every pending call.
+- Checked with the real worker code in node against the built wasm; not run in a browser. Open: the window does not reopen the workbook by itself after an engine restart; edits not saved before the restart are lost and the message says to open it again.
 
 ## Review fixes · v0.41.0 (2026-11-12)
 
