@@ -11,7 +11,7 @@
 </p>
 
 <p align="center">
-  <img alt="version 0.40.9" src="https://img.shields.io/badge/version-0.40.9-eef0f4?style=flat-square">
+  <img alt="version 0.41.0" src="https://img.shields.io/badge/version-0.41.0-eef0f4?style=flat-square">
   <img alt="Rust and WebAssembly" src="https://img.shields.io/badge/engine-Rust%20%2B%20WebAssembly-b7410e?style=flat-square&logo=rust&logoColor=white">
   <img alt="TypeScript and Vite" src="https://img.shields.io/badge/TypeScript-Vite-3178c6?style=flat-square">
   <img alt="macOS, Windows, Linux" src="https://img.shields.io/badge/macOS%20%C2%B7%20Windows%20%C2%B7%20Linux-native-2f7bf5?style=flat-square">

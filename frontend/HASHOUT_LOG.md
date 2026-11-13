@@ -2,12 +2,12 @@
 
 Living log of comment content and rationale for the window. Source stays comment-free; it lives here.
 
-Current build version: v0.40.10
-Last updated: 2026-11-12 · the v0.40.10 review fixes (section below). Before: 2026-10-31 · no frontend change in 0.40.7 (version string only). Before: 2026-10-24 · Home credit reads by nodemode.ai (text only, `ui/home.ts` brand span); full fonts for the Reserved Font Name families
+Current build version: v0.41.0
+Last updated: 2026-11-12 · the v0.41.0 review fixes (section below). Before: 2026-10-31 · no frontend change in 0.40.7 (version string only). Before: 2026-10-24 · Home credit reads by nodemode.ai (text only, `ui/home.ts` brand span); full fonts for the Reserved Font Name families
 
 ---
 
-## Review fixes · v0.40.10 (2026-11-12)
+## Review fixes · v0.41.0 (2026-11-12)
 
 Each line names the file and symbol, then what changed and why. The commit of the same subject carries the full reasoning and what was run. None of these was run in a browser unless the line says so.
 
@@ -52,7 +52,7 @@ Each line names the file and symbol, then what changed and why. The commit of th
 - vbalang/builtins.ts :: `InStrRev` · returns 0 when the match would end after start or start is past the text.
 - backend/app/services/vba_runner.mjs · rebuilt from the vbalang sources with `npm run build:vba` in the same commits.
 
-### Open, recorded and not changed in 0.40.10
+### Open, recorded and not changed in 0.41.0
 
 - grid/grid.ts :: `writeClipboard` · a copy of a range outside the cached window writes the clipboard after a worker round trip, which WebKit may refuse outside the gesture.
 - engine/worker.ts, engine/index.ts · a wasm trap leaves the module unusable until reload; workbooks are never dropped from wasm memory; the worker has no error handler.

@@ -2,10 +2,10 @@
 
 Living log of comment content and rationale for the engine process. Source stays comment-free; it lives here.
 
-Current build version: v0.40.10
-Last updated: 2026-11-12 · the v0.40.10 review fixes (entries below). Before: 2026-10-31 · .js, .mjs and .css keep their types on Windows (app/main.py). Before: 2026-10-30 · the Windows install stops on a failed step and never on a missing Tesseract. Before: 2026-10-26 · scripts run with no file, process or network reach (FB-043), and the test suite. Before: LocalGuard refuses cross-site requests that carry no Origin (FB-035). Before: only this computer's own window and agents reach the engine (FB-030), and full fonts in PDF export, freeze exclusions
+Current build version: v0.41.0
+Last updated: 2026-11-12 · the v0.41.0 review fixes (entries below). Before: 2026-10-31 · .js, .mjs and .css keep their types on Windows (app/main.py). Before: 2026-10-30 · the Windows install stops on a failed step and never on a missing Tesseract. Before: 2026-10-26 · scripts run with no file, process or network reach (FB-043), and the test suite. Before: LocalGuard refuses cross-site requests that carry no Origin (FB-035). Before: only this computer's own window and agents reach the engine (FB-030), and full fonts in PDF export, freeze exclusions
 
-## v0.40.10 entries · review fixes (2026-11-12)
+## v0.41.0 entries · review fixes (2026-11-12)
 
 Each line names the file and symbol, then what changed and why. The commit of the same subject carries the full reasoning and what was run.
 
@@ -52,7 +52,7 @@ Each line names the file and symbol, then what changed and why. The commit of th
 - src-tauri/src/main.rs :: `spawn_engine` · sets `FORMCEL_HOST=127.0.0.1` and `FORMCEL_PARENT_PID`.
 - src-tauri/tauri.conf.json :: `bundle` · `license` is the SPDX id and `licenseFile` the path.
 
-### Open, recorded and not changed in 0.40.10
+### Open, recorded and not changed in 0.41.0
 
 - src-tauri/capabilities/default.json grants IPC to every 127.0.0.1 port; narrowing it needs a runtime capability once the port is known.
 - src-tauri/tauri.conf.json has `csp: null`; a real policy needs checking against workers, wasm and inline styles.
