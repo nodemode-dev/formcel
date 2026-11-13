@@ -565,7 +565,7 @@ function waterfall(spec: ChartSpec, d: ChartData, b: Box): string {
   const steps: { a: number; z: number; total: boolean; v: number }[] = [];
   let run = 0;
   vals.forEach((v, i) => {
-    const total = spec.totals ? spec.totals.includes(i) : /total|net|sum|end/i.test(d.cats[i]) && i > 0;
+    const total = spec.totals ? spec.totals.includes(i) : /\b(sub)?totals?\b|\bnet\b|\bsum\b|\bend\b/i.test(d.cats[i]) && i > 0;
     if (total) steps.push({ a: 0, z: run, total, v: run });
     else {
       steps.push({ a: run, z: run + v, total: false, v });
