@@ -14,7 +14,8 @@
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "tauri": "tauri",
-    "build:vba": "vite build --config vite.vba.config.ts"
+    "build:vba": "vite build --config vite.vba.config.ts",
+    "demo": "vite build --config vite.demo.config.ts --mode sales && vite build --config vite.demo.config.ts --mode whatif && vite build --config vite.demo.config.ts --mode lab"
   },
   "devDependencies": {
     "@tauri-apps/cli": "2.12.4",

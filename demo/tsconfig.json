@@ -1,0 +1,13 @@
+{
+  "extends": "../frontend/tsconfig.json",
+  "compilerOptions": {
+    "typeRoots": ["../frontend/node_modules/@types", "../frontend/node_modules"],
+    "types": ["vite/client"],
+    "paths": {
+      "@fontsource/*": ["../frontend/node_modules/@fontsource/*"],
+      "@tauri-apps/*": ["../frontend/node_modules/@tauri-apps/*"],
+      "@xterm/*": ["../frontend/node_modules/@xterm/*"]
+    }
+  },
+  "include": ["src"]
+}
