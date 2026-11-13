@@ -1,4 +1,6 @@
 import { icon } from './icons';
+import { brandMark } from './brand';
+import { DEMOS, demoTemplate, registerDemoCommands, type DemoId } from '../demos';
 import { HomeFiles } from './home-files';
 import { runCommand } from './commands';
 import { drawThumb } from './thumb';
@@ -29,7 +31,7 @@ export interface TemplateMeta {
 
 export interface HomeHooks {
   open(id: string): void;
-  create(template?: string): void;
+  create(template?: string): void | Promise<void>;
   importFile(file: File): void;
   pasteData(text?: string, html?: string): void;
   trash(id: string): void;
@@ -97,13 +99,19 @@ export class Home {
     const formats = ['XLSX', 'XLSM', 'XLS', 'ODS', 'CSV', 'TSV', 'HTML', 'PDF'].map((f) => `<span class="fc-home-format">${f}</span>`).join('');
     root.innerHTML = `
       <nav class="fc-home-nav" aria-label="Home">
-        <div class="fc-home-brand"><img class="fc-home-logo" src="/icons/logo-64.png" width="24" height="24" alt="" draggable="false">FormCel <span>by nodemode.ai</span></div>
-        ${navItem('start', 'home', 'Start')}${navItem('recent', 'clock', 'Recent')}${navItem('templates', 'template', 'Templates')}${navItem('trash', 'trash', 'Trash')}
+        <div class="fc-home-brand">${brandMark(26)}formcel <span translate="no">by nodemode.ai</span></div>
+        <div class="fc-home-nav-scroll">${navItem('start', 'home', 'Start')}${navItem('recent', 'clock', 'Recent')}${navItem('templates', 'template', 'Templates')}${navItem('trash', 'trash', 'Trash')}
         <div class="fc-home-nav-sep"></div>
         <div class="fc-home-nav-title">Create</div>
         ${cmdItem('data-a="blank"', 'newFile', 'New workbook')}${cmdItem('data-a="openfile"', 'folderOpen', 'Open')}${cmdItem('data-a="pastedata"', 'clipboard', 'Paste data')}
+        <div class="fc-home-nav-sep"></div>
+        <div class="fc-home-nav-title">Agents</div>
+        ${cmdItem('data-cmd="claude-code"', 'agent', 'Claude Code')}${cmdItem('data-cmd="claude-chat"', 'agentChat', 'Chat')}${cmdItem('data-cmd="terminal-toggle"', 'terminal', 'Terminal')}</div>
         <div class="fc-home-nav-foot"><button class="fc-home-nav-item fc-home-back" type="button" data-a="back" hidden>${icon('chevronLeft')}<span>Back to workbook</span></button>${cmdItem('data-cmd="app.settings"', 'settings', 'Preferences')}${cmdItem('data-cmd="a11y.shortcuts"', 'info', 'Help')}</div>
       </nav>
+      <div class="fc-home-resizer" role="separator" aria-orientation="vertical" aria-label="Resize the side panel"></div>
+      <button class="fc-home-nav-hide" type="button" title="Hide the side panel" aria-label="Hide the side panel">${icon('chevronLeft')}</button>
+      <button class="fc-home-nav-show" type="button" title="Show the side panel" aria-label="Show the side panel">${icon('chevronRight')}</button>
       <div class="fc-home-body">
         <div class="fc-home-narrow">${navItem('start', 'home', 'Start')}${navItem('recent', 'clock', 'Recent')}${navItem('templates', 'template', 'Templates')}${navItem('trash', 'trash', 'Trash')}</div>
         <div class="fc-home-page" data-page="start">
@@ -120,6 +128,7 @@ export class Home {
               <input type="file" class="fc-file" accept=".xlsx,.xlsm,.xls,.ods,.csv,.tsv,.txt,.html,.htm,.pdf" hidden>
             </div>
           </div>
+          <section class="fc-home-section" data-home-section="demos"><div class="fc-home-section-head"><h2 class="fc-home-section-title">Demos</h2><span class="fc-home-section-note">Each opens as a new workbook. Nothing of yours is changed.</span></div><div class="fc-home-demos">${DEMOS.map((d) => `<button class="fc-home-demo" type="button" data-demo="${d.id}" aria-busy="false"><span class="fc-home-demo-pic">${d.cover()}</span><span class="fc-home-demo-title">${d.title}</span><span class="fc-home-demo-blurb">${d.blurb}</span></button>`).join('')}</div></section>
           <section class="fc-home-section"><div class="fc-home-section-head"><h2 class="fc-home-section-title">Recent</h2><button class="fc-btn fc-btn-ghost" type="button" data-v="recent">See all</button></div><div class="fc-home-slot" data-slot="start"></div></section>
           <section class="fc-home-section"><div class="fc-home-section-head"><h2 class="fc-home-section-title">New workbook</h2><button class="fc-btn fc-btn-ghost" type="button" data-v="templates">More templates...</button></div><div class="fc-home-sizes"><button class="fc-home-size" type="button" data-a="blank" data-key="__blank"><span class="fc-home-size-box"><span class="fc-home-blank" style="aspect-ratio: 4 / 3"></span></span><span class="fc-home-size-name">Blank workbook</span><span class="fc-home-size-meta">One empty sheet</span></button><span class="fc-home-tpls"></span></div></section>
         </div>
@@ -168,8 +177,80 @@ export class Home {
       this.query = (e.target as HTMLInputElement).value.trim().toLowerCase();
       this.renderTemplates();
     });
+    this.sidePanel();
+    registerDemoCommands((id) => void this.openDemo(id));
     this.paint();
     this.go(this.page);
+  }
+
+  private demoBusy = false;
+
+  async openDemo(id: DemoId): Promise<void> {
+    const d = DEMOS.find((x) => x.id === id);
+    if (!d || this.demoBusy) return;
+    this.demoBusy = true;
+    const card = this.root.querySelector<HTMLElement>(`[data-demo="${id}"]`);
+    card?.setAttribute('aria-busy', 'true');
+    this.say(`Opening the ${d.title} demo as a new workbook`);
+    try {
+      await this.hooks.create(demoTemplate(id));
+      this.say('');
+    } catch {
+      this.say(`The ${d.title} demo could not open.`, true);
+    } finally {
+      card?.setAttribute('aria-busy', 'false');
+      this.demoBusy = false;
+    }
+  }
+
+  private sidePanel(): void {
+    const root = this.root;
+    const bar = root.querySelector<HTMLElement>('.fc-home-resizer')!;
+    const save = (): void => {
+      try {
+        localStorage.setItem('formcel.homeNav', root.style.getPropertyValue('--fc-home-nav-w'));
+        localStorage.setItem('formcel.homeNavHidden', root.classList.contains('is-nav-hidden') ? '1' : '0');
+      } catch { return; }
+    };
+    const hide = (on: boolean): void => { root.classList.toggle('is-nav-hidden', on); save(); };
+    try {
+      const w = localStorage.getItem('formcel.homeNav');
+      if (w) root.style.setProperty('--fc-home-nav-w', w.trim());
+      if (localStorage.getItem('formcel.homeNavHidden') === '1') root.classList.add('is-nav-hidden');
+    } catch { void 0; }
+    root.querySelector('.fc-home-nav-hide')!.addEventListener('click', () => hide(true));
+    root.querySelector('.fc-home-nav-show')!.addEventListener('click', () => hide(false));
+    const list = root.querySelector<HTMLElement>('.fc-home-nav-scroll')!;
+    const more = (): void => {
+      const above = list.scrollTop > 1;
+      const below = list.scrollTop + list.clientHeight < list.scrollHeight - 1;
+      const v = above && below ? 'both' : above ? 'above' : below ? 'below' : '';
+      if ((list.dataset.more ?? '') === v) return;
+      if (v) list.dataset.more = v;
+      else delete list.dataset.more;
+    };
+    list.addEventListener('scroll', more, { passive: true });
+    new ResizeObserver(more).observe(list);
+    bar.addEventListener('pointerdown', (e) => {
+      e.preventDefault();
+      const x0 = e.clientX;
+      const start = root.querySelector('.fc-home-nav')!.getBoundingClientRect().width || 232;
+      bar.classList.add('is-dragging');
+      const mv = (ev: PointerEvent): void => {
+        const raw = start + ev.clientX - x0;
+        const collapse = raw < 120;
+        if (root.classList.contains('is-nav-hidden') !== collapse) root.classList.toggle('is-nav-hidden', collapse);
+        if (!collapse) root.style.setProperty('--fc-home-nav-w', `${Math.round(Math.max(180, Math.min(420, raw)))}px`);
+      };
+      const up = (): void => {
+        bar.classList.remove('is-dragging');
+        window.removeEventListener('pointermove', mv);
+        window.removeEventListener('pointerup', up);
+        save();
+      };
+      window.addEventListener('pointermove', mv);
+      window.addEventListener('pointerup', up);
+    });
   }
 
   private paint(): void {
@@ -189,6 +270,8 @@ export class Home {
     if (nav) return this.go(nav.dataset.v as Page);
     const cmd = t.closest<HTMLElement>('[data-cmd]');
     if (cmd) return void runCommand(cmd.dataset.cmd!);
+    const demo = t.closest<HTMLElement>('[data-demo]');
+    if (demo) return void this.openDemo(demo.dataset.demo as DemoId);
     const chip = t.closest<HTMLElement>('[data-cat]');
     if (chip) {
       this.cat = chip.dataset.cat!;
@@ -198,12 +281,12 @@ export class Home {
     if (!act) return;
     const id = act.closest<HTMLElement>('[data-key]')?.dataset.key ?? '';
     switch (act.dataset.a) {
-      case 'blank': return this.hooks.create();
+      case 'blank': return this.make();
       case 'openfile': return void runCommand('file.open');
       case 'back': return this.lastId ? this.hooks.open(this.lastId) : undefined;
       case 'pastedata': return this.hooks.pasteData();
       case 'open': return this.hooks.open(id);
-      case 'use': return this.hooks.create(id);
+      case 'use': return this.make(id);
       case 'trash': return this.hooks.trash(id);
       case 'restore': return this.hooks.restore(id);
       case 'purge':
@@ -216,6 +299,10 @@ export class Home {
         }, 3000);
         return;
     }
+  }
+
+  private make(template?: string): void {
+    void Promise.resolve(this.hooks.create(template)).catch(() => this.say('The workbook could not be created.', true));
   }
 
   say(text: string, error = false): void {
@@ -244,7 +331,7 @@ export class Home {
     const card = el(`<div class="fc-card"><button type="button" class="fc-card-open"><span class="fc-card-body"><span class="fc-card-name"></span><span class="fc-card-meta"></span></span></button></div>`);
     const open = card.querySelector<HTMLElement>('.fc-card-open')!;
     open.prepend(thumbBox());
-    onPreviewGesture(open, () => openPreview(t, (id) => this.hooks.create(id)), () => this.hooks.create(t.id));
+    onPreviewGesture(open, () => openPreview(t, (id) => this.make(id)), () => this.make(t.id));
     return card;
   };
 

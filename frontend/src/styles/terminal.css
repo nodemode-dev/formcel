@@ -1,0 +1,76 @@
+:root { --ft-dock-size: 280px; --ft-dock-h: 0px; }
+:root[data-ft-dock="open"] { --ft-dock-h: min(var(--ft-dock-size), 70vh); }
+:root #app { grid-template-rows: var(--bar-h) minmax(0, 1fr) var(--ft-dock-h); }
+
+.ft-dock { grid-row: 3; position: relative; display: flex; flex-direction: column; min-height: 0; overflow: hidden; background: var(--bg-primary); border-top: 1px solid var(--border-color); color: var(--text-primary); user-select: none; -webkit-user-select: none; }
+:root:not([data-ft-dock="open"]) .ft-dock { visibility: hidden; border-top-width: 0; }
+.ft-dock .fc-icon { --icon-box: 26px; --icon-size: 15px; }
+.ft-dock-grip { position: absolute; top: 0; left: 0; right: 0; height: 6px; cursor: ns-resize; z-index: var(--z-raised); touch-action: none; }
+.ft-dock-grip:hover { background: var(--accent-color-dim); }
+.ft-dock-head { flex: none; display: flex; align-items: center; gap: var(--space-2); height: calc(var(--icon-box) + var(--space-2)); padding: 0 var(--space-2); background: var(--bg-secondary); border-bottom: 1px solid var(--border-color); min-width: 0; }
+.ft-dock-tabs { display: flex; align-items: center; gap: 2px; min-width: 0; overflow-x: auto; scrollbar-width: none; }
+.ft-dock-spacer { flex: 1; }
+.ft-dock-tab { display: inline-flex; align-items: center; flex: none; gap: 6px; height: 26px; padding: 0 6px 0 9px; border: 1px solid transparent; border-radius: var(--radius); background: transparent; color: var(--text-secondary); font: inherit; font-size: var(--text-sm); cursor: pointer; white-space: nowrap; }
+.ft-dock-tab:hover { color: var(--text-primary); }
+.ft-dock-tab.is-on { border-color: var(--border-light); background: var(--bg-tertiary); color: var(--text-primary); }
+.ft-dock-tab > .fc-icon { --icon-box: 14px; --icon-size: 13px; }
+.ft-dock-tab.is-claude > .fc-icon, .ft-dock-tab.is-chat > .fc-icon { color: var(--accent-color); }
+.ft-dock-tab.is-agent .ft-dock-tab-title { color: var(--accent-color); }
+.ft-dock-tab-x { display: inline-grid; place-items: center; width: 16px; height: 16px; border-radius: var(--radius-sm); color: var(--text-muted); }
+.ft-dock-tab-x .fc-icon { --icon-box: 16px; --icon-size: 11px; }
+.ft-dock-tab-x:hover { background: var(--border-light); color: var(--text-primary); }
+.ft-dock-head .fc-tool { width: 26px; height: 26px; flex: none; }
+.ft-dock-stage { position: relative; flex: 1; min-height: 0; padding: var(--space-1) var(--space-2) 0; overflow: hidden; background: var(--bg-primary); }
+.ft-term { height: 100%; user-select: text; -webkit-user-select: text; }
+.ft-term[hidden] { display: none; }
+.ft-term .xterm { height: 100%; }
+.ft-term .xterm .xterm-viewport { scrollbar-width: none !important; -ms-overflow-style: none !important; background-color: transparent !important; }
+.ft-term .xterm .xterm-viewport::-webkit-scrollbar { display: none !important; width: 0 !important; height: 0 !important; }
+.ft-term .xterm .scrollbar, .ft-term .xterm .xterm-scrollable-element > .scrollbar, .ft-term .xterm .xterm-scrollable-element > .shadow { display: none !important; }
+
+.ft-dock-empty { position: absolute; inset: 0; display: grid; place-items: center; margin: 0; padding: 0 var(--space-4); text-align: center; }
+.ft-dock-note { position: absolute; left: var(--space-2); right: var(--space-2); bottom: var(--space-2); z-index: var(--z-raised); display: flex; align-items: center; gap: var(--space-2); padding: var(--space-2) var(--space-3); border: 1px solid var(--accent-color-dim); border-radius: var(--radius-md); background: var(--bg-secondary); color: var(--text-primary); font-size: var(--text-sm); line-height: 1.4; user-select: text; -webkit-user-select: text; }
+.ft-dock-note-text { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
+.ft-dock-note-cmd { flex: 0 1 auto; max-width: 50%; padding: var(--space-1) var(--space-2); border-radius: var(--radius-sm); background: var(--bg-tertiary); font-family: var(--font-mono); font-size: var(--text-xs); overflow-wrap: anywhere; }
+.ft-dock-note .fc-btn { height: 26px; font-size: var(--text-sm); }
+.ft-dock-note .fc-tool { width: 24px; height: 24px; flex: none; }
+.ft-dock-note .fc-tool .fc-icon { --icon-box: 24px; --icon-size: 12px; }
+.ft-dock-ask { flex: none; display: flex; align-items: center; gap: var(--space-2); height: 40px; padding: 0 var(--space-2); background: var(--bg-secondary); border-top: 1px solid var(--border-color); }
+.ft-dock-ask-mark { display: inline-grid; place-items: center; color: var(--accent-color); }
+.ft-dock-ask-input { flex: 1; height: 28px; user-select: text; -webkit-user-select: text; }
+.ft-dock-ask .fc-tool { width: 28px; height: 28px; flex: none; }
+.ft-dock-ask .fc-tool .fc-icon { --icon-box: 28px; --icon-size: 14px; }
+
+.ft-chat { position: absolute; inset: 0; display: grid; grid-template-rows: 36px minmax(0, 1fr); background: var(--bg-primary); }
+.ft-chat-bar { display: flex; align-items: center; gap: var(--space-2); padding: 0 var(--space-3); border-bottom: 1px solid var(--border-color); min-width: 0; }
+.ft-chat-status { margin: 0; padding: 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ft-chat-bar .fc-btn, .ft-chat-bar .fc-input { flex: none; width: auto; height: 26px; min-height: 26px; padding: 0 var(--space-3); font-size: var(--text-sm); white-space: nowrap; }
+.ft-chat:not(.is-loaded) .ft-chat-log { visibility: hidden; }
+.ft-chat-log { overflow-y: auto; display: flex; flex-direction: column; gap: var(--space-2); padding: var(--space-2) var(--space-3) var(--space-3); font-size: var(--text-sm); user-select: text; -webkit-user-select: text; }
+.ft-chat-empty { margin: auto 0; max-width: 64ch; display: flex; flex-direction: column; gap: var(--space-2); }
+.ft-chat-empty p { margin: 0; line-height: 1.45; }
+.ft-chat-install { display: flex; align-items: center; gap: var(--space-2); }
+.ft-chat-install code { flex: 1; min-width: 0; padding: var(--space-1) var(--space-2); border-radius: var(--radius-sm); background: var(--bg-tertiary); font-family: var(--font-mono); font-size: var(--text-xs); overflow-wrap: anywhere; }
+.ft-chat-install .fc-btn { height: 26px; font-size: var(--text-sm); }
+.ft-chat-msg { max-width: 82ch; white-space: pre-wrap; line-height: 1.45; overflow-wrap: anywhere; }
+.ft-chat-msg.is-user { align-self: flex-end; padding: 6px 10px; border-radius: var(--radius-md); background: var(--bg-tertiary); color: var(--text-primary); }
+.ft-chat-msg.is-assistant { align-self: flex-start; color: var(--text-primary); }
+.ft-chat-msg.is-thinking, .ft-chat-msg.is-note { color: var(--text-muted); font-size: var(--text-xs); }
+.ft-chat-msg.is-thinking { font-style: italic; }
+.ft-chat-msg.is-error { color: var(--bad); }
+.ft-chat-tool-card { display: flex; flex-direction: column; gap: 4px; align-self: flex-start; max-width: 100%; }
+.ft-chat-tool { display: inline-flex; align-items: center; align-self: flex-start; gap: 6px; max-width: 100%; padding: 2px 8px; border: 1px solid var(--border-color); border-radius: var(--radius); color: var(--text-muted); font-family: var(--font-mono); font-size: var(--text-xs); cursor: pointer; }
+.ft-chat-tool-mark { display: inline-grid; place-items: center; }
+.ft-chat-tool-mark .fc-icon { --icon-box: 12px; --icon-size: 11px; }
+.ft-chat-tool-name { color: var(--text-primary); }
+.ft-chat-tool-input { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.ft-chat-tool.is-running .ft-chat-tool-mark { color: var(--accent-color); }
+.ft-chat-tool.is-error { border-color: var(--bad); }
+.ft-chat-tool.is-error .ft-chat-tool-mark { color: var(--bad); }
+.ft-chat-tool-out { margin: 0; max-height: 120px; overflow: auto; font-family: var(--font-mono); font-size: var(--text-xs); white-space: pre-wrap; overflow-wrap: anywhere; color: var(--text-muted); }
+.ft-chat-ask { display: flex; flex-direction: column; gap: var(--space-1); align-self: flex-start; max-width: 82ch; padding: var(--space-2) var(--space-3); border: 1px solid var(--accent-color-dim); border-radius: var(--radius); background: var(--bg-secondary); }
+.ft-chat-ask-sum { font-family: var(--font-mono); font-size: var(--text-xs); white-space: pre-wrap; overflow-wrap: anywhere; color: var(--text-secondary); }
+.ft-chat-ask-row { display: flex; align-items: center; gap: var(--space-2); }
+.ft-chat-ask-row .fc-btn { height: 26px; font-size: var(--text-sm); }
+.ft-chat-ask.is-done .ft-chat-allow, .ft-chat-ask.is-done .ft-chat-deny { display: none; }
+.ft-chat-ask-state { color: var(--text-muted); }

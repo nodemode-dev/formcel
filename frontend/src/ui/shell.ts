@@ -1,4 +1,5 @@
 import { icon } from './icons';
+import { brandMark } from './brand';
 import { VERSION } from '../version';
 
 export interface ShellParts {
@@ -30,7 +31,7 @@ export function mountShell(root: HTMLElement): ShellParts {
   root.innerHTML = `
     <header class="fc-titlebar">
       <div class="fc-tb-left">
-        <div class="fc-brand" title="FormCel v${VERSION}"><img class="fc-brand-logo" src="/icons/logo-64.png" width="20" height="20" alt="" draggable="false"><span>FormCel</span></div>
+        <div class="fc-brand" title="FormCel v${VERSION}">${brandMark(20)}<span>FormCel</span></div>
         <button type="button" class="fc-tool fc-home-btn" title="Home" aria-label="Home" hidden>${icon('home')}</button>
         <nav class="fc-menubar" aria-label="Main menu"></nav>
       </div>
@@ -44,6 +45,9 @@ export function mountShell(root: HTMLElement): ShellParts {
           <label class="fc-tb-search-box">${icon('search')}<input class="fc-tb-search-input" type="text" placeholder="Search" title="Search commands (Alt+Q)" aria-label="Search commands" spellcheck="false" autocomplete="off"></label>
           <div class="fc-search-pop" role="listbox" aria-label="Commands" hidden></div>
         </div>
+        <button type="button" class="fc-tool fc-tb-claude" title="Claude Code" aria-label="Claude Code" aria-pressed="false">${icon('agent')}</button>
+        <button type="button" class="fc-tool fc-tb-chat" title="Chat with Claude" aria-label="Chat with Claude" aria-pressed="false">${icon('agentChat')}</button>
+        <button type="button" class="fc-tool fc-tb-terminal" title="Terminal (Ctrl+J)" aria-label="Terminal" aria-pressed="false">${icon('terminal')}</button>
         <button type="button" class="fc-tool fc-tb-share" title="Share" aria-label="Share">${icon('share')}</button>
         <button type="button" class="fc-tb-account" aria-label="Account"></button>
         <button type="button" class="fc-tool fc-tb-settings" title="Settings (Ctrl+,)" aria-label="Settings">${icon('settings')}</button>

@@ -11,7 +11,7 @@
 </p>
 
 <p align="center">
-  <img alt="version 0.41.1" src="https://img.shields.io/badge/version-0.41.1-eef0f4?style=flat-square">
+  <img alt="version 0.43.0" src="https://img.shields.io/badge/version-0.43.0-eef0f4?style=flat-square">
   <img alt="Rust and WebAssembly" src="https://img.shields.io/badge/engine-Rust%20%2B%20WebAssembly-b7410e?style=flat-square&logo=rust&logoColor=white">
   <img alt="TypeScript and Vite" src="https://img.shields.io/badge/TypeScript-Vite-3178c6?style=flat-square">
   <img alt="macOS, Windows, Linux" src="https://img.shields.io/badge/macOS%20%C2%B7%20Windows%20%C2%B7%20Linux-native-2f7bf5?style=flat-square">
@@ -102,6 +102,28 @@
 - **Local by design:** a guard on the engine refuses cross-site requests, and scripts in a workbook run with no access to your files or network.
 - **No icon libraries:** the window is vanilla TypeScript with inline `currentColor` SVG icons and token-driven dark and light themes.
 - **Tested:** Python tests for the guard, formulas, the .xlsx round trip and script runners, and a window test under a slow network and processor.
+
+## Built for agents
+
+The window, the command line and the MCP server call the same command catalogue, so what you can click an agent can run. The terminal dock (Mod+J) opens shells, Claude Code tabs with FormCel's tools attached, and a Chat tab; the engine runs them and Claude Code is your own install.
+
+```sh
+./formcel cli list sort             # the open window's commands, filtered by a word
+./formcel cli run ribbon.collapse   # run one by id
+./formcel mcp                       # MCP server on stdio for Claude Code, Codex and Cursor
+./formcel agents install            # register FormCel with Claude Code, Codex and Cursor for your account
+```
+
+`.mcp.json`, `.codex/config.toml` and `.cursor/mcp.json` are already wired in this repo. The first command an outside agent runs asks you once, in the window, to allow outside agents. See [`AGENTS.md`](AGENTS.md).
+
+## Demo
+
+[`demo/index.html`](demo/index.html) is an offline demo that opens from `file://` or any static server and runs the real FormCel window with its calculation engine: A year of bike sales, an invented shop's 1,200 orders with a dashboard of formulas, a PivotTable, charts and sparklines that recalculate as you edit. See [`demo/README.md`](demo/README.md).
+
+- [`demos/whatif/index.html`](demos/whatif/index.html): Loan and savings what-if, with named inputs, LAMBDA, a data table, scenarios and a schedule. See [`demos/whatif/README.md`](demos/whatif/README.md).
+- [`demos/lab/index.html`](demos/lab/index.html): Lab measurements, a messy export cleaned, then statistics, a trendline and flagged outliers. See [`demos/lab/README.md`](demos/lab/README.md).
+
+The pages replay the engine's recorded answers that open each workbook; saving and everything else that needs the engine process says so. The same three demos open inside the app from Home, from Help > Demos, or with the `demo-sales`, `demo-whatif` and `demo-lab` commands, each as a new workbook.
 
 ## Download
 

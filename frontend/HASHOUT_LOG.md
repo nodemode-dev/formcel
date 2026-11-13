@@ -2,10 +2,72 @@
 
 Living log of comment content and rationale for the window. Source stays comment-free; it lives here.
 
-Current build version: v0.41.1
-Last updated: 2026-11-13 · the engine bridge fixes of v0.41.1 (section below). Before: 2026-11-12 · the v0.41.0 review fixes (section below). Before: 2026-10-31 · no frontend change in 0.40.7 (version string only). Before: 2026-10-24 · Home credit reads by nodemode.ai (text only, `ui/home.ts` brand span); full fonts for the Reserved Font Name families
+Current build version: v0.43.0
+Last updated: 2026-11-13 · v0.43.0: browser demo pages, the inline mark in the title bar and About, Home's side panel scrolls only its middle, a failed create says so (section below). Before: 2026-11-13 · the family release pass of v0.42.0 (Home, terminal dock and Claude Code, demos, no sparkle icon; section below). Before: 2026-11-13 · the engine bridge fixes of v0.41.1. Before: 2026-11-12 · the v0.41.0 review fixes (section below). Before: 2026-10-31 · no frontend change in 0.40.7 (version string only). Before: 2026-10-24 · Home credit reads by nodemode.ai (text only, `ui/home.ts` brand span); full fonts for the Reserved Font Name families
 
 ---
+
+## Open items closed · v0.43.0 (2026-11-13)
+
+### The demos as browser pages
+- refers-to: frontend/vite.demo.config.ts (inlineWorkers, tsWorker, wasmFromPage, sharedEngine, quietFonts, sharedBundle, demoPage, classicScript, escapeSymbols); demo/src/shim/api.ts (route, create, QuietSocket, QuietSource); demo/src/shim/workers.ts (withWasm, sharedWorker, sharedScript); demo/src/session.ts (openSession); scripts/demo-record.py; demo/, demos/whatif, demos/lab
+- kind: decision
+- logged: v0.43.0 · 2026-11-13
+
+Each page is the real window and its WebAssembly engine, opened from `file://`. The in-app demos get their workbook from the engine service (`POST /api/workbooks {template}`, then the workbook and its objects), so `scripts/demo-record.py` records exactly those three answers per demo into `demo/assets/workbooks.js` with an in-process client, and the shim replays them with a fresh id; a rerun writes identical bytes. Every other `/api` call answers 503 with the needs-the-engine message, so the title bar reads Not saved and the status bar Engine offline. Editing and recalculation are real: they run in the page's own engine. `file://` cannot fetch `.wasm`, so `workers.ts` hands the engine worker its bytes from `engine.js`; the TypeScript worker loads on first use through a queueing bootstrap worker. The bundle is byte-identical for the three modes, so everything large lives once in `demo/assets` and the whatif and lab builds write only `index.html`, failing if their bundle would differ. Fonts are woff2 only; the five full variable fonts are left out and fall back to a system font. The hide rule is `opacity: 0`, not `visibility: hidden`: a hidden grid cannot take focus and the session waits for `grid.focus()`. The build needs `frontend/public/engine/formcel.wasm` or `FORMCEL_DEMO_WASM`. About 16.6 MB committed. Seen in the page and not chased: after PivotTable Refresh the pivot values lost their currency format; not checked against the real app.
+
+### The inline mark in the title bar and both About views
+- refers-to: src/ui/shell.ts (mountShell); src/styles/titlebar.css (.fc-brand .fc-mark); src/ui/backstage.ts (buildAccount About block); src/ui/shell-mount.ts (aboutDialog)
+- kind: hashed-out
+- logged: v0.43.0 · 2026-11-13
+
+All three draw `brandMark(size)` from `ui/brand.ts` (20, 32 and 72 px), written in the same step as their surroundings, so there is no image load. Removed from the title bar: `<img class="fc-brand-logo" src="/icons/logo-64.png" width="20" height="20" alt="" draggable="false">` and the rule `.fc-brand-logo { display: block; flex: none; width: 20px; height: 20px; }`. Removed from the backstage: `ic3.insertAdjacentHTML('afterbegin', '<img src="/icons/logo-64.png" width="32" height="32" alt="" draggable="false">');`. Removed from the About dialog: `const logo = el('img', 'fc-about-logo') as HTMLImageElement; logo.src = '/icons/logo-128.png'; logo.width = logo.height = 72; logo.alt = '';`. The icon files stay for the desktop shell and the README.
+
+### Home's side panel scrolls only its middle
+- refers-to: src/ui/home.ts (Home constructor markup, Home.sidePanel more()); src/styles/home.css (.fc-home-nav, .fc-home-nav-scroll, [data-more])
+- kind: decision
+- logged: v0.43.0 · 2026-11-13
+
+The panel already ended at the terminal dock's top (grid rows), but its contents need 636 px and with the dock open the panel is shorter, and every scrollbar is hidden app-wide, so the foot and the Agents group looked cut off. Now the pages, Create and Agents are wrapped once at build time in `.fc-home-nav-scroll`, the only scrolling part; `.fc-home-nav` went from `overflow-y: auto` to `overflow: hidden`, so the brand and the foot stay in view. `more()` sets `data-more` (below, above, both, or absent) from a passive scroll listener and a ResizeObserver, and that switches a 28 px `mask-image` fade at the edge with hidden content. When everything fits the attribute is absent and nothing looks different. The region has a -4px -10px margin with matching padding so focus rings are not clipped. This was the orchestrator's choice among pin, tighter spacing or a thin scrollbar; none is in the references.
+
+### A workbook that cannot be created says so
+- refers-to: src/ui/home.ts (Home.make, onClick blank and use, templateCard); src/app.ts (Backstage create hook)
+- kind: fix
+- logged: v0.43.0 · 2026-11-13
+
+New workbook, Use this template and the template preview called `hooks.create` and dropped its promise, and the backstage hook did the same, so a refusal from the engine showed nothing and logged an uncaught rejection. `make()` catches and shows the message in Home's status line; the backstage hook shows it in the save status. `openDemo` already had its own catch.
+
+## Family release pass · v0.42.0 (2026-11-13)
+
+Home, the terminal dock with Claude Code, demos and the sparkle ban, brought to the family standard of formvis and formdeck. Ported code names its source; the commit of the same subject has the detail.
+
+### No sparkle icon
+- ui/icons.ts :: `agent` replaces `assistant` on both Assistant ribbon buttons (ui/ribbon-tabs.ts). Removed: `assistant: svg('<path d="M12 4l1.8 5.2L19 11l-5.2 1.8L12 18l-1.8-5.2L5 11l5.2-1.8z"/><path d="M18.5 4v3M17 5.5h3"/>'),`
+- ui/icons-ribbon.ts :: `analyze` is a bar chart with a rising arrow (removed star: `<path d="M17.500 4l1 2.500 2.500 1-2.500 1-1 2.500-1-2.500-2.500-1 2.500-1z"/>`) and `autoOutline` a small bolt (removed: `<path d="M19 3.500l.6 1.500 1.500.6-1.500.6L19 7.700l-.6-1.500-1.500-.6 1.500-.6z" ${F}/>`).
+- The three-star sparkle is banned in every family app; this pass also removed the one-star and two-star glyphs so nothing reads as a sparkle. CI's scripts job has a "No sparkle icon" step (formvis's `SPARKLE_BANNED` pattern, plus the three removed paths). Agents, Claude Code and assistants use `agent`, `agentChat` and `terminal` (ui/icons.ts, the formvis glyphs); `send` is the paper plane.
+
+### Home
+- ui/home.ts :: `Home.sidePanel` is formdeck 0.26.1's: a 6 px resizer (180 to 420 px, collapses below 120), two chevron tabs to hide and show, state in `formcel.homeNav` and `formcel.homeNavHidden`, applied in the constructor before `revealApp`. In the narrow layout the resizer and tabs hide and the tab row takes over.
+- ui/brand.ts :: `brandMark` is an inline SVG of the formcel mark; the brand block reads "formcel by nodemode.ai". Removed: the PNG `<img class="fc-home-logo" src="/icons/logo-64.png" ...>FormCel` and the rule `.fc-home-logo { flex: none; width: 24px; height: 24px; align-self: center; }`.
+- The Agents group (Claude Code, Chat, Terminal) runs `claude-code`, `claude-chat` and `terminal-toggle` through `runCommand`, looked up at click time.
+- styles/home.css maps the family tokens formcel lacks: surface-0 to bg-secondary, line-0 to border-color, line-2 to border-light.
+
+### Demos
+- demos/index.ts :: `DEMOS`, `registerDemoCommands`; ui/home.ts :: `Home.openDemo` (one at a time, `aria-busy` on the card). Three cards in Home > Start, Help > Demos (ui/menudefs.ts) and the commands `demo-sales`, `demo-whatif`, `demo-lab`. Covers are inline SVG drawn in token colours inside a 16:9 box reserved by CSS; no image files.
+- Opening is `POST /api/workbooks {template: "demo-<id>"}`, so each is a new workbook. app.ts :: the `create` hook returns its promise so Home can wait.
+
+### Terminal dock, Claude Code tabs, Chat
+- ui/terminal-dock.ts :: `TerminalDock` and ui/chat-pane.ts :: `ChatPane` are formvis's, with formcel's classes (`fc-tool`, `fc-btn`, `fc-input`, `fc-note`), `rb-dom` helpers and tokens; ui/dock-api.ts holds the API methods and `socketTo`; ui/dock-mount.ts :: `mountDock` registers `terminal-toggle` (Mod+J, because Backquote is a number-format key here), `terminal-new`, `claude-code`, `claude-chat` and wires three title bar buttons (ui/shell.ts) that light with `aria-pressed`. Window menu entries in ui/menudefs.ts.
+- styles/terminal.css puts the dock in grid row 3 of `#app`; index.html reserves the row before first paint from `formcel.terminal` (`data-ft-dock`, `data-ft-dock-h`, `--ft-dock-size`). Token mapping: fs-11/12/13 to text-xs/sm/md, line-2 to border-light, surface-raised and bg-input to bg-tertiary, accent-line to accent-color-dim, accent-ink to accent-color, danger to bad, radius-xs to radius-sm.
+- Dependencies: `@xterm/xterm` 6.0.0 and `@xterm/addon-fit` 0.11.0 (MIT, NOTICE row). Claude Code is the person's own install and is not bundled.
+
+### Window bridge and consent
+- automation/bridge.ts :: `connectBridge`, `run` answer the engine's `/api/live` socket (formtxt's message format: `{t:'run', id, command, params}` answered by `{t:'result', id, ok, result|error}`), mirror the catalogue on each connect and refuse unknown, disabled and window-only commands (`WINDOW_ONLY`, which must stay in step with backend routers/commands.py). automation/actor.ts :: `asAgent`, `agentActing`.
+- ui/agents-allow.ts :: `agentsPanel`, `askConsent`; ui/settings.ts Trust Center gains "Outside agents". The bridge answers the engine's `__consent__` run with `{allowed}`; the dialog names the client and starts on Don't Allow.
+
+### Checked and open
+- Run end to end in headless Chrome against the engine: bridge, dock, shell echo, reload adoption, title bar lights, chat status, consent, each demo. Not run: a signed-in Claude Code session, the desktop shell, Windows, the light theme of the dock, dragging the resizer by hand.
+- Open: with the dock open at 900 px window height the Home panel's bottom item is cut off (the panel should scroll); the title bar still shows the PNG and "FormCel" (`brandMark(20)` is ready for it); a demo opened from Help > Demos while a workbook is open reports a failure only in Home's subtitle; three array formulas fail in the engine and the demos avoid them (TRIM over an array, INDEX with a SEQUENCE index, IFERROR over an array).
 
 ## The engine bridge · v0.41.1 (2026-11-13)
 

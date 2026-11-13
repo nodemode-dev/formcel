@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.43.0 · 2026-11-13
+
+- The three demos also open as offline browser pages (`demo/index.html`, `demos/whatif/index.html`, `demos/lab/index.html`) that run the real FormCel window and recalculate as you edit.
+- The title bar, the About dialog and the About block under File, Account show the same crisp formcel mark as Home.
+- Home's side panel keeps the brand and Preferences and Help in view when the terminal dock is open; only the pages and groups between them scroll, with a soft fade where more is hidden.
+- When a new workbook cannot be created, Home says so.
+
+## 0.42.0 · 2026-11-13
+
+FormCel joins the Form family standard for Home, agents and demos.
+
+- Home: the side panel can be resized or hidden and remembers its size, shows the formcel mark with "by nodemode.ai", and has an Agents group for Claude Code, Chat and Terminal.
+- Terminal dock: Window > Terminal (Ctrl or Cmd+J) opens a dock at the foot of the window with shell tabs, Claude Code tabs that have FormCel's commands attached, and a Chat tab; tabs survive a reload, and title bar buttons light while the dock shows them. Claude Code is your own install; FormCel does not bundle it.
+- Agents: Claude Code, Codex, Cursor and other MCP clients can list, describe and run FormCel's commands in the open window through `./formcel mcp`; `./formcel agents install` connects them in one step and `./formcel cli` does the same from a shell. Outside agents are off until you allow them (Preferences > Trust Center > Outside agents), and FormCel asks once when one first calls.
+- Demos: three demo workbooks (a year of bike sales, a loan and savings what-if, lab measurements) open as new workbooks from Home, Help > Demos or a command each.
+- Icons: the Assistant buttons draw the family agent icon, and no sparkle or star glyph is left in the interface.
+
 ## 0.41.1 · 2026-11-13
 
 The second pass of fixes from the full review, in the calculation engine and its bridge to the window; nothing new.

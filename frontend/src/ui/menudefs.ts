@@ -350,6 +350,11 @@ export function excelMenus(): MenuDef[] {
       items: [
         { cmd: 'file.home', label: 'Home' },
         '-',
+        { cmd: 'claude-code', label: 'Claude Code' },
+        { cmd: 'claude-chat', label: 'Chat with Claude' },
+        { cmd: 'terminal-toggle', label: 'Terminal', keys: 'Mod+J' },
+        { cmd: 'terminal-new', label: 'New Terminal' },
+        '-',
         { cmd: 'view.freeze-panes', label: 'Freeze Panes' },
         { cmd: 'view.unfreeze', label: 'Unfreeze Panes' },
         { cmd: 'view.split', label: 'Split' },
@@ -365,6 +370,14 @@ export function excelMenus(): MenuDef[] {
       items: [
         { cmd: 'a11y.shortcuts', label: 'Keyboard Shortcuts', keys: 'F1' },
         { cmd: 'view.access', label: 'Accessibility and Language' },
+        {
+          label: 'Demos',
+          items: [
+            { cmd: 'demo-sales', label: 'A year of bike sales' },
+            { cmd: 'demo-whatif', label: 'Loan and savings what-if' },
+            { cmd: 'demo-lab', label: 'Lab measurements' },
+          ],
+        },
         '-',
         { cmd: 'help.about', label: 'About FormCel' },
       ],

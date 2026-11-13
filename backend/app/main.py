@@ -8,8 +8,8 @@ from . import config
 from .local_guard import LocalGuard
 import asyncio
 
-from .routers import automation, collab, commands, fonts, printpreview, quotes, review, share, spell, tplthumb, workbooks
-from .services import scheduler
+from .routers import automation, claude_code, collab, commands, fonts, live, mcp, printpreview, quotes, review, share, spell, terminal, tplthumb, workbooks
+from .services import claude_code as claude_service, scheduler, terminal as terminal_service
 from .version import VERSION
 
 mimetypes.add_type("text/javascript", ".js")
@@ -26,8 +26,11 @@ except ImportError:
 async def lifespan(_: FastAPI):
     config.ensure_data_dir()
     task = asyncio.create_task(scheduler.loop())
+    terminal_service.bind(asyncio.get_running_loop())
     yield
     task.cancel()
+    claude_service.stop(quiet=True)
+    terminal_service.close_all()
 
 
 app = FastAPI(title="FormCel engine", version=VERSION, lifespan=lifespan, docs_url="/api/docs", openapi_url="/api/openapi.json", redoc_url=None)
@@ -36,6 +39,11 @@ app.include_router(tplthumb.router)
 app.include_router(workbooks.router)
 app.include_router(printpreview.router)
 app.include_router(commands.router)
+app.include_router(live.router)
+app.include_router(mcp.router)
+app.include_router(terminal.router)
+app.include_router(claude_code.router)
+app.include_router(claude_code.window_router)
 app.include_router(collab.router)
 app.include_router(review.router)
 app.include_router(share.router)

@@ -175,7 +175,7 @@ export function ribbonTabs(h: RibbonHost): TabDef[] {
     id: 'review', label: 'Review', groups: [
       G('proofing', 'Proofing', L('review.spelling', 'Spelling', 'spell')),
       G('accessibility', 'Accessibility', S('a11y.check', 'Check Accessibility', 'access', accessMenu)),
-      G('insights', 'Insights', L('assistant.panel', 'Assistant', 'assistant')),
+      G('insights', 'Insights', L('assistant.panel', 'Assistant', 'agent')),
       G('comments', 'Comments', L('review.comment', 'New Comment', 'comment'), L('review.panel', 'Show Comments', 'commentsPanel')),
       G('notes', 'Notes', L('review.note', 'Note', 'note')),
       G('changes', 'Changes', L('review.changes', 'Show Changes', 'changes'), L('history.panel', 'Version History', 'clock'), R([T('review.inbox', 'Inbox', 'inbox')], [T('review.people', 'People', 'people')], [T('review.watch', 'Notify Me', 'notify')]), R([T('review.user', 'Your Name', 'user')])),
@@ -199,7 +199,7 @@ export function ribbonTabs(h: RibbonHost): TabDef[] {
     id: 'automate', label: 'Automate', groups: [
       G('scripts', 'Office Scripts', L('automate.record', 'Record Actions', 'record'), L('automate.run', 'Run Script', 'play'), L('automate.panel', 'All Scripts', 'script')),
       G('python', 'Python', L('python.cell', 'Python Cell', 'python')),
-      G('assist', 'Assistant', L('assistant.panel', 'Assistant', 'assistant')),
+      G('assist', 'Assistant', L('assistant.panel', 'Assistant', 'agent')),
     ],
   };
 

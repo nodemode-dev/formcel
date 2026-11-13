@@ -3,6 +3,7 @@ import { MARGIN_PRESETS, PAPERS, type PageSetup, type Scale } from './pagesetup'
 import { setTheme, theme, type ThemeName } from './a11y';
 import { runCommand } from './commands';
 import { VERSION } from '../version';
+import { brandMark } from './brand';
 import { onPreviewGesture, openPreview, paintThumb, thumbBox, type Visual } from './tplgallery';
 
 export interface BackstageHost {
@@ -1079,7 +1080,7 @@ export class Backstage {
     th.append(ic2, t2);
     const about = h('div', 'fc-bs-block');
     const ic3 = h('div', 'fc-bs-bicon');
-    ic3.insertAdjacentHTML('afterbegin', '<img src="/icons/logo-64.png" width="32" height="32" alt="" draggable="false">');
+    ic3.insertAdjacentHTML('afterbegin', brandMark(32));
     const t3 = h('div', 'fc-bs-btext');
     t3.append(h('h3', '', 'About FormCel'), h('p', '', `FormCel ${VERSION}. A local-first spreadsheet in the form family.`));
     about.append(ic3, t3);

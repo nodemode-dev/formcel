@@ -17,6 +17,7 @@ Spreadsheet app in the form family. Read `README.md`, then the `HASHOUT_LOG.md` 
 engine/build_wasm             rebuild the window's engine after a Rust change
 pip install ../engine/crates/formcel-py   (from backend/, venv active) rebuild the Python engine
 cd frontend && npx tsc --noEmit           typecheck
+./formcel mcp | agents | cli | mcpb       the agent kit (./formcel help)
 ```
 
 ## Rules
@@ -28,6 +29,14 @@ cd frontend && npx tsc --noEmit           typecheck
 - Near-zero comments in code; explanations go in the side's `HASHOUT_LOG.md`.
 - Commits as `nodemode-ai <mackin@nodemode.ai>`. Versions read `v` digit dot digit dot digit and match across `frontend/package.json` (and its lockfile), `frontend/src/version.ts`, `backend/app/version.py` and `engine/Cargo.toml`.
 - Tests live in `tests/` folders and run in CI; write only tests this plan or its successor names. The plan is `FAMILY_TEST_PLAN.md` in the formai_dev sidecar; `cd backend && python -m pytest tests` runs them (after the engine module is built).
+
+## Claude Code and agents
+
+- The terminal dock (Mod+J, `frontend/src/ui/terminal-dock.ts`, `chat-pane.ts`, `dock-mount.ts`) shows shell tabs, Claude Code tabs and a Chat tab. The engine owns every process: `backend/app/services/terminal.py` and `routers/terminal.py` (`/api/terminal`), `services/claude_code.py` and `routers/claude_code.py` (`/api/agent/claude`, `/api/claude-code/status`). Claude Code is the person's own install, never bundled.
+- A Claude Code tab gets this engine's `/mcp` as server `formcel` with `--allowedTools mcp__formcel` and a per-run token (`FORMCEL_INAPP_TOKEN`, header `x-formcel-inapp`, `services/agents.py`), so it is not asked the outside-agent question.
+- One command catalogue: the window registers commands (`src/ui/commands.ts`) and mirrors them to `PUT /api/commands`; the engine hands a run to the window over `/api/live` (`services/bridge.py`, `frontend/src/automation/bridge.ts`). The palette, `/mcp` (`list_commands`, `describe_command`, `run_command`) and `./formcel cli` all use it.
+- Outside agents are off until the person allows them: `GET` and `PUT /api/agents/allowed`, and the first `run_command` asks once in the window. `terminal-toggle`, `terminal-new`, `claude-code` and `claude-chat` are window-only and refused to every agent.
+- The kit: `./formcel mcp`, `./formcel agents install | sync | check`, `./formcel cli`, `./formcel mcpb check | build DIR`; `.mcp.json`, `.cursor/mcp.json`, `.codex/config.toml`, `.claude-plugin/plugin.json`; skills `formcel-driving` (use) and `formcel-harness` (code) in `.claude/skills`, mirrored to `.agents/skills` by `./formcel agents sync`. Edit only `.claude/skills`; CI runs `agents check` and `mcpb check`.
 
 ## Linked data types and related features (declined for patent risk, 2026-10-23)
 

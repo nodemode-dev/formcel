@@ -136,8 +136,13 @@ jobs:
         run: |
           for f in formcel formcel_oc_install build_app backend/oc_install backend/boot_backend frontend/oc_install frontend/boot_frontend setup/*; do
             case "$f" in *.bat|*.py) continue ;; esac
+            [ -d "$f" ] && continue
             bash -n "$f"
           done
+      - name: Agent kit (skills mirror, skill format, MCP configs)
+        run: ./formcel agents check
+      - name: Claude Desktop extension manifest
+        run: ./formcel mcpb check
       - name: No em dash or emoji in tracked markdown
         run: |
           python3 - <<'PY'
@@ -153,6 +158,27 @@ jobs:
                   if cp == 0x2014 or 0x1F000 <= cp <= 0x1FAFF or 0x2600 <= cp <= 0x27BF:
                       bad.append(f'{path}: U+{cp:04X}')
                       break
+          print('\n'.join(bad) or 'clean')
+          sys.exit(1 if bad else 0)
+          PY
+      - name: No sparkle icon
+        run: |
+          python3 - <<'PY'
+          import re, subprocess, sys
+          banned = re.compile("\\bsparkle\\s*:\\s*[`'\"]?\\s*<svg|\\bsparkle\\s*:\\s*\\w+\\(|icon\\(\\s*['\"]sparkle['\"]|M12 1\\.5l1\\.5 4\\.5 4\\.5 1\\.5|"
+                              "M7\\.5 5\\.6L10 7 8\\.6 4\\.5|M12 4l1\\.8 5\\.2L19 11|M17\\.500 4l1 2\\.500 2\\.500 1|M19 3\\.500l\\.6 1\\.500|[\\u2726\\u2727\\u2728\\u2734\\u2747]")
+          files = subprocess.check_output(['git', 'ls-files', 'frontend/src', 'frontend/public', 'frontend/index.html', 'backend/app', 'src-tauri/src', 'demo', 'demos'], text=True).split()
+          bad = []
+          for path in files:
+              if not path.endswith(('.ts', '.py', '.rs', '.css', '.html', '.svg', '.js')) or '/i18n/' in path or path.endswith('.test.ts'):
+                  continue
+              try:
+                  lines = open(path, encoding='utf-8').read().splitlines()
+              except (UnicodeDecodeError, IsADirectoryError, FileNotFoundError):
+                  continue
+              for n, line in enumerate(lines, 1):
+                  if banned.search(line):
+                      bad.append(f'{path}:{n}: the sparkle icon is banned app-wide (the owner\'s rule); use agent, agentChat or terminal')
           print('\n'.join(bad) or 'clean')
           sys.exit(1 if bad else 0)
           PY

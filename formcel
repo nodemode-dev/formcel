@@ -2,6 +2,38 @@
 set -e
 cd "$(dirname "$0")"
 
+usage() {
+  cat << 'EOF'
+usage: ./formcel [command]
+
+  (none) | boot          boot the engine (8199) and the window (5199) together
+  mcp [--where]          FormCel over MCP's stdio transport, for Claude Code, Codex, Cursor and Claude Desktop
+  agents sync | check    mirror .claude/skills into .agents/skills; check the mirror, the skills and the MCP configs
+  agents install [--dry-run] [claude|codex|cursor]  register FormCel with those clients for this user
+  cli list [text] | describe ID | run ID [key=value ...]  the window's commands from a shell
+  mcpb check | build DIR validate the Claude Desktop extension manifest; write formcel.mcpb into DIR
+  help                   this text
+EOF
+}
+cmd="${1:-boot}"
+[ $# -gt 0 ] && shift
+case "$cmd" in
+  boot) ;;
+  mcp) exec python3 setup/mcp_stdio.py "$@" ;;
+  agents) exec python3 setup/agents.py "$@" ;;
+  cli) exec python3 setup/catalogue.py "$@" ;;
+  mcpb)
+    sub="${1:-check}"
+    [ $# -gt 0 ] && shift
+    case "$sub" in
+      check) exec python3 setup/mcpb.py --check ;;
+      build) exec python3 setup/mcpb.py --build "$@" ;;
+      *) usage; exit 2 ;;
+    esac ;;
+  help|-h|--help) usage; exit 0 ;;
+  *) printf '[formcel] unknown command: %s\n\n' "$cmd"; usage; exit 2 ;;
+esac
+
 pids=()
 if [ -d backend ]; then
   ( cd backend && ./boot_backend ) &

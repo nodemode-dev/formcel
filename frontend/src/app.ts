@@ -10,6 +10,8 @@ import { Charts } from './charts';
 import type { FloatObject } from './charts/types';
 import { Automation } from './automation';
 import type { ScriptHost } from './automation/scripts';
+import { connectBridge } from './automation/bridge';
+import { mountDock } from './ui/dock-mount';
 import { Grid, type BorderKind, type MenuKind, type PasteKind, type SheetView } from './grid/grid';
 import { paint } from './grid/style';
 import { TABLE_STYLES, customId, parseCustom, parseTable } from './grid/tables';
@@ -334,7 +336,7 @@ export class App {
     initPrefs();
     this.home = new Home(p.home, {
       open: (id) => void this.openWorkbook(id),
-      create: (template) => void this.create(template),
+      create: (template) => this.create(template),
       importFile: (file) => void withJob(`Opening ${file.name}`, () => this.importFile(file)),
       pasteData: (text, html) => this.pasteData(text, html),
       trash: (id) => void this.act(() => api('DELETE', `/api/workbooks/${id}`)),
@@ -348,7 +350,7 @@ export class App {
         await this.saving;
       },
       openWorkbook: (id) => void this.openWorkbook(id),
-      create: (template) => void this.create(template),
+      create: (template) => void this.create(template).catch((e) => this.status(e instanceof Error ? e.message : 'The workbook could not be created.', true)),
       importFile: (file) => void this.importFile(file),
       page: (sheet) => this.pageOf(sheet),
       setPage: async (sheet, page) => {
@@ -765,6 +767,8 @@ export class App {
       },
       toast: (t) => this.status(t),
     });
+    mountDock(document.getElementById('app')!, document.querySelector<HTMLElement>('.fc-titlebar')!);
+    connectBridge();
     setCommandState('page.preview', { checked: () => this.viewState === 'break' });
     setCommandState('edit.undo', { enabled: () => this.canUndo });
     setCommandState('edit.redo', { enabled: () => this.canRedo });

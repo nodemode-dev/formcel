@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "formcel": {
+      "command": "${workspaceFolder}/formcel",
+      "args": ["mcp"]
+    }
+  }
+}
