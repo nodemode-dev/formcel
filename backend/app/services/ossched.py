@@ -178,12 +178,13 @@ def read_state() -> dict:
 
 
 def save_state(state: dict | None) -> None:
-    s = aiclient.load_settings()
-    if state:
-        s["os_schedule"] = state
-    else:
-        s.pop("os_schedule", None)
-    aiclient.save_settings(s)
+    with aiclient.SETTINGS:
+        s = aiclient.load_settings()
+        if state:
+            s["os_schedule"] = state
+        else:
+            s.pop("os_schedule", None)
+        aiclient.save_settings(s)
 
 
 def enable(minutes: int, activate: bool = True) -> dict:

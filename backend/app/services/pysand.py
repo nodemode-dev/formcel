@@ -20,12 +20,13 @@ def enabled() -> bool:
 
 
 def set_enabled(on: bool) -> dict:
-    s = aiclient.load_settings()
-    if on:
-        s["python_cells"] = True
-    else:
-        s.pop("python_cells", None)
-    aiclient.save_settings(s)
+    with aiclient.SETTINGS:
+        s = aiclient.load_settings()
+        if on:
+            s["python_cells"] = True
+        else:
+            s.pop("python_cells", None)
+        aiclient.save_settings(s)
     return status()
 
 
