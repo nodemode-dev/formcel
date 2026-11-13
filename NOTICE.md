@@ -59,6 +59,9 @@ FormCel ports code from three sibling repositories by the same owner, all Apache
 | fontTools 4.66.1 | MIT | engine process: static instances of the full fonts above for PDF embedding |
 | fontdb 0.24 | MIT | desktop shell: lists installed fonts (`src-tauri/src/system_fonts.rs`) |
 | Tesseract OCR (system binary, not bundled) | Apache-2.0 | engine process: Data from picture calls a `tesseract` already installed on the computer, if any (`backend/app/services/ocr.py`) |
+| ptyprocess 0.7.0 | ISC | engine process, the pseudo-terminals behind the terminal dock on macOS and Linux (`backend/app/services/terminal.py`) |
+| pywinpty 3.0.5 | MIT | engine process, the same on Windows (ConPTY) |
+| Claude Code (the person's own install, not bundled) | the person's own licence with its maker | engine process: the terminal dock's Claude Code tabs and Chat tab start a `claude` program already installed on the computer, if any (`backend/app/services/claude_code.py`); FormCel reads and stores no credential |
 | Other Python packages frozen into the engine | MIT: annotated-doc, annotated-types, anyio, charset-normalizer, h11, httptools, jaraco.classes, jaraco.context, jaraco.functools, jeepney, more-itertools, pydantic, pydantic-core, pytz, pyyaml, six, typing-inspection, watchfiles; MIT-0: cffi; BSD-3-Clause: click, idna, pycparser, python-dotenv, secretstorage, starlette, websockets; BSD: python-dateutil (with Apache-2.0 parts); Apache-2.0: tzdata; MIT OR Apache-2.0: uvloop; PSF-2.0: typing-extensions and the CPython runtime; cryptography's wheel bundles OpenSSL 3 (Apache-2.0) | read from the installed metadata of `backend/requirements.txt`, 2026-10-23 |
 
 ## Desktop shell: crates under other licences

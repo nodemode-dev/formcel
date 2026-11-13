@@ -16,6 +16,7 @@ def window_origins() -> list[str]:
     return pages + ["tauri://localhost", "http://tauri.localhost"]
 DATA_DIR = Path(os.environ.get("FORMCEL_DATA_DIR", Path.home() / "FormCel")).expanduser()
 WINDOW_DIR = Path(os.environ["FORMCEL_WINDOW_DIR"]).expanduser() if os.environ.get("FORMCEL_WINDOW_DIR") else None
+REPO_DIR = Path(__file__).resolve().parents[2]
 SUBDIRS = ("Workbooks", "Templates", "Media", "Exports", "Trash")
 
 
