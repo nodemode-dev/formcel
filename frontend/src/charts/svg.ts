@@ -15,10 +15,13 @@ interface Box {
   h: number;
 }
 
-const esc = (s: string): string => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
+export const esc = (s: string): string => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
 const r1 = (n: number): string => String(Math.round(n * 10) / 10);
 let COLORS: string[] | undefined;
-const color = (i: number): string => COLORS?.[i] || PALETTE[i % PALETTE.length];
+const color = (i: number): string => {
+  const c = COLORS?.[i];
+  return c && /^#[0-9a-f]{3,8}$/i.test(c) ? c : PALETTE[i % PALETTE.length];
+};
 const shown = (code: string | undefined, n: number): string => FORMATS.text(code, n, fmt);
 
 interface Axis {
