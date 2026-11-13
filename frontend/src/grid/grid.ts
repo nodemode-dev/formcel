@@ -3044,12 +3044,15 @@ export class Grid {
 
   private async selectionTSV(): Promise<string> {
     const s = this.sel();
-    const cells = await this.engine.read(this.book, s.r0, s.c0, s.r1, s.c1, this.sheet);
+    const ext = await this.engine.extent(this.book, this.sheet);
+    const r1 = Math.max(s.r0, Math.min(s.r1, ext ? ext[0] : s.r0));
+    const c1 = Math.max(s.c0, Math.min(s.c1, ext ? ext[1] : s.c0));
+    const cells = await this.engine.read(this.book, s.r0, s.c0, r1, c1, this.sheet);
     const map = new Map(cells.map(([r, c, t]) => [KEY(r, c), t]));
     const out: string[] = [];
-    for (let r = s.r0; r <= s.r1; r++) {
+    for (let r = s.r0; r <= r1; r++) {
       const row: string[] = [];
-      for (let c = s.c0; c <= s.c1; c++) row.push(tsvCell(map.get(KEY(r, c)) ?? ''));
+      for (let c = s.c0; c <= c1; c++) row.push(tsvCell(map.get(KEY(r, c)) ?? ''));
       out.push(row.join('\t'));
     }
     return out.join('\n');
