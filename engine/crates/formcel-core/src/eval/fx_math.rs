@@ -644,7 +644,7 @@ impl Eval<'_> {
         for e in refs {
             match self.arg(e) {
                 Arg::R(s, ar) => self.ctx.each(s, ar, &mut |at, v| {
-                    if (hidden && self.ctx.filtered(s, at.row)) || (nested && self.ctx.subtotal_at(s, at)) {
+                    if (hidden && (self.ctx.filtered(s, at.row) || self.ctx.hidden_row(s, at.row))) || (nested && self.ctx.subtotal_at(s, at)) {
                         return;
                     }
                     vals.push(v.clone());
