@@ -492,7 +492,8 @@ def render_sheet(title: str, sheet_name: str, values: list, styles: dict[tuple[i
 
 def csv_of(values: list, area: tuple[int, int, int, int] | None = None) -> str:
     cells = {(r, c): v for r, c, v in values if v != ""}
-    r0, c0, r1, c1 = area if area else (0, 0, max((r for r, _ in cells), default=-1), max((c for _, c in cells), default=-1))
+    mr, mc = max((r for r, _ in cells), default=-1), max((c for _, c in cells), default=-1)
+    r0, c0, r1, c1 = (area[0], area[1], min(area[2], mr), min(area[3], mc)) if area else (0, 0, mr, mc)
     out = io.StringIO()
     w = csv.writer(out, lineterminator="\r\n")
     for r in range(r0, r1 + 1):
