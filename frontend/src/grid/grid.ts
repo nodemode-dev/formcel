@@ -3731,7 +3731,7 @@ export class Grid {
   }
 
   private async gridKey(e: KeyboardEvent): Promise<void> {
-    const mod = e.ctrlKey || e.metaKey;
+    const mod = (e.ctrlKey || e.metaKey) && !typedChar(e);
     const dir = ARROWS[e.key];
     if (this.ghost.size && !this.editing) {
       if ((e.key === 'Enter' || (e.key === 'Tab' && !e.shiftKey)) && !mod) {
@@ -3941,8 +3941,17 @@ export const SHORT_FORMATS: Record<string, string> = {
   Digit6: '0.00E+00',
 };
 
+const MAC = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
+
+function typedChar(e: KeyboardEvent): boolean {
+  if (e.key.length !== 1 || e.metaKey) return false;
+  if (e.getModifierState('AltGraph') || (e.ctrlKey && e.altKey && !/^[a-z0-9]$/i.test(e.key))) return true;
+  return !e.ctrlKey && (!e.altKey || MAC);
+}
+
 function wants(e: KeyboardEvent): boolean {
   if (ARROWS[e.key]) return true;
+  if (typedChar(e)) return true;
   const mod = e.ctrlKey || e.metaKey;
   if (mod && e.altKey && e.code === 'KeyV') return true;
   if (mod) return !e.altKey && (['z', 'y', 'a', 'home', 'end', '+', '=', '-', '_', 'g', 'k', 'e', 'f', 'h'].includes(e.key.toLowerCase()) || (e.shiftKey && e.code === 'KeyL') || (!e.shiftKey && e.code === 'KeyT') || e.code === 'Digit9' || e.code === 'Digit0' || (e.shiftKey && (e.code in SHORT_FORMATS || e.code === 'Digit7')) || (!e.shiftKey && e.code in TOGGLE_KEYS));
