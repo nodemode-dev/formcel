@@ -409,9 +409,12 @@ class Hub:
         self.publish(wid, {"type": "join", "client": client, "user": user}, client)
         return q
 
-    def leave(self, wid: str, client: str) -> None:
+    def leave(self, wid: str, client: str, q: asyncio.Queue | None = None) -> None:
         with self.guard:
-            self.subs.get(wid, {}).pop(client, None)
+            subs = self.subs.get(wid, {})
+            if q is not None and client in subs and subs[client][1] is not q:
+                return
+            subs.pop(client, None)
             self.cursors.get(wid, {}).pop(client, None)
         self.publish(wid, {"type": "leave", "client": client}, client)
 

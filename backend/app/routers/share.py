@@ -214,6 +214,6 @@ async def events(token: str, request: Request, client: str, user: str = "") -> S
                         break
                     yield ": keepalive\n\n"
         finally:
-            hub.leave(wid, client[:40])
+            hub.leave(wid, client[:40], q)
 
     return StreamingResponse(stream(), media_type="text/event-stream", headers={"Cache-Control": "no-store", "X-Accel-Buffering": "no"})
