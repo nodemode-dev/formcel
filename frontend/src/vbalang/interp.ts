@@ -14,6 +14,7 @@ import {
   VError,
   VUdt,
   type TypeRef,
+  bankers,
   coerce,
   compare,
   defaultOf,
@@ -1548,15 +1549,15 @@ export class Interp {
       }
       case '\\': {
         if (l === NULLV || r === NULLV) return NULLV;
-        const d = Math.round(toNum(r));
+        const d = bankers(toNum(r));
         if (d === 0) fail(11);
-        return Math.trunc(Math.round(toNum(l)) / d);
+        return Math.trunc(bankers(toNum(l)) / d);
       }
       case 'mod': {
         if (l === NULLV || r === NULLV) return NULLV;
-        const d = Math.round(toNum(r));
+        const d = bankers(toNum(r));
         if (d === 0) fail(11);
-        const n = Math.round(toNum(l));
+        const n = bankers(toNum(l));
         return n % d;
       }
       case '^': {
