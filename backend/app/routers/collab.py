@@ -328,7 +328,7 @@ def presence(wid: str, body: CursorIn) -> dict:
 @router.get("/api/workbooks/{wid}/events")
 async def events(wid: str, request: Request, client: str, user: str = "") -> StreamingResponse:
     try:
-        book(wid)
+        await asyncio.to_thread(book, wid)
     except (KeyError, FileNotFoundError):
         raise HTTPException(404, f"No workbook {wid}.")
     hub = store().hub

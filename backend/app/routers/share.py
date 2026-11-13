@@ -196,7 +196,7 @@ def chat(token: str, body: GuestChat) -> dict:
 
 @router.get("/s/{token}/api/events")
 async def events(token: str, request: Request, client: str, user: str = "") -> StreamingResponse:
-    wid, b, s = grant(token)
+    wid, b, s = await asyncio.to_thread(grant, token)
     hub = store().hub
     q = hub.join(wid, client[:40], name_of(user), asyncio.get_running_loop())
 
