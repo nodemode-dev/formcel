@@ -1700,7 +1700,7 @@ impl Eval<'_> {
                     }
                 };
                 let (rows, cols) = (dim(0)?, dim(1)?);
-                if (rows as u64) * (cols as u64) > MAX_ARRAY {
+                if (rows as u64).checked_mul(cols as u64).is_none_or(|n| n > MAX_ARRAY) {
                     return Err(ErrKind::Value);
                 }
                 let f = self.lambda(&a[2], 2)?;
@@ -1840,7 +1840,7 @@ impl Eval<'_> {
                     }
                 };
                 let (rows, cols) = (size(1, g.rows)?, size(2, g.cols)?);
-                if (rows as u64) * (cols as u64) > MAX_ARRAY {
+                if (rows as u64).checked_mul(cols as u64).is_none_or(|n| n > MAX_ARRAY) {
                     return Err(ErrKind::Num);
                 }
                 let pad = if a.len() > 3 && !matches!(a[3], Expr::Missing) { self.scalar(&a[3]) } else { err(ErrKind::Na) };
