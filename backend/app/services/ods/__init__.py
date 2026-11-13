@@ -10,6 +10,7 @@ from formcel_engine import reads_as_text
 from openpyxl.utils import get_column_letter
 
 from ..xlsx.autofilter import filtered_rows
+from ..xlsx.reader import check_unpacked
 from . import cf, filters, numfmt, valid
 from .formulas import from_file, range_in, to_file
 
@@ -161,6 +162,7 @@ def _num(n: float) -> str:
 
 
 def read(data: bytes) -> dict:
+    check_unpacked(data)
     z = zipfile.ZipFile(io.BytesIO(data))
     root = ET.fromstring(z.read("content.xml"))
     styles_root = ET.fromstring(z.read("styles.xml")) if "styles.xml" in z.namelist() else None
