@@ -1214,13 +1214,11 @@ export class XRange extends HostObject {
       if (v instanceof VArray) {
         const vr = v.dims === 2 ? v.ub[0] - v.lb[0] + 1 : 1;
         const vc = v.dims === 2 ? v.ub[1] - v.lb[1] + 1 : v.data.length;
-        if (rows === 1 && cols === 1 && (vr > 1 || vc > 1) && !(this.areas.length > 1)) {
-          for (let r = 0; r < vr; r++) for (let c = 0; c < vc; c++) m.writeCell(a, a.r0 + r, a.c0 + c, v.data[r * vc + c], formula);
-          return;
-        }
         for (let r = 0; r < rows; r++)
           for (let c = 0; c < cols; c++) {
-            const x = r < vr && c < vc ? v.data[r * vc + c] : new VError(2042);
+            const rr = vr === 1 ? 0 : r;
+            const cc = vc === 1 ? 0 : c;
+            const x = rr < vr && cc < vc ? v.data[rr * vc + cc] : new VError(2042);
             m.writeCell(a, a.r0 + r, a.c0 + c, x, formula);
           }
         return;
