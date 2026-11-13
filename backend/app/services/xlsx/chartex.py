@@ -528,8 +528,13 @@ def plot_fill(xml: bytes) -> str | None:
         for child in el:
             if _local(child.tag) == "spPr":
                 for c in child.iter(f"{{{NS_A}}}srgbClr"):
-                    return "#" + c.attrib.get("val", "").lower()
+                    return _srgb_in(c)
     return None
+
+
+def _srgb_in(el) -> str | None:
+    val = el.attrib.get("val", "")
+    return "#" + val.lower() if re.fullmatch(r"[0-9a-fA-F]{6}", val) else None
 
 
 def _cx_attr(el, name: str):
@@ -625,8 +630,8 @@ def parse(xml: bytes, ws_title: str) -> dict | None:
     sp = _first(ser, ["spPr"])
     if sp is not None:
         c = next(sp.iter(f"{{{NS_A}}}srgbClr"), None)
-        if c is not None:
-            spec["colors"] = ["#" + c.attrib.get("val", "").lower()]
+        if c is not None and _srgb_in(c):
+            spec["colors"] = [_srgb_in(c)]
     for ax in (c for c in _first(chart, ["plotArea"]) if _local(c.tag) == "axis"):
         tt = _first(ax, ["title", "tx", "txData", "v"])
         is_val = any(_local(c.tag) == "valScaling" for c in ax)
@@ -648,11 +653,11 @@ def parse(xml: bytes, ws_title: str) -> dict | None:
     pa = _first(chart, ["plotArea", "spPr"])
     if pa is not None:
         c = next(pa.iter(f"{{{NS_A}}}srgbClr"), None)
-        if c is not None:
-            spec["plotFill"] = "#" + c.attrib.get("val", "").lower()
+        if c is not None and _srgb_in(c):
+            spec["plotFill"] = _srgb_in(c)
     cs = next((c for c in root if _local(c.tag) == "spPr"), None)
     if cs is not None:
         c = next(cs.iter(f"{{{NS_A}}}srgbClr"), None)
-        if c is not None:
-            spec["fill"] = "#" + c.attrib.get("val", "").lower()
+        if c is not None and _srgb_in(c):
+            spec["fill"] = _srgb_in(c)
     return spec
