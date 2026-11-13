@@ -76,6 +76,7 @@ export class DataModelWindow {
   private canvas = el('div', 'fc-dm-canvas');
   private side = el('div', 'fc-dm-side');
   private lines: SVGSVGElement;
+  private relNodes: [SVGPathElement, SVGPathElement, SVGTextElement, SVGTextElement][] = [];
   private editing = '';
   private busy = false;
 
@@ -465,35 +466,50 @@ export class DataModelWindow {
     const ns = 'http://www.w3.org/2000/svg';
     const svg = this.lines;
     if (this.panes.diagram.hidden) return;
-    svg.replaceChildren();
+    const set = (n: Element, k: string, v: string) => {
+      if (n.getAttribute(k) !== v) n.setAttribute(k, v);
+    };
+    const lab = (txt: string) => {
+      const t = document.createElementNS(ns, 'text');
+      t.setAttribute('class', 'fc-dm-lab');
+      t.textContent = txt;
+      return t;
+    };
+    for (const nodes of this.relNodes.splice(this.info.rels.length)) for (const n of nodes) n.remove();
     this.info.rels.forEach((r, i) => {
+      let nodes = this.relNodes[i];
+      if (!nodes) {
+        const path = document.createElementNS(ns, 'path');
+        const hit = document.createElementNS(ns, 'path');
+        hit.setAttribute('class', 'fc-dm-hit');
+        hit.addEventListener('click', () => {
+          this.chosen = i;
+          this.paintSide();
+          this.drawLines();
+        });
+        nodes = this.relNodes[i] = [path, hit, lab('*'), lab('1')];
+        svg.append(...nodes);
+      }
+      const [path, hit, from, to] = nodes;
       const a = this.anchor(r.from[0], r.from[1], 'r');
       const b = this.anchor(r.to[0], r.to[1], 'l');
+      for (const n of nodes) {
+        if (!a || !b) set(n, 'display', 'none');
+        else if (n.hasAttribute('display')) n.removeAttribute('display');
+      }
       if (!a || !b) return;
       const left = (this.pos.get(r.from[0])?.x ?? 0) > (this.pos.get(r.to[0])?.x ?? 0);
       const A = left ? this.anchor(r.from[0], r.from[1], 'l')! : a;
       const B = left ? this.anchor(r.to[0], r.to[1], 'r')! : b;
       const mid = (A.x + B.x) / 2;
-      const path = document.createElementNS(ns, 'path');
-      path.setAttribute('d', `M${A.x},${A.y} C${mid},${A.y} ${mid},${B.y} ${B.x},${B.y}`);
-      path.setAttribute('class', `fc-dm-rel${r.active ? '' : ' fc-dm-off'}${r.err ? ' fc-dm-bad' : ''}${i === this.chosen ? ' fc-dm-sel' : ''}`);
-      const hit = document.createElementNS(ns, 'path');
-      hit.setAttribute('d', path.getAttribute('d')!);
-      hit.setAttribute('class', 'fc-dm-hit');
-      hit.addEventListener('click', () => {
-        this.chosen = i;
-        this.paintSide();
-        this.drawLines();
-      });
-      const lab = (txt: string, p: { x: number; y: number }, dx: number) => {
-        const t = document.createElementNS(ns, 'text');
-        t.setAttribute('x', String(p.x + dx));
-        t.setAttribute('y', String(p.y - 4));
-        t.setAttribute('class', 'fc-dm-lab');
-        t.textContent = txt;
-        return t;
-      };
-      svg.append(path, hit, lab('*', A, left ? -12 : 4), lab('1', B, left ? 4 : -12));
+      const d = `M${A.x},${A.y} C${mid},${A.y} ${mid},${B.y} ${B.x},${B.y}`;
+      set(path, 'd', d);
+      set(path, 'class', `fc-dm-rel${r.active ? '' : ' fc-dm-off'}${r.err ? ' fc-dm-bad' : ''}${i === this.chosen ? ' fc-dm-sel' : ''}`);
+      set(hit, 'd', d);
+      set(from, 'x', String(A.x + (left ? -12 : 4)));
+      set(from, 'y', String(A.y - 4));
+      set(to, 'x', String(B.x + (left ? 4 : -12)));
+      set(to, 'y', String(B.y - 4));
     });
   }
 
