@@ -1996,7 +1996,7 @@ fn same(a: &Value, b: &Value) -> bool {
 
 fn lookup_eq(key: &Value, v: &Value, wild: bool) -> bool {
     match (key, v) {
-        (Value::Number(a), Value::Number(b)) => a == b,
+        (Value::Number(a), Value::Number(b)) => num_cmp(*a, *b) == Some(std::cmp::Ordering::Equal),
         (Value::Text(a), Value::Text(b)) => {
             if wild {
                 wild_match(a, b)
@@ -2107,7 +2107,7 @@ fn crit_matches(c: &Crit, cell: &Value) -> bool {
                 _ => None,
             };
             match x {
-                Some(x) => holds(c.op, x.partial_cmp(n)),
+                Some(x) => holds(c.op, num_cmp(x, *n)),
                 None => c.op == Op::Ne,
             }
         }
@@ -2132,6 +2132,13 @@ pub fn sig15(x: f64) -> f64 {
         return x;
     }
     format!("{:.14e}", x).parse().unwrap_or(x)
+}
+
+fn num_cmp(x: f64, y: f64) -> Option<std::cmp::Ordering> {
+    if x != y && (x - y).abs() <= x.abs().max(y.abs()) * 1e-13 {
+        return sig15(x).partial_cmp(&sig15(y));
+    }
+    x.partial_cmp(&y)
 }
 
 fn rank(v: &Value) -> u8 {
@@ -2162,7 +2169,7 @@ pub fn compare(a: &Value, b: &Value) -> std::cmp::Ordering {
         _ => {
             let x = number_of(&a).unwrap_or(0.0);
             let y = number_of(&b).unwrap_or(0.0);
-            x.partial_cmp(&y).unwrap_or(Ordering::Equal)
+            num_cmp(x, y).unwrap_or(Ordering::Equal)
         }
     }
 }
