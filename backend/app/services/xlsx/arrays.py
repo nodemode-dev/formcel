@@ -1,3 +1,4 @@
+from openpyxl.cell.cell import ILLEGAL_CHARACTERS_RE
 from openpyxl.utils import get_column_letter, range_boundaries
 from openpyxl.worksheet.formula import ArrayFormula
 
@@ -37,7 +38,7 @@ def write_out(eng, ws, sheet: int) -> list[str]:
                 if (dr, dc) == (0, 0) or v is None:
                     continue
                 cell = ws.cell(row=r0 + dr + 1, column=c0 + dc + 1)
-                cell.value = v
+                cell.value = ILLEGAL_CHARACTERS_RE.sub("", v) if isinstance(v, str) else v
                 if isinstance(v, str):
                     cell.data_type = "e" if v in ERRORS else "s"
     return dynamic

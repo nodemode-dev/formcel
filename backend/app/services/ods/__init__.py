@@ -7,6 +7,7 @@ from xml.etree import ElementTree as ET
 from xml.sax.saxutils import escape, quoteattr
 
 from formcel_engine import reads_as_text
+from openpyxl.cell.cell import ILLEGAL_CHARACTERS_RE
 from openpyxl.utils import get_column_letter
 
 from ..xlsx.autofilter import filtered_rows
@@ -565,10 +566,12 @@ def _cell_xml(r, c, vals, res, codes, sts, merges, covered, links, cell_style, d
         h, w = merges[(r, c)]
         attrs.append(f'table:number-columns-spanned="{w}" table:number-rows-spanned="{h}"')
     kind, text = vals.get((r, c), ("", ""))
+    text = ILLEGAL_CHARACTERS_RE.sub("", text)
     shown = text
     if kind == "f":
         attrs.append(f"table:formula={quoteattr(to_file(text))}")
         rk, rt = res.get((r, c), ("t", ""))
+        rt = ILLEGAL_CHARACTERS_RE.sub("", rt)
         attrs.append(_value_attrs(rk, rt, code, data_style) if rk in ("n", "b") else 'office:value-type="string"' + (f" office:string-value={quoteattr(rt)}" if rk == "t" else ""))
         shown = rt
     elif kind in ("n", "b", "t", "e"):
