@@ -146,7 +146,14 @@ class Store:
                 for s in scripts:
                     z.writestr(f"scripts/{s['id']}.ts", s.get("code", ""))
                 z.writestr("automation.json", json.dumps({**b.auto, "scripts": [{k: v for k, v in s.items() if k != "code"} for s in scripts]}, ensure_ascii=False, separators=(",", ":")))
-        os.replace(tmp, target)
+        for attempt in range(10):
+            try:
+                os.replace(tmp, target)
+                break
+            except PermissionError as e:
+                if attempt == 9:
+                    raise OSError(f"{target.name} is in use and could not be saved: {e}") from None
+                time.sleep(0.05)
         try:
             self.versions.snapshot(b.id, target)
         except OSError:
