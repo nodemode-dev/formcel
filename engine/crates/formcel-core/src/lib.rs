@@ -1471,7 +1471,22 @@ impl Workbook {
             }
         }
         let mut out: Changed = seeds.iter().filter(|k| !self.formulas.contains_key(k)).map(|k| (k.0, k.1, self.sheets[k.0].cells.get(k.1).cloned().unwrap_or(Value::Empty))).collect();
+        let again: Vec<Key> = if volatile {
+            dirty
+                .iter()
+                .filter(|k| {
+                    self.formulas.get(k).is_some_and(|f| f.volatile && {
+                        let src = f.src.to_ascii_uppercase();
+                        src.contains("INDIRECT(") || src.contains("OFFSET(")
+                    })
+                })
+                .copied()
+                .collect()
+        } else {
+            Vec::new()
+        };
         out.extend(self.evaluate(dirty));
+        self.touched.extend(again);
         out
     }
 
