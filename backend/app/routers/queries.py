@@ -62,6 +62,6 @@ def refresh_queries(wid: str, body: RefreshIn) -> dict:
     for qid in order:
         try:
             done.append({"id": qid, "name": library[qid].get("name"), **scheduler.refresh(wid, qid)})
-        except (pquery.QueryError, webdata.FetchError, ValueError, KeyError, FileNotFoundError) as e:
+        except (pquery.QueryError, webdata.FetchError, ValueError, KeyError, FileNotFoundError, PermissionError) as e:
             failed.append({"id": qid, "name": library[qid].get("name"), "error": str(e)})
     return {"refreshed": done, "failed": failed}
