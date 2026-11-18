@@ -1,5 +1,9 @@
+import json
 import os
+import socket
 import sqlite3
+import threading
+from http.server import BaseHTTPRequestHandler, HTTPServer
 
 import pytest
 
@@ -142,6 +146,54 @@ def test_a_python_handler_does_not_run_while_python_is_off(client, orders):
 def test_put_is_refused_in_a_cell_formula():
     with pytest.raises(pysand.PyError, match="PermissionError: put runs only in a Python handler"):
         pysand.run('put("A1", 1)', [])
+
+
+@pytest.fixture
+def formtxt(monkeypatch):
+    seen = []
+
+    class Handler(BaseHTTPRequestHandler):
+        def do_POST(self):
+            body = json.loads(self.rfile.read(int(self.headers["content-length"])))
+            seen.append((self.path, body))
+            ok = body.get("template") != "missing"
+            out = {"id": "r1", "title": "Invoice", "records": 2, "file": body.get("out")} if ok else {"detail": "No document missing."}
+            self.send_response(200 if ok else 404)
+            self.send_header("content-type", "application/json")
+            self.end_headers()
+            self.wfile.write(json.dumps(out).encode())
+
+        def log_message(self, *a):
+            pass
+
+    server = HTTPServer(("127.0.0.1", 0), Handler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    monkeypatch.setenv("FORMTXT_ENGINE_PORT", str(server.server_address[1]))
+    yield seen
+    server.shutdown()
+    server.server_close()
+
+
+def test_a_report_is_sent_to_formtxt_with_the_workbook_database(client, orders, formtxt):
+    wid = _book(client, {"dbPath": orders})
+    r = client.post(f"/api/workbooks/{wid}/report", json={"template": "doc1", "sql": "select * from orders", "out": "/tmp/invoice.pdf"})
+    assert r.status_code == 200, r.text
+    assert r.json() == {"id": "r1", "title": "Invoice", "records": 2, "file": "/tmp/invoice.pdf"}
+    assert formtxt == [("/api/reports/run", {"template": "doc1", "data": {"path": orders, "sql": "select * from orders"}, "mode": "list", "format": "pdf", "out": "/tmp/invoice.pdf"})]
+    r = client.post(f"/api/workbooks/{wid}/report", json={"template": "missing", "sql": "select 1"})
+    assert r.status_code == 502 and "No document missing." in r.json()["detail"]
+    assert client.post(f"/api/workbooks/{_book(client)}/report", json={"template": "doc1", "sql": "select 1"}).status_code == 422
+
+
+def test_a_report_says_when_formtxt_is_not_running(client, orders, monkeypatch):
+    s = socket.socket()
+    s.bind(("127.0.0.1", 0))
+    port = s.getsockname()[1]
+    s.close()
+    monkeypatch.setenv("FORMTXT_ENGINE_PORT", str(port))
+    wid = _book(client, {"dbPath": orders})
+    r = client.post(f"/api/workbooks/{wid}/report", json={"template": "doc1", "sql": "select 1"})
+    assert r.status_code == 503 and r.json()["detail"] == "FormTxt is not running. Open it and try again."
 
 
 def test_db_exec_refuses_a_relative_path(client, orders):

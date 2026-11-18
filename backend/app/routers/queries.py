@@ -1,3 +1,9 @@
+import asyncio
+import json
+import os
+import urllib.error
+import urllib.request
+
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
@@ -128,3 +134,45 @@ def py_run(wid: str, body: PyRunIn) -> dict:
     if body.record is not None:
         reply["record"] = out["record"] if isinstance(out.get("record"), dict) else body.record
     return reply
+
+
+FORMTXT_DOWN = "FormTxt is not running. Open it and try again."
+
+
+class ReportIn(BaseModel):
+    template: str = Field(min_length=1, max_length=200)
+    sql: str = Field(max_length=100_000)
+    out: str | None = Field(default=None, max_length=4096)
+
+
+def formtxt_port() -> int:
+    try:
+        return int(os.environ.get("FORMTXT_ENGINE_PORT") or 8210)
+    except ValueError:
+        return 8210
+
+
+@router.post("/workbooks/{wid}/report")
+async def run_report(wid: str, body: ReportIn) -> dict:
+    path = str(((_auto(wid).get("settings") or {}).get("dbPath")) or "")
+    if not path:
+        raise HTTPException(422, "This workbook has no database yet. Run data.dbAllowWrite or data.dbQuery with a full path first.")
+    payload = {"template": body.template, "data": {"path": path, "sql": body.sql}, "mode": "list", "format": "pdf", "out": body.out}
+    req = urllib.request.Request(f"http://127.0.0.1:{formtxt_port()}/api/reports/run", data=json.dumps(payload).encode("utf-8"), headers={"content-type": "application/json"}, method="POST")
+
+    def send() -> dict:
+        with urllib.request.urlopen(req, timeout=120) as r:
+            return json.loads(r.read().decode("utf-8") or "{}")
+
+    try:
+        return await asyncio.to_thread(send)
+    except urllib.error.HTTPError as e:
+        try:
+            detail = json.loads(e.read().decode("utf-8") or "{}").get("detail") or str(e)
+        except ValueError:
+            detail = str(e)
+        raise HTTPException(502, f"FormTxt could not make the report: {detail}")
+    except (urllib.error.URLError, ConnectionError, TimeoutError):
+        raise HTTPException(503, FORMTXT_DOWN)
+    except ValueError:
+        raise HTTPException(502, "FormTxt answered with something that is not JSON.")
