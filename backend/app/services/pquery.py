@@ -136,6 +136,37 @@ def sqlite_table(path: str, sql: str, params: dict | None = None) -> Table:
     return Table(cols or ["Column1"], rows)
 
 
+WRITE_START = re.compile(r"(?is)^\s*(insert|update|delete)\b")
+
+
+def sqlite_exec(path: str, sql: str, params: dict | None = None) -> dict:
+    from . import qparams
+
+    p = Path(path).expanduser()
+    if not p.is_file():
+        raise QueryError(f"no database file at {path}")
+    s = (sql or "").strip()
+    code = "".join(t for k, t in qparams.scan(s) if k == "code").rstrip().rstrip(";").rstrip()
+    if ";" in code:
+        raise QueryError("only one statement is run")
+    while s.endswith(";"):
+        s = s[:-1].rstrip()
+    if not WRITE_START.match("".join(t for k, t in qparams.scan(s) if k != "comment")):
+        raise QueryError("only an INSERT, UPDATE or DELETE statement is run")
+    s, used = qparams.bind(s, params, "named")
+    try:
+        con = sqlite3.connect(f"file:{quote(p.resolve().as_posix(), safe='/:')}?mode=rw", uri=True)
+        try:
+            cur = con.execute(s, {**(params or {}), **(used or {})})
+            con.commit()
+            out = {"rowcount": cur.rowcount, "lastrowid": cur.lastrowid}
+        finally:
+            con.close()
+    except sqlite3.Error as e:
+        raise QueryError(f"SQLite: {e}")
+    return out
+
+
 def unique(names: list[str]) -> list[str]:
     seen: dict[str, int] = {}
     out = []

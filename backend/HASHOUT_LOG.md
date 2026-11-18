@@ -5,6 +5,12 @@ Living log of comment content and rationale for the engine process. Source stays
 Current build version: v0.43.0
 Last updated: 2026-11-13 · v0.43.0 has no change in the engine process; `scripts/demo-record.py` records the three demo workbooks for the browser demo pages (frontend log) and CI's sparkle step also reads `demo`, `demos` and `.js` files. Before: 2026-11-13 · v0.42.0: the agent bridge, MCP, terminals and Claude Code, the agent kit and demos (entries below). Before: 2026-11-13 · v0.41.1 has no change in the engine process; `setup/build_frontend` now always runs `engine/build_wasm` (removed: `[ -f public/engine/formcel.wasm ] || ../engine/build_wasm`), so a plain build after a Rust change no longer ships the old window engine, and the Python wheel takes the workspace version. The engine and frontend logs carry the rest. Before: 2026-11-12 · the v0.41.0 review fixes (entries below). Before: 2026-10-31 · .js, .mjs and .css keep their types on Windows (app/main.py). Before: 2026-10-30 · the Windows install stops on a failed step and never on a missing Tesseract. Before: 2026-10-26 · scripts run with no file, process or network reach (FB-043), and the test suite. Before: LocalGuard refuses cross-site requests that carry no Origin (FB-035). Before: only this computer's own window and agents reach the engine (FB-030), and full fonts in PDF export, freeze exclusions
 
+## Unreleased entries · data forms, SQLite saving, Python handlers, reports (discussion #12, 2026-11-18)
+
+The version bump and the CHANGELOG entry come in a later release commit. The commit of the same subject has the detail and what was run.
+
+- services/pquery.py :: `sqlite_exec`, `WRITE_START` · the one write path to a SQLite file. It opens `mode=rw` (never `rwc`, so a missing file is an error and nothing is created), runs exactly one statement that starts with INSERT, UPDATE or DELETE after comments are dropped (the same `qparams.scan` that `one_statement` uses), commits, and returns `{rowcount, lastrowid}`. Params bind both ways: `@name` through `qparams.bind`, and `:name` straight from the params dict (sqlite3 ignores keys a statement does not use). It does not check who may write; the callers do (`dbWrite`, below).
+
 ## v0.42.0 entries · the agent bridge, MCP, terminals and Claude Code, the agent kit, demos (2026-11-13)
 
 Ported from formtxt (bridge), formtools (MCP shell, kit) and formvis (terminals, Claude Code), renamed for formcel. The commit of the same subject has the detail and what was run.
