@@ -759,6 +759,8 @@ export class App {
       },
       viewMode: () => this.viewState,
       setViewMode: (m) => this.setView(m),
+      dashboard: () => document.getElementById('app')!.classList.contains('fc-dashboard'),
+      setDashboard: (on) => this.setDashboard(on),
       a11y: async () => {
         const o = this.open;
         if (!o) return null;
@@ -2675,6 +2677,7 @@ export class App {
     const o = this.open;
     if (!o) return;
     this.grid.show(o.book, i, o.views[i] ?? {});
+    this.dashboard(!!o.views[i]?.dashboard);
     void this.refreshBreaks();
     this.markTab(i);
     this.tools.syncSlicers();
@@ -2687,6 +2690,33 @@ export class App {
     if (this.p.zoomVal.textContent !== v) this.p.zoomVal.textContent = v;
     const slider = this.p.zoom.querySelector<HTMLInputElement>('.fc-zoom-slider');
     if (slider && slider.value !== String(Math.round(this.grid.zoom * 100))) slider.value = String(Math.round(this.grid.zoom * 100));
+  }
+
+  private dashGridlines = true;
+
+  private dashboard(on: boolean): void {
+    const root = document.getElementById('app')!;
+    if (root.classList.contains('fc-dashboard') === on) return;
+    if (on) {
+      const f = this.grid.objectFrame();
+      root.style.setProperty('--fc-dash-left', `${f.left}px`);
+      root.style.setProperty('--fc-dash-top', `${f.top}px`);
+      this.dashGridlines = this.grid.opts.gridlines;
+      this.grid.opts.gridlines = false;
+    } else this.grid.opts.gridlines = this.dashGridlines;
+    root.classList.toggle('fc-dashboard', on);
+    this.grid.paint();
+    document.dispatchEvent(new Event('fc-viewmode'));
+  }
+
+  private setDashboard(on: boolean): void {
+    const o = this.open;
+    if (!o) return;
+    const sheet = this.grid.sheetIndex;
+    this.dashboard(on);
+    o.views[sheet] = { ...(o.views[sheet] ?? {}), dashboard: on || null };
+    void api('PATCH', `/api/workbooks/${o.id}/sheets/${sheet}`, { view: { dashboard: on || null } }).catch(() => this.status('View not saved', true));
+    this.grid.focus();
   }
 
   private patchView(sheet: number, part: Partial<SheetView>): void {
@@ -2716,7 +2746,7 @@ export class App {
     const o = this.open;
     if (!o) return;
     const old = o.views[sheet] ?? {};
-    o.views[sheet] = { ...view, hidden: old.hidden, fviews: old.fviews, sviews: old.sviews, slicers: old.slicers, timeline: old.timeline };
+    o.views[sheet] = { ...view, hidden: old.hidden, fviews: old.fviews, sviews: old.sviews, slicers: old.slicers, timeline: old.timeline, dashboard: old.dashboard };
     this.zoomLabel();
     if (this.preview) void this.refreshBreaks();
     window.clearTimeout(this.viewTimers.get(sheet));

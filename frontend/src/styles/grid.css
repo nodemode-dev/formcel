@@ -118,6 +118,9 @@
 }
 
 .fc-grid:focus-visible { box-shadow: inset 0 0 0 1px var(--accent-color-dim); }
+#app.fc-dashboard .fc-sheet { grid-template-rows: minmax(0, 1fr) auto; }
+#app.fc-dashboard .fc-sheet > .fc-ribbon, #app.fc-dashboard .fc-sheet > .fc-formula, #app.fc-dashboard .fc-sheetbar { display: none; }
+#app.fc-dashboard .fc-sheet > .fc-grid { margin: calc(-1 * var(--fc-dash-top, 20px)) 0 0 calc(-1 * var(--fc-dash-left, 46px)); }
 
 .fc-outline {
   position: absolute;

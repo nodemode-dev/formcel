@@ -17,6 +17,8 @@ export interface ShellHooks {
   save(): void;
   viewMode(): ViewMode;
   setViewMode(m: ViewMode): void;
+  dashboard(): boolean;
+  setDashboard(on: boolean): void;
   about(): void;
   toast(text: string): void;
 }
@@ -72,6 +74,12 @@ export function registerShellCommands(h: ShellHooks): void {
     h.grid.select(0, 0, MAX_ROWS - 1, MAX_COLS - 1, false);
   }, { keys: 'Mod+A', enabled: book });
   cmd('view.normal', 'Normal view', 'Show the sheet in Normal view.', () => h.setViewMode('normal'), { enabled: book, checked: () => h.viewMode() === 'normal' });
+  cmd('view.dashboard', 'Dashboard view', 'Show this sheet without the ribbon, formula bar, headings, gridlines and sheet tabs; charts, slicers and controls keep working. Run it again or press Esc to return.', () => h.setDashboard(!h.dashboard()), { enabled: book, checked: () => h.dashboard() });
+  document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape' || !h.dashboard() || document.querySelector('.fc-modal:not([hidden])')) return;
+    if ((e.target as HTMLElement).closest('input, textarea, select, [contenteditable="true"]')) return;
+    h.setDashboard(false);
+  }, true);
   cmd('view.page-layout', 'Page Layout view', 'Show where each printed page starts while you work on the sheet.', () => h.setViewMode('layout'), { enabled: book, checked: () => h.viewMode() === 'layout' });
   cmd('view.status-bar', 'Status bar', 'Show or hide the status bar at the bottom of the window.', () => setStatusBarVisible(!statusBarVisible()), { checked: statusBarVisible });
   cmd('view.home-at-launch', 'Show Home at launch', 'Open the Home screen when FormCel starts. When it is off, FormCel opens the workbook you used last.', () => {
