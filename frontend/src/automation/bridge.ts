@@ -1,5 +1,5 @@
 import { askConsent } from '../ui/agents-allow';
-import { commandInfo, listCommands, runCommand } from '../ui/commands';
+import { callCommand, commandInfo, listCommands } from '../ui/commands';
 import { asAgent } from './actor';
 import { api } from './dom';
 
@@ -14,12 +14,12 @@ function safe(value: unknown): unknown {
   }
 }
 
-async function run(command: string): Promise<unknown> {
+async function run(command: string, params: Record<string, unknown> = {}): Promise<unknown> {
   if (WINDOW_ONLY.includes(command)) throw new Error(`${command} is only available in the FormCel window, so a person runs it. Do not retry.`);
   const info = commandInfo(command);
   if (!info) throw new Error(`No command has the id ${command}. Search with GET /api/commands?text=word.`);
   if (info.enabled && !info.enabled()) throw new Error(`${command} cannot run now: ${info.description}`);
-  return asAgent(async () => { await runCommand(command); });
+  return asAgent(() => callCommand(command, params));
 }
 
 export function connectBridge(): void {
@@ -33,7 +33,7 @@ export function connectBridge(): void {
       try { msg = JSON.parse(String(ev.data)); } catch { return; }
       if (msg.t !== 'run' || !msg.id || !msg.command) return;
       try {
-        const result = msg.command === '__consent__' ? { allowed: await askConsent(String(msg.params?.client ?? '')) } : await run(msg.command);
+        const result = msg.command === '__consent__' ? { allowed: await askConsent(String(msg.params?.client ?? '')) } : await run(msg.command, msg.params ?? {});
         ws.send(JSON.stringify({ t: 'result', id: msg.id, ok: true, result: safe(result) }));
       } catch (e) {
         ws.send(JSON.stringify({ t: 'result', id: msg.id, ok: false, error: (e as Error).message }));

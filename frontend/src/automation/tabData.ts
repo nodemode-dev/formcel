@@ -1,4 +1,5 @@
 import { engine } from '../engine';
+import { callCommand } from '../ui/commands';
 import { colName, parseRef } from '../grid/a1';
 import { api, el, esc, setText } from './dom';
 import { uid, type Env, type Query, type Step } from './model';
@@ -105,7 +106,7 @@ export class DataTab {
         <div class="fc-qsrc" data-k="sheet"><input class="fc-auto-input" data-f="range" placeholder="Sheet1!A1:D20 (empty for the whole used range)" spellcheck="false"></div>
         <div class="fc-qsrc" data-k="excel"><input class="fc-auto-input" data-f="xpath" placeholder="/path/to/Book.xlsx, .xls, .fcel or .csv" spellcheck="false"><input class="fc-auto-input" data-f="sheet" placeholder="Sheet name (empty for the first)" spellcheck="false"><input class="fc-auto-input" data-f="xrange" placeholder="Range such as A1:D50 (empty for all)" spellcheck="false"></div>
         <div class="fc-qsrc" data-k="folder"><input class="fc-auto-input" data-f="fpath" placeholder="/path/to/folder" spellcheck="false"><input class="fc-auto-input" data-f="pattern" placeholder="File name pattern, such as sales-*.xlsx" spellcheck="false"><label><input type="checkbox" data-f="subfolders"> Include subfolders</label><label><input type="checkbox" data-f="flist"> List the files instead of combining them</label></div>
-        <div class="fc-qsrc" data-k="sqlite"><input class="fc-auto-input" data-f="path" placeholder="/path/to/file.db" spellcheck="false"></div>
+        <div class="fc-qsrc" data-k="sqlite"><input class="fc-auto-input" data-f="path" placeholder="/path/to/file.db" spellcheck="false"><label class="fc-auto-small"><input type="checkbox" data-f="dbwrite"> Allow saving to this database</label></div>
         <div class="fc-qsrc" data-k="postgres mysql"><div class="fc-auto-row"><input class="fc-auto-input fc-grow" data-f="host" placeholder="Server" spellcheck="false"><input class="fc-auto-num" data-f="port" type="number" min="1" placeholder="Port"></div><div class="fc-auto-row"><input class="fc-auto-input fc-grow" data-f="user" placeholder="User" spellcheck="false" autocomplete="off"><input class="fc-auto-input fc-grow" data-f="password" type="password" placeholder="Password" autocomplete="off"></div><input class="fc-auto-input" data-f="database" placeholder="Database" spellcheck="false"><p class="fc-auto-hint">The password is saved inside this workbook's automation data. Use a read-only account.</p></div>
         <div class="fc-qsrc" data-k="sqlite postgres mysql"><div class="fc-auto-row"><button type="button" class="fc-btn" data-a="schema">Show tables</button></div><div class="fc-auto-list fc-dbtables"></div><textarea class="fc-auto-input" data-f="sql" rows="4" placeholder="SELECT * FROM table WHERE region = @region" spellcheck="false"></textarea></div>
         <div class="fc-auto-h">Parameters</div>
@@ -146,6 +147,27 @@ export class DataTab {
 
   private f<T extends HTMLElement>(name: string): T {
     return this.root.querySelector<T>(`[data-f="${name}"]`)!;
+  }
+
+  private paintWrite(): void {
+    const path = this.f<HTMLInputElement>('path').value.trim();
+    const box = this.f<HTMLInputElement>('dbwrite');
+    const on = !!path && ((this.env.auto.settings.dbWrite as string[] | undefined) ?? []).includes(path);
+    if (box.checked !== on) box.checked = on;
+  }
+
+  private async setWrite(on: boolean): Promise<void> {
+    const path = this.f<HTMLInputElement>('path').value.trim();
+    try {
+      if (on) await callCommand('data.dbAllowWrite', { path });
+      else {
+        this.env.auto.settings.dbWrite = ((this.env.auto.settings.dbWrite as string[] | undefined) ?? []).filter((x) => x !== path);
+        this.env.changed();
+      }
+    } catch (err) {
+      setText(this.msg, err instanceof Error ? err.message : String(err));
+    }
+    this.paintWrite();
   }
 
   reload(): void {
@@ -289,6 +311,11 @@ export class DataTab {
   private input(e: Event): void {
     const t = e.target as HTMLInputElement;
     if (!this.editing) return;
+    if (t.dataset.f === 'dbwrite') {
+      if (e.type === 'change') void this.setWrite(t.checked);
+      return;
+    }
+    if (t.dataset.f === 'path') this.paintWrite();
     if (t.dataset.f === 'addstep' && t.value) {
       this.editing.steps.push({ op: t.value });
       t.value = '';
@@ -349,6 +376,7 @@ export class DataTab {
     this.f<HTMLInputElement>('xpath').value = isExcel ? s.path ?? '' : '';
     this.f<HTMLInputElement>('fpath').value = s.kind === 'folder' ? s.path ?? '' : '';
     this.f<HTMLInputElement>('path').value = s.kind === 'sqlite' ? s.path ?? '' : '';
+    this.paintWrite();
     this.f<HTMLInputElement>('subfolders').checked = !!(draft.source as Record<string, unknown>).subfolders;
     this.f<HTMLInputElement>('flist').checked = !!(draft.source as Record<string, unknown>).list;
     this.f<HTMLInputElement>('tsheet').value = draft.target.sheet;

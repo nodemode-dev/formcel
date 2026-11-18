@@ -9,6 +9,7 @@ import { blankAuto, type Auto, type Env, type Script } from './model';
 import { ScriptRunner, type RunResult, type ScriptHost } from './scripts';
 import { AssistantTab } from './tabAssistant';
 import { DataTab } from './tabData';
+import { Db } from './db';
 import { MoreTab } from './tabMore';
 import { ScriptsTab } from './tabScripts';
 import { PyCellEditor } from './pyCell';
@@ -63,6 +64,7 @@ export class Automation {
   private readonly more: MoreTab;
   private readonly server: ServerTab;
   private readonly py: PyCellEditor;
+  readonly db: Db;
   private readonly panes: Record<string, HTMLElement>;
   private saveTimer = 0;
   private editTimer = 0;
@@ -122,6 +124,7 @@ export class Automation {
     this.data = new DataTab(env);
     this.more = new MoreTab(env, () => this.scripts.reload());
     this.server = new ServerTab(env);
+    this.db = new Db({ id: () => h.id(), setting: (k) => this.setting(k), setSetting: (k, v) => this.setSetting(k, v), saveNow: () => this.saveNow() });
     this.py = new PyCellEditor({ grid: h.grid, book: () => h.book(), sheets: () => h.sheets(), status: (t, e) => h.status(t, e), drain: () => this.calls.drain(false, true) });
     this.panel = el('section', 'fc-auto');
     this.panel.hidden = true;
@@ -158,6 +161,9 @@ export class Automation {
     cmd('automate.panel', 'Scripts', 'Open the script editor: write TypeScript against the FormCel workbook API, run it, record actions, add buttons and triggers.', () => this.show('scripts'));
     cmd('assistant.panel', 'Assistant', 'Open the assistant: ask about the selection, get formulas, tables and filled columns as proposals you apply yourself. It needs a model endpoint you set.', () => this.show('assistant'));
     cmd('data.panel', 'Data connections', 'Import web tables, build and refresh queries from CSV, JSON, web tables, sheets and SQLite files.', () => this.show('data'));
+    registerCommand({ id: 'data.dbQuery', title: 'Query the database', description: 'Run one SELECT on a SQLite file and return its columns and rows. Params: sql, params (named @values), path (defaults to the workbook database).', changes: false, run: (p) => this.db.query(p) });
+    registerCommand({ id: 'data.dbExec', title: 'Save to the database', description: 'Run one INSERT, UPDATE or DELETE on a SQLite file this workbook may save to. Params: sql, params (named @values), path (defaults to the workbook database).', changes: true, run: (p) => this.db.exec(p) });
+    registerCommand({ id: 'data.dbAllowWrite', title: 'Allow saving to a database', description: 'Ask the person, once per database, to let this workbook save to a SQLite file. Params: path (full path; defaults to the workbook database).', changes: true, run: (p) => this.db.allow(p) });
     cmd('automate.record', 'Record actions', 'Start recording cell edits, formats and sorts into a script.', () => {
       this.show('scripts');
       (this.panes.scripts.querySelector('[data-a="record"]') as HTMLButtonElement).click();

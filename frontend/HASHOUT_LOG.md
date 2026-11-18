@@ -7,6 +7,24 @@ Last updated: 2026-11-13 · v0.43.0: browser demo pages, the inline mark in the 
 
 ---
 
+## Unreleased · data forms, SQLite saving, Python handlers, dashboard view (discussion #12, 2026-11-18)
+
+The version bump comes in a later release commit.
+
+### Commands take params and give back a result
+- refers-to: src/ui/commands.ts (Command.run, callCommand); src/automation/bridge.ts (run)
+- kind: decision
+- logged: unreleased · 2026-11-18
+
+`Command.run` now receives the params an agent or `./formcel cli run id key=value` sends and may return a value; `callCommand(id, params)` runs one and hands its result back, and the bridge sends that result to the engine (it already carried both, the window dropped them). Commands that take nothing ignore the argument, so no existing command changed. Removed from the bridge: `return asAgent(async () => { await runCommand(command); });`. A command must treat its params as untrusted input: none of them may skip a question the window asks the person.
+
+### The database commands and the saving switch
+- refers-to: src/automation/db.ts (Db, askWrite); src/automation/index.ts (commands: data.dbQuery, data.dbExec, data.dbAllowWrite); src/automation/tabData.ts (dbwrite switch, paintWrite, setWrite)
+- kind: decision
+- logged: unreleased · 2026-11-18
+
+`data.dbQuery` and `data.dbExec` take `sql`, `params` (named `@values`) and `path`, which defaults to the workbook setting `dbPath`; the engine does the work and the check. `data.dbAllowWrite` asks with its own modal (the outside-agent dialog's shape) every time a path not yet in `dbWrite` is named, and has no param that skips the question; on Allow it appends the full path to `dbWrite`, sets `dbPath` when the workbook has none, and saves the automation at once so the engine sees it before the next `data.dbExec`. `data.dbQuery` with a full path also sets `dbPath` when none is set. The SQLite source row on the Data tab gets the "Allow saving to this database" switch: it shows whether the typed path is in `dbWrite`, on runs `data.dbAllowWrite`, off removes the path. Only the checkbox's `checked` changes, the row's size does not.
+
 ## Open items closed · v0.43.0 (2026-11-13)
 
 ### The demos as browser pages
