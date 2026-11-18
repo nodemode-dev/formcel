@@ -10,6 +10,10 @@ import { ScriptRunner, type RunResult, type ScriptHost } from './scripts';
 import { AssistantTab } from './tabAssistant';
 import { DataTab } from './tabData';
 import { Db } from './db';
+import { PythonTab } from './tabPython';
+import { runHandler, type PyRun } from './pyHandlers';
+import { engine } from '../engine';
+import { parseRef } from '../grid/a1';
 import { MoreTab } from './tabMore';
 import { ScriptsTab } from './tabScripts';
 import { PyCellEditor } from './pyCell';
@@ -49,7 +53,7 @@ function compiled(s: Script): Script {
   }
 }
 
-const TABS: [string, string][] = [['scripts', 'Scripts'], ['server', 'Triggers'], ['assistant', 'Assistant'], ['data', 'Data'], ['more', 'More']];
+const TABS: [string, string][] = [['scripts', 'Scripts'], ['python', 'Python'], ['server', 'Triggers'], ['assistant', 'Assistant'], ['data', 'Data'], ['more', 'More']];
 
 export class Automation {
   private readonly auto: Auto = blankAuto();
@@ -65,6 +69,7 @@ export class Automation {
   private readonly server: ServerTab;
   private readonly py: PyCellEditor;
   readonly db: Db;
+  private readonly python: PythonTab;
   private readonly panes: Record<string, HTMLElement>;
   private saveTimer = 0;
   private editTimer = 0;
@@ -124,6 +129,7 @@ export class Automation {
     this.data = new DataTab(env);
     this.more = new MoreTab(env, () => this.scripts.reload());
     this.server = new ServerTab(env);
+    this.python = new PythonTab(env);
     this.db = new Db({ id: () => h.id(), setting: (k) => this.setting(k), setSetting: (k, v) => this.setSetting(k, v), saveNow: () => this.saveNow() });
     this.py = new PyCellEditor({ grid: h.grid, book: () => h.book(), sheets: () => h.sheets(), status: (t, e) => h.status(t, e), drain: () => this.calls.drain(false, true) });
     this.panel = el('section', 'fc-auto');
@@ -131,7 +137,7 @@ export class Automation {
     this.panel.setAttribute('aria-label', 'Automation');
     this.panel.innerHTML = `<header class="fc-auto-head"><div class="fc-auto-tabs" role="tablist">${TABS.map(([k, l]) => `<button type="button" class="fc-auto-tab" role="tab" data-tab="${k}">${l}</button>`).join('')}</div><button type="button" class="fc-tool" data-act="close" title="Close" aria-label="Close">${icon('close')}</button></header><div class="fc-auto-body"></div>`;
     const body = this.panel.querySelector<HTMLElement>('.fc-auto-body')!;
-    this.panes = { scripts: this.scripts.root, assistant: this.assistant.root, data: this.data.root, server: this.server.root, more: this.more.root };
+    this.panes = { scripts: this.scripts.root, python: this.python.root, assistant: this.assistant.root, data: this.data.root, server: this.server.root, more: this.more.root };
     for (const p of Object.values(this.panes)) {
       p.hidden = true;
       body.appendChild(p);
@@ -168,6 +174,12 @@ export class Automation {
       this.show('scripts');
       (this.panes.scripts.querySelector('[data-a="record"]') as HTMLButtonElement).click();
     });
+    cmd('python.panel', 'Python handlers', 'Open the Python tab: write handlers that buttons and data forms run, with db.query, db.execute and put.', () => this.show('python'));
+    registerCommand({ id: 'python.run', title: 'Run a Python handler', description: 'Run a Python handler of this workbook and write the cells it puts. Params: name.', changes: true, run: async (p) => {
+      const r = await this.runPy(typeof p?.name === 'string' ? p.name : '', { type: 'command' });
+      for (const [ref, v] of r.writes) await this.write(ref, v);
+      return r;
+    } });
     registerCommand({ id: 'python.cell', title: 'Python cell', description: 'Edit the active cell as Python: write code with xl() to read ranges and pandas to shape them, and a DataFrame result spills with its headers.', changes: true, keys: 'Ctrl+Alt+Shift+P', run: () => this.py.open() });
     cmd('automate.run', 'Run script', 'Run the script shown in the script editor.', () => void this.scripts.runCurrent());
     cmd('data.refresh', 'Refresh all data', 'Fetch web functions and run every saved query again.', async () => {
@@ -185,6 +197,20 @@ export class Automation {
     if (tab === 'more') void this.more.load();
     if (tab === 'server') void this.server.load();
     if (tab === 'data') this.data.reload();
+    if (tab === 'python') this.python.reload();
+  }
+
+  async runPy(name: string, event: Record<string, unknown> = {}): Promise<PyRun> {
+    if (!name) throw new Error('Name a Python handler with name=handler1.');
+    await this.saveNow();
+    return runHandler(this.h.id(), name, event);
+  }
+
+  async write(ref: string, value: unknown): Promise<void> {
+    const b = parseRef(String(ref).toUpperCase());
+    if (!b) throw new Error(`${ref} is not a cell such as B2.`);
+    const c = await engine().apply(this.h.book(), [[b.r0, b.c0, value === null || value === undefined ? '' : String(value)]], this.h.grid.sheetIndex);
+    await this.h.grid.commitEdits(c);
   }
 
   opened(id: string, raw: Partial<Auto> | undefined): void {

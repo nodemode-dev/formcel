@@ -5,6 +5,7 @@ import { registerCommand } from '../ui/commands';
 import { icon } from '../ui/icons';
 import { actions, field, makeModal } from '../ui/modal';
 import { CONTROL_TYPES, FormControls, pickerHtml, type Ctl, type CtlType } from './controls';
+import { handlerNames, runHandler } from '../automation/pyHandlers';
 import { Vbe } from './editor';
 import { MacrosDialog, setMacroInfo, shortcuts } from './macros';
 import { VbaStore } from './model';
@@ -68,6 +69,8 @@ export class Vba {
       save: (l) => h.settings.set('formControls', l),
       macros: () => macros(this.store.mods).map(qualified),
       run: (m) => this.runByName(m),
+      pyHandlers: () => handlerNames(h.settings.get('pyHandlers')),
+      runPy: (n) => runHandler(h.id(), n, { type: 'button' }),
       read: (ref) => {
         const b = parseRef(ref);
         return b ? h.grid.shownAt(b.r0, b.c0) : '';

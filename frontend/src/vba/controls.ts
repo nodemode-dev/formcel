@@ -15,6 +15,7 @@ export interface Ctl {
   h: number;
   text: string;
   macro: string;
+  py: string;
   link: string;
   range: string;
   value: number;
@@ -45,6 +46,8 @@ export interface ControlsHost {
   save(list: Ctl[]): void;
   macros(): string[];
   run(macro: string): void;
+  pyHandlers(): string[];
+  runPy(name: string): Promise<{ writes: [string, unknown][] }>;
   read(ref: string): string;
   readRange(ref: string): string[];
   write(ref: string, value: string): void;
@@ -55,7 +58,7 @@ const uid = () => Math.random().toString(36).slice(2, 10);
 
 export function blankControl(type: CtlType, sheet: number, x: number, y: number): Ctl {
   const t = CONTROL_TYPES.find((c) => c[0] === type)!;
-  return { id: uid(), type, sheet, x, y, w: t[3][0], h: t[3][1], text: type === 'button' ? 'Button' : type === 'check' ? 'Check Box' : type === 'option' ? 'Option Button' : type === 'group' ? 'Group Box' : type === 'label' ? 'Label' : '', macro: '', link: '', range: '', value: 0, min: 0, max: 100, step: 1, page: 10, checked: false };
+  return { id: uid(), type, sheet, x, y, w: t[3][0], h: t[3][1], text: type === 'button' ? 'Button' : type === 'check' ? 'Check Box' : type === 'option' ? 'Option Button' : type === 'group' ? 'Group Box' : type === 'label' ? 'Label' : '', macro: '', py: '', link: '', range: '', value: 0, min: 0, max: 100, step: 1, page: 10, checked: false };
 }
 
 interface Node {
@@ -200,7 +203,11 @@ export class FormControls {
     const el = n.el;
     const stop = (e: Event) => e.stopPropagation();
     const run = () => {
-      if (c.macro) this.h.run(c.macro);
+      if (c.py) {
+        void this.h.runPy(c.py).then((r) => {
+          for (const [ref, v] of r.writes) this.h.write(ref, v === null || v === undefined ? '' : String(v));
+        }, (err: unknown) => this.h.say(err instanceof Error ? err.message : String(err), true));
+      } else if (c.macro) this.h.run(c.macro);
     };
     const num = () => {
       const v = Number(this.link(c));
@@ -271,7 +278,7 @@ export class FormControls {
       el.appendChild(d);
     }
     for (const ev of ['keydown', 'dblclick']) el.addEventListener(ev, stop);
-    el.dataset.macro = c.macro ? '1' : '';
+    el.dataset.macro = c.macro || c.py ? '1' : '';
     this.grip(n);
   }
 
@@ -363,13 +370,20 @@ export class FormControls {
     const m = makeModal('Assign Macro');
     const sel = Object.assign(document.createElement('select'), { className: 'fc-auto-input' });
     sel.replaceChildren(Object.assign(document.createElement('option'), { value: '', textContent: '(none)' }), ...this.h.macros().map((n) => Object.assign(document.createElement('option'), { value: n, textContent: n })));
-    sel.value = c.macro;
+    const py = this.h.pyHandlers();
+    if (py.length) {
+      const g = Object.assign(document.createElement('optgroup'), { label: 'Python handlers' });
+      g.append(...py.map((n) => Object.assign(document.createElement('option'), { value: `py:${n}`, textContent: n })));
+      sel.appendChild(g);
+    }
+    sel.value = c.py ? `py:${c.py}` : c.macro;
     const done = () => {
       m.close();
       m.el.remove();
     };
     m.body.append(field('Macro name', sel), actions('OK', () => {
-      c.macro = sel.value;
+      c.py = sel.value.startsWith('py:') ? sel.value.slice(3) : '';
+      c.macro = c.py ? '' : sel.value;
       this.h.save(this.list);
       this.fill({ c, el: this.nodes.get(c.id)!.el, key: '' } as Node);
       done();

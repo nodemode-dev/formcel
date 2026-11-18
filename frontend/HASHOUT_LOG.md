@@ -25,6 +25,13 @@ The version bump comes in a later release commit.
 
 `data.dbQuery` and `data.dbExec` take `sql`, `params` (named `@values`) and `path`, which defaults to the workbook setting `dbPath`; the engine does the work and the check. `data.dbAllowWrite` asks with its own modal (the outside-agent dialog's shape) every time a path not yet in `dbWrite` is named, and has no param that skips the question; on Allow it appends the full path to `dbWrite`, sets `dbPath` when the workbook has none, and saves the automation at once so the engine sees it before the next `data.dbExec`. `data.dbQuery` with a full path also sets `dbPath` when none is set. The SQLite source row on the Data tab gets the "Allow saving to this database" switch: it shows whether the typed path is in `dbWrite`, on runs `data.dbAllowWrite`, off removes the path. Only the checkbox's `checked` changes, the row's size does not.
 
+### Python handlers
+- refers-to: src/automation/tabPython.ts (PythonTab); src/automation/pyHandlers.ts (handlerNames, runHandler); src/automation/index.ts (TABS, runPy, write, commands python.panel, python.run); src/vba/controls.ts (Ctl.py, ControlsHost.pyHandlers, runPy, fill run, assign); src/vba/index.ts (ControlsHost wiring)
+- kind: decision
+- logged: unreleased · 2026-11-18
+
+Handlers live in the workbook setting `pyHandlers` (`{name: code}`) and the Python tab sits second in the automation panel. The tab writes the code on every input (the automation save is debounced 700 ms) and only patches the select, name and textarea it owns; the option list is rebuilt only when the set of names changed. `python.run` saves the automation first, posts to `/py/run`, then writes each queued `put` through `engine().apply` on the active sheet and `grid.commitEdits`. A form control keeps its macro in `macro` and its handler in `py` (only one is set; Assign Macro lists handlers in a Python handlers group with `py:` values); a click with `py` set calls the route directly and applies the writes with `ControlsHost.write`. Controls saved before this have no `py` and behave as before.
+
 ## Open items closed · v0.43.0 (2026-11-13)
 
 ### The demos as browser pages
