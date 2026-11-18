@@ -1,4 +1,5 @@
 import json
+import os
 import re
 import sqlite3
 from datetime import date, datetime
@@ -165,6 +166,18 @@ def sqlite_exec(path: str, sql: str, params: dict | None = None) -> dict:
     except sqlite3.Error as e:
         raise QueryError(f"SQLite: {e}")
     return out
+
+
+WRITE_REFUSED = "Saving to this database is not allowed for this workbook. Run data.dbAllowWrite in the FormCel window to allow it."
+
+
+def write_allowed(auto: dict | None, path: str) -> bool:
+    p = Path(path or "").expanduser()
+    if not p.is_absolute():
+        return False
+    want = os.path.realpath(p)
+    listed = ((auto or {}).get("settings") or {}).get("dbWrite") or []
+    return isinstance(listed, list) and any(isinstance(x, str) and Path(x).expanduser().is_absolute() and os.path.realpath(Path(x).expanduser()) == want for x in listed)
 
 
 def unique(names: list[str]) -> list[str]:

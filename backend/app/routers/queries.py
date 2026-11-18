@@ -65,3 +65,38 @@ def refresh_queries(wid: str, body: RefreshIn) -> dict:
         except (pquery.QueryError, webdata.FetchError, ValueError, KeyError, FileNotFoundError, PermissionError) as e:
             failed.append({"id": qid, "name": library[qid].get("name"), "error": str(e)})
     return {"refreshed": done, "failed": failed}
+
+
+class DbIn(BaseModel):
+    path: str = Field(max_length=4096)
+    sql: str = Field(max_length=100_000)
+    params: dict | None = None
+
+
+def _auto(wid: str) -> dict:
+    try:
+        b = store().book(wid)
+    except (KeyError, FileNotFoundError):
+        raise HTTPException(404, f"No workbook {wid}. It may have been moved to the Trash.")
+    with b.lock:
+        return dict(b.auto or {})
+
+
+@router.post("/workbooks/{wid}/db/query")
+def db_query(wid: str, body: DbIn) -> dict:
+    _auto(wid)
+    try:
+        t = pquery.sqlite_table(body.path, body.sql, body.params)
+    except pquery.QueryError as e:
+        raise HTTPException(422, str(e))
+    return {"columns": t.cols, "rows": t.rows}
+
+
+@router.post("/workbooks/{wid}/db/exec")
+def db_exec(wid: str, body: DbIn) -> dict:
+    if not pquery.write_allowed(_auto(wid), body.path):
+        raise HTTPException(403, pquery.WRITE_REFUSED)
+    try:
+        return pquery.sqlite_exec(body.path, body.sql, body.params)
+    except pquery.QueryError as e:
+        raise HTTPException(422, str(e))

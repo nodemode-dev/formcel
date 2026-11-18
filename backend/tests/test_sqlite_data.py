@@ -43,3 +43,39 @@ def test_sqlite_exec_never_creates_a_database(tmp_path):
     with pytest.raises(pquery.QueryError):
         pquery.sqlite_exec(str(p), "delete from orders", None)
     assert not p.exists()
+
+
+def _book(client, settings=None):
+    wid = client.post("/api/workbooks", json={"title": "Orders"}).json()["id"]
+    if settings is not None:
+        assert client.put(f"/api/workbooks/{wid}/automation", json={"settings": settings}).status_code == 200
+    return wid
+
+
+def test_db_query_reads_and_refuses_writes(client, orders):
+    wid = _book(client)
+    r = client.post(f"/api/workbooks/{wid}/db/query", json={"path": orders, "sql": "select count(*) as n from orders"})
+    assert r.status_code == 200 and r.json() == {"columns": ["n"], "rows": [[3]]}
+    assert client.post(f"/api/workbooks/{wid}/db/query", json={"path": orders, "sql": "delete from orders"}).status_code == 422
+    assert _count(orders) == 3
+
+
+def test_db_exec_writes_only_to_a_database_the_workbook_allows(client, orders, tmp_path):
+    body = {"path": orders, "sql": "delete from orders where id = @id", "params": {"id": 1003}}
+    wid = _book(client)
+    r = client.post(f"/api/workbooks/{wid}/db/exec", json=body)
+    assert r.status_code == 403 and "data.dbAllowWrite" in r.json()["detail"]
+    assert _count(orders) == 3
+    other = _book(client, {"dbWrite": [str(tmp_path / "other.db")]})
+    assert client.post(f"/api/workbooks/{other}/db/exec", json=body).status_code == 403
+    allowed = _book(client, {"dbWrite": [str(tmp_path / ".." / tmp_path.name / "orders.db")]})
+    r = client.post(f"/api/workbooks/{allowed}/db/exec", json=body)
+    assert r.status_code == 200 and r.json()["rowcount"] == 1
+    assert _count(orders) == 2
+
+
+def test_db_exec_refuses_a_relative_path(client, orders):
+    wid = _book(client, {"dbWrite": ["orders.db"]})
+    r = client.post(f"/api/workbooks/{wid}/db/exec", json={"path": "orders.db", "sql": "delete from orders"})
+    assert r.status_code == 403
+    assert _count(orders) == 3
