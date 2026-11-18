@@ -121,7 +121,7 @@ def ask(msg):
         raise RuntimeError("the engine closed the connection")
     reply = json.loads(line)
     if reply.get("error"):
-        raise ValueError(reply["error"])
+        raise (PermissionError if reply.get("denied") else ValueError)(reply["error"])
     return reply
 
 
@@ -148,10 +148,32 @@ def xl(reference, headers=False):
     return frame(rows, bool(headers))
 
 
+HANDLER = bool(req.get("handler"))
+FRAMES = any((isinstance(n, ast.Import) and any(a.name.split(".")[0] == "pandas" for a in n.names)) or (isinstance(n, ast.ImportFrom) and (n.module or "").split(".")[0] == "pandas") for t in before + [tree] for n in ast.walk(t))
+
+
+def db_query(sql, **params):
+    r = ask({"db": {"op": "query", "sql": str(sql), "params": params}})
+    if pd is not None and FRAMES:
+        return pd.DataFrame(r["rows"], columns=r["columns"])
+    return r["rows"]
+
+
+def db_execute(sql, **params):
+    if not HANDLER:
+        raise PermissionError("db.execute runs only in a Python handler, not in a cell formula")
+    return ask({"db": {"op": "execute", "sql": str(sql), "params": params}})["result"]
+
+
+class Database:
+    query = staticmethod(db_query)
+    execute = staticmethod(db_execute)
+
+
 safe = {k: getattr(builtins, k) for k in SAFE if hasattr(builtins, k)}
 safe["__import__"] = guarded_import
 safe["print"] = say
-env = {"__builtins__": safe, "xl": xl}
+env = {"__builtins__": safe, "xl": xl, "db": Database()}
 for m in ALLOWED:
     env[m] = importlib.import_module(m)
 if pd is not None:

@@ -60,7 +60,25 @@ def pandas_ready() -> bool:
     return importlib.util.find_spec("pandas") is not None and importlib.util.find_spec("numpy") is not None
 
 
-def run(code: str, args: list, reader=None, memory: int = 1536, before: list[str] | None = None) -> dict:
+def database(req: dict, db: dict | None, handler: bool) -> dict:
+    from . import pquery
+
+    path = str((db or {}).get("path") or "")
+    if not path:
+        raise ValueError("this workbook has no database yet; run data.dbAllowWrite or data.dbQuery with a full path")
+    sql = str(req.get("sql") or "")
+    params = req.get("params") if isinstance(req.get("params"), dict) else None
+    if req.get("op") == "execute":
+        if not handler:
+            raise PermissionError("db.execute runs only in a Python handler, not in a cell formula")
+        if not pquery.write_allowed((db or {}).get("auto"), path):
+            raise PermissionError(pquery.WRITE_REFUSED)
+        return {"result": pquery.sqlite_exec(path, sql, params)}
+    t = pquery.sqlite_table(path, sql, params)
+    return {"columns": t.cols, "rows": t.rows}
+
+
+def run(code: str, args: list, reader=None, memory: int = 1536, before: list[str] | None = None, db: dict | None = None, handler: bool = False) -> dict:
     if os.name != "posix":
         raise PyError("Python cells run on Linux and macOS only")
     if len(code) > MAX_CODE:
@@ -76,7 +94,7 @@ def run(code: str, args: list, reader=None, memory: int = 1536, before: list[str
         timer.start()
         done: dict | None = None
         try:
-            p.stdin.write(json.dumps({"code": code, "before": before or [], "args": args, "pandas": pandas_ready(), "memory": memory, "cpu": TIMEOUT + 2}, default=str) + "\n")
+            p.stdin.write(json.dumps({"code": code, "before": before or [], "args": args, "pandas": pandas_ready(), "memory": memory, "cpu": TIMEOUT + 2, "handler": handler}, default=str) + "\n")
             p.stdin.flush()
             for line in p.stdout:
                 try:
@@ -88,10 +106,15 @@ def run(code: str, args: list, reader=None, memory: int = 1536, before: list[str
                     break
                 reply: dict
                 try:
-                    if reader is None:
-                        raise ValueError("xl() is not available here")
-                    refs.append(msg["xl"])
-                    reply = reader(msg["xl"])
+                    if "db" in msg:
+                        reply = database(msg["db"], db, handler)
+                    else:
+                        if reader is None:
+                            raise ValueError("xl() is not available here")
+                        refs.append(msg["xl"])
+                        reply = reader(msg["xl"])
+                except PermissionError as e:
+                    reply = {"error": str(e), "denied": True}
                 except Exception as e:
                     reply = {"error": str(e)}
                 p.stdin.write(json.dumps(reply, default=str) + "\n")

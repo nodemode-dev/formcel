@@ -1,8 +1,9 @@
+import os
 import sqlite3
 
 import pytest
 
-from app.services import pquery
+from app.services import pquery, pysand
 
 
 @pytest.fixture
@@ -71,6 +72,32 @@ def test_db_exec_writes_only_to_a_database_the_workbook_allows(client, orders, t
     allowed = _book(client, {"dbWrite": [str(tmp_path / ".." / tmp_path.name / "orders.db")]})
     r = client.post(f"/api/workbooks/{allowed}/db/exec", json=body)
     assert r.status_code == 200 and r.json()["rowcount"] == 1
+    assert _count(orders) == 2
+
+
+needs_posix = pytest.mark.skipif(os.name != "posix", reason="Python cells run on Linux and macOS only")
+
+
+@needs_posix
+def test_python_reads_the_workbook_database(orders):
+    db = {"path": orders, "auto": {}}
+    assert pysand.run("db.query('select count(*) as n from orders')", [], db=db)["value"] == [[3]]
+    assert pysand.run("db.query('select customer from orders where id > @x', x=1001)", [], db=db)["value"] == [["Lin"], ["Sam"]]
+    if pysand.pandas_ready():
+        assert pysand.run("import pandas as pd\ndb.query('select id from orders where id = @x', x=1001)", [], db=db)["value"] == [["id"], [1001]]
+    with pytest.raises(pysand.PyError, match="no database"):
+        pysand.run("db.query('select 1')", [], db={"path": "", "auto": {}})
+
+
+@needs_posix
+def test_python_saves_only_from_a_handler_to_an_allowed_database(orders):
+    with pytest.raises(pysand.PyError, match="PermissionError: db.execute runs only in a Python handler"):
+        pysand.run("db.execute('delete from orders')", [], db={"path": orders, "auto": {"settings": {"dbWrite": [orders]}}})
+    with pytest.raises(pysand.PyError, match="PermissionError: Saving to this database is not allowed"):
+        pysand.run("db.execute('delete from orders')", [], db={"path": orders, "auto": {}}, handler=True)
+    assert _count(orders) == 3
+    out = pysand.run("db.execute('delete from orders where id = @id', id=1003)", [], db={"path": orders, "auto": {"settings": {"dbWrite": [orders]}}}, handler=True)
+    assert out["value"] == [["rowcount", 1], ["lastrowid", 0]]
     assert _count(orders) == 2
 
 

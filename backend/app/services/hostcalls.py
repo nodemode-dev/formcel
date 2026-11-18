@@ -203,7 +203,7 @@ def python_cell(args: list, books=None, wid: str = ""):
             earlier = pyorder.before(books(wid), code)
         except Exception:
             earlier = []
-    hit = _py_memo.get(memo_key) if not earlier else None
+    hit = _py_memo.get(memo_key) if not earlier and "db." not in code else None
     if hit is not None and wid:
         try:
             if all(pyxl.digest(read(r)["rows"]) == d for r, d in hit[0]):
@@ -217,8 +217,15 @@ def python_cell(args: list, books=None, wid: str = ""):
         seen.append((ref, pyxl.digest(got["rows"])))
         return got
 
+    db = None
+    if wid and books is not None:
+        try:
+            auto = books(wid).auto or {}
+            db = {"path": (auto.get("settings") or {}).get("dbPath") or "", "auto": auto}
+        except (KeyError, FileNotFoundError):
+            db = None
     try:
-        out = encode(norm(pysand.run(code, data, tracked, before=earlier)["value"]))
+        out = encode(norm(pysand.run(code, data, tracked, before=earlier, db=db)["value"]))
     except pysand.PyError as e:
         return error("#VALUE!"), f"PY: {e}"
     if len(_py_memo) > 400:
