@@ -150,6 +150,10 @@
 .fc-fctl-gridwrap { height: 100%; overflow: auto; border: 1px solid var(--border-light); border-radius: var(--radius-sm); background: var(--bg-primary); }
 .fc-fctl-grid { width: 100%; border-collapse: collapse; font-size: var(--text-sm); font-variant-numeric: tabular-nums; }
 .fc-fctl-grid td { height: 22px; padding: 0 var(--space-2); border-bottom: 1px solid var(--border-light); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 160px; cursor: default; }
+.fc-dform-fields { display: grid; gap: var(--space-2); min-width: 360px; max-height: 60vh; overflow: auto; }
+.fc-dform-nav { display: flex; align-items: center; gap: var(--space-2); margin-top: var(--space-3); }
+.fc-dform-count { min-width: 9ch; margin-left: auto; font-size: var(--text-sm); font-variant-numeric: tabular-nums; text-align: right; color: var(--text-secondary); }
+.fc-dform-note { height: 40px; margin: var(--space-2) 0 0; line-height: 20px; overflow: hidden; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
 .fc-fctl-grid tr.is-on td { background: color-mix(in srgb, var(--accent-color) 22%, transparent); }
 .fc-fctl.is-selected { outline: 2px solid var(--accent-color); outline-offset: 2px; cursor: move; }
 .fc-fctl.is-selected > * { pointer-events: none; }

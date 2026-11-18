@@ -11,6 +11,7 @@ import { AssistantTab } from './tabAssistant';
 import { DataTab } from './tabData';
 import { Db } from './db';
 import { PythonTab } from './tabPython';
+import { DataForms } from '../forms/dataForm';
 import { runHandler, type PyRun } from './pyHandlers';
 import { engine } from '../engine';
 import { parseRef } from '../grid/a1';
@@ -70,6 +71,7 @@ export class Automation {
   private readonly py: PyCellEditor;
   readonly db: Db;
   private readonly python: PythonTab;
+  readonly forms: DataForms;
   private readonly panes: Record<string, HTMLElement>;
   private saveTimer = 0;
   private editTimer = 0;
@@ -130,6 +132,7 @@ export class Automation {
     this.more = new MoreTab(env, () => this.scripts.reload());
     this.server = new ServerTab(env);
     this.python = new PythonTab(env);
+    this.forms = new DataForms({ id: () => h.id(), setting: (k) => this.setting(k), setSetting: (k, v) => this.setSetting(k, v), status: (t, e) => h.status(t, e) });
     this.db = new Db({ id: () => h.id(), setting: (k) => this.setting(k), setSetting: (k, v) => this.setSetting(k, v), saveNow: () => this.saveNow() });
     this.py = new PyCellEditor({ grid: h.grid, book: () => h.book(), sheets: () => h.sheets(), status: (t, e) => h.status(t, e), drain: () => this.calls.drain(false, true) });
     this.panel = el('section', 'fc-auto');
