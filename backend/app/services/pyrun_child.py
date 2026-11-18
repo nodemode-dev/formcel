@@ -187,6 +187,8 @@ safe["print"] = say
 env = {"__builtins__": safe, "xl": xl, "db": Database(), "put": put}
 if HANDLER:
     env["event"] = (req.get("context") or {}).get("event")
+    if isinstance((req.get("context") or {}).get("record"), dict):
+        env["record"] = req["context"]["record"]
 for m in ALLOWED:
     env[m] = importlib.import_module(m)
 if pd is not None:
@@ -282,6 +284,8 @@ try:
         exec(compile(tree, "<py>", "exec"), env)
         value = env.get("result")
     out = {"value": plain(value), "print": printed, "writes": writes}
+    if isinstance(env.get("record"), dict):
+        out["record"] = {str(k): plain_cell(v) for k, v in env["record"].items()}
 except BaseException as e:
     tb = e.__traceback__
     line = 0

@@ -124,6 +124,14 @@ def test_a_python_handler_reads_the_database_and_queues_cell_writes(client, orde
     assert _count(orders) == 2
 
 
+@needs_posix
+def test_a_python_handler_can_change_the_record_it_is_given(client, orders, python_on):
+    wid = _book(client, {"pyHandlers": {"stamp": 'record["placed"] = event["today"]\nrecord["customer"] = record["customer"].upper()'}, "dbPath": orders})
+    r = client.post(f"/api/workbooks/{wid}/py/run", json={"name": "stamp", "event": {"type": "save", "today": "2026-11-18"}, "record": {"id": None, "customer": "Kim", "placed": None}})
+    assert r.status_code == 200, r.text
+    assert r.json()["record"] == {"id": None, "customer": "KIM", "placed": "2026-11-18"}
+
+
 def test_a_python_handler_does_not_run_while_python_is_off(client, orders):
     client.put("/api/settings/python", json={"enabled": False})
     wid = _book(client, {"pyHandlers": {"count": 'put("A1", 1)'}, "dbPath": orders})

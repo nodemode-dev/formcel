@@ -105,6 +105,7 @@ def db_exec(wid: str, body: DbIn) -> dict:
 class PyRunIn(BaseModel):
     name: str = Field(max_length=200)
     event: dict | None = None
+    record: dict | None = None
 
 
 @router.post("/workbooks/{wid}/py/run")
@@ -120,7 +121,10 @@ def py_run(wid: str, body: PyRunIn) -> dict:
         raise HTTPException(404, f"No Python handler is named {body.name}.")
     b = store().book(wid)
     try:
-        out = pysand.run(code, [], lambda ref: pyxl.read(b, ref), db={"path": settings.get("dbPath") or "", "auto": auto}, handler=True, context={"event": body.event or {}})
+        out = pysand.run(code, [], lambda ref: pyxl.read(b, ref), db={"path": settings.get("dbPath") or "", "auto": auto}, handler=True, context={"event": body.event or {}, "record": body.record})
     except pysand.PyError as e:
         raise HTTPException(422, f"{body.name}: {e}")
-    return {"value": out["value"], "printed": out["print"], "writes": out["writes"]}
+    reply = {"value": out["value"], "printed": out["print"], "writes": out["writes"]}
+    if body.record is not None:
+        reply["record"] = out["record"] if isinstance(out.get("record"), dict) else body.record
+    return reply

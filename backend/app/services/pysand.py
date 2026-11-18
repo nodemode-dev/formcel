@@ -139,4 +139,4 @@ def run(code: str, args: list, reader=None, memory: int = 1536, before: list[str
         raise PyError((err[-1] if err else "the code failed")[:300])
     if "error" in done:
         raise PyError(done["error"] + (f" (line {done['line']})" if done.get("line") else ""))
-    return {"value": done["value"], "print": done.get("print", []), "refs": refs, "writes": done.get("writes", [])}
+    return {"value": done["value"], "print": done.get("print", []), "refs": refs, "writes": done.get("writes", []), "record": done.get("record")}
