@@ -32,6 +32,13 @@ The version bump comes in a later release commit.
 
 Handlers live in the workbook setting `pyHandlers` (`{name: code}`) and the Python tab sits second in the automation panel. The tab writes the code on every input (the automation save is debounced 700 ms) and only patches the select, name and textarea it owns; the option list is rebuilt only when the set of names changed. `python.run` saves the automation first, posts to `/py/run`, then writes each queued `put` through `engine().apply` on the active sheet and `grid.commitEdits`. A form control keeps its macro in `macro` and its handler in `py` (only one is set; Assign Macro lists handlers in a Python handlers group with `py:` values); a click with `py` set calls the route directly and applies the writes with `ControlsHost.write`. Controls saved before this have no `py` and behave as before.
 
+### Text Field, Date Field and Data Grid controls
+- refers-to: src/vba/controls.ts (CtlType, CONTROL_TYPES, isoDate, fire, fillField, markRow, fill, format); src/ui/icons.ts (ctlText, ctlDate, ctlGrid); src/styles/vba.css (.fc-fctl-field, .fc-fctl-gridwrap, .fc-fctl-grid)
+- kind: decision
+- logged: unreleased · 2026-11-18
+
+Named Text Field because `insert.textbox` is already the drawing shape. The other controls rebuild their node whenever their key, which includes the linked cell's value, changes; that would drop focus on every keystroke in a typed field, so the three new types go through `fillField`: the node is built once per type, link and range, and after that only the input's `value` (skipped while it has focus) or each grid cell's `textContent` and the row's `is-on` class are patched. A Text or Date Field writes its cell on `change` (Enter or leaving the field), not per keystroke. The Date Field is an `input type=date`; `isoDate` turns the cell's shown text back into yyyy-mm-dd. The Data Grid shows `range` read-only (at most 500 cells, row-major from `readRange`) in a scrolling box of the control's own size, and a row click writes its 1-based row number to `link`. All three run an assigned macro or handler after writing, as the other controls do. `fire` is the old inline `run` closure, moved to a method so both paths share it. The ribbon's Insert menu lists them because it maps `CONTROL_TYPES`.
+
 ## Open items closed · v0.43.0 (2026-11-13)
 
 ### The demos as browser pages
