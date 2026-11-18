@@ -183,6 +183,13 @@ export class Automation {
       for (const [ref, v] of r.writes) await this.write(ref, v);
       return r;
     } });
+    registerCommand({ id: 'report.run', title: 'Run a report', description: 'Print a list report through FormTxt from the workbook database: FormTxt merges the rows into a document and writes a PDF. Params: template (FormTxt document id), sql, out (file to write). FormTxt must be open.', changes: false, run: async (p) => {
+      const template = typeof p?.template === 'string' ? p.template.trim() : '';
+      if (!template) throw new Error('Name the FormTxt document with template=<id>.');
+      const r = await api<{ file?: string | null; records?: number }>('POST', `/api/workbooks/${this.h.id()}/report`, { template, sql: typeof p?.sql === 'string' ? p.sql : '', out: typeof p?.out === 'string' && p.out ? p.out : null });
+      this.h.status(r.file ? `Report written to ${r.file}` : `Report made from ${r.records ?? 0} records`);
+      return r;
+    } });
     registerCommand({ id: 'python.cell', title: 'Python cell', description: 'Edit the active cell as Python: write code with xl() to read ranges and pandas to shape them, and a DataFrame result spills with its headers.', changes: true, keys: 'Ctrl+Alt+Shift+P', run: () => this.py.open() });
     cmd('automate.run', 'Run script', 'Run the script shown in the script editor.', () => void this.scripts.runCurrent());
     cmd('data.refresh', 'Refresh all data', 'Fetch web functions and run every saved query again.', async () => {

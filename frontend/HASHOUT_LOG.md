@@ -53,6 +53,13 @@ Forms live in the workbook setting `dataForms` as `{id, name, path, table, key, 
 
 One class, `fc-dashboard` on `#app`, does the work in CSS: the sheet's rows become `minmax(0, 1fr) auto`, the ribbon, formula bar and sheet bar get `display: none`, and the grid gets a negative top and left margin equal to the headings' size at the current zoom (`--fc-dash-top`, `--fc-dash-left`, read from `objectFrame()` when it turns on), so the canvas headings sit outside `.fc-sheet`'s `overflow: hidden`. The headings are painted on the canvas with 85 uses of `HEAD_W` and `HEAD_H` in grid.ts, so hiding them by margin is the one-place change. Gridlines are `grid.opts.gridlines`, saved before and put back after. Charts, slicers and controls are laid out from `objectFrame()` and the grid's box, so they keep their cells. The flag lives in the sheet view as `dashboard` (PATCHed alone; the engine merges view keys, and `saveView` now keeps it like `hidden`), and `showSheet` applies it, so a workbook reopens in dashboard view on that sheet. Esc is caught in the capture phase (the grid handles Escape itself) unless the target is a text field or a dialog is open. Open: changing the zoom while in dashboard view keeps the margins of the zoom it started with.
 
+### report.run and buttons that run a command
+- refers-to: src/automation/index.ts (command report.run); src/vba/controls.ts (CONTROL_COMMANDS, Ctl.cmd, Ctl.args, fire, assign)
+- kind: decision
+- logged: unreleased · 2026-11-18
+
+`report.run` (params `template`, `sql`, `out`) posts to the engine's `/api/workbooks/{id}/report`, which talks to FormTxt; the status line names the written file. A Button can run it: Assign Macro has a Commands group (buttons only) with "Run a report (report.run)" and three fields (template, SQL, save to) that are always in the dialog and enabled only while that entry is chosen, so choosing it does not resize the dialog. The control stores `cmd` and `args`. `fire` runs a stored command only when it is in `CONTROL_COMMANDS` (just `report.run`), so a workbook file cannot make a button run any other command.
+
 ## Open items closed · v0.43.0 (2026-11-13)
 
 ### The demos as browser pages

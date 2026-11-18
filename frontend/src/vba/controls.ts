@@ -2,6 +2,9 @@ import type { Grid } from '../grid/grid';
 import { icon, type IconName } from '../ui/icons';
 import { actions, field, makeModal } from '../ui/modal';
 import { parseRef } from '../grid/a1';
+import { callCommand } from '../ui/commands';
+
+export const CONTROL_COMMANDS = ['report.run'];
 
 export type CtlType = 'button' | 'check' | 'combo' | 'list' | 'option' | 'spin' | 'scroll' | 'label' | 'group' | 'text' | 'date' | 'grid';
 
@@ -16,6 +19,8 @@ export interface Ctl {
   text: string;
   macro: string;
   py: string;
+  cmd?: string;
+  args?: Record<string, string>;
   link: string;
   range: string;
   value: number;
@@ -207,7 +212,9 @@ export class FormControls {
   }
 
   private fire(c: Ctl): void {
-    if (c.py) {
+    if (c.cmd && CONTROL_COMMANDS.includes(c.cmd)) {
+      void callCommand(c.cmd, { ...(c.args ?? {}) }).catch((err: unknown) => this.h.say(err instanceof Error ? err.message : String(err), true));
+    } else if (c.py) {
       void this.h.runPy(c.py).then((r) => {
         for (const [ref, v] of r.writes) this.h.write(ref, v === null || v === undefined ? '' : String(v));
       }, (err: unknown) => this.h.say(err instanceof Error ? err.message : String(err), true));
@@ -359,7 +366,7 @@ export class FormControls {
       el.appendChild(d);
     }
     for (const ev of ['keydown', 'dblclick']) el.addEventListener(ev, stop);
-    el.dataset.macro = c.macro || c.py ? '1' : '';
+    el.dataset.macro = c.macro || c.py || c.cmd ? '1' : '';
     this.grip(n);
   }
 
@@ -457,14 +464,26 @@ export class FormControls {
       g.append(...py.map((n) => Object.assign(document.createElement('option'), { value: `py:${n}`, textContent: n })));
       sel.appendChild(g);
     }
-    sel.value = c.py ? `py:${c.py}` : c.macro;
+    if (c.type === 'button') {
+      const g = Object.assign(document.createElement('optgroup'), { label: 'Commands' });
+      g.append(Object.assign(document.createElement('option'), { value: 'cmd:report.run', textContent: 'Run a report (report.run)' }));
+      sel.appendChild(g);
+    }
+    sel.value = c.cmd ? `cmd:${c.cmd}` : c.py ? `py:${c.py}` : c.macro;
+    const arg = (k: string) => Object.assign(document.createElement('input'), { className: 'fc-auto-input', value: c.args?.[k] ?? '', spellcheck: false });
+    const args: [string, string, HTMLInputElement][] = c.type === 'button' ? [['template', 'Report template (FormTxt document id)', arg('template')], ['sql', 'Report SQL', arg('sql')], ['out', 'Save the PDF to', arg('out')]] : [];
+    const paint = () => { for (const [, , i] of args) i.disabled = !sel.value.startsWith('cmd:'); };
+    sel.addEventListener('change', paint);
+    paint();
     const done = () => {
       m.close();
       m.el.remove();
     };
-    m.body.append(field('Macro name', sel), actions('OK', () => {
+    m.body.append(field('Macro name', sel), ...args.map(([, label, i]) => field(label, i)), actions('OK', () => {
+      c.cmd = sel.value.startsWith('cmd:') ? sel.value.slice(4) : '';
+      c.args = c.cmd ? Object.fromEntries(args.map(([k, , i]) => [k, i.value.trim()])) : {};
       c.py = sel.value.startsWith('py:') ? sel.value.slice(3) : '';
-      c.macro = c.py ? '' : sel.value;
+      c.macro = c.py || c.cmd ? '' : sel.value;
       this.h.save(this.list);
       this.fill({ c, el: this.nodes.get(c.id)!.el, key: '' } as Node);
       done();
