@@ -78,7 +78,7 @@ def database(req: dict, db: dict | None, handler: bool) -> dict:
     return {"columns": t.cols, "rows": t.rows}
 
 
-def run(code: str, args: list, reader=None, memory: int = 1536, before: list[str] | None = None, db: dict | None = None, handler: bool = False) -> dict:
+def run(code: str, args: list, reader=None, memory: int = 1536, before: list[str] | None = None, db: dict | None = None, handler: bool = False, context: dict | None = None) -> dict:
     if os.name != "posix":
         raise PyError("Python cells run on Linux and macOS only")
     if len(code) > MAX_CODE:
@@ -94,7 +94,7 @@ def run(code: str, args: list, reader=None, memory: int = 1536, before: list[str
         timer.start()
         done: dict | None = None
         try:
-            p.stdin.write(json.dumps({"code": code, "before": before or [], "args": args, "pandas": pandas_ready(), "memory": memory, "cpu": TIMEOUT + 2, "handler": handler}, default=str) + "\n")
+            p.stdin.write(json.dumps({"code": code, "before": before or [], "args": args, "pandas": pandas_ready(), "memory": memory, "cpu": TIMEOUT + 2, "handler": handler, "context": context or {}}, default=str) + "\n")
             p.stdin.flush()
             for line in p.stdout:
                 try:
@@ -139,4 +139,4 @@ def run(code: str, args: list, reader=None, memory: int = 1536, before: list[str
         raise PyError((err[-1] if err else "the code failed")[:300])
     if "error" in done:
         raise PyError(done["error"] + (f" (line {done['line']})" if done.get("line") else ""))
-    return {"value": done["value"], "print": done.get("print", []), "refs": refs}
+    return {"value": done["value"], "print": done.get("print", []), "refs": refs, "writes": done.get("writes", [])}

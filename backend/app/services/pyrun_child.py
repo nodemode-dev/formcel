@@ -170,10 +170,23 @@ class Database:
     execute = staticmethod(db_execute)
 
 
+writes = []
+
+
+def put(ref, value):
+    if not HANDLER:
+        raise PermissionError("put runs only in a Python handler, not in a cell formula")
+    if len(writes) >= 10000:
+        raise ValueError("a handler writes at most 10000 cells")
+    writes.append([str(ref), scalar(value)])
+
+
 safe = {k: getattr(builtins, k) for k in SAFE if hasattr(builtins, k)}
 safe["__import__"] = guarded_import
 safe["print"] = say
-env = {"__builtins__": safe, "xl": xl, "db": Database()}
+env = {"__builtins__": safe, "xl": xl, "db": Database(), "put": put}
+if HANDLER:
+    env["event"] = (req.get("context") or {}).get("event")
 for m in ALLOWED:
     env[m] = importlib.import_module(m)
 if pd is not None:
@@ -268,7 +281,7 @@ try:
     else:
         exec(compile(tree, "<py>", "exec"), env)
         value = env.get("result")
-    out = {"value": plain(value), "print": printed}
+    out = {"value": plain(value), "print": printed, "writes": writes}
 except BaseException as e:
     tb = e.__traceback__
     line = 0

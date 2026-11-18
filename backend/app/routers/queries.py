@@ -100,3 +100,27 @@ def db_exec(wid: str, body: DbIn) -> dict:
         return pquery.sqlite_exec(body.path, body.sql, body.params)
     except pquery.QueryError as e:
         raise HTTPException(422, str(e))
+
+
+class PyRunIn(BaseModel):
+    name: str = Field(max_length=200)
+    event: dict | None = None
+
+
+@router.post("/workbooks/{wid}/py/run")
+def py_run(wid: str, body: PyRunIn) -> dict:
+    from ..services import pysand, pyxl
+
+    auto = _auto(wid)
+    if not pysand.enabled():
+        raise HTTPException(403, "Python is off. Turn on Python cells in Preferences to run Python handlers.")
+    settings = auto.get("settings") or {}
+    code = (settings.get("pyHandlers") or {}).get(body.name)
+    if not isinstance(code, str):
+        raise HTTPException(404, f"No Python handler is named {body.name}.")
+    b = store().book(wid)
+    try:
+        out = pysand.run(code, [], lambda ref: pyxl.read(b, ref), db={"path": settings.get("dbPath") or "", "auto": auto}, handler=True, context={"event": body.event or {}})
+    except pysand.PyError as e:
+        raise HTTPException(422, f"{body.name}: {e}")
+    return {"value": out["value"], "printed": out["print"], "writes": out["writes"]}

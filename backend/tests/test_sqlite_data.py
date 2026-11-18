@@ -101,6 +101,41 @@ def test_python_saves_only_from_a_handler_to_an_allowed_database(orders):
     assert _count(orders) == 2
 
 
+@pytest.fixture
+def python_on(client):
+    before = client.get("/api/settings/python").json()["enabled"]
+    client.put("/api/settings/python", json={"enabled": True})
+    yield
+    client.put("/api/settings/python", json={"enabled": before})
+
+
+@needs_posix
+def test_a_python_handler_reads_the_database_and_queues_cell_writes(client, orders, python_on):
+    handlers = {"count": 'n = db.query("select count(*) as n from orders")[0][0]\nprint("rows", n)\nput("B2", n)', "drop": 'db.execute("delete from orders where id = @id", id=1003)'}
+    wid = _book(client, {"pyHandlers": handlers, "dbPath": orders})
+    r = client.post(f"/api/workbooks/{wid}/py/run", json={"name": "count", "event": {"type": "button"}})
+    assert r.status_code == 200, r.text
+    assert r.json()["writes"] == [["B2", 3]] and r.json()["printed"] == ["rows 3"]
+    r = client.post(f"/api/workbooks/{wid}/py/run", json={"name": "drop"})
+    assert r.status_code == 422 and "PermissionError" in r.json()["detail"]
+    assert client.post(f"/api/workbooks/{wid}/py/run", json={"name": "missing"}).status_code == 404
+    allowed = _book(client, {"pyHandlers": handlers, "dbPath": orders, "dbWrite": [orders]})
+    assert client.post(f"/api/workbooks/{allowed}/py/run", json={"name": "drop"}).status_code == 200
+    assert _count(orders) == 2
+
+
+def test_a_python_handler_does_not_run_while_python_is_off(client, orders):
+    client.put("/api/settings/python", json={"enabled": False})
+    wid = _book(client, {"pyHandlers": {"count": 'put("A1", 1)'}, "dbPath": orders})
+    assert client.post(f"/api/workbooks/{wid}/py/run", json={"name": "count"}).status_code == 403
+
+
+@needs_posix
+def test_put_is_refused_in_a_cell_formula():
+    with pytest.raises(pysand.PyError, match="PermissionError: put runs only in a Python handler"):
+        pysand.run('put("A1", 1)', [])
+
+
 def test_db_exec_refuses_a_relative_path(client, orders):
     wid = _book(client, {"dbWrite": ["orders.db"]})
     r = client.post(f"/api/workbooks/{wid}/db/exec", json={"path": "orders.db", "sql": "delete from orders"})
