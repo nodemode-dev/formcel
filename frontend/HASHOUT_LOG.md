@@ -129,6 +129,13 @@ Stored state is one key, `formcel.dock` ({open, side, h, w, tab}); `formcel.term
 What looks different at the bottom: the head has the side switch and the More agents button, and the plus, close, restart and send glyphs are the module's drawings; the Chat lead sentence is the module's wording.
 - verified: headless Chrome 1440 by 900 against Vite and the engine. Pixel comparison with the old dock (terminal text masked): closed 0; open on a shell 743, open on Chat 9612, all inside the dock (head buttons, the three glyphs, the lead sentence, 22 anti-aliased corner pixels of two Chat bar buttons); 51 more elements in every state (2 stylesheets, the hidden Codex and Cursor buttons, the More agents button and its menu, the side switch, one more path in the restart glyph). Side switch with a shell running: the same dock and terminal nodes, `MARK-42` still in the scrollback and a new command answered; the title bar and every child unchanged; `.fc-main` 1440x562 to 1000x862, the grid canvas at 0,200 in all three states. Width and height kept apart and restored after a reload. Cold load remembered at the right under 4x CPU, 150 ms and 1.6 Mbit/s, cache off: 204 frames with the workbook area, its right edge 1000 in every one, the dock at x 1000 in every frame. Studio Dark, AMOLED Black, Studio Dark re-coloured the open terminal in place (foreground f7f7f7, ededed, f7f7f7, same node).
 
+### The REST API note says what a call without a token can do
+- refers-to: src/ui/settings-engine.ts (the REST API panel, paint)
+- kind: fix
+- logged: unreleased · 2026-11-19
+
+With no token set the note read "No token is set, so REST calls from this computer are open." That understated the engine: since the window key, a write to `/api/v1` with no REST token is answered 403 unless it carries the window key, which a script does not have, so only reads are answered. The note now reads "No token is set: REST calls from this computer can read, and a call that changes anything is refused until a token is made." One string in the same text node; the sentence shown when a token is set was already true. Seen on the engine from source with a temp data folder: no token, GET `/api/v1/workbooks` 200 and POST 403; with a token made, GET and POST without it 401, with it 200 and 201. The page itself was not opened (no browser in this session); `demo/assets/demo.js` still carries the old sentence until the next `npm run demo`.
+
 ## Open items closed · v0.43.0 (2026-11-13)
 
 ### The demos as browser pages

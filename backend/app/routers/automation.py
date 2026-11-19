@@ -175,7 +175,7 @@ def list_extensions() -> list[dict]:
     return extpkg.listing()
 
 
-bearer = HTTPBearer(auto_error=False, description="The token made under More, REST API. Calls are open when no token is set.")
+bearer = HTTPBearer(auto_error=False, description="The token made under More, REST API. While no token is set, reads are answered and a call that changes anything is refused.")
 
 
 def guard(cred: HTTPAuthorizationCredentials | None = Depends(bearer)) -> None:
