@@ -35,15 +35,30 @@ def state() -> dict:
     return seal.effective(aiclient.load_settings())
 
 
+def choice() -> str:
+    held = state().get("agents") or {}
+    return "blocked" if held.get("blocked") is True else "allowed" if held.get("allowed") is True else "ask"
+
+
 def allowed() -> bool:
-    return (state().get("agents") or {}).get("allowed") is True
+    return choice() == "allowed"
 
 
-def set_allowed(on: bool) -> bool:
+def blocked() -> bool:
+    return choice() == "blocked"
+
+
+def set_choice(value: str) -> str:
     from . import seal
 
     with aiclient.SETTINGS:
         s = aiclient.load_settings()
-        s["agents"] = {**(s.get("agents") or {}), "allowed": bool(on)}
+        held = {k: v for k, v in (s.get("agents") or {}).items() if k != "blocked"}
+        s["agents"] = {**held, "allowed": value == "allowed"} | ({"blocked": True} if value == "blocked" else {})
         aiclient.save_settings(seal.sign(s))
+    return choice()
+
+
+def set_allowed(on: bool) -> bool:
+    set_choice("allowed" if on else "blocked" if blocked() else "ask")
     return allowed()

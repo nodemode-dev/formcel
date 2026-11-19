@@ -388,7 +388,7 @@ def program() -> str | None:
 
 
 def inapp_mcp_config(port: int) -> str:
-    return json.dumps({"mcpServers": {"formcel": {"type": "http", "url": f"http://127.0.0.1:{port}/mcp", "headers": {agents.INAPP_HEADER: "${" + INAPP_VAR + "}"}}}})
+    return json.dumps({"mcpServers": {"formcel_tab": {"type": "http", "url": f"http://127.0.0.1:{port}/mcp", "headers": {agents.INAPP_HEADER: "${" + INAPP_VAR + "}"}}}})
 
 
 def terminal_env() -> dict:
@@ -396,7 +396,7 @@ def terminal_env() -> dict:
 
 
 def terminal_argv(path: str, port: int, prompt: str | None, resume: str | None) -> list[str]:
-    cmd = [path, "--mcp-config", inapp_mcp_config(port), "--allowedTools", "mcp__formcel", "--append-system-prompt", TERMINAL_NOTE]
+    cmd = [path, "--mcp-config", inapp_mcp_config(port), "--allowedTools", "mcp__formcel_tab", "--append-system-prompt", TERMINAL_NOTE]
     if resume:
         cmd += ["--strict-mcp-config", "--resume", resume]
     if prompt:

@@ -36,7 +36,8 @@ def _load(create: bool) -> bytes | None:
 
 
 def sealed(values: dict) -> dict:
-    return {"agentsAllowed": (values.get("agents") or {}).get("allowed") is True}
+    held = values.get("agents") or {}
+    return {"agentsAllowed": held.get("allowed") is True} | ({"agentsBlocked": True} if held.get("blocked") is True else {})
 
 
 def digest(values: dict, key: bytes) -> str:
