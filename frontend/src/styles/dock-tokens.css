@@ -1,0 +1,34 @@
+:root, .ft-dock {
+  --dock-bg: var(--bg-primary);
+  --dock-bar-bg: var(--bg-secondary);
+  --dock-raised: var(--bg-tertiary);
+  --dock-hover: var(--border-light);
+  --dock-input-bg: var(--bg-tertiary);
+  --dock-border: var(--border-color);
+  --dock-tab-border: var(--border-light);
+  --dock-text: var(--text-primary);
+  --dock-text-dim: var(--text-secondary);
+  --dock-text-muted: var(--text-muted);
+  --dock-accent: var(--accent-color);
+  --dock-accent-line: var(--accent-color-dim);
+  --dock-accent-ink: var(--accent-color);
+  --dock-danger: var(--bad);
+  --dock-danger-text: var(--bad);
+  --dock-space-1: var(--space-1);
+  --dock-space-2: var(--space-2);
+  --dock-space-3: var(--space-3);
+  --dock-space-4: var(--space-4);
+  --dock-radius-xs: var(--radius-sm);
+  --dock-radius-sm: var(--radius-sm);
+  --dock-radius: var(--radius);
+  --dock-radius-md: var(--radius-md);
+  --dock-head-h: calc(var(--icon-box) + var(--space-2));
+  --dock-fs-xs: var(--text-xs);
+  --dock-fs-sm: var(--text-sm);
+  --dock-font-mono: var(--font-mono);
+  --dock-term-bg: var(--bg-primary);
+  --dock-term-fg: var(--text-primary);
+  --dock-term-cursor: var(--accent-color);
+  --dock-term-selection: var(--accent-color-dim);
+  --dock-term-font-size: var(--text-md);
+}

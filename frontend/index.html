@@ -92,15 +92,20 @@
   </script>
   <script>
 (function () {
-  var r = document.documentElement, open = 0, h = 280;
+  var r = document.documentElement, open = 0, h = 280, w = 440, side = 'bottom';
   try {
-    var t = JSON.parse(localStorage.getItem('formcel.terminal') || '{}');
+    var t = JSON.parse(localStorage.getItem('formcel.dock') || localStorage.getItem('formcel.terminal') || '{}');
     open = t.open === true ? 1 : 0;
     if (typeof t.h === 'number' && t.h >= 120 && t.h <= 2000) h = Math.round(t.h);
+    if (typeof t.w === 'number' && t.w >= 320 && t.w <= 4000) w = Math.round(t.w);
+    if (t.side === 'right') side = 'right';
   } catch (e) {}
   r.setAttribute('data-ft-dock', open ? 'open' : 'closed');
+  r.setAttribute('data-ft-dock-side', side);
   r.setAttribute('data-ft-dock-h', String(h));
+  r.setAttribute('data-ft-dock-w', String(w));
   r.style.setProperty('--ft-dock-size', h + 'px');
+  r.style.setProperty('--ft-dock-wsize', w + 'px');
 })();
   </script>
   <link rel="stylesheet" href="/src/styles/tokens.css">
@@ -131,6 +136,8 @@
   <link rel="stylesheet" href="/src/styles/backstage.css">
   <link rel="stylesheet" href="/src/styles/datamodel.css">
   <link rel="stylesheet" href="/src/styles/datatypes.css">
+  <link rel="stylesheet" href="/src/styles/dock-tokens.css">
+  <link rel="stylesheet" href="/src/dock/dock.css">
   <link rel="stylesheet" href="/src/styles/terminal.css">
 </head>
 <body>

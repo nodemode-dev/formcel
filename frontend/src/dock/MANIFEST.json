@@ -1,0 +1,14 @@
+{
+  "module": "dock",
+  "version": "1.0.0-stage1",
+  "files": {
+    "adapter.ts": "a396742bba31fc4a45b8918a9557931c6c40b2fce1f1db8c127082a869b2b4dd",
+    "chat.ts": "93b951ab3f5b0d64968d464647bdc596d7018e03bf0addc07099dca9fe6c45fe",
+    "dock.css": "26575bf288415542b0edc3da108b901a653cd17565c4a5d1d840c0b39ff5642e",
+    "dock.ts": "ba36be8c89e73c9364e45a2bad38169253dc006e28a276562b81d7c32a68041a",
+    "dom.ts": "dc2adf64e70e600f28eaa2d84eed0b4ad7deadb6e200cd489ee7abb583269e62",
+    "icons.ts": "e5b6a5732ee5ab8ab1e682b6806c1493c0c167c2d9161733277bb179cfbc179b",
+    "state.ts": "e0f53583f87aa69d338823187d82f67b5fb563426e9229beec6d751c8e413580",
+    "strings.ts": "2f00d5b69c53b8dcce45b08fdb48300c2f24f92ced3fa0ecfe9bf529b3d5252d"
+  }
+}

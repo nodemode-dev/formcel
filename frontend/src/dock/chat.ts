@@ -1,58 +1,67 @@
-import { ApiError, dockApi as api, socketTo, type AgentEvent, type AgentMode, type ClaudeStatus } from './dock-api';
-import { el, setClass, setDisabled, setHidden, setText } from './rb-dom';
-import { icon } from './icons';
+import type { ChatMode, DockAdapter, DockChatEvent, DockChatStatus } from './adapter';
+import { el, q, setClass, setDisabled, setHidden, setText } from './dom';
+import { dockIcon as icon } from './icons';
+import { strings, type Say, type StringKey } from './strings';
 
-const LABELS: Record<AgentMode, string> = { ask: 'Ask', 'auto-edits': 'Auto-accept edits', plan: 'Plan' };
-
-function q<T extends HTMLElement = HTMLElement>(root: ParentNode, sel: string): T {
-  return root.querySelector<T>(sel)!;
-}
+const MODES: [ChatMode, StringKey][] = [['ask', 'modeAsk'], ['auto-edits', 'modeAuto'], ['plan', 'modePlan']];
 
 function toolName(name: string): string {
   return name.replace(/^mcp__/, '').replace(/__/g, ' ');
 }
 
 export class ChatPane {
-  readonly root = el(`<div class="ft-chat" hidden>
-<div class="ft-chat-bar"><span class="ft-chat-status fc-note"></span><span class="ft-dock-spacer"></span>
-<select class="fc-input ft-chat-mode" aria-label="Permission mode"></select>
-<button type="button" class="fc-btn ft-chat-stop" disabled>Stop</button>
-<button type="button" class="fc-btn ft-chat-handoff" title="Continue this conversation in a Claude Code terminal tab">Continue in Claude Code</button>
-<button type="button" class="fc-btn ft-chat-new">New Chat</button></div>
-<div class="ft-chat-log" role="log" aria-live="polite"><div class="ft-chat-empty"><p class="fc-note ft-chat-empty-text"></p><div class="ft-chat-install" hidden><code class="ft-chat-install-cmd"></code><button type="button" class="fc-btn ft-chat-copy">Copy</button></div></div></div>
-</div>`);
+  private readonly s: Say;
+  readonly root: HTMLElement;
   onFail: (err: unknown) => void = () => undefined;
   onHandoff: (session: string) => void = () => undefined;
   onBash: () => void = () => undefined;
-  private readonly log = q(this.root, '.ft-chat-log');
-  private readonly empty = q(this.root, '.ft-chat-empty');
-  private readonly emptyText = q(this.root, '.ft-chat-empty-text');
-  private readonly install = q(this.root, '.ft-chat-install');
-  private readonly statusEl = q(this.root, '.ft-chat-status');
-  private readonly mode = q<HTMLSelectElement>(this.root, '.ft-chat-mode');
-  private readonly stopBtn = q<HTMLButtonElement>(this.root, '.ft-chat-stop');
+  private readonly log: HTMLElement;
+  private readonly empty: HTMLElement;
+  private readonly emptyText: HTMLElement;
+  private readonly install: HTMLElement;
+  private readonly statusEl: HTMLElement;
+  private readonly mode: HTMLSelectElement;
+  private readonly stopBtn: HTMLButtonElement;
   private readonly blocks = new Map<string, { node: HTMLElement; text: Text }>();
   private readonly tools = new Map<string, HTMLElement>();
   private readonly asks = new Map<string, HTMLElement>();
   private socket: WebSocket | null = null;
-  private info: ClaudeStatus | null = null;
+  private info: DockChatStatus | null = null;
   private state = 'idle';
   private running = false;
   private offline = false;
   private wanted = false;
   private session: string | null = null;
 
-  constructor() {
-    for (const [value, label] of Object.entries(LABELS)) {
+  constructor(private readonly a: DockAdapter) {
+    const s = strings(a);
+    const c = a.classes;
+    this.s = s;
+    this.root = el(`<div class="ft-chat" hidden>
+<div class="ft-chat-bar"><span class="ft-chat-status ${c.note}"></span><span class="ft-dock-spacer"></span>
+<select class="${c.select} ft-chat-mode" aria-label="${s('modeLabel')}"></select>
+<button type="button" class="${c.button} ft-chat-btn ft-chat-stop" disabled>${s('stop')}</button>
+<button type="button" class="${c.button} ft-chat-btn ft-chat-handoff" title="${s('handoffTitle')}">${s('handoff')}</button>
+<button type="button" class="${c.button} ft-chat-btn ft-chat-new">${s('newChat')}</button></div>
+<div class="ft-chat-log" role="log" aria-live="polite"><div class="ft-chat-empty"><p class="${c.note} ft-chat-empty-text"></p><div class="ft-chat-install" hidden><code class="ft-chat-install-cmd"></code><button type="button" class="${c.button} ft-chat-copy">${s('copy')}</button></div></div></div>
+</div>`);
+    this.log = q(this.root, '.ft-chat-log');
+    this.empty = q(this.root, '.ft-chat-empty');
+    this.emptyText = q(this.root, '.ft-chat-empty-text');
+    this.install = q(this.root, '.ft-chat-install');
+    this.statusEl = q(this.root, '.ft-chat-status');
+    this.mode = q<HTMLSelectElement>(this.root, '.ft-chat-mode');
+    this.stopBtn = q<HTMLButtonElement>(this.root, '.ft-chat-stop');
+    for (const [value, key] of MODES) {
       const o = document.createElement('option');
       o.value = value;
-      o.textContent = label;
+      o.textContent = s(key);
       this.mode.append(o);
     }
     q(this.root, '.ft-chat-new').addEventListener('click', () => void this.begin(true));
     q(this.root, '.ft-chat-handoff').addEventListener('click', () => void this.handoff());
     q(this.root, '.ft-chat-copy').addEventListener('click', () => { void navigator.clipboard?.writeText(this.info?.install ?? '').catch(() => undefined); });
-    this.stopBtn.addEventListener('click', () => { void api.claudeStop().catch(() => undefined); });
+    this.stopBtn.addEventListener('click', () => { void a.chat.stop().catch(() => undefined); });
     this.mode.addEventListener('change', () => { if (this.running) void this.begin(false); });
   }
 
@@ -73,14 +82,14 @@ export class ChatPane {
   async send(text: string): Promise<void> {
     if (!text || this.state === 'busy') return;
     if (!this.running && !(await this.begin(false))) return;
-    try { await api.claudeSend(text); } catch (err) {
-      this.note('note', err instanceof ApiError ? err.message : 'The message could not be sent.');
+    try { await this.a.chat.send(text); } catch (err) {
+      this.note('note', this.a.errors.message(err) ?? this.s('sendFailed'));
     }
     this.paint();
   }
 
   private async refresh(): Promise<void> {
-    this.info = await api.claudeStatus();
+    this.info = await this.a.chat.status();
     this.offline = this.info === null;
     if (this.info) {
       this.running = this.info.running;
@@ -93,22 +102,23 @@ export class ChatPane {
   }
 
   private paint(): void {
+    const s = this.s;
     const i = this.info;
     let status: string;
     let lead: string;
     if (this.offline || !i) {
-      status = 'The FormCel engine is not reachable. Start it with ./formcel.';
+      status = s('offline');
       lead = status;
     } else if (!i.installed) {
-      status = 'Claude Code is not installed';
-      lead = 'Claude Code is not installed. Install it with the command below, then sign in once by running claude in a terminal.';
+      status = s('missing');
+      lead = s('notInstalled');
     } else {
       const parts = [`Claude Code ${i.version ?? ''}`.trim()];
-      if (i.signedIn === true) parts.push('signed in');
-      else if (i.signedIn === false) parts.push('not signed in: run claude in a terminal and sign in with /login');
-      parts.push(this.running ? (this.state === 'busy' ? 'working' : 'ready') : 'not started');
+      if (i.signedIn === true) parts.push(s('signedIn'));
+      else if (i.signedIn === false) parts.push(s('notSignedIn'));
+      parts.push(this.running ? (this.state === 'busy' ? s('working') : s('ready')) : s('idle'));
       status = parts.join(' · ');
-      lead = 'Ask Claude about your workbook in the line below. It works through FormCel\'s own tools, and every change shows here and in the window.';
+      lead = s('lead');
     }
     setText(this.statusEl, status);
     this.statusEl.title = status;
@@ -118,16 +128,16 @@ export class ChatPane {
     if (missing) setText(q(this.install, '.ft-chat-install-cmd'), i.install);
     const usable = !!i && i.installed && !this.offline;
     setDisabled(this.stopBtn, !this.running);
-    if (this.mode.disabled === usable) this.mode.disabled = !usable;
+    setDisabled(this.mode, !usable);
     setClass(this.root, 'is-busy', this.state === 'busy');
   }
 
   private connect(): void {
     if (this.socket) return;
-    const socket = socketTo('/agent/claude/stream');
+    const socket = this.a.chat.socket();
     this.socket = socket;
     socket.addEventListener('open', () => { this.wipe(); });
-    socket.addEventListener('message', (msg) => { try { this.onEvent(JSON.parse(String(msg.data)) as AgentEvent); } catch { return; } });
+    socket.addEventListener('message', (msg) => { try { this.onEvent(JSON.parse(String(msg.data)) as DockChatEvent); } catch { return; } });
     socket.addEventListener('close', () => {
       if (this.socket === socket) this.socket = null;
       if (this.wanted) window.setTimeout(() => { if (this.wanted && !this.socket) { this.connect(); void this.refresh(); } }, 2000);
@@ -144,20 +154,20 @@ export class ChatPane {
 
   private async begin(fresh: boolean): Promise<boolean> {
     try {
-      await api.claudeStart(this.mode.value as AgentMode, fresh);
+      await this.a.chat.start(this.mode.value as ChatMode, fresh);
       if (fresh) this.wipe();
       return true;
     } catch (err) {
-      this.note('note', err instanceof ApiError ? err.message : 'Claude Code could not be started.');
+      this.note('note', this.a.errors.message(err) ?? this.s('notStarted'));
       return false;
     }
   }
 
   private async handoff(): Promise<void> {
-    const s = await api.claudeStatus();
-    const session = s?.session ?? this.session;
-    if (!session) { this.onFail(new Error('Start a conversation here first; then it can continue in Claude Code')); return; }
-    if ((s?.state ?? this.state) === 'busy') { this.onFail(new Error('Wait for Claude to finish, or press Stop, before moving the conversation')); return; }
+    const st = await this.a.chat.status();
+    const session = st?.session ?? this.session;
+    if (!session) { this.onFail(new Error(this.s('handoffFirst'))); return; }
+    if ((st?.state ?? this.state) === 'busy') { this.onFail(new Error(this.s('handoffBusy'))); return; }
     this.onHandoff(session);
   }
 
@@ -178,7 +188,7 @@ export class ChatPane {
     if (this.log.scrollHeight - this.log.scrollTop - this.log.clientHeight < 80 + node.clientHeight) this.log.scrollTop = this.log.scrollHeight;
   }
 
-  private onEvent(ev: AgentEvent): void {
+  private onEvent(ev: DockChatEvent): void {
     switch (ev.type) {
       case 'state':
         this.running = ev.running;
@@ -219,10 +229,10 @@ export class ChatPane {
         const card = this.asks.get(ev.id);
         if (!card) break;
         card.classList.add('is-done');
-        setText(q(card, '.ft-chat-ask-state'), ev.allowed ? 'Allowed' : 'Declined');
+        setText(q(card, '.ft-chat-ask-state'), ev.allowed ? this.s('allowed') : this.s('declined'));
         break;
       }
-      case 'result': if (!ev.ok) this.note('error', ev.text || 'Claude Code stopped with an error.'); break;
+      case 'result': if (!ev.ok) this.note('error', ev.text || this.s('stoppedError')); break;
       case 'notice': this.note('note', ev.text); break;
     }
   }
@@ -230,7 +240,7 @@ export class ChatPane {
   private tool(id: string, name: string, summary: string): void {
     if (this.tools.has(id)) return;
     const card = this.add('ft-chat-tool-card');
-    const chip = el(`<div class="ft-chat-tool is-running" role="button" tabindex="0"><span class="ft-chat-tool-mark">${icon('terminal')}</span><span class="ft-chat-tool-name"></span><span class="ft-chat-tool-input"></span></div>`);
+    const chip = el(`<div class="ft-chat-tool is-running" role="button" tabindex="0"><span class="ft-chat-tool-mark">${icon('terminal', 11)}</span><span class="ft-chat-tool-name"></span><span class="ft-chat-tool-input"></span></div>`);
     const out = el('<pre class="ft-chat-tool-out" hidden></pre>');
     setText(q(chip, '.ft-chat-tool-name'), toolName(name));
     setText(q(chip, '.ft-chat-tool-input'), summary);
@@ -245,13 +255,14 @@ export class ChatPane {
 
   private question(id: string, tool: string, summary: string): void {
     if (this.asks.has(id)) return;
+    const c = this.a.classes;
     const card = this.add('ft-chat-ask');
     card.append(el('<div class="ft-chat-ask-text"></div>'), el('<code class="ft-chat-ask-sum"></code>'),
-      el('<div class="ft-chat-ask-row"><button type="button" class="fc-btn fc-btn-primary ft-chat-allow">Allow</button><button type="button" class="fc-btn ft-chat-deny">Deny</button><span class="ft-chat-ask-state"></span></div>'));
-    setText(q(card, '.ft-chat-ask-text'), `Claude Code asks to use ${toolName(tool)}`);
+      el(`<div class="ft-chat-ask-row"><button type="button" class="${c.button} ${c.primaryButton} ft-chat-allow">${this.s('allow')}</button><button type="button" class="${c.button} ft-chat-deny">${this.s('deny')}</button><span class="ft-chat-ask-state"></span></div>`));
+    setText(q(card, '.ft-chat-ask-text'), `${this.s('asksToUse')} ${toolName(tool)}`);
     setText(q(card, '.ft-chat-ask-sum'), summary);
-    q(card, '.ft-chat-allow').addEventListener('click', () => { void api.claudeAllow(id, true).catch(() => undefined); });
-    q(card, '.ft-chat-deny').addEventListener('click', () => { void api.claudeAllow(id, false).catch(() => undefined); });
+    q(card, '.ft-chat-allow').addEventListener('click', () => { void this.a.chat.answer(id, true).catch(() => undefined); });
+    q(card, '.ft-chat-deny').addEventListener('click', () => { void this.a.chat.answer(id, false).catch(() => undefined); });
     this.asks.set(id, card);
   }
 }

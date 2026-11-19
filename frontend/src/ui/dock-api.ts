@@ -1,6 +1,7 @@
 import { keyHeaders, presentKey } from './window-key';
 
-export interface TerminalInfo { id: string; title: string; cwd?: string; alive: boolean; kind: 'shell' | 'claude' | 'agent' }
+export type AgentProgram = 'codex' | 'cursor';
+export interface TerminalInfo { id: string; title: string; cwd?: string; alive: boolean; kind: 'shell' | 'claude' | 'agent' | AgentProgram }
 export interface ClaudeCodeStatus { installed: boolean; version: string | null; install: string; signedIn: boolean | null }
 export interface ClaudeOpen { prompt?: string; resume?: string; cols?: number; rows?: number; fresh?: boolean }
 export type AgentMode = 'ask' | 'auto-edits' | 'plan';
@@ -78,4 +79,10 @@ export const dockApi = {
   async claudeSend(text: string): Promise<void> { await request('/agent/claude/send', json({ text })); },
   async claudeStop(): Promise<void> { await request('/agent/claude/stop', { method: 'POST' }); },
   async claudeAllow(id: string, allow: boolean): Promise<void> { await request('/agent/claude/permission', json({ id, allow })); },
+  async openAgent(kind: AgentProgram, cols: number, rows: number): Promise<TerminalInfo> {
+    return (await (await request('/terminal/agent', json({ kind, cols, rows }))).json()) as TerminalInfo;
+  },
+  async agentPrograms(): Promise<Partial<Record<AgentProgram, ClaudeCodeStatus>>> {
+    try { return ((await (await request('/claude-code/status')).json()) as { agents?: Partial<Record<AgentProgram, ClaudeCodeStatus>> }).agents ?? {}; } catch { return {}; }
+  },
 };
