@@ -18,7 +18,7 @@ const FALLBACK_SIZE: (f64, f64) = (1440.0, 900.0);
 const MIN_SIZE: (f64, f64) = (800.0, 520.0);
 const SCREEN_FRACTION: f64 = 0.9;
 const ENGINE_WAIT: Duration = Duration::from_secs(30);
-const KEY_GRACE: Duration = Duration::from_secs(2);
+const KEY_GRACE: Duration = Duration::from_secs(10);
 
 struct Engine(Mutex<Option<Child>>);
 
@@ -165,9 +165,9 @@ fn main() {
                         Err(_) => break,
                     }
                 }
-                match port {
-                    Some(found) => open_main(&handle, found, key),
-                    None => engine_failed(&handle),
+                match (port, key) {
+                    (Some(found), Some(value)) => open_main(&handle, found, Some(value)),
+                    _ => engine_failed(&handle),
                 }
             });
             Ok(())
