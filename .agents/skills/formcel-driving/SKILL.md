@@ -42,13 +42,13 @@ A workbook asks the person before its formulas read local files or web pages; un
 ## Rules
 
 - The terminal, Claude Code and chat commands (`terminal-toggle`, `terminal-new`, `claude-code`, `claude-chat`) are the person's own and are refused to every agent. Do not retry them; tell the person where to find them in the window.
-- Outside agents need the person's consent. The first `run_command` from an outside agent asks once in the FormCel window; if the person says no, the refusal holds for ten minutes and the person can turn on Allow outside agents in Preferences, Trust Center. The Claude Code that the window's own terminal dock starts is never asked.
+- Outside agents need the person's consent. The first `run_command` from an outside agent asks once in the FormCel window; if the person says no, the refusal holds for ten minutes and the person can turn on Allow outside agents in Preferences, Trust Center. Only the FormCel window can change that switch: no tool, command or request of yours turns it on, so ask the person and do not look for another way. If the saved permission was changed outside FormCel, it counts as off, FormCel asks again, and Preferences says so. The Claude Code that the window's own terminal dock starts is never asked.
 - Reading the catalogue (`list_commands`, `describe_command`) needs no window; running a command does.
 - FormCel's calculation rules live in its engine. Do not compute a workbook's values yourself when a command or the window can show them.
 
 ## From a shell
 
-The same catalogue answers on the command line while the engine runs:
+The same catalogue answers on the command line while the engine runs. `list` and `describe` only read; `run` needs the open window and counts as an outside agent, so the first one asks the person in the window like any other:
 
 ```
 ./formcel cli list sort

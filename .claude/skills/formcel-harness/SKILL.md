@@ -17,6 +17,7 @@ FormCel is the Form family's spreadsheet app. This skill is for changing its cod
 | `src-tauri/` | the desktop shell; it starts the frozen engine with `FORMCEL_PORT=0` |
 | `setup/` | build and freeze helpers (`lib.sh`, functions prefixed `fc_`), and the agent kit: `mcp_stdio.py`, `agents.py`, `catalogue.py`, `mcpb.py` with `mcpb/manifest.json` |
 | `.claude/skills`, `.agents/skills` | these skills; `.agents/skills` is a mirror written by `./formcel agents sync` |
+| `agents/manifest.json` | what FormCel offers agents: the MCP tools, which only read and which wait for the person's Allow, the transports, the skills and the dock. Written by `./formcel agents sync` from `TOOLS` in `backend/app/routers/mcp.py`, `.claude/skills` and `DOCK` in `setup/agents.py`; never edited by hand |
 | `formcel`, `formcel.bat` | the launcher; `./formcel help` lists its commands |
 
 ## Routing
@@ -29,6 +30,7 @@ FormCel is the Form family's spreadsheet app. This skill is for changing its cod
 | A window command agents can run | register it with `registerCommand` (id, title, description, `changes`); the window mirrors the catalogue to `PUT /api/commands` and runs it for `/api/live` |
 | Terminals, Claude Code tabs, the Chat tab, child processes | load `sub-skills/terminal-operator/SUB-SKILL.md` |
 | Skills, `.mcp.json`, `.cursor`, `.codex`, `.claude-plugin`, the extension | edit `.claude/skills`, then `./formcel agents sync`; check with `./formcel agents check` and `./formcel mcpb check` |
+| An MCP tool added, renamed or re-annotated, or a skill or sub-skill folder added or removed | run `./formcel agents sync` in the same change so `agents/manifest.json` follows; `./formcel agents check` and `backend/tests/test_agent_manifest.py` fail when it does not |
 
 ## Rules
 
@@ -40,7 +42,7 @@ FormCel is the Form family's spreadsheet app. This skill is for changing its cod
 6. Every new dependency gets a `NOTICE.md` row in the same commit, pinned to an exact version.
 7. Other vendors' product names never name a command, menu, panel or tool. "Claude Code" and "Claude" name the person's own tool and are fine.
 8. The features declined in `CLAUDE.md` stay declined.
-9. Versions match across `frontend/package.json` and its lock, `frontend/src/version.ts`, `backend/app/version.py` and `engine/Cargo.toml`. The extension manifest has no version of its own: `./formcel mcpb build` writes the one in `frontend/package.json`.
+9. Versions move together at every site: `frontend/package.json` and both version fields of its lock, `frontend/src/version.ts`, `backend/app/version.py`, `engine/Cargo.toml` and the three `formcel-` packages in `engine/Cargo.lock`, `src-tauri/Cargo.toml`, the `formcel-desktop` package in `src-tauri/Cargo.lock`, `src-tauri/tauri.conf.json`, the version badge in `README.md`, the newest heading in `CHANGELOG.md`, and the `Current build version` line of the backend and frontend `HASHOUT_LOG.md`. The browser demo bundle (`demo/assets/demo.js`) carries it too and changes only by `npm run demo` in `frontend/`. The extension manifest has no version of its own: `./formcel mcpb build` writes the one in `frontend/package.json`.
 10. Never edit `.claude/settings.json`; it keeps Claude Code's attribution off.
 
 ## Commits
