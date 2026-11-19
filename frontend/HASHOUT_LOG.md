@@ -100,7 +100,14 @@ Found by clicking a report Button in headless Chrome at 1440 by 900 against both
 - kind: fix
 - logged: unreleased · 2026-11-19
 
-From source the bootstrap answers once per engine launch. The page asked it first on every load, so every reload was refused (409) and the engine recorded a second claim that never happened. Now the order is: the packaged global; then the key kept in sessionStorage, if `POST /api/window/check` accepts it; then the bootstrap (a restarted engine has a new key, so the kept one fails and the bootstrap is asked). Same order as FormPath's window-key.ts. Seen in headless Chrome: load, reload, reload gave one bootstrap request, a 200 check on each reload, every page write 200 or 201, and `secondClaim: false`.
+From source the bootstrap answers once per engine launch. The page asked it first on every load, so every reload was refused (409) and the engine recorded a second claim that never happened. Now the order is: the packaged global; then the key kept in sessionStorage, if `POST /api/window/check` accepts it; then the bootstrap (a restarted engine has a new key, so the kept one fails and the bootstrap is asked). Same order as FormPath's window-key.ts.
+
+### A broken seal is said once, in the Outside agents note
+- refers-to: src/ui/agents-allow.ts (agentsPanel, paint)
+- kind: decision
+- logged: unreleased · 2026-11-19
+
+When `GET /api/agents/allowed` reports `sealBroken`, the note under the switch (the node that already holds the On or Off sentence) says "The saved agent permission was changed outside FormCel, so it is back to Ask." in place of the Off sentence; the switch shows off. Only that text node changes. The next answer from the switch (`PUT`) re-seals, and the engine no longer reports it. FormCel keeps no i18n table; its window text is English only. Seen in headless Chrome with a file-backed stand-in keyring: after the window allowed, the note read On; after the stored seal was changed by hand and the page reloaded, the engine reported `seal: broken` and the note read the sentence above. Seen in headless Chrome: load, reload, reload gave one bootstrap request, a 200 check on each reload, every page write 200 or 201, and `secondClaim: false`.
 
 ## Open items closed · v0.43.0 (2026-11-13)
 

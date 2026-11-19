@@ -3,7 +3,7 @@ import { note, toggleRow } from './controls';
 import { actions, makeModal, type Modal } from './modal';
 import type { Panel } from './settings-engine';
 
-interface Allowed { allowed: boolean }
+interface Allowed { allowed: boolean; sealBroken?: boolean }
 
 export function agentsPanel(): Panel {
   const msg = note('', true);
@@ -15,7 +15,9 @@ export function agentsPanel(): Panel {
   });
   const paint = (s: Allowed): void => {
     row.set(s.allowed);
-    setText(msg, s.allowed
+    setText(msg, s.sealBroken
+      ? 'The saved agent permission was changed outside FormCel, so it is back to Ask.'
+      : s.allowed
       ? 'On. Agents connected to FormCel over its MCP endpoint, such as Claude Code, can run FormCel\'s commands in this window.'
       : 'Off. The first time an outside agent calls, FormCel asks here in the window; Allow turns this on. Claude Code started from the terminal dock is not an outside agent.');
   };
