@@ -1,0 +1,49 @@
+{
+  "format": "form-agent-manifest",
+  "version": 1,
+  "app": "formcel",
+  "mcp": {
+    "tools": [
+      "list_commands",
+      "describe_command",
+      "run_command"
+    ],
+    "read_only": [
+      "list_commands",
+      "describe_command"
+    ],
+    "approval_gated": [
+      "run_command"
+    ],
+    "transports": [
+      "stdio",
+      "http"
+    ]
+  },
+  "skills": [
+    {
+      "name": "formcel-driving",
+      "sub_skills": [
+        "terminal"
+      ]
+    },
+    {
+      "name": "formcel-harness",
+      "sub_skills": [
+        "terminal-operator"
+      ]
+    }
+  ],
+  "dock": {
+    "present": true,
+    "positions": [
+      "bottom"
+    ],
+    "tabs": [
+      "Terminal",
+      "Claude-Code",
+      "Chat"
+    ]
+  },
+  "extensions": null
+}

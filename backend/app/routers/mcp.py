@@ -25,9 +25,9 @@ _declined_until = 0.0
 
 TOOLS = [
     {"name": "list_commands", "description": "List the commands the FormCel window can run, optionally only those matching every word of text.",
-     "inputSchema": {"type": "object", "properties": {"text": {"type": "string"}}}},
+     "inputSchema": {"type": "object", "properties": {"text": {"type": "string"}}}, "annotations": {"readOnlyHint": True}},
     {"name": "describe_command", "description": "Describe one command: its title, what it does, whether it changes the workbook and its keys.",
-     "inputSchema": {"type": "object", "properties": {"id": {"type": "string"}}, "required": ["id"]}},
+     "inputSchema": {"type": "object", "properties": {"id": {"type": "string"}}, "required": ["id"]}, "annotations": {"readOnlyHint": True}},
     {"name": "run_command", "description": "Run a command in the open FormCel window and return its answer.",
      "inputSchema": {"type": "object", "properties": {"id": {"type": "string"}, "params": {"type": "object"}}, "required": ["id"]}},
 ]

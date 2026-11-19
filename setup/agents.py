@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import argparse
+import ast
 import json
 import os
 import re
@@ -19,6 +20,11 @@ LAUNCHER = "formcel"
 LAUNCH = os.path.join(ROOT, "formcel.bat" if os.name == "nt" else "formcel")
 ARGS = ["mcp"]
 CLIENTS = ("claude", "codex", "cursor")
+REGISTRY = "formcel"
+MANIFEST = os.path.join(ROOT, "agents", "manifest.json")
+MCP_SOURCE = os.path.join(ROOT, "backend", "app", "routers", "mcp.py")
+STDIO_SOURCE = os.path.join(ROOT, "setup", "mcp_stdio.py")
+DOCK = {"present": True, "positions": ["bottom"], "tabs": ["Terminal", "Claude-Code", "Chat"]}
 
 
 def files_under(base):
@@ -65,6 +71,72 @@ def skill_names():
     return sorted(d for d in os.listdir(SOURCE) if os.path.isdir(os.path.join(SOURCE, d))) if os.path.isdir(SOURCE) else []
 
 
+def served_mcp():
+    with open(MCP_SOURCE, encoding="utf-8") as f:
+        tree = ast.parse(f.read())
+    tools, http = [], False
+    for node in tree.body:
+        if isinstance(node, ast.Assign) and any(isinstance(t, ast.Name) and t.id == "TOOLS" for t in node.targets):
+            tools = ast.literal_eval(node.value)
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            for deco in node.decorator_list:
+                if isinstance(deco, ast.Call) and isinstance(deco.func, ast.Attribute) and deco.func.attr == "post" and deco.args and ast.literal_eval(deco.args[0]) == "/mcp":
+                    http = True
+    return tools, http
+
+
+def build_manifest():
+    tools, http = served_mcp()
+    names = [t["name"] for t in tools]
+    read_only = [t["name"] for t in tools if (t.get("annotations") or {}).get("readOnlyHint") is True]
+    stdio = os.path.isfile(STDIO_SOURCE) and "mcp_stdio.py" in read_bytes(os.path.join(ROOT, LAUNCHER)).decode("utf-8", errors="replace")
+    transports = (["stdio"] if stdio else []) + (["http"] if http else [])
+    mcp = {"tools": names, "read_only": read_only, "approval_gated": [n for n in names if n not in read_only], "transports": transports} if names and transports else None
+    skills = []
+    for skill in skill_names():
+        nested = os.path.join(SOURCE, skill, "sub-skills")
+        subs = sorted(d for d in os.listdir(nested) if os.path.isdir(os.path.join(nested, d))) if os.path.isdir(nested) else []
+        skills.append({"name": skill, "sub_skills": subs})
+    return {"format": "form-agent-manifest", "version": 1, "app": REGISTRY, "mcp": mcp, "skills": skills, "dock": DOCK, "extensions": None}
+
+
+def manifest_text():
+    return json.dumps(build_manifest(), indent=2, ensure_ascii=False) + "\n"
+
+
+def check_manifest(problems):
+    try:
+        want = manifest_text()
+    except (OSError, SyntaxError, ValueError) as exc:
+        problems.append(f"agents/manifest.json cannot be built: {exc}")
+        return
+    try:
+        have = read_bytes(MANIFEST).decode("utf-8")
+    except OSError:
+        problems.append("agents/manifest.json is missing; run ./formcel agents sync")
+        return
+    if have != want:
+        problems.append("agents/manifest.json is not what the sync writes; run ./formcel agents sync")
+
+
+def sync_manifest():
+    try:
+        want = manifest_text()
+    except (OSError, SyntaxError, ValueError) as exc:
+        print(f"[agents] agents/manifest.json cannot be built: {exc}", file=sys.stderr)
+        return 1
+    problems = []
+    check_manifest(problems)
+    if problems:
+        os.makedirs(os.path.dirname(MANIFEST), exist_ok=True)
+        with open(MANIFEST, "w", encoding="utf-8", newline="\n") as f:
+            f.write(want)
+        print("[agents] wrote agents/manifest.json")
+    else:
+        print("[agents] agents/manifest.json is current")
+    return 0
+
+
 def sync():
     if not os.path.isdir(SOURCE):
         print("[agents] .claude/skills is missing", file=sys.stderr)
@@ -89,7 +161,7 @@ def sync():
         if folder != MIRROR and not os.listdir(folder):
             os.rmdir(folder)
     print(f"[agents] .agents/skills mirrors .claude/skills ({len(source)} files, {changed} changed)")
-    return 0
+    return sync_manifest()
 
 
 def check_drift(problems):
@@ -234,12 +306,13 @@ def check():
     check_drift(problems)
     check_skill_format(problems)
     check_agent_files(problems)
+    check_manifest(problems)
     if problems:
         for line in problems:
             print(f"[agents] {line}", file=sys.stderr)
         print(f"[agents] {len(problems)} problem(s)", file=sys.stderr)
         return 1
-    print("[agents] clean: mirror matches, skills pass the format gate, MCP configs name the launcher")
+    print("[agents] clean: mirror matches, skills pass the format gate, MCP configs name the launcher, manifest is current")
     return 0
 
 
