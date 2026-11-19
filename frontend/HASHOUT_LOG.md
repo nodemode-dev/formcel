@@ -88,6 +88,13 @@ A path in the workbook's `dbWrite` is honoured only when the engine has this mac
 
 When `/api/host/resolve` answers `ask: "external"`, HostCalls calls `askExternal(id)`: one dialog (made once with `makeModal` and reused, like the database question), at most one question per workbook per window session, the answer stored by `PUT /api/workbooks/{id}/trust`, and on Allow a fresh drain of the host calls. The grid is not touched while the dialog is open. `trust()` and `forget()` in vba/trust.ts also tell the engine (`scripts: true` or `false`), which is what lets Apps Script triggers run in that workbook.
 
+### The message slot in the title bar keeps its width
+- refers-to: src/styles/titlebar.css (.fc-tb-doc, .fc-tb-doc .fc-title, .fc-tb-doc .fc-save)
+- kind: fix
+- logged: unreleased · 2026-11-19
+
+Found by clicking a report Button in headless Chrome at 1440 by 900 against both real engines: the status slot `.fc-save` (where `h.status` writes every message, including the report results and refusals) took a width from its text, so a long refusal made it 76 px and the workbook name beside it lost 4 px, and a short message gave them back. `.fc-tb-doc` now fills its grid column and centres its content, the name has a 260 px basis and the slot a zero basis that grows to its existing 220 px cap, so both widths come from the column and never from the text. Seen after: 72 px before and after every message, no other box moved, no node added. Left for the owner: at 1440 px the menus leave the middle column about 190 px, so the slot shows about ten characters and the full message only on hover (its title), and under 1100 px the slot is hidden.
+
 ## Open items closed · v0.43.0 (2026-11-13)
 
 ### The demos as browser pages
