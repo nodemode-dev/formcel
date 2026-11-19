@@ -60,6 +60,13 @@ One class, `fc-dashboard` on `#app`, does the work in CSS: the sheet's rows beco
 
 `report.run` (params `template`, `sql`, `out`) posts to the engine's `/api/workbooks/{id}/report`, which talks to FormTxt; the status line names the written file. A Button can run it: Assign Macro has a Commands group (buttons only) with "Run a report (report.run)" and three fields (template, SQL, save to) that are always in the dialog and enabled only while that entry is chosen, so choosing it does not resize the dialog. The control stores `cmd` and `args`. `fire` runs a stored command only when it is in `CONTROL_COMMANDS` (just `report.run`), so a workbook file cannot make a button run any other command.
 
+### The window key on every write
+- refers-to: src/ui/window-key.ts (loadWindowKey, keyHeaders, presentKey); src/main.ts; src/app.ts (api, export, import preview, importFile); src/automation/dom.ts (api); src/ui/backstage.ts (api); src/ui/collab.ts (call); src/ui/spell.ts (call); src/datatypes/api.ts (call); src/automation/hostCalls.ts; src/ui/dock-api.ts (request, socketTo); src/automation/bridge.ts; src/automation/tabMore.ts
+- kind: decision
+- logged: unreleased · 2026-11-19
+
+The engine refuses every write without `X-Formcel-Window-Key`. main.ts awaits `loadWindowKey()` once, after the shell is mounted and before `App` starts: the packaged shell's `window.__FORMCEL_WINDOW_KEY` first (read once and deleted), else `POST /api/window/key` (development), else the copy kept in sessionStorage for a reload of the same tab. Every helper that sends a write adds `keyHeaders()`; GET-only fetches are unchanged. `presentKey` sends `{type: "key", key}` as the first message of the live socket and of the terminal and chat streams; it is added as a listener before the caller's `onopen`, so it always goes first. Nothing visible changes. The REST API note in More now says that without a token programs can read but not change workbooks.
+
 ## Open items closed · v0.43.0 (2026-11-13)
 
 ### The demos as browser pages

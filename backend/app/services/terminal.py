@@ -195,6 +195,9 @@ def close(sid: str) -> None:
     session = SESSIONS.pop(sid, None)
     if session is None:
         return
+    from . import agents
+
+    agents.revoke((session.env or {}).get(agents.INAPP_VAR))
     session.gen += 1
     if session.proc is not None:
         try:

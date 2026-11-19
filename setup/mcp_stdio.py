@@ -10,7 +10,26 @@ import urllib.error
 import urllib.request
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-PORT = os.environ.get("FORMCEL_PORT", "8199")
+FIXED_URL = "http://127.0.0.1:8199/mcp"
+
+
+def published():
+    folder = os.path.expanduser(os.environ.get("FORMCEL_DATA_DIR") or os.path.join("~", "FormCel"))
+    try:
+        with open(os.path.join(folder, "engine.port"), encoding="utf-8") as f:
+            raw = f.read().strip()
+    except OSError:
+        return ""
+    if not raw.isdigit():
+        return ""
+    try:
+        with urllib.request.urlopen(f"http://127.0.0.1:{raw}/api/health", timeout=2) as r:
+            return raw if json.loads(r.read().decode("utf-8")).get("app") == "formcel" else ""
+    except (urllib.error.URLError, OSError, ValueError):
+        return ""
+
+
+PORT = os.environ.get("FORMCEL_PORT") or published() or "8199"
 DEFAULT_URL = f"http://127.0.0.1:{PORT}/mcp"
 URL = os.environ.get("FORMCEL_MCP_URL", DEFAULT_URL)
 session = ""
@@ -105,7 +124,7 @@ def main():
     parser.add_argument("--where", action="store_true", help="print the launcher, script and URL, then exit")
     parser.add_argument("--version", action="store_true", help="print the version, then exit")
     args = parser.parse_args()
-    if args.url:
+    if args.url and not (args.url == FIXED_URL and DEFAULT_URL != FIXED_URL):
         URL = args.url
     if args.version:
         print("formcel " + read_version())

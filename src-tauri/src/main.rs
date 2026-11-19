@@ -4,7 +4,7 @@ use std::io::{BufRead, BufReader};
 use std::process::{Child, Stdio};
 use std::sync::mpsc;
 use std::sync::Mutex;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use tauri::{Manager, RunEvent, WebviewUrl, WebviewWindowBuilder, WindowEvent};
 
@@ -18,6 +18,7 @@ const FALLBACK_SIZE: (f64, f64) = (1440.0, 900.0);
 const MIN_SIZE: (f64, f64) = (800.0, 520.0);
 const SCREEN_FRACTION: f64 = 0.9;
 const ENGINE_WAIT: Duration = Duration::from_secs(30);
+const KEY_GRACE: Duration = Duration::from_secs(2);
 
 struct Engine(Mutex<Option<Child>>);
 
@@ -27,9 +28,19 @@ fn port_in(line: &str) -> Option<u16> {
     digits.parse().ok()
 }
 
-fn spawn_engine() -> Option<(Child, mpsc::Receiver<u16>)> {
+enum Heard {
+    Port(u16),
+    Key(String),
+}
+
+fn key_in(line: &str) -> Option<String> {
+    let rest = line.trim().strip_prefix("formcel-window-key: ")?;
+    (rest.len() >= 32 && rest.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')).then(|| rest.to_string())
+}
+
+fn spawn_engine() -> Option<(Child, mpsc::Receiver<Heard>)> {
     let mut command = packaged::engine_command()?;
-    command.env("FORMCEL_PORT", "0").env("FORMCEL_HOST", "127.0.0.1").env("FORMCEL_PARENT_PID", std::process::id().to_string()).stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped());
+    command.env("FORMCEL_PORT", "0").env("FORMCEL_WINDOW_KEY_STDOUT", "1").env("FORMCEL_HOST", "127.0.0.1").env("FORMCEL_PARENT_PID", std::process::id().to_string()).stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped());
     #[cfg(windows)]
     {
         use std::os::windows::process::CommandExt;
@@ -39,12 +50,18 @@ fn spawn_engine() -> Option<(Child, mpsc::Receiver<u16>)> {
     let (tx, rx) = mpsc::channel();
     let out = child.stdout.take()?;
     let err = child.stderr.take()?;
-    for pipe in [Box::new(out) as Box<dyn std::io::Read + Send>, Box::new(err)] {
+    for (pipe, keyed) in [(Box::new(out) as Box<dyn std::io::Read + Send>, true), (Box::new(err), false)] {
         let tx = tx.clone();
         std::thread::spawn(move || {
             for line in BufReader::new(pipe).lines().map_while(Result::ok) {
+                if keyed {
+                    if let Some(key) = key_in(&line) {
+                        let _ = tx.send(Heard::Key(key));
+                        continue;
+                    }
+                }
                 if let Some(port) = port_in(&line) {
-                    let _ = tx.send(port);
+                    let _ = tx.send(Heard::Port(port));
                 }
             }
         });
@@ -69,7 +86,7 @@ fn engine_failed(app: &tauri::AppHandle) {
     app.exit(1);
 }
 
-fn open_main(app: &tauri::AppHandle, port: u16) {
+fn open_main(app: &tauri::AppHandle, port: u16, key: Option<String>) {
     let (width, height) = app
         .primary_monitor()
         .ok()
@@ -88,6 +105,11 @@ fn open_main(app: &tauri::AppHandle, port: u16) {
         .min_inner_size(MIN_SIZE.0, MIN_SIZE.1)
         .center()
         .disable_drag_drop_handler();
+    let origin = format!("http://127.0.0.1:{port}");
+    let builder = match &key {
+        Some(value) => builder.initialization_script(format!("if (window.location.origin === {origin:?}) {{ window.__FORMCEL_WINDOW_KEY = {value:?}; }}")),
+        None => builder,
+    };
     #[cfg(target_os = "macos")]
     let builder = builder.title_bar_style(tauri::TitleBarStyle::Overlay).hidden_title(true);
     let builder = builder.on_page_load(|window, payload| {
@@ -124,9 +146,29 @@ fn main() {
                 return Ok(());
             };
             *app.state::<Engine>().0.lock().unwrap() = Some(child);
-            std::thread::spawn(move || match rx.recv_timeout(ENGINE_WAIT) {
-                Ok(port) => open_main(&handle, port),
-                Err(_) => engine_failed(&handle),
+            std::thread::spawn(move || {
+                let started = Instant::now();
+                let (mut port, mut key, mut port_at) = (None, None, None);
+                while port.is_none() || key.is_none() {
+                    let deadline = port_at.map_or(started + ENGINE_WAIT, |at: Instant| at + KEY_GRACE);
+                    let now = Instant::now();
+                    if now >= deadline {
+                        break;
+                    }
+                    match rx.recv_timeout(deadline - now) {
+                        Ok(Heard::Port(found)) if port.is_none() => {
+                            port = Some(found);
+                            port_at = Some(Instant::now());
+                        }
+                        Ok(Heard::Key(found)) if key.is_none() => key = Some(found),
+                        Ok(_) => continue,
+                        Err(_) => break,
+                    }
+                }
+                match port {
+                    Some(found) => open_main(&handle, found, key),
+                    None => engine_failed(&handle),
+                }
             });
             Ok(())
         })

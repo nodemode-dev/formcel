@@ -1,3 +1,5 @@
+import { keyHeaders, presentKey } from './window-key';
+
 export interface TerminalInfo { id: string; title: string; cwd?: string; alive: boolean; kind: 'shell' | 'claude' | 'agent' }
 export interface ClaudeCodeStatus { installed: boolean; version: string | null; install: string; signedIn: boolean | null }
 export interface ClaudeOpen { prompt?: string; resume?: string; cols?: number; rows?: number; fresh?: boolean }
@@ -25,7 +27,7 @@ const NOT_RUNNING = 'The FormCel engine is not running. Start it with ./formcel.
 
 async function request(path: string, init?: RequestInit): Promise<Response> {
   let res: Response;
-  try { res = await fetch(`/api${path}`, init); } catch {
+  try { res = await fetch(`/api${path}`, { ...init, headers: { ...(init?.headers as Record<string, string> | undefined), ...keyHeaders() } }); } catch {
     throw new ApiError(NOT_RUNNING, 0);
   }
   if (!res.ok) {
@@ -44,7 +46,7 @@ function json(body: unknown): RequestInit {
 }
 
 export function socketTo(path: string): WebSocket {
-  return new WebSocket(`${location.protocol === 'https:' ? 'wss:' : 'ws:'}//${location.host}/api${path}`);
+  return presentKey(new WebSocket(`${location.protocol === 'https:' ? 'wss:' : 'ws:'}//${location.host}/api${path}`));
 }
 
 export const dockApi = {

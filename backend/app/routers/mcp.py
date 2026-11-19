@@ -156,7 +156,8 @@ class Allowed(BaseModel):
 
 @router.get("/api/agents/allowed")
 def get_allowed() -> dict:
-    return {"allowed": agents.allowed()}
+    now = agents.state()
+    return {"allowed": (now.get("agents") or {}).get("allowed") is True, "seal": now["seal"], "sealBroken": now["sealBroken"]}
 
 
 @router.put("/api/agents/allowed")

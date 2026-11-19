@@ -131,7 +131,7 @@ export class MoreTab {
     void this.loadRegistry();
     try {
       const s = await api<{ enabled: boolean }>('GET', '/api/settings/api');
-      this.apiState.innerHTML = `Read and write cells over HTTP at <code>/api/v1/workbooks/{id}/sheets/{sheet}/values?range=A1:C5</code> (GET, PUT and DELETE), plus create, rename and delete for workbooks and sheets, formulas (<code>/formulas</code>), number formats and styles (<code>/formats</code>), names, tables, charts, pivots, conditional formats, validations, filters and sheet copy and order. Every endpoint is listed on the OpenAPI page. ${s.enabled ? 'A token is required: send <code>Authorization: Bearer TOKEN</code>.' : 'No token is set, so calls from this computer are open.'} This workbook's id is <code>${esc(this.env.id())}</code>.`;
+      this.apiState.innerHTML = `Read and write cells over HTTP at <code>/api/v1/workbooks/{id}/sheets/{sheet}/values?range=A1:C5</code> (GET, PUT and DELETE), plus create, rename and delete for workbooks and sheets, formulas (<code>/formulas</code>), number formats and styles (<code>/formats</code>), names, tables, charts, pivots, conditional formats, validations, filters and sheet copy and order. Every endpoint is listed on the OpenAPI page. ${s.enabled ? 'A token is required: send <code>Authorization: Bearer TOKEN</code>.' : 'No token is set, so programs on this computer can read but not change workbooks. Make a token to let them write.'} This workbook's id is <code>${esc(this.env.id())}</code>.`;
     } catch {
       setText(this.apiState, 'The engine process could not be reached.');
     }

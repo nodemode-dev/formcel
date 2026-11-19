@@ -52,6 +52,7 @@ import { Backstage } from './ui/backstage';
 import { Vba } from './vba';
 import { DataModelWindow } from './ui/datamodel';
 import { DataTypes } from './datatypes';
+import { keyHeaders } from './ui/window-key';
 
 const LOCALES: [string, string][] = [['en-US', 'English (United States)'], ['en-GB', 'English (United Kingdom)'], ['de-DE', 'Deutsch (Deutschland)'], ['fr-FR', 'Francais (France)'], ['ja-JP', 'Japanese (Japan)'], ['es-ES', 'Espanol (Espana)'], ['it-IT', 'Italiano (Italia)'], ['pt-BR', 'Portugues (Brasil)'], ['nl-NL', 'Nederlands (Nederland)'], ['sv-SE', 'Svenska (Sverige)'], ['pl-PL', 'Polski (Polska)'], ['ru-RU', 'Russian (Russia)'], ['zh-CN', 'Chinese (China)'], ['ko-KR', 'Korean (Korea)']];
 
@@ -249,7 +250,7 @@ const TAB_COLOURS =['', '#ef4444', '#f97316', '#eab308', '#22c55e', '#14b8a6', '
 async function api<T>(method: string, url: string, body?: unknown): Promise<T> {
   const r = await fetch(url, {
     method,
-    headers: { ...identityHeaders(), ...(body === undefined ? {} : { 'content-type': 'application/json' }) },
+    headers: { ...identityHeaders(), ...keyHeaders(), ...(body === undefined ? {} : { 'content-type': 'application/json' }) },
     body: body === undefined ? undefined : JSON.stringify(body),
   });
   if (!r.ok) {
@@ -2224,7 +2225,7 @@ export class App {
     this.passwordBox('Download with a password', 'Anyone who opens the file needs this password. FormCel does not keep it, and a lost password cannot be recovered.', true, async (password) => {
       this.flush();
       await this.saving;
-      const r = await fetch(`/api/workbooks/${o.id}/export.xlsx`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ password }) }).catch(() => null);
+      const r = await fetch(`/api/workbooks/${o.id}/export.xlsx`, { method: 'POST', headers: { 'content-type': 'application/json', ...keyHeaders() }, body: JSON.stringify({ password }) }).catch(() => null);
       if (!r || !r.ok) return 'The file could not be made.';
       const url = URL.createObjectURL(await r.blob());
       const a = document.createElement('a');
@@ -2255,7 +2256,7 @@ export class App {
 
   private async csvPreview(file: File, delimiter?: string): Promise<CsvPreview | null> {
     const q = `name=${encodeURIComponent(file.name)}${delimiter ? `&delimiter=${delimiter}` : ''}`;
-    const r = await fetch(`/api/import/preview?${q}`, { method: 'POST', headers: { 'content-type': 'application/octet-stream' }, body: file }).catch(() => null);
+    const r = await fetch(`/api/import/preview?${q}`, { method: 'POST', headers: { 'content-type': 'application/octet-stream', ...keyHeaders() }, body: file }).catch(() => null);
     if (!r || !r.ok) {
       const detail = r ? await r.json().then((j: { detail?: string }) => j.detail).catch(() => undefined) : undefined;
       this.home.say(detail ?? `${file.name} could not be read.`, true);
@@ -2459,7 +2460,7 @@ export class App {
       return null;
     }
     this.home.say(`Opening ${file.name}`);
-    const headers: Record<string, string> = { 'content-type': 'application/octet-stream' };
+    const headers: Record<string, string> = { 'content-type': 'application/octet-stream', ...keyHeaders() };
     if (password) headers['x-formcel-password'] = password;
     const cap = textFile && prefs().importMaxRows < 1048576 ? `&max_rows=${prefs().importMaxRows}` : '';
     const r = await fetch(`/api/import?name=${encodeURIComponent(file.name)}${options ?? ''}${cap}`, { method: 'POST', headers, body: file }).catch(() => null);

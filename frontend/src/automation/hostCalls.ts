@@ -1,4 +1,5 @@
 import { engine, type Changed } from '../engine';
+import { keyHeaders } from '../ui/window-key';
 
 type Scalar = string | number | boolean | null;
 
@@ -115,7 +116,7 @@ export class HostCalls {
         const answers = new Map<string, string>();
         if (web.length) {
           try {
-            const r = await fetch('/api/host/resolve', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ keys: web, fresh, workbook: this.h.workbook() }) });
+            const r = await fetch('/api/host/resolve', { method: 'POST', headers: { 'content-type': 'application/json', ...keyHeaders() }, body: JSON.stringify({ keys: web, fresh, workbook: this.h.workbook() }) });
             const j = (await r.json()) as { results: Record<string, { data: string; note: string }> };
             for (const [k, v] of Object.entries(j.results)) {
               answers.set(k, v.data);

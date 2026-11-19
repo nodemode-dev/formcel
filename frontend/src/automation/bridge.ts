@@ -2,6 +2,7 @@ import { askConsent } from '../ui/agents-allow';
 import { callCommand, commandInfo, listCommands } from '../ui/commands';
 import { asAgent } from './actor';
 import { api } from './dom';
+import { presentKey } from '../ui/window-key';
 
 export const WINDOW_ONLY = ['terminal-toggle', 'terminal-new', 'claude-code', 'claude-chat'];
 
@@ -26,7 +27,7 @@ export function connectBridge(): void {
   let delay = 500;
   const open = (): void => {
     const proto = location.protocol === 'https:' ? 'wss' : 'ws';
-    const ws = new WebSocket(`${proto}://${location.host}/api/live`);
+    const ws = presentKey(new WebSocket(`${proto}://${location.host}/api/live`));
     ws.onopen = () => { delay = 500; void api('PUT', '/api/commands', listCommands()).catch(() => undefined); };
     ws.onmessage = async (ev) => {
       let msg: { t?: string; id?: string; command?: string; params?: Record<string, unknown> };

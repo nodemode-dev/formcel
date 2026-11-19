@@ -5,7 +5,7 @@ from urllib.parse import urlparse
 from fastapi import APIRouter, HTTPException, Request, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel, Field
 
-from .. import config
+from .. import config, window_key
 from ..services import claude_code, terminal
 
 router = APIRouter(prefix="/api/terminal", tags=["terminal"])
@@ -147,6 +147,9 @@ async def attach(ws: WebSocket, sid: str) -> None:
         await ws.close(code=4429)
         return
     await ws.accept()
+    if not await window_key.admit(ws):
+        release_socket()
+        return
     try:
         session = terminal.get(sid)
     except KeyError:

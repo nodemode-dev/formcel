@@ -4,6 +4,7 @@ import { setTheme, theme, type ThemeName } from './a11y';
 import { runCommand } from './commands';
 import { VERSION } from '../version';
 import { brandMark } from './brand';
+import { keyHeaders } from './window-key';
 import { onPreviewGesture, openPreview, paintThumb, thumbBox, type Visual } from './tplgallery';
 
 export interface BackstageHost {
@@ -86,7 +87,7 @@ function button(label: string, cls = 'fc-btn', run?: () => void, ic?: IconName):
 }
 
 async function api<T>(method: string, path: string, body?: unknown): Promise<T> {
-  const r = await fetch(`/api${path}`, { method, headers: body === undefined ? undefined : { 'content-type': 'application/json' }, body: body === undefined ? undefined : JSON.stringify(body) });
+  const r = await fetch(`/api${path}`, { method, headers: { ...keyHeaders(), ...(body === undefined ? {} : { 'content-type': 'application/json' }) }, body: body === undefined ? undefined : JSON.stringify(body) });
   if (!r.ok) throw new Error(await r.json().then((j: { detail?: string }) => j.detail ?? `HTTP ${r.status}`).catch(() => `HTTP ${r.status}`));
   return (r.status === 204 ? null : await r.json()) as T;
 }

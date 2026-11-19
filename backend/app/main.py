@@ -1,11 +1,13 @@
 import mimetypes
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
 
 from . import config
 from .local_guard import LocalGuard
+from . import window_key
+from .window_key import WindowKeyGuard
 import asyncio
 
 from .routers import automation, claude_code, collab, commands, fonts, live, mcp, printpreview, quotes, review, share, spell, terminal, tplthumb, workbooks
@@ -35,6 +37,7 @@ async def lifespan(_: FastAPI):
 
 app = FastAPI(title="FormCel engine", version=VERSION, lifespan=lifespan, docs_url="/api/docs", openapi_url="/api/openapi.json", redoc_url=None)
 app.add_middleware(LocalGuard, origins=config.window_origins())
+app.add_middleware(WindowKeyGuard)
 app.include_router(tplthumb.router)
 app.include_router(workbooks.router)
 app.include_router(printpreview.router)
@@ -81,6 +84,21 @@ def health() -> dict:
 @app.get("/api/version")
 def version() -> dict:
     return {"app": "formcel", "version": VERSION}
+
+
+@app.post("/api/window/key")
+def claim_window_key() -> dict:
+    if window_key.stdout_mode():
+        raise HTTPException(404, "Not Found")
+    key = window_key.claim()
+    if key is None:
+        raise HTTPException(409, "Another window already holds this engine's window key; use that window, or restart FormCel")
+    return {"key": key}
+
+
+@app.get("/api/window/state")
+def window_state() -> dict:
+    return {"secondClaim": window_key.STATE["secondClaim"], "packaged": window_key.stdout_mode()}
 
 
 if config.WINDOW_DIR is not None and config.WINDOW_DIR.is_dir():

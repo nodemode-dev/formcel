@@ -4,6 +4,8 @@ import sys
 import threading
 import time
 
+PORT_FILE = "engine.port"
+
 
 def resource_dir() -> str:
     return getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__)))
@@ -80,6 +82,11 @@ def announce_port(server) -> None:
 
         config.PORT = port
         os.environ["FORMCEL_PORT"] = str(port)
+        try:
+            config.DATA_DIR.mkdir(parents=True, exist_ok=True)
+            (config.DATA_DIR / PORT_FILE).write_text(str(port), encoding="utf-8")
+        except OSError:
+            pass
 
     threading.Thread(target=run, name="formcel-port", daemon=True).start()
 
@@ -110,6 +117,10 @@ def main() -> int:
     host = os.environ.get("FORMCEL_HOST", "127.0.0.1")
     server = uvicorn.Server(uvicorn.Config(app, host=host, port=port, log_level="info"))
     announce_port(server)
+    from app import window_key
+
+    if window_key.stdout_mode():
+        print(window_key.LINE + window_key.KEY, flush=True)
     server.run()
     return 0 if server.started else 3
 
