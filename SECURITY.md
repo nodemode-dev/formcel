@@ -31,8 +31,13 @@ something outside it could get in:
 - **The share listener** for other computers (off by default, port 8200): reaching a
   workbook without its share link, doing more with a link than it allows, or reaching
   anything it should not expose.
-- **Scripts in a workbook** (Python cells, scripts and macros) run with no access to
-  your files or network. Anything that gets past that.
+- **Scripts in a workbook** (Python cells, scripts and macros) run restricted, not
+  sealed off: the README says what the runners block and that only trusted scripts
+  should be run. A way past the trust questions (external content, Enable Content,
+  saving to a database) is in scope; code that defeats the in-process restrictions
+  of a script the person chose to run is a known limit.
+- **The window key**: any way for a program on this computer, other than the FormCel
+  window, to make a change through the engine outside `/mcp` and its question.
 - **Agents**: running a command through `/mcp` or `./formcel cli` before the person has
   allowed outside agents, running the window-only terminal and Claude Code commands
   from any agent, or reusing the token the engine gives its own Claude Code tabs.
