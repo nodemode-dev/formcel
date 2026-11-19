@@ -5,13 +5,18 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app import window_key
-from app.services import agent_programs, agents, terminal
+from app.services import agent_programs, agents, claude_code, terminal
 
 
 def stand_in(folder, name):
     path = folder / name
     path.write_text(f"#!/bin/sh\necho stand-in {name}\nexec sleep 30\n")
     path.chmod(path.stat().st_mode | stat.S_IXUSR)
+
+
+@pytest.fixture(autouse=True)
+def no_claude_run(monkeypatch):
+    monkeypatch.setattr(claude_code, "info", lambda fresh=False: {"installed": False})
 
 
 @pytest.fixture()
