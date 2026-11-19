@@ -3,6 +3,7 @@ import os
 import socket
 import sqlite3
 import threading
+import time
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
 import pytest
@@ -166,9 +167,13 @@ def formtxt(monkeypatch):
         def do_POST(self):
             body = json.loads(self.rfile.read(int(self.headers["content-length"])))
             seen.append((self.path, body))
-            ok = body.get("template") != "missing"
-            out = {"id": "r1", "title": "Invoice", "records": 2, "file": body.get("out", "")} if ok else {"detail": "No document missing."}
-            self.send_response(200 if ok else 404)
+            name = body.get("template")
+            if name == "slow":
+                time.sleep(1.0)
+            refused = {"missing": (404, "No document missing."), "nobody": (403, "No FormTxt window is open. Start it with ./formtxt and open the app, then retry."), "declined": (403, "The person did not allow outside agents in FormTxt. Ask them to allow it, then retry."), "exists": (409, "/tmp/a.pdf already exists. Send overwrite true to replace it, or choose another name."), "listy": (422, [{"type": "string_type", "loc": ["body", "out"], "msg": "Input should be a valid string", "input": None}]), "broken": (500, "Something broke.")}.get(name)
+            ok = refused is None
+            out = {"id": "r1", "title": "Invoice", "records": 2, "file": body.get("out", "")} if ok else {"detail": refused[1]}
+            self.send_response(200 if ok else refused[0])
             self.send_header("content-type", "application/json")
             self.end_headers()
             self.wfile.write(json.dumps(out).encode())
@@ -191,8 +196,34 @@ def test_a_report_is_sent_to_formtxt_with_the_workbook_database(client, orders, 
     assert r.json() == {"id": "r1", "title": "Invoice", "records": 2, "file": "/tmp/invoice.pdf"}
     assert formtxt == [("/api/reports/run", {"template": "doc1", "data": {"path": orders, "sql": "select * from orders"}, "mode": "list", "format": "pdf", "out": "/tmp/invoice.pdf", "overwrite": False})]
     r = client.post(f"/api/workbooks/{wid}/report", json={"template": "missing", "sql": "select 1"})
-    assert r.status_code == 502 and "No document missing." in r.json()["detail"]
+    assert r.status_code == 422 and "No document missing." in r.json()["detail"]
     assert client.post(f"/api/workbooks/{_book(client)}/report", json={"template": "doc1", "sql": "select 1"}).status_code == 422
+
+
+def test_a_report_keeps_formtxts_refusals_apart(client, orders, formtxt):
+    wid = _book(client, {"dbPath": orders})
+    said = {}
+    for name in ("nobody", "declined", "exists", "listy", "broken"):
+        r = client.post(f"/api/workbooks/{wid}/report", json={"template": name, "sql": "select 1", "out": "/tmp/a.pdf"})
+        said[name] = (r.status_code, r.json()["detail"])
+    assert said["nobody"][0] == 403 and "allow outside agents" in said["nobody"][1] and "No FormTxt window is open" in said["nobody"][1]
+    assert said["declined"][0] == 403 and "did not allow outside agents" in said["declined"][1]
+    assert said["exists"][0] == 409 and "already exists" in said["exists"][1] and "file is in the way" in said["exists"][1]
+    assert said["listy"][0] == 422 and said["listy"][1].endswith("out: Input should be a valid string") and "[" not in said["listy"][1]
+    assert said["broken"][0] == 502 and "Something broke." in said["broken"][1]
+
+
+def test_a_report_says_when_formtxt_does_not_answer_in_time(client, orders, formtxt, monkeypatch):
+    from app.routers import queries
+    monkeypatch.setattr(queries, "REPORT_WAIT", 0.3)
+    wid = _book(client, {"dbPath": orders})
+    r = client.post(f"/api/workbooks/{wid}/report", json={"template": "slow", "sql": "select 1"})
+    assert r.status_code == 504 and r.json()["detail"].startswith("FormTxt did not answer in time.") and "not running" not in r.json()["detail"]
+
+
+def test_a_report_waits_longer_than_formtxt_does_for_the_person():
+    from app.routers import queries
+    assert queries.REPORT_WAIT > 180
 
 
 def test_a_report_without_a_path_sends_no_out(client, orders, formtxt):

@@ -173,6 +173,8 @@ def py_run(wid: str, body: PyRunIn) -> dict:
 
 
 FORMTXT_DOWN = "FormTxt is not running. Open it and try again."
+FORMTXT_SLOW = "FormTxt did not answer in time. If its window is asking whether to allow outside agents, answer it there and run the report again. The report may have been written anyway."
+REPORT_WAIT = 200
 
 
 FORMTXT_TEMPLATE_MAX = 80
@@ -191,6 +193,27 @@ def formtxt_port() -> int:
         return int(os.environ.get("FORMTXT_ENGINE_PORT") or 8210)
     except ValueError:
         return 8210
+
+
+def formtxt_detail(e: urllib.error.HTTPError) -> str:
+    try:
+        detail = json.loads(e.read().decode("utf-8") or "{}")
+        detail = detail.get("detail") if isinstance(detail, dict) else None
+    except ValueError:
+        detail = None
+    if isinstance(detail, list):
+        detail = "; ".join(f"{'.'.join(str(p) for p in (i.get('loc') or [])[1:])}: {i.get('msg')}".lstrip(": ") for i in detail if isinstance(i, dict))
+    return str(detail or e)
+
+
+def formtxt_refusal(code: int, detail: str) -> HTTPException:
+    if code == 403:
+        return HTTPException(403, f"FormTxt has not allowed this report. Open FormTxt and allow outside agents (answer its question, or turn on Allow outside agents in Preferences), then run the report again. FormTxt said: {detail}")
+    if code == 409:
+        return HTTPException(409, f"FormTxt did not write the report because the file is in the way. {detail}")
+    if code in (400, 404, 413, 415, 422):
+        return HTTPException(422, f"FormTxt did not accept the report: {detail}")
+    return HTTPException(502, f"FormTxt could not make the report: {detail}")
 
 
 @router.post("/workbooks/{wid}/report")
@@ -214,18 +237,16 @@ async def run_report(wid: str, body: ReportIn) -> dict:
     req = urllib.request.Request(f"http://127.0.0.1:{formtxt_port()}/api/reports/run", data=json.dumps(payload).encode("utf-8"), headers={"content-type": "application/json"}, method="POST")
 
     def send() -> dict:
-        with urllib.request.urlopen(req, timeout=120) as r:
+        with urllib.request.urlopen(req, timeout=REPORT_WAIT) as r:
             return json.loads(r.read().decode("utf-8") or "{}")
 
     try:
         return await asyncio.to_thread(send)
     except urllib.error.HTTPError as e:
-        try:
-            detail = json.loads(e.read().decode("utf-8") or "{}").get("detail") or str(e)
-        except ValueError:
-            detail = str(e)
-        raise HTTPException(502, f"FormTxt could not make the report: {detail}")
-    except (urllib.error.URLError, ConnectionError, TimeoutError):
+        raise formtxt_refusal(e.code, formtxt_detail(e))
+    except (urllib.error.URLError, ConnectionError, TimeoutError) as e:
+        if isinstance(e, TimeoutError) or isinstance(getattr(e, "reason", None), TimeoutError):
+            raise HTTPException(504, FORMTXT_SLOW)
         raise HTTPException(503, FORMTXT_DOWN)
     except ValueError:
         raise HTTPException(502, "FormTxt answered with something that is not JSON.")
