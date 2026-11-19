@@ -33,7 +33,7 @@ def set_enabled(on: bool) -> dict:
 def status() -> dict:
     mods = ["math", "statistics", "re", "json", "datetime", "itertools", "functools", "collections", "random", "string", "decimal", "fractions", "operator", "textwrap", "calendar"]
     pandas = pandas_ready()
-    return {"enabled": enabled(), "version": sys.version.split()[0], "modules": mods + (["pandas as pd", "numpy as np"] if pandas else []), "pandas": pandas, "network": "no network (separate network namespace)" if isolated_network() else "no network (blocked in the interpreter)", "limits": f"{TIMEOUT} s, 1.5 GB, no file access, no child processes"}
+    return {"enabled": enabled(), "version": sys.version.split()[0], "modules": mods + (["pandas as pd", "numpy as np"] if pandas else []), "pandas": pandas, "network": "no network (separate network namespace)" if isolated_network() else "no network (blocked in the interpreter)", "limits": f"{TIMEOUT} s" + (", 1.5 GB" if sys.platform.startswith("linux") else "") + ", no file writes, no reading or listing files outside Python's own library, no child processes"}
 
 
 class PyError(Exception):

@@ -7,6 +7,7 @@ import os
 import resource
 import sys
 import sysconfig
+import types
 
 proto_in = os.fdopen(os.dup(0), "r", encoding="utf-8")
 proto_out = os.fdopen(os.dup(1), "w", encoding="utf-8")
@@ -46,15 +47,27 @@ if req.get("pandas"):
         pd.DataFrame({"a": [1, 2]}).merge(pd.DataFrame({"a": [1, 2], "c": [3, 4]}), on="a")
         pd.DataFrame({"a": [1, 2]}).sort_values("a").to_dict()
         pd.pivot_table(pd.DataFrame({"a": ["x", "y"], "b": [1, 2], "c": [1, 1]}), index="a", values="b", aggfunc="sum")
+        from pandas.core.computation import expr as pd_expr
+
+        def eval_attribute(self, node, attribute=pd_expr.BaseExprVisitor.visit_Attribute, **kwargs):
+            if node.attr.startswith("_") or node.attr in INSPECT:
+                raise NameError("attributes that start with an underscore are not available")
+            return attribute(self, node, **kwargs)
+
+        pd_expr.BaseExprVisitor.visit_Attribute = eval_attribute
     except Exception:
         pd = np = None
         have = []
 for m in ALLOWED:
     importlib.import_module(m)
 
-ROOTS = tuple(os.path.realpath(p) for p in {sysconfig.get_paths()[k] for k in ("stdlib", "platstdlib", "purelib", "platlib")} | {sys.prefix, sys.base_prefix, sys.exec_prefix} if p)
+ROOTS = tuple(os.path.join(os.path.realpath(p), "") for p in {sysconfig.get_paths()[k] for k in ("stdlib", "platstdlib", "purelib", "platlib")} | ({sys.prefix, sys.base_prefix, sys.exec_prefix} if getattr(sys, "frozen", False) else set()) if p)
 BLOCK = ("socket.", "subprocess.", "os.system", "os.exec", "os.fork", "os.spawn", "os.posix_spawn", "os.kill", "os.remove", "os.rename", "os.replace", "os.mkdir", "os.rmdir", "os.chmod", "os.chown", "os.link", "os.symlink", "os.truncate", "os.putenv", "os.unsetenv", "os.chdir", "os.chroot", "os.setuid", "os.setgid", "shutil.", "ctypes.", "webbrowser", "urllib.Request", "http.client", "smtplib", "ftplib", "telnetlib", "pty.", "fcntl.", "tempfile.", "sqlite3.", "mmap.", "pickle.find_class", "multiprocessing.", "winreg.")
 WRITE = os.O_WRONLY | os.O_RDWR | os.O_CREAT | os.O_APPEND | os.O_TRUNC
+LIST = ("os.listdir", "os.scandir", "glob.glob", "glob.glob/2")
+INSPECT = {"tb_frame", "tb_next", "f_back", "f_builtins", "f_code", "f_globals", "f_locals", "f_trace", "gi_frame", "gi_code", "gi_yieldfrom", "gi_suspended", "cr_await", "cr_frame", "cr_code", "cr_origin", "ag_await", "ag_code", "ag_frame", "co_code", "co_consts", "co_names"}
+DENY = {"operator": {"attrgetter", "methodcaller"}, "string": {"Formatter"}}
+HIDDEN = ("pandas.core", "pandas.compat", "pandas.util", "pandas.testing", "numpy.ctypeslib", "numpy.lib.stride_tricks", "numpy.testing", "numpy.f2py", "numpy.distutils")
 
 
 def audit(event, args):
@@ -66,9 +79,17 @@ def audit(event, args):
         if (mode and any(c in mode for c in "wax+")) or (isinstance(flags, int) and flags & WRITE):
             raise PermissionError("writing files is not available in Python cells")
         p = os.path.realpath(os.fsdecode(path))
-        if p == os.devnull or p.startswith(ROOTS):
+        if p == os.devnull or os.path.join(p, "").startswith(ROOTS):
             return
         raise PermissionError("reading files is not available in Python cells")
+    if event in LIST:
+        path = args[0] if args else None
+        if isinstance(path, int):
+            return
+        p = os.path.realpath(os.path.dirname(os.fsdecode(path)) if event.startswith("glob.") else os.fsdecode(path if path is not None else "."))
+        if os.path.join(p, "").startswith(ROOTS):
+            return
+        raise PermissionError("listing folders is not available in Python cells")
     if event.startswith(BLOCK):
         raise PermissionError("this is not available in Python cells (" + event + ")")
 
@@ -94,16 +115,58 @@ for node in [n for t in before + [tree] for n in ast.walk(t)]:
             raise ImportError("import from " + str(node.module) + " is not available")
     elif isinstance(node, ast.Attribute) and node.attr.startswith("_"):
         raise NameError("attributes that start with an underscore are not available")
+    elif isinstance(node, ast.Attribute) and node.attr in INSPECT:
+        raise NameError(node.attr + " is not available")
     elif isinstance(node, ast.Name) and (node.id in BANNED_NAMES or "__" in node.id):
         raise NameError(node.id + " is not available")
     elif isinstance(node, (ast.Global, ast.Nonlocal)):
         raise SyntaxError("global and nonlocal are not available")
 
 
+shields = {}
+
+
+def shield(mod):
+    if mod.__name__ in shields:
+        return shields[mod.__name__]
+    top = mod.__name__.split(".")[0]
+    deny = DENY.get(mod.__name__, set())
+
+    class Module:
+        __slots__ = ()
+
+        def __getattr__(self, name):
+            if name.startswith("_") or name in deny:
+                raise AttributeError(mod.__name__ + "." + name + " is not available")
+            v = getattr(mod, name)
+            if isinstance(v, types.ModuleType):
+                if v.__name__.split(".")[0] != top or (v.__name__ + ".").startswith(tuple(h + "." for h in HIDDEN)):
+                    raise AttributeError(mod.__name__ + "." + name + " is not available")
+                return shield(v)
+            return v
+
+        def __dir__(self):
+            return [k for k in dir(mod) if not k.startswith("_") and k not in deny]
+
+        def __repr__(self):
+            return "<module '" + mod.__name__ + "'>"
+
+    shields[mod.__name__] = Module()
+    return shields[mod.__name__]
+
+
 def guarded_import(name, globals=None, locals=None, fromlist=(), level=0):
     if level or name.split(".")[0] not in allowed:
         raise ImportError(name + " is not available")
-    return importlib.import_module(name)
+    importlib.import_module(name)
+    parts = name.split(".")
+    head = leaf = shield(importlib.import_module(parts[0]))
+    try:
+        for part in parts[1:]:
+            leaf = getattr(leaf, part)
+    except AttributeError as e:
+        raise ImportError(str(e)) from None
+    return leaf if fromlist else head
 
 
 printed = []
@@ -190,10 +253,10 @@ if HANDLER:
     if isinstance((req.get("context") or {}).get("record"), dict):
         env["record"] = req["context"]["record"]
 for m in ALLOWED:
-    env[m] = importlib.import_module(m)
+    env[m] = shield(importlib.import_module(m))
 if pd is not None:
-    env["pd"] = pd
-    env["np"] = np
+    env["pd"] = shield(pd)
+    env["np"] = shield(np)
 args = req["args"]
 env["args"] = args
 for i, v in enumerate(args):
