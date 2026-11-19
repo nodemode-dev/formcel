@@ -10,6 +10,7 @@ import { FILTER_BAR, pivotChartData } from './pivotchart';
 import { contrast, isLine, shapeSvg } from './shapes';
 import { esc, renderChartAsync, setChartFont } from './svg';
 import { isFloat, newId, type ChartSpec, type FloatObject, type ShapeSpec } from './types';
+import { dockKeeps } from '../ui/dock-keys';
 
 export interface LayerIo {
   book(): number;
@@ -92,7 +93,7 @@ export class ObjectLayer implements ObjectsHook {
     grid.el.addEventListener('pointerdown', (e) => {
       if (this.selected && !(e.target as HTMLElement).closest('.fc-obj, .fc-obj-bar')) this.select(null);
     }, true);
-    document.addEventListener('keydown', (e) => this.key(e), true);
+    document.addEventListener('keydown', (e) => { if (!dockKeeps(e)) this.key(e); }, true);
   }
 
   async open(): Promise<void> {

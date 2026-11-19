@@ -1,4 +1,5 @@
 import type { DockAdapter, DockChannel, DockChatEvent } from './dock/adapter';
+import { jsonLegacy } from './dock/state';
 import { ApiError, dockApi as api, socketTo } from './ui/dock-api';
 import { outsideAgents } from './ui/outside-agents';
 import { isMac } from './ui/rb-dom';
@@ -36,7 +37,7 @@ export function formcelDock(): DockAdapter {
     },
     placement: {
       mode: 'own',
-      storage: { key: 'formcel.dock', legacy: ['formcel.terminal'] },
+      storage: { key: 'formcel.dock', legacy: jsonLegacy(['formcel.terminal'], true) },
       sizes: { minHeight: 120, maxHeightShare: 0.7, defaultHeight: 280, minWidth: 320, maxWidthShare: 0.6, defaultWidth: 440 },
     },
     isDockChord: (e) => (e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey && e.code === 'KeyJ' && !e.repeat && !document.querySelector('.fc-modal:not([hidden])'),

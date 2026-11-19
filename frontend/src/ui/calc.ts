@@ -4,6 +4,7 @@ import { colName, type Range } from '../grid/a1';
 import type { Grid } from '../grid/grid';
 import { ErrCheck } from './errcheck';
 import { EditLinks } from './links';
+import { dockKeeps } from './dock-keys';
 import type { Menu, MenuItem } from './menu';
 import { actions, el, makeModal, type Modal } from './modal';
 
@@ -92,7 +93,7 @@ export class Calc {
     this.bar = { root, calc, circ };
     host.grid.arrayHook = (raw, area) => this.arrayEntry(raw, area);
     host.grid.setDecor((ctx, box, view) => this.draw(ctx, box, view));
-    document.addEventListener('keydown', (e) => this.key(e), true);
+    document.addEventListener('keydown', (e) => { if (!dockKeeps(e)) this.key(e); }, true);
     host.formulaBar.addEventListener('keydown', (e) => {
       if (e.key === 'Enter' && (e.ctrlKey || e.metaKey) && e.shiftKey) {
         e.preventDefault();

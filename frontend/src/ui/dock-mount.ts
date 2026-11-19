@@ -1,5 +1,6 @@
 import { agentActing } from '../automation/actor';
 import { registerCommand } from './commands';
+import { setDockKeeps } from './dock-keys';
 import { Dock, type DockKind } from '../dock/dock';
 import { formcelDock } from '../dock-adapter';
 
@@ -12,6 +13,7 @@ function person(run: () => void | Promise<void>): () => void | Promise<void> {
 
 export function mountDock(app: HTMLElement, titlebar: HTMLElement): Dock {
   const dock = new Dock(formcelDock());
+  setDockKeeps((event) => dock.keeps(event));
   const cmd = (id: string, title: string, description: string, run: () => void | Promise<void>, extra: { keys?: string; checked?: () => boolean } = {}) =>
     registerCommand({ id, title, description, changes: false, run: person(run), ...extra });
   cmd('terminal-toggle', 'Terminal', 'Show or hide the terminal dock at the foot or the right side of the window. Programs in it keep running while it is hidden.', () => dock.toggle(), { keys: 'Mod+J', checked: () => dock.isOpen() });

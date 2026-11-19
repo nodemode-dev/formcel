@@ -1,3 +1,4 @@
+import { dockKeeps } from './dock-keys';
 import { el, isMac, setClass, setHidden } from './rb-dom';
 
 export interface TipHost {
@@ -67,8 +68,8 @@ export class KeyTips {
 
   constructor(private readonly host: TipHost, private readonly allowed: () => boolean) {
     (document.getElementById('overlay-root') ?? document.body).appendChild(this.layer);
-    window.addEventListener('keydown', (e) => this.onDown(e), true);
-    window.addEventListener('keyup', (e) => this.onUp(e), true);
+    window.addEventListener('keydown', (e) => { if (!dockKeeps(e)) this.onDown(e); }, true);
+    window.addEventListener('keyup', (e) => { if (!dockKeeps(e)) this.onUp(e); }, true);
     window.addEventListener('pointerdown', () => { this.armed = false; if (this.level) this.hide(); }, true);
     window.addEventListener('blur', () => { this.armed = false; if (this.level) this.hide(); });
     window.addEventListener('resize', () => { if (this.level) this.hide(); });

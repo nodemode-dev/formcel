@@ -14,6 +14,7 @@ import { generateVba } from './recordVba';
 import { runtime } from './runtime';
 import { Session } from './session';
 import { forget, isTrusted, LEVEL_TEXT, loadTrust, setLevel, trust, type MacroLevel } from './trust';
+import { dockKeeps } from '../ui/dock-keys';
 
 export interface VbaHooks {
   grid: Grid;
@@ -113,7 +114,7 @@ export class Vba {
     this.session.on((e, d) => {
       if (e === 'print') this.pendingPrint.push(String(d));
     });
-    document.addEventListener('keydown', (e) => this.key(e), true);
+    document.addEventListener('keydown', (e) => { if (!dockKeeps(e)) this.key(e); }, true);
     this.store.on((c) => {
       if (c === 'code' || c === 'modules') this.afterEdit();
     });

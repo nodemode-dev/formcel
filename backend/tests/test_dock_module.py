@@ -48,7 +48,7 @@ def test_the_manifest_dock_block_says_bottom_and_right():
     dock = json.loads((REPO / "agents" / "manifest.json").read_text(encoding="utf-8"))["dock"]
     assert dock["positions"] == ["bottom", "right"]
     assert dock["tabs"] == ["chat", "shell", "claude", "codex", "cursor", "agent"]
-    assert "'formcel.dock'" in ADAPTER.read_text(encoding="utf-8") and "legacy: ['formcel.terminal']" in ADAPTER.read_text(encoding="utf-8")
+    assert "'formcel.dock'" in ADAPTER.read_text(encoding="utf-8") and "legacy: jsonLegacy(['formcel.terminal'], true)" in ADAPTER.read_text(encoding="utf-8")
 
 
 MOVE = """
