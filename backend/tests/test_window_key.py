@@ -133,12 +133,12 @@ def test_a_hand_edit_of_agent_access_is_caught(client, monkeypatch):
     seal.reset()
     try:
         client.put("/api/agents/allowed", json={"allowed": True})
-        assert client.get("/api/agents/allowed").json() == {"allowed": True, "seal": "ok", "sealBroken": False}
+        assert client.get("/api/agents/allowed").json() == {"allowed": True, "choice": "allowed", "seal": "ok", "sealBroken": False}
         path = config.DATA_DIR / "settings.json"
         stored = json.loads(path.read_text(encoding="utf-8"))
         stored["seal"] = "0" * 64
         path.write_text(json.dumps(stored), encoding="utf-8")
-        assert client.get("/api/agents/allowed").json() == {"allowed": False, "seal": "broken", "sealBroken": True}
+        assert client.get("/api/agents/allowed").json() == {"allowed": False, "choice": "ask", "seal": "broken", "sealBroken": True}
         assert agents.allowed() is False
     finally:
         client.put("/api/agents/allowed", json={"allowed": False})

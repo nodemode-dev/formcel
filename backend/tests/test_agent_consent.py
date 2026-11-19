@@ -106,3 +106,37 @@ def test_a_tab_token_is_not_asked(client, window, outside):
         assert not box["out"]["isError"]
     finally:
         agents.drop("consent-test-tab")
+
+
+def test_a_waiting_question_is_shown_again_to_the_window_that_comes_back(client, outside, monkeypatch):
+    monkeypatch.setattr(commands, "_catalogue", [COMMAND])
+    monkeypatch.setattr(mcp, "_declined_until", 0.0)
+    client.put("/api/agents/allowed", json={"allowed": False})
+    box = {}
+    worker = threading.Thread(target=lambda: box.update(out=call(client, outside)))
+    with client.websocket_connect(WS + "/api/live") as first:
+        first.send_text(json.dumps({"type": "key", "key": window_key.KEY}))
+        worker.start()
+        question = first.receive_json()
+    with client.websocket_connect(WS + "/api/live") as second:
+        second.send_text(json.dumps({"type": "key", "key": window_key.KEY}))
+        assert second.receive_json() == question
+        second.send_json({"t": "result", "id": question["id"], "ok": True, "result": {"allowed": True, "once": True}})
+        assert second.receive_json() == {"t": "consent-withdrawn", "id": question["id"], "reason": "answered"}
+        ran(second)
+        worker.join(20)
+    assert not box["out"]["isError"] and agents.allowed() is False
+
+
+def test_blocked_refuses_outside_agents_and_the_tabs_own_token(client, window, outside):
+    assert client.put("/api/agents/allowed", json={"choice": "blocked"}).json()["choice"] == "blocked"
+    token = agents.mint("blocked-test-tab")
+    try:
+        for headers in (outside, outside | {agents.INAPP_HEADER: token}):
+            out = call(client, headers)
+            assert out["isError"] and out["content"][0]["text"] == mcp.BLOCKED
+        assert client.put("/api/agents/allowed", json={"allowed": False}).json()["choice"] == "blocked"
+        assert client.put("/api/agents/allowed", json={"allowed": True}).json()["choice"] == "allowed"
+    finally:
+        agents.drop("blocked-test-tab")
+        client.put("/api/agents/allowed", json={"choice": "ask"})

@@ -145,3 +145,8 @@ def test_the_cursor_config_keeps_what_is_already_there(tmp_path):
     (folder / "mcp.json").write_text("not json", encoding="utf-8")
     agent_programs.cursor_config(str(tmp_path), 4321)
     assert (folder / "mcp.json").read_text(encoding="utf-8") == "not json"
+
+
+def test_chat_and_a_claude_code_tab_use_the_tab_entry():
+    assert set(json.loads(claude_code.inapp_mcp_config(4321))["mcpServers"]) == {agent_programs.TAB_SERVER}
+    assert any("mcp__" + agent_programs.TAB_SERVER in part for part in claude_code.terminal_argv("claude", 4321, None, None))
