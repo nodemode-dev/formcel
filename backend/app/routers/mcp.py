@@ -20,6 +20,10 @@ INSTRUCTIONS = ("FormCel is a spreadsheet app open on this computer. Every actio
                 "every change happen. The terminal, Claude Code and chat commands are the person's own and are refused.")
 SWITCH = "Allow outside agents in FormCel's Preferences, Trust Center"
 DECLINE_SECONDS = 600
+CONSENT_SECONDS = 180
+ANSWERS = ("deny", "once", "always")
+ALWAYS_COVERS = "all"
+WITHDRAWN = "consent-withdrawn"
 _sessions: dict[str, str] = {}
 _declined_until = 0.0
 
@@ -47,7 +51,14 @@ def server_port(request: Request) -> int:
     return server[1] if server and server[1] else config.PORT
 
 
-async def consent(client: str) -> str | None:
+def question(rid: str, client: str, cid: str) -> dict:
+    found = commands.find(cid) or {}
+    return {"client": client, "request": rid, "agent": client, "tool": "run_command", "command": cid,
+            "what": f"run the command {found.get('title') or cid}", "answers": list(ANSWERS), "alwaysCovers": ALWAYS_COVERS,
+            "expiresIn": CONSENT_SECONDS, "expiresAt": round(time.time() + CONSENT_SECONDS, 3)}
+
+
+async def consent(client: str, cid: str = "") -> str | None:
     global _declined_until
     if agents.allowed():
         return None
@@ -55,9 +66,15 @@ async def consent(client: str) -> str | None:
         return f"The person chose not to allow outside agents in FormCel just now. Ask them to turn on {SWITCH}, then retry."
     if not bridge.connected():
         return "No FormCel window is open. Start it with ./formcel and open the app, then retry."
-    out = await bridge.call("__consent__", {"client": client}, 180)
-    if out.get("ok") and isinstance(out.get("result"), dict) and out["result"].get("allowed") is True:
-        agents.set_allowed(True)
+    rid = bridge.request_id()
+    asked = time.monotonic()
+    out = await bridge.call("__consent__", question(rid, client, cid), CONSENT_SECONDS, rid)
+    answer = out["result"] if out.get("ok") and isinstance(out.get("result"), dict) else {}
+    reason = "answered" if out.get("ok") else "expired" if time.monotonic() - asked >= CONSENT_SECONDS else "closed"
+    await bridge.tell({"t": WITHDRAWN, "id": rid, "reason": reason})
+    if answer.get("allowed") is True:
+        if answer.get("once") is not True:
+            agents.set_allowed(True)
         return None
     if out.get("ok"):
         _declined_until = time.monotonic() + DECLINE_SECONDS
@@ -76,7 +93,7 @@ async def call_tool(name: str, args: dict, client: str, inapp: bool) -> dict:
     if refusal:
         return text_result(refusal, True)
     if not inapp:
-        why = await consent(client)
+        why = await consent(client, cid)
         if why:
             return text_result(why, True)
     params = args.get("params")
