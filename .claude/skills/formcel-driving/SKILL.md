@@ -17,6 +17,21 @@ FormCel is a spreadsheet app. Its engine runs on `127.0.0.1:8199` and its window
 
 Command ids are dotted, for example `ribbon.collapse`, `ribbon.customize`, `qat.customize` and `app.settings`. Always find an id with `list_commands` first; never guess one.
 
+Commands that take params get them in `run_command`'s `params` (on the command line as `key=value`). Forms, databases and handlers:
+
+| Command | Params | What it does |
+| --- | --- | --- |
+| `data.dbQuery` | `path`, `sql`, `params` | One SELECT on a SQLite file; answers columns and rows |
+| `data.dbExec` | `path`, `sql`, `params` | One INSERT, UPDATE or DELETE; refused until the person allows that database for this workbook |
+| `data.dbAllowWrite` | `path` | Asks the person in the window to allow saving to that database; an agent cannot answer for them |
+| `form.new`, `form.open`, `form.list`, `form.delete` | `id` or `name` | Data forms over a SQLite table |
+| `python.run` | `name` | Runs a Python handler of the workbook and writes the cells it puts; needs Python cells on |
+| `python.panel` | | Opens the Python tab |
+| `view.dashboard` | | Turns dashboard view on or off for the sheet |
+| `report.run` | `template`, `sql`, `out` | Has FormTxt write a list report of the workbook database |
+
+A workbook asks the person before its formulas read local files or web pages; until they answer, those cells show `#N/A`. Do not try to answer that question or the database question yourself.
+
 ## How to work
 
 1. `list_commands` with a word from the person's request (`text: "sort"`).

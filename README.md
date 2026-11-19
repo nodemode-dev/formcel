@@ -94,6 +94,14 @@
   </tr>
 </table>
 
+## Forms, databases and Python handlers
+
+- **SQLite as a data source:** a workbook reads a SQLite file with one SELECT, and saves to it with one INSERT, UPDATE or DELETE only after you allow that database for that workbook on this computer. A workbook you receive from someone else asks again.
+- **Data forms:** browse, add, change and delete the records of a SQLite table one at a time (Developer, Controls, Data Form), with Text Field, Date Field and Data Grid controls on the sheet.
+- **Python handlers:** write handlers on the Python tab and run them from a button or a form. A handler reads cells with `xl()`, the database with `db.query`, saves with `db.execute`, and puts values into cells with `put()`. Handlers use the same Python switch as Python cells.
+- **Dashboard view:** show a sheet without the ribbon, formula bar, headings and gridlines while charts, slicers and controls stay live; Esc returns to the normal view, and the choice is kept per sheet.
+- **Reports:** a button can hand a list report of the workbook's database to FormTxt, which writes a PDF.
+
 ## Under the hood
 
 - **One engine:** every calculation rule lives in `engine/crates/formcel-core`; the WebAssembly and Python builds only translate calls.
