@@ -106,7 +106,7 @@
 
 - **One engine:** every calculation rule lives in `engine/crates/formcel-core`; the WebAssembly and Python builds only translate calls.
 - **Big sheets:** a chunked cell store for 1,048,576 rows by 16,384 columns, with the engine running in a Web Worker so the grid stays responsive.
-- **REST API:** the engine process serves `/api/v1` on 127.0.0.1:8199, with OpenAPI docs at `/api/docs`; 28 chart kinds can be created through it.
+- **REST API:** the engine process serves `/api/v1` on 127.0.0.1:8199, with OpenAPI docs at `/api/docs`; 28 chart kinds can be created through it. A script that changes a workbook through it sends the REST API token you create in Preferences, Assistant and Services: while no token is set only reads are answered, and once one is set every call sends it.
 - **Local by design:** a guard on the engine refuses cross-site requests, and only the FormCel window can change things through the engine; outside agents go through `/mcp` and ask first.
 - **Run only scripts you trust:** Python cells, Apps Script and JavaScript functions are restricted, not sealed off. Python cells and handlers run on Linux and macOS (not on Windows) in a separate process with a time limit, a file-size limit and, on Linux, a memory limit, without network on Linux (its own empty network namespace), with a check on what the code may import and which attributes it may name, modules that hand out their own functions but not other modules, and a hook that blocks file writes, reading and listing folders outside Python's own library, network sockets and starting programs (on macOS the hook is all that stands in the way of the network); Apps Script and JavaScript run in a separate Node process with its file, child-process and worker permissions off and no direct network. These limits stop mistakes and casual misuse, but they are not a security boundary: code written to get around them can. A workbook asks before its formulas read files on this computer or fetch web pages, web functions never reach this computer or private networks, and Apps Script triggers run only after you choose Enable Content for that workbook.
 - **No icon libraries:** the window is vanilla TypeScript with inline `currentColor` SVG icons and token-driven dark and light themes.
@@ -123,7 +123,7 @@ The window, the command line and the MCP server call the same command catalogue,
 ./formcel agents install            # register FormCel with Claude Code, Codex and Cursor for your account
 ```
 
-`.mcp.json`, `.codex/config.toml` and `.cursor/mcp.json` are already wired in this repo. The first command an outside agent runs asks you once, in the window, to allow outside agents. See [`AGENTS.md`](AGENTS.md).
+`.mcp.json`, `.codex/config.toml` and `.cursor/mcp.json` are already wired in this repo. The first command an outside agent runs asks you once, in the window, to allow outside agents; `./formcel cli run` counts as one, so the window must be open and you answer there the first time. Only the window can change that choice (Preferences, Trust Center, Outside agents). See [`AGENTS.md`](AGENTS.md).
 
 ## Demo
 
