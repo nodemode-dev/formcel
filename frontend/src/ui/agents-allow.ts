@@ -1,28 +1,34 @@
 import { api, el, setText } from '../automation/dom';
 import { note, toggleRow } from './controls';
-import { actions, makeModal, type Modal } from './modal';
 import type { Panel } from './settings-engine';
 
-interface Allowed { allowed: boolean; sealBroken?: boolean }
+interface Allowed { allowed: boolean; sealBroken?: boolean; choice?: 'ask' | 'allowed' | 'blocked' }
 
 export function agentsPanel(): Panel {
   const msg = note('', true);
+  const failed = (row: { set(on: boolean): void }, was: boolean) => (err: unknown): void => {
+    row.set(was);
+    setText(msg, err instanceof Error ? err.message : String(err));
+  };
   const row = toggleRow('Allow outside agents', (v) => {
-    void api<Allowed>('PUT', '/api/agents/allowed', { allowed: v }).then(paint, (err: unknown) => {
-      row.set(!v);
-      setText(msg, err instanceof Error ? err.message : String(err));
-    });
+    void api<Allowed>('PUT', '/api/agents/allowed', { allowed: v }).then(paint, failed(row, !v));
+  });
+  const block = toggleRow('Block all agents', (v) => {
+    void api<Allowed>('PUT', '/api/agents/allowed', { choice: v ? 'blocked' : 'ask' }).then(paint, failed(block, !v));
   });
   const paint = (s: Allowed): void => {
     row.set(s.allowed);
-    setText(msg, s.sealBroken
+    block.set(s.choice === 'blocked');
+    setText(msg, s.choice === 'blocked'
+      ? 'Blocked. No agent can run FormCel\'s commands: outside agents, Chat and Claude Code, Codex and Cursor tabs in the dock are all refused. The dock and its plain terminals still open.'
+      : s.sealBroken
       ? 'The saved agent permission was changed outside FormCel, so it is back to Ask.'
       : s.allowed
       ? 'On. Agents connected to FormCel over its MCP endpoint, such as Claude Code, can run FormCel\'s commands in this window.'
       : 'Off. The first time an outside agent calls, FormCel asks here in the window; Allow turns this on. Claude Code started from the terminal dock is not an outside agent.');
   };
   const box = el('div', 'fc-panel');
-  box.append(row.el, msg);
+  box.append(row.el, block.el, msg);
   return {
     el: box,
     async refresh() {
@@ -33,31 +39,4 @@ export function agentsPanel(): Panel {
       }
     },
   };
-}
-
-let modal: Modal | null = null;
-let text: HTMLElement | null = null;
-let answer: ((ok: boolean) => void) | null = null;
-
-function settle(ok: boolean): void {
-  const a = answer;
-  answer = null;
-  if (!a) return;
-  modal?.close();
-  a(ok);
-}
-
-export function askConsent(client: string): Promise<boolean> {
-  settle(false);
-  if (!modal) {
-    modal = makeModal('Allow an outside agent?', { onClose: () => settle(false) });
-    text = el('p', 'fc-note');
-    modal.body.append(text, actions('Allow', () => settle(true), () => settle(false), [], 'Don\'t Allow'));
-  }
-  setText(text!, `${client || 'An outside agent'} asks to use FormCel. Allowed agents can run FormCel's commands on the open workbook, and every change shows in this window. You can turn this off in Preferences, Trust Center, Outside agents.`);
-  const m = modal;
-  return new Promise((ok) => {
-    answer = ok;
-    m.open();
-  });
 }

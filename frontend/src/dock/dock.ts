@@ -1,12 +1,14 @@
-import { FitAddon } from '@xterm/addon-fit';
-import { Terminal } from '@xterm/xterm';
-import '@xterm/xterm/css/xterm.css';
-import type { DockAdapter, DockKind, DockTerminal, PtyKind } from './adapter';
-import { ChatPane } from './chat';
-import { cssToken as token, el, q, setDisabled, setHidden, setText } from './dom';
+import type { DockAdapter, DockAgentStatus, DockAppTab, DockChannel, DockKind, DockTerminal, PtyKind } from './adapter';
+import { ChatPane, OwnChat, type DockChatView } from './chat';
+import { Consent } from './consent';
+import { el, q, setClass, setDisabled, setHidden, setText } from './dom';
 import { dockIcon as icon } from './icons';
-import { moveLegacy, readState, type DockSide, type DockState } from './state';
+import { chordLabel, contain, isChord, leaves } from './keys';
+import { placementFor, type Placement } from './placement';
+import type { DockSide } from './state';
+import type { DockTerm } from './terminal';
 import { strings, type Say } from './strings';
+import { Tour, type TourStep } from './tour';
 
 export type { DockAdapter, DockKind } from './adapter';
 
@@ -15,19 +17,13 @@ type Program = typeof PROGRAMS[number];
 
 interface Tab {
   id: string;
-  term: Terminal;
-  fit: FitAddon;
+  term: DockTerm | null;
   host: HTMLElement;
   tab: HTMLElement;
-  socket: WebSocket | null;
+  channel: DockChannel | null;
   kind: PtyKind;
   seen: boolean;
   closed: boolean;
-}
-
-function termFontSize(): number {
-  const n = parseFloat(token('--dock-term-font-size', '13'));
-  return n > 0 ? n : 13;
 }
 
 export class Dock {
@@ -43,17 +39,23 @@ export class Dock {
   private readonly ask: HTMLInputElement;
   private readonly restartBtn: HTMLButtonElement;
   private readonly tabs = new Map<string, Tab>();
-  private chat: ChatPane | null = null;
+  private readonly owned = new Map<string, { spec: DockAppTab; tab: HTMLElement; host: HTMLElement; mounted: boolean; off: (() => void) | undefined }>();
+  private chat: DockChatView | null = null;
   private chatTab: HTMLElement | null = null;
   private active: string | null = null;
   private started = false;
   private pending: Promise<void> | null = null;
-  private look = '';
+  private emulator: Promise<typeof import('./terminal')> | null = null;
+  private asked: Promise<DockAgentStatus | null> | null = null;
+  private mounted = false;
+  private readonly place: Placement;
   onTab: () => void = () => undefined;
   onChange: () => void = () => undefined;
-  yieldsKey: () => boolean = () => false;
+  onResize: () => void = () => undefined;
+  readonly consent: Consent | null;
+  private readonly tour: Tour;
 
-  constructor(private readonly a: DockAdapter) {
+  constructor(private readonly a: DockAdapter, parts: { consent?: Consent } = {}) {
     const s = strings(a);
     const c = a.classes;
     const ib = `${c.iconButton} ft-dock-ibtn`;
@@ -71,11 +73,12 @@ export class Dock {
       <button type="button" class="${ib} ft-dock-more" title="${s('moreAgents')}" aria-label="${s('moreAgents')}" aria-haspopup="true" aria-expanded="false">${icon('menu', 15)}</button>
       <button type="button" class="${ib} ft-dock-restart" title="${s('restart')}" aria-label="${s('restart')}">${icon('refresh', 15)}</button>
       <button type="button" class="${ib} ft-dock-side" title="${s('toRight')}" aria-label="${s('toRight')}"><span class="ft-dock-side-right">${icon('dockRight', 15)}</span><span class="ft-dock-side-bottom">${icon('dockBottom', 15)}</span></button>
-      <button type="button" class="${ib} ft-dock-hide" title="${s('hide')} (${a.shortcut.label}); ${s('keepRunning')}" aria-label="${s('hide')}">${icon('close', 15)}</button>
+      <button type="button" class="${ib} ft-dock-hide" title="${s('hideTitle', { chord: chordLabel(a) })}" aria-label="${s('hide')}">${icon('close', 15)}</button>
     </div>
     <div class="ft-dock-menu" role="menu" hidden>
       <div class="ft-dock-menu-row" data-kind="codex"><button type="button" class="${c.button} ft-dock-menu-go" role="menuitem">${icon('codex', 13)}<span>${s('codex')}</span></button><p class="ft-dock-menu-how ${c.note}"></p><code class="ft-dock-menu-cmd"></code></div>
       <div class="ft-dock-menu-row" data-kind="cursor"><button type="button" class="${c.button} ft-dock-menu-go" role="menuitem">${icon('cursor', 13)}<span>${s('cursor')}</span></button><p class="ft-dock-menu-how ${c.note}"></p><code class="ft-dock-menu-cmd"></code></div>
+      <div class="ft-dock-menu-row ft-dock-menu-links"><button type="button" class="${c.button} ft-dock-menu-settings" role="menuitem">${s('outsideAgents')}</button><button type="button" class="${c.button} ft-dock-menu-tour" role="menuitem">${s('showAround')}</button></div>
     </div>
     <div class="ft-dock-stage"><p class="ft-dock-empty ${c.note}" hidden>${s('empty')}</p>
       <div class="ft-dock-note" role="status" hidden><span class="ft-dock-note-text"></span><code class="ft-dock-note-cmd" hidden></code><button type="button" class="${c.button} ft-dock-note-copy" hidden>${s('copy')}</button><button type="button" class="${ib} ft-dock-note-x" title="${s('dismiss')}" aria-label="${s('dismiss')}">${icon('close', 12)}</button></div></div>
@@ -94,45 +97,78 @@ export class Dock {
     this.noteCopy = q<HTMLButtonElement>(this.root, '.ft-dock-note-copy');
     this.ask = q<HTMLInputElement>(this.root, '.ft-dock-ask-input');
     this.restartBtn = q<HTMLButtonElement>(this.root, '.ft-dock-restart');
-    const html = document.documentElement;
+    this.place = placementFor(a);
     q(this.root, '.ft-dock-new').addEventListener('click', () => void this.open());
     q(this.root, '.ft-dock-claude').addEventListener('click', () => void this.claude());
     q(this.root, '.ft-dock-chat').addEventListener('click', () => void this.showChat());
     q(this.root, '.ft-dock-hide').addEventListener('click', () => this.toggle(false));
-    q(this.root, '.ft-dock-side').addEventListener('click', () => this.setSide(this.side() === 'right' ? 'bottom' : 'right'));
-    this.migrate();
-    this.labelSide();
+    q(this.root, '.ft-dock-side').addEventListener('click', () => { this.setSide(this.side() === 'right' ? 'bottom' : 'right'); this.focus(); });
     for (const kind of PROGRAMS) {
       q(this.root, `.ft-dock-${kind}`).addEventListener('click', () => void this.program(kind));
       q(this.root, `.ft-dock-menu-row[data-kind="${kind}"] .ft-dock-menu-go`).addEventListener('click', () => { this.menu(false); void this.program(kind); });
     }
     q(this.root, '.ft-dock-more').addEventListener('click', () => { this.menu(q(this.root, '.ft-dock-menu').hidden === true); });
-    document.addEventListener('pointerdown', (e) => { if (!(e.target as Element).closest?.('.ft-dock-menu, .ft-dock-more')) this.menu(false); }, true);
-    void this.programs();
+    q(this.root, '.ft-dock-menu-settings').addEventListener('click', () => { this.menu(false); a.openSettings?.(); });
+    setHidden(q(this.root, '.ft-dock-menu-settings'), !a.openSettings);
+    q(this.root, '.ft-dock-menu-tour').addEventListener('click', () => { this.menu(false); void this.guide(); });
+    this.consent = parts.consent ?? (a.consent ? new Consent(a) : null);
+    this.tour = new Tour(a);
     this.restartBtn.addEventListener('click', () => void this.restart());
     q(this.root, '.ft-dock-ask').addEventListener('submit', (e) => { e.preventDefault(); void this.send(); });
     q(this.root, '.ft-dock-note-x').addEventListener('click', () => this.dismiss());
     this.noteCopy.addEventListener('click', () => { void navigator.clipboard?.writeText(this.noteCmd.textContent ?? '').catch(() => undefined); });
-    this.ask.addEventListener('keydown', (e) => { e.stopPropagation(); });
+    contain(this.root, a);
+    setClass(this.root, 'has-own-chat', !!a.chat && 'pane' in a.chat);
+  }
+
+  mount(host: HTMLElement, before: Node | null = null): void {
+    if (this.mounted) return;
+    this.mounted = true;
+    const a = this.a;
+    host.insertBefore(this.root, before);
+    this.place.start(this.root, q(this.root, '.ft-dock-grip'), {
+      changed: () => { this.labelSide(); this.onChange(); this.fitActive(); },
+      resizing: () => { this.onResize(); },
+      settled: () => { this.keep(); window.dispatchEvent(new Event('resize')); this.focus(); },
+    });
+    this.labelSide();
+    this.refresh();
+    document.addEventListener('pointerdown', (e) => { if (!(e.target as Element).closest?.('.ft-dock-menu, .ft-dock-more')) this.menu(false); }, true);
     new ResizeObserver(() => this.fitActive()).observe(this.stage);
     document.addEventListener('keydown', (e) => {
-      if ((e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey && e.code === a.shortcut.code && !e.repeat && !(this.yieldsKey() && !this.root.contains(e.target as Node))) { e.preventDefault(); e.stopPropagation(); this.toggle(); }
+      if (!isChord(a, e)) return;
+      e.preventDefault();
+      e.stopPropagation();
+      if (!e.repeat) this.toggle();
     }, true);
     a.onTheme(() => this.retheme());
-    new MutationObserver(() => this.retheme()).observe(html, { attributes: true, attributeFilter: ['style', 'class', 'data-theme'] });
-    this.grip(q(this.root, '.ft-dock-grip'), html);
-    a.mount(this.root);
+    new MutationObserver(() => this.retheme()).observe(document.documentElement, { attributes: true, attributeFilter: ['style', 'class', 'data-theme'] });
     if (this.isOpen()) void this.ensure();
   }
 
-  isOpen(): boolean { return document.documentElement.getAttribute('data-ft-dock') === 'open'; }
+  isOpen(): boolean { return this.place.isOpen(); }
+
+  shown(): void {
+    this.place.shown(true);
+    void this.ensure();
+    this.onTab();
+  }
+
+  hidden(): void {
+    this.place.shown(false);
+    this.tour.end(false);
+    this.onTab();
+  }
 
   toggle(on = !this.isOpen(), seed: DockKind | 'none' = 'shell'): void {
-    const html = document.documentElement;
-    html.setAttribute('data-ft-dock', on ? 'open' : 'closed');
+    const p = this.a.placement;
+    if (p.mode === 'hosted') { p.request(on); return; }
+    this.place.setOpen(on);
     this.keep();
     this.onChange();
     window.dispatchEvent(new Event('resize'));
+    if (on && !this.place.seen() && !this.tour.isRunning() && this.a.firstRun?.() !== false) void this.guide();
+    if (!on) this.tour.end(false);
     if (on) void this.ensure(seed);
     this.onTab();
   }
@@ -162,17 +198,58 @@ export class Dock {
   }
 
   private async programs(): Promise<void> {
-    const status = await this.a.agentStatus().catch(() => null);
+    const status = await this.agents();
     for (const kind of PROGRAMS) {
       const st = status?.[kind];
-      const found = !!st?.installed && this.a.tabs.includes(kind);
+      const offered = this.offers(kind);
+      const found = offered && !!st?.installed;
       const row = q(this.root, `.ft-dock-menu-row[data-kind="${kind}"]`);
+      setHidden(row, !offered || !st);
       setHidden(q(this.root, `.ft-dock-${kind}`), !found);
       setHidden(q(row, '.ft-dock-menu-go'), !found);
-      setText(q(row, '.ft-dock-menu-how'), `${this.s(kind)} ${found ? this.s('programReady') : this.s('programMissing')}`);
+      setText(q(row, '.ft-dock-menu-how'), this.s(found ? 'programReady' : 'programMissing', { program: this.s(kind) }));
       setText(q(row, '.ft-dock-menu-cmd'), found ? '' : st?.install ?? '');
       setHidden(q(row, '.ft-dock-menu-cmd'), found || !st?.install);
     }
+  }
+
+  private offers(kind: DockKind): boolean {
+    return this.a.tabs().builtin.includes(kind) && (kind !== 'chat' || !!this.a.chat);
+  }
+
+  activeTab(): string | null { return this.active; }
+
+  refresh(): void {
+    setHidden(q(this.root, '.ft-dock-new'), !this.offers('shell'));
+    setHidden(q(this.root, '.ft-dock-chat'), !this.offers('chat'));
+    setHidden(q(this.root, '.ft-dock-claude'), !this.offers('claude'));
+    setHidden(this.restartBtn, !this.a.terminal.restart);
+    setClass(this.root, 'has-no-ask', !this.offers('claude') && !this.offers('chat'));
+    const want = new Map((this.a.tabs().own ?? []).map((spec) => [spec.id, spec]));
+    for (const [id, o] of [...this.owned]) {
+      if (want.has(id)) continue;
+      o.off?.();
+      o.tab.remove();
+      o.host.remove();
+      this.owned.delete(id);
+      if (this.active !== `own:${id}`) continue;
+      this.active = null;
+      const next = [...this.tabs.keys()].pop() ?? (this.chatTab ? 'chat' : undefined);
+      if (next) this.select(next); else { setHidden(this.empty, false); this.onTab(); }
+    }
+    for (const spec of want.values()) {
+      if (this.owned.has(spec.id)) continue;
+      const tab = el('<button type="button" class="ft-dock-tab is-app" role="tab" aria-selected="false"><span class="ft-icon ft-dock-tab-icon" aria-hidden="true"></span><span class="ft-dock-tab-title"></span></button>');
+      q(tab, '.ft-dock-tab-icon').innerHTML = spec.icon;
+      setText(q(tab, '.ft-dock-tab-title'), spec.label);
+      const host = el('<div class="ft-dock-pane" hidden></div>');
+      tab.addEventListener('click', () => this.select(`own:${spec.id}`));
+      this.tabsEl.appendChild(tab);
+      this.stage.appendChild(host);
+      this.owned.set(spec.id, { spec, tab, host, mounted: false, off: undefined });
+      setHidden(this.empty, true);
+    }
+    if (this.started) void this.programs();
   }
 
   private menu(open: boolean): void {
@@ -188,11 +265,12 @@ export class Dock {
     try {
       const info = await this.a.terminal.open(kind, { cols: size.cols, rows: size.rows });
       if (!this.isOpen()) this.toggle(true, 'none');
-      this.mount(info, true);
+      await this.attach(info, true);
       this.dismiss();
       return true;
     } catch (err) {
-      if (this.a.errors.missingRoute(err) || /not installed/i.test(this.a.errors.message(err) ?? '')) { void this.programs(); this.menu(true); }
+      const kind = this.a.errors.kind?.(err);
+      if (kind === 'oldEngine' || kind === 'notInstalled') { void this.programs(); this.menu(true); }
       else this.warn(err);
       return false;
     }
@@ -208,24 +286,37 @@ export class Dock {
     for (const info of await this.list()) if (info.kind === 'agent') this.adopt(info);
   }
 
-  private saved(): DockState {
-    return readState(localStorage, this.a.storage.key, this.a.storage.legacy, { h: this.a.sizes.defaultHeight, w: this.a.sizes.defaultWidth });
+  private keep(): void { this.place.keep(this.activeKind()); }
+
+  async guide(): Promise<void> {
+    if (!this.isOpen()) {
+      const first = !this.place.seen();
+      this.toggle(true, 'none');
+      if (first) return;
+    }
+    await this.showChat();
+    const claude = (await this.agents())?.claude ?? null;
+    const middle: TourStep = !claude?.installed ? { target: '.ft-dock-claude', title: 'tourMissingTitle', body: 'tourMissingBody', cmd: claude?.install || 'npm install -g @anthropic-ai/claude-code' }
+      : claude.signedIn === false ? { target: '.ft-dock-claude', title: 'tourSignInTitle', body: 'tourSignInBody' }
+        : claude.signedIn === true ? { target: '.ft-dock-claude', title: 'tourReadyTitle', body: 'tourReadyBody' }
+          : { target: '.ft-dock-claude', title: 'tourInstalledTitle', body: 'tourInstalledBody' };
+    const steps: TourStep[] = [
+      { target: '.ft-dock', title: 'tourPanelTitle', body: 'tourPanelBody' },
+      { target: '.ft-dock-ask-input', title: 'tourChatTitle', body: 'tourChatBody' },
+      middle,
+      ...(this.consent ? [{ target: '.ft-dock-more', title: 'tourAskTitle', body: 'tourAskBody' } as TourStep] : []),
+      { target: '.ft-dock-side', title: 'tourSideTitle', body: 'tourSideBody' },
+    ];
+    this.tour.start(steps, () => this.place.markSeen());
   }
 
-  private migrate(): void {
-    moveLegacy(localStorage, this.a.storage.key, this.a.storage.legacy, { h: this.a.sizes.defaultHeight, w: this.a.sizes.defaultWidth });
-  }
+  side(): DockSide { return this.place.side(); }
 
-  private keep(): void {
-    const state: DockState = { open: this.isOpen(), side: this.side(), h: this.height(), w: this.width(), tab: this.activeKind() ?? this.saved().tab };
-    try { localStorage.setItem(this.a.storage.key, JSON.stringify(state)); } catch { return; }
-  }
-
-  side(): DockSide { return document.documentElement.getAttribute('data-ft-dock-side') === 'right' ? 'right' : 'bottom'; }
+  storedSide(): DockSide { return this.place.storedSide(); }
 
   setSide(side: DockSide): void {
-    if (side === this.side()) return;
-    document.documentElement.setAttribute('data-ft-dock-side', side);
+    if (side === this.place.storedSide() && side === this.side()) return;
+    this.place.setSide(side);
     this.labelSide();
     this.keep();
     this.onChange();
@@ -238,57 +329,25 @@ export class Dock {
     const btn = q(this.root, '.ft-dock-side');
     if (btn.title !== label) { btn.title = label; btn.setAttribute('aria-label', label); }
     q(this.root, '.ft-dock-grip').setAttribute('aria-orientation', right ? 'vertical' : 'horizontal');
-  }
-
-  private height(): number {
-    const h = Number(document.documentElement.getAttribute('data-ft-dock-h'));
-    return Number.isFinite(h) && h >= this.a.sizes.minHeight ? h : this.saved().h;
-  }
-
-  private width(): number {
-    const w = Number(document.documentElement.getAttribute('data-ft-dock-w'));
-    return Number.isFinite(w) && w >= this.a.sizes.minWidth ? w : this.saved().w;
-  }
-
-  private grip(grip: HTMLElement, html: HTMLElement): void {
-    grip.addEventListener('pointerdown', (e) => {
-      e.preventDefault();
-      grip.setPointerCapture(e.pointerId);
-      const box = this.root.getBoundingClientRect();
-      const z = this.a.sizes;
-      const right = this.side() === 'right';
-      const move = (ev: PointerEvent): void => {
-        if (right) {
-          const w = Math.round(Math.min(window.innerWidth * z.maxWidthShare, Math.max(z.minWidth, box.right - ev.clientX)));
-          html.setAttribute('data-ft-dock-w', String(w));
-          html.style.setProperty('--ft-dock-wsize', `${w}px`);
-          return;
-        }
-        const h = Math.round(Math.min(window.innerHeight * z.maxHeightShare, Math.max(z.minHeight, box.bottom - ev.clientY)));
-        html.setAttribute('data-ft-dock-h', String(h));
-        html.style.setProperty('--ft-dock-size', `${h}px`);
-      };
-      const up = (): void => {
-        grip.removeEventListener('pointermove', move);
-        grip.removeEventListener('pointerup', up);
-        grip.removeEventListener('pointercancel', up);
-        this.keep();
-        window.dispatchEvent(new Event('resize'));
-      };
-      grip.addEventListener('pointermove', move);
-      grip.addEventListener('pointerup', up);
-      grip.addEventListener('pointercancel', up);
-    });
+    setHidden(btn, !this.place.canRight());
   }
 
   private retheme(): void {
-    const theme = this.theme();
-    const size = termFontSize();
-    const look = JSON.stringify([theme, size]);
-    if (look === this.look) return;
-    this.look = look;
-    for (const x of this.tabs.values()) { x.term.options.theme = theme; if (x.term.options.fontSize !== size) x.term.options.fontSize = size; }
+    for (const x of this.tabs.values()) x.term?.retheme();
     this.fitActive();
+  }
+
+  private load(): Promise<typeof import('./terminal')> {
+    this.emulator ??= import('./terminal');
+    return this.emulator;
+  }
+
+  private agents(): Promise<DockAgentStatus | null> {
+    if (!this.asked) {
+      this.asked = this.a.agentStatus().catch(() => null);
+      void this.asked.then(() => window.setTimeout(() => { this.asked = null; }, 1500));
+    }
+    return this.asked;
   }
 
   private async list(): Promise<DockTerminal[]> {
@@ -308,28 +367,42 @@ export class Dock {
     }
     const shown = !!this.chatTab || [...this.tabs.values()].some((x) => x.kind !== 'agent');
     if (!shown && seed === 'shell') {
-      if (this.saved().tab === 'chat') await this.showChat();
-      else await this.open();
+      const first = this.owned.keys().next();
+      if (this.offers('chat') && (this.place.savedTab() === 'chat' || !this.offers('shell'))) await this.showChat();
+      else if (this.offers('shell')) await this.open();
+      else if (!first.done) this.select(`own:${first.value}`);
     }
     setHidden(this.empty, !!this.chatTab || this.tabs.size > 0);
+    void this.programs();
     this.fitActive();
     this.focus();
     this.onTab();
   }
 
   focus(): void {
-    if (this.active === 'chat') this.ask.focus({ preventScroll: true });
-    else if (this.active) this.tabs.get(this.active)?.term.focus();
+    if (this.active === 'chat' && this.chat?.focus) this.chat.focus();
+    else if (this.active === 'chat') this.ask.focus({ preventScroll: true });
+    else if (this.active) this.tabs.get(this.active)?.term?.focus();
+  }
+
+  async sendChat(text: string): Promise<void> {
+    await this.show('chat');
+    await this.chat?.send(text);
   }
 
   async showChat(): Promise<void> {
+    const c = this.a.chat;
+    if (!c) return;
     if (!this.chat) {
-      const chat = new ChatPane(this.a);
-      chat.onFail = (err) => this.warn(err);
-      chat.onHandoff = (session) => void this.claude(undefined, session);
-      chat.onBash = () => void this.sync();
-      this.chat = chat;
-      this.stage.appendChild(chat.root);
+      if ('pane' in c) this.chat = new OwnChat(c);
+      else {
+        const chat = new ChatPane({ ...this.a, chat: c });
+        chat.onFail = (err) => this.warn(err);
+        chat.onHandoff = (session) => void this.claude(undefined, session);
+        chat.onBash = () => void this.sync();
+        this.chat = chat;
+      }
+      this.stage.appendChild(this.chat.root);
     }
     if (!this.chatTab) {
       const tab = el(`<button type="button" class="ft-dock-tab is-chat" role="tab" aria-selected="false">${icon('agentChat', 13)}<span class="ft-dock-tab-title">${this.s('chat')}</span><span class="ft-dock-tab-x" role="button" aria-label="${this.s('closeChat')}">${icon('close', 11)}</span></button>`);
@@ -389,39 +462,41 @@ export class Dock {
   private dismiss(): void { setHidden(this.note, true); }
 
   private warn(err: unknown): void {
-    this.say(err instanceof Error ? err.message : this.s('failed'));
+    const kind = this.a.errors.kind?.(err);
+    const said = this.a.errors.message(err) ?? (err instanceof Error ? err.message : '');
+    if (kind === 'unreachable') this.say(this.a.words.start ? this.s('offlineStart') : this.s('offline'));
+    else if (kind === 'refused') this.say(said || this.s('refused'));
+    else this.say(said || this.s('failed'));
   }
 
   private async fail(err: unknown, what: 'shell' | 'claude'): Promise<void> {
-    if (what === 'shell') { this.warn(err); return; }
-    const status = (await this.a.agentStatus())?.claude;
+    const kind = this.a.errors.kind?.(err);
+    if (what === 'shell' || kind === 'refused' || kind === 'unreachable') { this.warn(err); return; }
+    const status = (await this.agents())?.claude;
     if (status && !status.installed) {
       this.say(this.s('notInstalled'), status.install);
       return;
     }
-    if (this.a.errors.missingRoute(err)) this.say(this.s('oldEngine'));
+    if (kind === 'oldEngine') this.say(this.s('oldEngine'));
     else this.say(`${this.s('notStarted')} ${err instanceof Error ? err.message : ''}`.trim());
   }
 
-  private theme() {
-    return {
-      background: token('--dock-term-bg', '#111111'),
-      foreground: token('--dock-term-fg', '#f7f7f7'),
-      cursor: token('--dock-term-cursor', '#f97316'),
-      cursorAccent: token('--dock-term-bg', '#111111'),
-      selectionBackground: token('--dock-term-selection', '#f9731633'),
-    };
+  private ended(x: Tab, on: boolean): void {
+    setClass(x.tab, 'is-ended', on);
+    if (x.kind === 'agent') return;
+    const tip = on ? this.s('endedTab') : x.tab.dataset.tip ?? '';
+    if (x.tab.title !== tip) x.tab.title = tip;
   }
 
   private adopt(info: DockTerminal): void {
     if (this.tabs.has(info.id)) return;
-    this.mount(info, this.active === null || info.kind !== 'agent');
+    void this.attach(info, this.active === null || info.kind !== 'agent');
   }
 
   private async open(): Promise<void> {
     try {
       const info = await this.a.terminal.open('shell', { cols: 100, rows: 24 });
-      this.mount(info, true);
+      await this.attach(info, true);
       this.dismiss();
     } catch (err) { await this.fail(err, 'shell'); }
   }
@@ -429,10 +504,10 @@ export class Dock {
   async claude(prompt?: string, resume?: string): Promise<boolean> {
     const size = this.size();
     try {
-      const info = await this.a.terminal.open('claude', { prompt: prompt || undefined, resume: resume || undefined, cols: size.cols, rows: size.rows });
+      const info = await this.a.terminal.open('claude', { cols: size.cols, rows: size.rows, ...(prompt ? { prompt } : {}), ...(resume ? { resume } : {}) });
       if (!this.isOpen()) this.toggle(true, 'none');
       if (this.tabs.has(info.id)) this.select(info.id);
-      else this.mount(info, true);
+      else await this.attach(info, true);
       this.dismiss();
       return true;
     } catch (err) {
@@ -443,21 +518,15 @@ export class Dock {
 
   private size(): { cols: number; rows: number } {
     const tab = this.active ? this.tabs.get(this.active) : null;
-    return tab ? { cols: tab.term.cols, rows: tab.term.rows } : { cols: 100, rows: 20 };
+    return tab?.term ? { cols: tab.term.cols(), rows: tab.term.rows() } : { cols: 100, rows: 20 };
   }
 
-  private mount(info: DockTerminal, show: boolean): void {
+  private async attach(info: DockTerminal, show: boolean): Promise<void> {
     if (this.tabs.has(info.id)) { if (show) this.select(info.id); return; }
     const kind: PtyKind = ['claude', 'agent', 'codex', 'cursor'].includes(info.kind) ? info.kind : 'shell';
     const agent = kind === 'agent';
     const mark = kind === 'claude' ? 'agent' : kind === 'codex' || kind === 'cursor' ? kind : 'terminal';
-    const term = new Terminal({
-      fontFamily: token('--dock-font-mono', 'monospace'), fontSize: termFontSize(), lineHeight: 1.25, cursorBlink: !agent, disableStdin: agent,
-      scrollback: 5000, theme: this.theme(), overviewRuler: { width: 0 },
-    });
-    const fit = new FitAddon();
-    term.loadAddon(fit);
-    const host = el('<div class="ft-term" hidden></div>');
+    const host = el('<div class="ft-term" translate="no" dir="ltr" hidden></div>');
     const tab = el(`<button type="button" class="ft-dock-tab${kind === 'shell' || agent ? '' : ` is-${kind}`}${agent ? ' is-agent' : ''}" role="tab" aria-selected="false">${icon(mark, 13)}<span class="ft-dock-tab-title"></span><span class="ft-dock-tab-x" role="button" aria-label="${this.s('closeTab')}">${icon('close', 11)}</span></button>`);
     setText(q(tab, '.ft-dock-tab-title'), info.title);
     if (agent) tab.title = this.s('agentTab');
@@ -467,46 +536,42 @@ export class Dock {
     });
     this.stage.appendChild(host);
     this.tabsEl.appendChild(tab);
-    const entry: Tab = { id: info.id, term, fit, host, tab, socket: null, kind, seen: false, closed: false };
+    if (info.tip) tab.dataset.tip = info.tip;
+    const entry: Tab = { id: info.id, term: null, host, tab, channel: null, kind, seen: false, closed: false };
     this.tabs.set(info.id, entry);
     setHidden(this.empty, true);
+    this.ended(entry, !info.alive);
+    if (show) this.select(info.id, false);
+    const { createTerm } = await this.load();
+    if (entry.closed) return;
+    const term = createTerm({ agent, scrollback: this.a.terminal.scrollback, leaves: (e) => leaves(this.a, e) });
+    entry.term = term;
     term.open(host);
-    if (agent) term.write('\x1b[?25l');
-    if (show) this.select(info.id, !agent);
-    this.connect(entry);
+    term.onInput((data) => entry.channel?.send(data));
+    if (this.active === info.id) { this.fitActive(); if (show && !agent) term.focus(); }
+    await this.connect(entry);
   }
 
-  private connect(entry: Tab): void {
-    const socket = this.a.terminal.socket(entry.id);
-    socket.binaryType = 'arraybuffer';
-    entry.socket = socket;
-    socket.addEventListener('open', () => this.sendSize(entry));
-    socket.addEventListener('message', (msg) => {
-      entry.seen = true;
-      if (typeof msg.data === 'string') { entry.term.write(msg.data); return; }
-      try {
-        const ctl = JSON.parse(new TextDecoder().decode(msg.data as ArrayBuffer)) as { type?: string };
-        if (ctl.type === 'exit') entry.term.write(`\r\n\x1b[2m[${entry.kind === 'claude' ? 'Claude Code' : entry.kind === 'codex' || entry.kind === 'cursor' ? this.s(entry.kind) : 'shell'} ${this.s('exited')} · ${this.s('restartAgain')}]\x1b[0m\r\n`);
-      } catch { return; }
-    });
-    socket.addEventListener('close', () => {
-      if (!entry.seen && !entry.closed) entry.term.write(`\r\n\x1b[2m[${this.s('noAnswer')}]\x1b[0m\r\n`);
-    });
-    entry.term.onData((data) => {
-      if (socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ type: 'input', data }));
-    });
+  private async connect(entry: Tab): Promise<void> {
+    const silent = (): void => { if (!entry.seen && !entry.closed) this.say(this.s('noAnswer')); };
+    let channel: DockChannel;
+    try { channel = await this.a.terminal.channel(entry.id); } catch { silent(); return; }
+    if (entry.closed) { channel.close(); return; }
+    entry.channel = channel;
+    channel.onData((data) => { entry.seen = true; entry.term?.write(data); });
+    channel.onExit(() => { entry.seen = true; this.ended(entry, true); });
+    channel.onClose?.(() => { if (entry.channel === channel) entry.channel = null; silent(); });
+    this.sendSize(entry);
   }
 
   private sendSize(x: Tab): void {
-    if (x.socket?.readyState === WebSocket.OPEN) x.socket.send(JSON.stringify({ type: 'resize', cols: x.term.cols, rows: x.term.rows }));
+    if (x.term) x.channel?.resize(x.term.cols(), x.term.rows());
   }
 
   private fitActive(): void {
     const x = this.active ? this.tabs.get(this.active) : null;
-    if (!x || x.host.hidden || this.stage.clientHeight < 20) return;
-    const before = `${x.term.cols}x${x.term.rows}`;
-    x.fit.fit();
-    if (`${x.term.cols}x${x.term.rows}` !== before) this.sendSize(x);
+    if (!x?.term || x.host.hidden || this.stage.clientHeight < 20) return;
+    if (x.term.fit()) this.sendSize(x);
   }
 
   private select(id: string, focus = true): void {
@@ -522,8 +587,15 @@ export class Dock {
       this.chatTab.classList.toggle('is-on', id === 'chat');
       this.chatTab.setAttribute('aria-selected', String(id === 'chat'));
     }
+    for (const [oid, o] of this.owned) {
+      const on = `own:${oid}` === id;
+      if (on && !o.mounted) { o.mounted = true; const off = o.spec.mount(o.host); o.off = typeof off === 'function' ? off : undefined; }
+      setHidden(o.host, !on);
+      setClass(o.tab, 'is-on', on);
+      o.tab.setAttribute('aria-selected', String(on));
+    }
     this.syncAsk();
-    setDisabled(this.restartBtn, id === 'chat' || this.tabs.get(id)?.kind === 'agent');
+    setDisabled(this.restartBtn, !this.tabs.has(id) || this.tabs.get(id)?.kind === 'agent');
     this.fitActive();
     if (focus) this.focus();
     this.keep();
@@ -532,18 +604,20 @@ export class Dock {
 
   private async restart(): Promise<void> {
     const x = this.active ? this.tabs.get(this.active) : null;
-    if (!x || x.kind === 'agent') return;
+    if (!x || x.kind === 'agent' || !this.a.terminal.restart) return;
     try { await this.a.terminal.restart(x.id); } catch (err) { this.warn(err); return; }
+    this.ended(x, false);
+    if (!x.channel) { x.term?.reset(); x.seen = false; await this.connect(x); }
     this.sendSize(x);
-    x.term.focus();
+    x.term?.focus();
   }
 
   private async close(id: string): Promise<void> {
     const x = this.tabs.get(id);
     if (!x) return;
     x.closed = true;
-    x.socket?.close();
-    x.term.dispose();
+    x.channel?.close();
+    x.term?.dispose();
     x.host.remove();
     x.tab.remove();
     this.tabs.delete(id);

@@ -13,11 +13,11 @@ export const STRINGS = {
   codex: 'Codex',
   cursor: 'Cursor',
   moreAgents: 'More agents',
-  programMissing: 'is not on this computer yet: install it with the command below, then sign in once in a terminal.',
-  programReady: 'is installed. Start it in a new tab.',
+  programMissing: '{program} is not on this computer yet: install it with the command below, then sign in once in a terminal.',
+  programReady: '{program} is installed. Start it in a new tab.',
   toRight: 'Move the terminal to the right',
   toBottom: 'Move the terminal to the bottom',
-  keepRunning: 'programs keep running',
+  hideTitle: 'Hide Terminal ({chord}); programs keep running',
   empty: 'No terminal is open. Start a shell with the plus button, Claude Code with the agent button, or Chat with the speech bubble.',
   copy: 'Copy',
   dismiss: 'Dismiss',
@@ -33,8 +33,7 @@ export const STRINGS = {
   notStarted: 'Claude Code could not be started.',
   closeTab: 'Close this tab',
   agentTab: "Claude's commands, read only",
-  exited: 'exited',
-  restartAgain: 'Restart runs it again',
+  endedTab: 'This program has ended. Restart this tab to run it again.',
   noAnswer: 'The engine did not answer on this terminal. Restart the engine, then close this tab and open it again.',
   modeLabel: 'Permission mode',
   stop: 'Stop',
@@ -45,14 +44,15 @@ export const STRINGS = {
   modeAuto: 'Auto-accept edits',
   modePlan: 'Plan',
   sendFailed: 'The message could not be sent.',
-  offline: 'The {app} engine is not reachable. Start it with {start}.',
+  offline: 'The {app} engine is not reachable.',
+  offlineStart: 'The {app} engine is not reachable. Start it with {start}.',
+  refused: 'This is not allowed for you here.',
   missing: 'Claude Code is not installed',
   signedIn: 'signed in',
   notSignedIn: 'not signed in: run claude in a terminal and sign in with /login',
   working: 'working',
   ready: 'ready',
   idle: 'not started',
-  lead: "Ask Claude about your {noun} in the line below: {examples}. It works through {app}'s tools, every change shows here and in the window, and each one can be undone.",
   handoffFirst: 'Start a conversation here first; then it can continue in Claude Code',
   handoffBusy: 'Wait for Claude to finish, or press Stop, before moving the conversation',
   allowed: 'Allowed',
@@ -60,13 +60,55 @@ export const STRINGS = {
   stoppedError: 'Claude Code stopped with an error.',
   allow: 'Allow',
   deny: 'Deny',
-  asksToUse: 'Claude Code asks to use',
+  asksToUse: 'Claude Code asks to use {tool}',
+  consentTitle: 'Allow an agent calling itself {agent} to make changes in {app}?',
+  consentTitleUnnamed: 'Allow an outside agent to make changes in {app}?',
+  consentWhat: 'It asked to {what}.',
+  consentCount: 'Request {n} of {total}',
+  consentDeny: 'Deny',
+  consentOnce: 'Allow once',
+  consentAlways: 'Always allow any agent named {agent}',
+  consentAlwaysUnnamed: 'Always allow this agent',
+  consentAlwaysAll: 'Always allow all outside agents',
+  consentChanged: 'The Outside agents setting was changed outside {app}, so {app} asks again.',
+  outsideAgents: 'Outside agents',
+  showAround: 'Show me around',
+  tourCount: 'Step {n} of {total}',
+  tourBack: 'Back',
+  tourNext: 'Next',
+  tourDone: 'Done',
+  tourClose: 'Close the guide',
+  tourPanelTitle: 'This is your helper panel',
+  tourPanelBody: 'This panel is where you talk to Claude, an assistant that can work on your {noun} for you. It stays out of the way until you open it.',
+  tourChatTitle: 'Ask for something in plain words',
+  tourChatBody: 'Type what you want in this line, for example "{example}", and press Enter. Claude does it in {app}.',
+  tourInstalledTitle: 'Claude Code is installed',
+  tourInstalledBody: 'Claude Code is installed. The robot button here opens it; the first time, it may ask you to sign in.',
+  tourMissingTitle: 'Claude Code is not on this computer yet',
+  tourMissingBody: 'For the bigger jobs, {app} uses a free program called Claude Code. To add it, copy the line below, open your computer\'s command window, paste it and press Enter.',
+  tourSignInTitle: 'Sign in to Claude Code once',
+  tourSignInBody: 'Claude Code is installed but not signed in. Press the robot button here: a window opens where you type /login and follow the steps. You only do this once.',
+  tourReadyTitle: 'Claude Code is ready',
+  tourReadyBody: 'Claude Code is installed and signed in. The robot button here opens it when you want it to take on a bigger job.',
+  tourAskTitle: 'You decide what other programs may change',
+  tourAskBody: 'If another AI program on this computer wants to change your {noun}, {app} asks you first in a box in the middle of the window. Choose Deny, Allow once or Always allow. You can change your answer later under Outside agents in the menu here.',
+  tourSideTitle: 'Put the panel where you like it',
+  tourSideBody: 'This button moves the panel to the right side of the window, and back to the bottom. Drag its edge to make it bigger or smaller.',
 } as const;
 
 export type StringKey = keyof typeof STRINGS;
-export type Say = (key: StringKey) => string;
+export type Say = (key: StringKey, vars?: Record<string, string | number>) => string;
+export const SENTENCES: readonly string[] = Object.values(STRINGS);
 
-export function strings(a: DockAdapter): Say {
-  const vars: Record<string, string> = { app: a.app.name, noun: a.app.noun, start: a.app.start, examples: a.app.examples };
-  return (key) => a.t(key, STRINGS[key].replace(/\{(\w+)\}/g, (m, name: string) => vars[name] ?? m));
+export function fill(text: string, vars: Record<string, string | number>): string {
+  return text.replace(/\{(\w+)\}/g, (m, name: string) => { const v = vars[name]; return v === undefined ? m : String(v); });
+}
+
+export function strings(a: Pick<DockAdapter, 'words' | 'strings' | 't'>): Say {
+  const words = { app: a.words.app, noun: a.words.noun, example: a.words.example, start: a.words.start ?? '' };
+  return (key, vars) => fill(a.t(key, a.strings?.[key] ?? STRINGS[key]), { ...words, ...vars });
+}
+
+export function lead(a: Pick<DockAdapter, 'words' | 't'>): string {
+  return fill(a.t('lead', a.words.lead), { app: a.words.app, noun: a.words.noun, example: a.words.example });
 }

@@ -17,5 +17,5 @@ export type DockIcon = keyof typeof ICONS;
 
 export function dockIcon(name: string, size = 16): string {
   const svg = ICONS[name] ?? ICONS.terminal;
-  return `<span class="ft-icon" style="width:${size}px;height:${size}px" aria-hidden="true">${svg}</span>`;
+  return `<span class="ft-icon ft-icon-${size}" aria-hidden="true">${svg}</span>`;
 }

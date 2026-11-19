@@ -64,14 +64,6 @@ export const dockApi = {
     if (!info || typeof info.id !== 'string' || info.id === '') throw new ApiError('Claude Code did not start.', 502);
     return info as TerminalInfo;
   },
-  async claudeCodeStatus(): Promise<ClaudeCodeStatus | null> {
-    let now: Partial<ClaudeCodeStatus> | null = null;
-    try { now = (await (await request('/claude-code/status')).json()) as Partial<ClaudeCodeStatus>; } catch { now = null; }
-    if (now?.installed === true) return { installed: true, version: now.version ?? null, install: '', signedIn: now.signedIn ?? null };
-    const old = await dockApi.claudeStatus();
-    if (!now && !old) return null;
-    return { installed: now ? false : old?.installed === true, version: now?.version ?? old?.version ?? null, install: now?.install || old?.install || '', signedIn: now?.signedIn ?? old?.signedIn ?? null };
-  },
   async claudeStatus(fresh = false): Promise<ClaudeStatus | null> {
     try { return (await (await request(`/agent/claude/status${fresh ? '?fresh=true' : ''}`)).json()) as ClaudeStatus; } catch { return null; }
   },
@@ -82,7 +74,14 @@ export const dockApi = {
   async openAgent(kind: AgentProgram, cols: number, rows: number): Promise<TerminalInfo> {
     return (await (await request('/terminal/agent', json({ kind, cols, rows }))).json()) as TerminalInfo;
   },
-  async agentPrograms(): Promise<Partial<Record<AgentProgram, ClaudeCodeStatus>>> {
-    try { return ((await (await request('/claude-code/status')).json()) as { agents?: Partial<Record<AgentProgram, ClaudeCodeStatus>> }).agents ?? {}; } catch { return {}; }
+  async agentStatus(): Promise<Partial<Record<'claude' | AgentProgram, ClaudeCodeStatus>> | null> {
+    let told: Partial<Record<'claude' | AgentProgram, Partial<ClaudeCodeStatus>>>;
+    try { told = (await (await request('/agents/status')).json()) as typeof told; } catch { return null; }
+    const out: Partial<Record<'claude' | AgentProgram, ClaudeCodeStatus>> = {};
+    for (const name of ['claude', 'codex', 'cursor'] as const) {
+      const p = told[name];
+      if (p) out[name] = { installed: p.installed === true, version: p.version ?? null, install: p.install ?? '', signedIn: p.signedIn ?? null };
+    }
+    return out;
   },
 };

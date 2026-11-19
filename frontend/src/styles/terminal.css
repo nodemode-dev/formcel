@@ -11,7 +11,6 @@
 .ft-dock-ask-mark { width: 26px; height: 26px; }
 .ft-dock-note .fc-btn { height: 26px; font-size: var(--text-sm); }
 .ft-chat-status { padding: 0; }
-.ft-chat-bar .fc-btn, .ft-chat-bar .fc-input { flex: none; width: auto; height: 26px; min-height: 26px; padding: 0 var(--space-3); font-size: var(--text-sm); white-space: nowrap; }
 .ft-chat-install .fc-btn { height: 26px; font-size: var(--text-sm); }
 .ft-chat-tool-mark { width: 12px; height: 12px; }
 .ft-chat-ask-row .fc-btn { height: 26px; font-size: var(--text-sm); }
