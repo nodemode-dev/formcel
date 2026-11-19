@@ -25,6 +25,7 @@ import { isAppsScript } from './scriptCheck';
 import { strip } from './tsStrip';
 import { setVbaRuntime } from '../vbalang/bridge';
 import { macroAllowed } from '../vbalang/types';
+import { askExternal } from './external';
 import { VbaService } from '../vbalang/service';
 
 export interface AppHooks {
@@ -110,6 +111,7 @@ export class Automation {
       },
       cancel: () => this.runner.cancelStreams(),
       note: (t) => h.status(t.slice(0, 140), true),
+      askExternal: () => void askExternal(h.id()).then((on) => { if (on) void this.calls.drain(true, true); }),
     });
     const env: Env = {
       auto: this.auto,

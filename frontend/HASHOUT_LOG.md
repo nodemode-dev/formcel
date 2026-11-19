@@ -74,6 +74,13 @@ The engine refuses every write without `X-Formcel-Window-Key`. main.ts awaits `l
 
 A path in the workbook's `dbWrite` is honoured only when the engine has this machine's record of the person's Allow (`GET/PUT /api/workbooks/{id}/db/allowed`). `Db.allowed` is now async and asks the engine; `Db.allow` still asks the person in the dialog, then adds the path to `dbWrite` if missing and records the Allow; `forbid` and the Data tab switch's off remove both. `paintWrite` sets only the checkbox's `checked`, after the engine answers, and drops answers that arrive after a newer paint (`writeAsk`), so a received workbook shows the switch off.
 
+### External content asks once per workbook
+- refers-to: src/automation/external.ts (askExternal); src/automation/hostCalls.ts (CallHooks.askExternal, drain); src/automation/index.ts; src/vba/trust.ts (trust, forget)
+- kind: decision
+- logged: unreleased · 2026-11-19
+
+When `/api/host/resolve` answers `ask: "external"`, HostCalls calls `askExternal(id)`: one dialog (made once with `makeModal` and reused, like the database question), at most one question per workbook per window session, the answer stored by `PUT /api/workbooks/{id}/trust`, and on Allow a fresh drain of the host calls. The grid is not touched while the dialog is open. `trust()` and `forget()` in vba/trust.ts also tell the engine (`scripts: true` or `false`), which is what lets Apps Script triggers run in that workbook.
+
 ## Open items closed · v0.43.0 (2026-11-13)
 
 ### The demos as browser pages

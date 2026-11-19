@@ -7,7 +7,7 @@ import urllib.request
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
-from ..services import mtext, pquery, qgraph, scheduler, webdata
+from ..services import mtext, pquery, qgraph, scheduler, trust, webdata
 from ..services.store import store
 
 router = APIRouter()
@@ -126,6 +126,22 @@ def db_allow(wid: str, body: DbAllowIn) -> dict:
     except pquery.QueryError as e:
         raise HTTPException(422, str(e))
     return {"allowed": body.allow}
+
+
+class TrustIn(BaseModel):
+    external: bool | None = None
+    scripts: bool | None = None
+
+
+@router.get("/workbooks/{wid}/trust")
+def get_trust(wid: str) -> dict:
+    return {"external": None, "scripts": None, **trust.get(wid), "asked": wid in trust.wanting}
+
+
+@router.put("/workbooks/{wid}/trust")
+def put_trust(wid: str, body: TrustIn) -> dict:
+    _auto(wid)
+    return {"external": None, "scripts": None, **trust.put(wid, body.model_dump())}
 
 
 class PyRunIn(BaseModel):

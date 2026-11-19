@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime
 
 from . import collab as cb
-from . import gasrun
+from . import gasrun, trust
 
 MAX_RUNS = 60
 FAIL_LIMIT = 5
@@ -149,7 +149,7 @@ def matching(auto: dict, kind: str) -> list[tuple[str, str | None]]:
 def spawn(wid: str, kind: str, event: dict | None) -> None:
     from .store import store
 
-    if gasrun.busy.get() or not gasrun.available():
+    if gasrun.busy.get() or not gasrun.available() or not trust.allows(wid, "scripts"):
         return
     try:
         b = store().book(wid)
@@ -240,6 +240,8 @@ def tick() -> None:
         has = any(t.get("type") == "time" and t.get("enabled") for t in server.get("triggers") or [])
         _seen[wid] = (mtime, has)
         if not has:
+            continue
+        if not trust.allows(wid, "scripts"):
             continue
         for t in server["triggers"]:
             if due(t, now):

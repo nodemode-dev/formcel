@@ -1,6 +1,6 @@
 import re
 
-from . import aiclient, appsettings, offline_ai, ranges, webdata
+from . import aiclient, appsettings, offline_ai, ranges, trust, webdata
 from .quotes import model as quote_model
 
 ERRORS = {"#VALUE!", "#N/A", "#DIV/0!", "#NUM!", "#NULL!", "#NAME?", "#REF!"}
@@ -87,7 +87,7 @@ def looks_like_path(s: str) -> bool:
     return bool(re.search(r"[\\/]", t)) or t.lower().endswith((".fcel", ".xlsx", ".xlsm", ".xls", ".csv", ".ods"))
 
 
-def external(book: str, ref: str, books) -> list[list]:
+def external(book: str, ref: str, books, wid: str = "") -> list[list]:
     from . import pqx
 
     b = book.strip()
@@ -119,15 +119,17 @@ def external(book: str, ref: str, books) -> list[list]:
             if w["title"].lower() == b.lower() or w["id"] == b:
                 return ranges.range_values(books, w["id"], f"{sheet}!{area}" if sheet else area)
         raise ValueError(f"the workbook {b} was not found")
+    if not trust.external(wid):
+        raise ValueError(trust.BLOCKED)
     t = pqx.file_table(str(p), sheet, area)
     return t.rows
 
 
-def importrange(args: list, books) -> list[list]:
+def importrange(args: list, books, caller: str = "") -> list[list]:
     need(args, 2)
     wid, ref = text_arg(args[0]), text_arg(args[1])
     if looks_like_path(wid):
-        return external(wid, ref, books)
+        return external(wid, ref, books, caller)
     try:
         return ranges.range_values(books, wid, ref)
     except (KeyError, FileNotFoundError):
@@ -248,7 +250,7 @@ def resolve(key: str, books, fresh: bool = False, auto: dict | None = None, wid:
             return r if isinstance(r, tuple) else (r, "")
         if name in ("EXTERNALREF", "EXTREF"):
             need(args, 2)
-            return encode(external(text_arg(args[0]), text_arg(args[1]), books)), ""
+            return encode(external(text_arg(args[0]), text_arg(args[1]), books, wid)), ""
         if auto is not None:
             from . import jsfn, vbarun
 
@@ -266,8 +268,8 @@ def resolve(key: str, books, fresh: bool = False, auto: dict | None = None, wid:
                     return error("#NAME?"), str(e)
                 except jsfn.JsError as e:
                     return error(e.code if e.code in ERRORS else "#VALUE!"), f"{name}: {e}"
-        if name in ("WEBSERVICE", "IMPORTDATA", "IMPORTXML", "IMPORTHTML", "IMPORTFEED", "GOOGLEFINANCE", "STOCKHISTORY") and not appsettings.external_allowed():
-            return error("#N/A"), "External content is blocked in Preferences, Trust Center."
+        if name in ("WEBSERVICE", "IMPORTDATA", "IMPORTXML", "IMPORTHTML", "IMPORTFEED", "GOOGLEFINANCE", "STOCKHISTORY") and not trust.external(wid):
+            return error("#N/A"), trust.BLOCKED if appsettings.external_allowed() else "External content is blocked in Preferences, Trust Center."
         if name in ("GOOGLEFINANCE", "STOCKHISTORY"):
             from .quotes import service as quote_service
 
@@ -303,7 +305,7 @@ def resolve(key: str, books, fresh: bool = False, auto: dict | None = None, wid:
             need(args, 2)
             return encode(webdata.filter_xml(text_arg(args[0]), text_arg(args[1]))), ""
         if name == "IMPORTRANGE":
-            return encode(importrange(args, books)), ""
+            return encode(importrange(args, books, wid)), ""
         if name == "XREF":
             from . import extbooks
 
