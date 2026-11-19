@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import argparse
 import ast
+import hashlib
 import json
 import os
 import re
@@ -24,7 +25,26 @@ REGISTRY = "formcel"
 MANIFEST = os.path.join(ROOT, "agents", "manifest.json")
 MCP_SOURCE = os.path.join(ROOT, "backend", "app", "routers", "mcp.py")
 STDIO_SOURCE = os.path.join(ROOT, "setup", "mcp_stdio.py")
-DOCK = {"present": True, "positions": ["bottom"], "tabs": ["Terminal", "Claude-Code", "Chat"]}
+DOCK = {"present": True, "positions": ["bottom", "right"], "tabs": ["chat", "shell", "claude", "codex", "cursor", "agent"]}
+DOCK_DIR = os.path.join(ROOT, "frontend", "src", "dock")
+DOCK_MANIFEST = os.path.join(DOCK_DIR, "MANIFEST.json")
+
+
+def dock_files():
+    names = sorted(n for n in os.listdir(DOCK_DIR) if n != "MANIFEST.json" and os.path.isfile(os.path.join(DOCK_DIR, n)))
+    return {n: hashlib.sha256(read_bytes(os.path.join(DOCK_DIR, n))).hexdigest() for n in names}
+
+
+def check_dock(problems):
+    try:
+        kept = json.loads(read_bytes(DOCK_MANIFEST).decode("utf-8")).get("files", {})
+    except (OSError, ValueError, AttributeError):
+        problems.append("frontend/src/dock/MANIFEST.json is missing or not JSON; copy the shared dock module in whole")
+        return
+    now = dock_files()
+    for name in sorted(set(kept) | set(now)):
+        if kept.get(name) != now.get(name):
+            problems.append(f"frontend/src/dock/{name} does not match MANIFEST.json; the shared dock module is never edited here, only copied in whole")
 
 
 def files_under(base):
@@ -161,7 +181,11 @@ def sync():
         if folder != MIRROR and not os.listdir(folder):
             os.rmdir(folder)
     print(f"[agents] .agents/skills mirrors .claude/skills ({len(source)} files, {changed} changed)")
-    return sync_manifest()
+    problems = []
+    check_dock(problems)
+    for line in problems:
+        print(f"[agents] {line}", file=sys.stderr)
+    return sync_manifest() or (1 if problems else 0)
 
 
 def check_drift(problems):
@@ -307,12 +331,13 @@ def check():
     check_skill_format(problems)
     check_agent_files(problems)
     check_manifest(problems)
+    check_dock(problems)
     if problems:
         for line in problems:
             print(f"[agents] {line}", file=sys.stderr)
         print(f"[agents] {len(problems)} problem(s)", file=sys.stderr)
         return 1
-    print("[agents] clean: mirror matches, skills pass the format gate, MCP configs name the launcher, manifest is current")
+    print("[agents] clean: mirror matches, skills pass the format gate, MCP configs name the launcher, manifest is current, the dock module matches its MANIFEST.json")
     return 0
 
 
