@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.44.0 · 2026-11-19
+
+Data forms and databases, Python handlers, a dashboard view, a terminal dock that can sit at the right, and tighter rules for who can change a workbook.
+
+- Data forms: browse, add, change and delete the records of a SQLite table one at a time, with Text Field, Date Field and Data Grid controls.
+- Databases: a workbook reads a SQLite database and saves to it one INSERT, UPDATE or DELETE at a time, only after you allow that database for that workbook on this computer; a workbook from someone else asks again.
+- Python handlers: a new Python tab holds handlers that buttons and forms run, with `db.query`, `db.execute` and `put()`.
+- Dashboard view shows a sheet without the ribbon, formula bar, headings and gridlines, and is kept per sheet.
+- Reports: a Button can have FormTxt write a list report of the workbook's database as a PDF (`report.run`). When FormTxt refuses, its own message is shown, and the result appears in the title bar without moving the workbook name.
+- Terminal dock: the dock can sit at the foot of the window or in a column at the right, and remembers its side and size. Codex and Cursor get tabs of their own when those programs are installed. The first time the dock opens, a short guide walks through it. Keys typed in the dock stay in the dock: Alt no longer brings up the ribbon's key tips while you type in the ask line.
+- Outside agents: the question FormCel asks says which agent wants to do what, and offers Deny, Allow once and Always allow all outside agents. Questions wait their turn, a question still waits after the window reloads, and it goes away when the agent stops waiting. Preferences, Trust Center, Outside agents can block every agent, the dock's own Chat and agent tabs included, and says when the saved permission was changed outside FormCel.
+- Only the FormCel window can change things through the engine; changes from outside the app's window are refused. Outside agents and `./formcel cli run` are asked first. The REST API writes only with its token; without one it reads.
+- Workbooks ask before their formulas read files on this computer or fetch web pages, and remember the answer per workbook; web functions reach public addresses only. Apps Script triggers run only in a workbook you have trusted with Enable Content.
+- Formulas written in Python run with fewer abilities than before. `import numpy.linalg as la`, `import collections.abc` and similar dotted imports now work.
+- The desktop app waits at most 10 seconds for its engine and says that the engine did not start instead of opening a window that cannot make changes. `./formcel mcp` and the Claude Desktop extension find the desktop app's engine.
+- AMOLED Black, a true-black theme for OLED screens, in Preferences, Family theme.
+- For agents: `agents/manifest.json` lists the MCP tools (which only read, which wait for your Allow), the skills and the dock, and `./formcel agents check` fails when it is out of date.
+
 ## 0.43.0 · 2026-11-13
 
 - The three demos also open as offline browser pages (`demo/index.html`, `demos/whatif/index.html`, `demos/lab/index.html`) that run the real FormCel window and recalculate as you edit.
