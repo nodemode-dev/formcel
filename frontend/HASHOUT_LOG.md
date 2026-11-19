@@ -102,6 +102,14 @@ Found by clicking a report Button in headless Chrome at 1440 by 900 against both
 
 From source the bootstrap answers once per engine launch. The page asked it first on every load, so every reload was refused (409) and the engine recorded a second claim that never happened. Now the order is: the packaged global; then the key kept in sessionStorage, if `POST /api/window/check` accepts it; then the bootstrap (a restarted engine has a new key, so the kept one fails and the bootstrap is asked). Same order as FormPath's window-key.ts.
 
+### AMOLED Black
+- refers-to: index.html (pre-paint script: PROFILES 'amoled', OLED); src/ui/family-themes.ts (FAMILY_THEMES 'amoled', FAMILY_OLED, setFamilyTheme); src/styles/tokens.css (:root[data-oled])
+- kind: decision
+- logged: unreleased · 2026-11-19
+
+A true-black theme for OLED screens, as FormTxt has it (its eb5bacd): `--bg-primary`, `--bg-secondary`, `--bg-node` and `--canvas-bg` #000000, `--bg-tertiary` #141414 (inputs, menus and hover fills use it as their only fill), borders #262626 and #3a3a3a, text #ededed, #a6a6a6, #858585; the accent stays the person's own. The pre-paint script is a second copy of the profile table, so the row is in both, and `OLED = { 'amoled': 1 }` sets `data-oled` before first paint; `setFamilyTheme` toggles the attribute only when it changes. True-black exceptions hang on `data-oled`, never on the id. FormCel has no `--bg-hover` or `--border-soft` in its own tokens (hover mostly fills with `--bg-tertiary`); the two-token rule is set anyway for the few rules that read `--bg-hover`. Interface or document: in every dark theme FormCel paints the cell area from the theme (`--cell-bg` is `--canvas-bg`), not paper white, so the grid is interface here and goes black like the rest. The grid canvas already takes its colours from the root tokens in `readPalette` and repaints on a root `style`, `data-theme` or `class` change, so a live switch repaints in place without a new canvas; no other surface needed a `data-oled` rule (measured: title bar, ribbon, formula bar, cells and headings, sheet tabs and status bar all #000000; the only non-black sample was the scroll thumb in the sheet bar).
+- verified: headless Chrome 1440 by 900, 4x CPU, 150 ms and 1.6 Mbit/s, cache off: cold load and hard reload with `amoled` saved, about 98 frames each up to the open workbook, every sample black except the scroll thumb; live switch Studio Dark to AMOLED and back: 4873 elements before and after, none new, none moved, the same grid canvas node.
+
 ### A broken seal is said once, in the Outside agents note
 - refers-to: src/ui/agents-allow.ts (agentsPanel, paint)
 - kind: decision
