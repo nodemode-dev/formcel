@@ -96,6 +96,11 @@ def claim_window_key() -> dict:
     return {"key": key}
 
 
+@app.post("/api/window/check")
+def check_window_key() -> dict:
+    return {"ok": True}
+
+
 @app.get("/api/window/state")
 def window_state() -> dict:
     return {"secondClaim": window_key.STATE["secondClaim"], "packaged": window_key.stdout_mode()}

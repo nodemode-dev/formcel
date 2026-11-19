@@ -59,6 +59,15 @@ def test_the_bootstrap_answers_once(bare, monkeypatch):
     assert bare.post("/api/window/key").status_code == 404
 
 
+def test_a_kept_key_is_checked_without_a_second_claim(bare, monkeypatch):
+    monkeypatch.setitem(window_key.STATE, "claimed", True)
+    monkeypatch.setitem(window_key.STATE, "secondClaim", False)
+    assert bare.post("/api/window/check", headers={window_key.HEADER: window_key.KEY}).json() == {"ok": True}
+    assert bare.post("/api/window/check", headers={window_key.HEADER: "stale"}).status_code == 403
+    assert bare.post("/api/window/check").status_code == 403
+    assert bare.get("/api/window/state").json()["secondClaim"] is False
+
+
 def test_the_live_socket_takes_only_a_keyed_window(bare):
     from app.services import bridge
 

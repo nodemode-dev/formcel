@@ -95,6 +95,13 @@ When `/api/host/resolve` answers `ask: "external"`, HostCalls calls `askExternal
 
 Found by clicking a report Button in headless Chrome at 1440 by 900 against both real engines: the status slot `.fc-save` (where `h.status` writes every message, including the report results and refusals) took a width from its text, so a long refusal made it 76 px and the workbook name beside it lost 4 px, and a short message gave them back. `.fc-tb-doc` now fills its grid column and centres its content, the name has a 260 px basis and the slot a zero basis that grows to its existing 220 px cap, so both widths come from the column and never from the text. Seen after: 72 px before and after every message, no other box moved, no node added. Left for the owner: at 1440 px the menus leave the middle column about 190 px, so the slot shows about ten characters and the full message only on hover (its title), and under 1100 px the slot is hidden.
 
+### A reload tries the kept key first
+- refers-to: src/ui/window-key.ts (loadWindowKey, stillWorks)
+- kind: fix
+- logged: unreleased · 2026-11-19
+
+From source the bootstrap answers once per engine launch. The page asked it first on every load, so every reload was refused (409) and the engine recorded a second claim that never happened. Now the order is: the packaged global; then the key kept in sessionStorage, if `POST /api/window/check` accepts it; then the bootstrap (a restarted engine has a new key, so the kept one fails and the bootstrap is asked). Same order as FormPath's window-key.ts. Seen in headless Chrome: load, reload, reload gave one bootstrap request, a 200 check on each reload, every page write 200 or 201, and `secondClaim: false`.
+
 ## Open items closed · v0.43.0 (2026-11-13)
 
 ### The demos as browser pages
