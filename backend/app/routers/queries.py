@@ -175,10 +175,15 @@ def py_run(wid: str, body: PyRunIn) -> dict:
 FORMTXT_DOWN = "FormTxt is not running. Open it and try again."
 
 
+FORMTXT_TEMPLATE_MAX = 80
+FORMTXT_SQL_MAX = 20_000
+
+
 class ReportIn(BaseModel):
-    template: str = Field(min_length=1, max_length=200)
+    template: str = Field(max_length=4096)
     sql: str = Field(max_length=100_000)
     out: str | None = Field(default=None, max_length=4096)
+    overwrite: bool = False
 
 
 def formtxt_port() -> int:
@@ -193,7 +198,19 @@ async def run_report(wid: str, body: ReportIn) -> dict:
     path = str(((_auto(wid).get("settings") or {}).get("dbPath")) or "")
     if not path:
         raise HTTPException(422, "This workbook has no database yet. Run data.dbAllowWrite or data.dbQuery with a full path first.")
-    payload = {"template": body.template, "data": {"path": path, "sql": body.sql}, "mode": "list", "format": "pdf", "out": body.out}
+    template = body.template.strip()
+    if not template:
+        raise HTTPException(422, "Name the FormTxt document to print with.")
+    if len(template) > FORMTXT_TEMPLATE_MAX:
+        raise HTTPException(422, f"The FormTxt document id is too long: {len(template)} characters, and FormTxt allows {FORMTXT_TEMPLATE_MAX}.")
+    if not body.sql.strip():
+        raise HTTPException(422, "Give the SQL that picks the rows for the report.")
+    if len(body.sql) > FORMTXT_SQL_MAX:
+        raise HTTPException(422, f"The report SQL is too long: {len(body.sql)} characters, and FormTxt allows {FORMTXT_SQL_MAX}.")
+    payload = {"template": template, "data": {"path": path, "sql": body.sql}, "mode": "list", "format": "pdf"}
+    if body.out:
+        payload["out"] = body.out
+        payload["overwrite"] = body.overwrite
     req = urllib.request.Request(f"http://127.0.0.1:{formtxt_port()}/api/reports/run", data=json.dumps(payload).encode("utf-8"), headers={"content-type": "application/json"}, method="POST")
 
     def send() -> dict:

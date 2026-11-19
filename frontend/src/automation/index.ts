@@ -185,10 +185,10 @@ export class Automation {
       for (const [ref, v] of r.writes) await this.write(ref, v);
       return r;
     } });
-    registerCommand({ id: 'report.run', title: 'Run a report', description: 'Print a list report through FormTxt from the workbook database: FormTxt merges the rows into a document and writes a PDF. Params: template (FormTxt document id), sql, out (file to write). FormTxt must be open.', changes: false, run: async (p) => {
+    registerCommand({ id: 'report.run', title: 'Run a report', description: 'Print a list report through FormTxt from the workbook database: FormTxt merges the rows into a document and writes a PDF. Params: template (FormTxt document id), sql, out (file to write), overwrite (true to replace a file that already exists; default false). FormTxt must be open.', changes: false, run: async (p) => {
       const template = typeof p?.template === 'string' ? p.template.trim() : '';
       if (!template) throw new Error('Name the FormTxt document with template=<id>.');
-      const r = await api<{ file?: string | null; records?: number }>('POST', `/api/workbooks/${this.h.id()}/report`, { template, sql: typeof p?.sql === 'string' ? p.sql : '', out: typeof p?.out === 'string' && p.out ? p.out : null });
+      const r = await api<{ file?: string | null; records?: number }>('POST', `/api/workbooks/${this.h.id()}/report`, { template, sql: typeof p?.sql === 'string' ? p.sql : '', ...(typeof p?.out === 'string' && p.out ? { out: p.out, overwrite: p.overwrite === true } : {}) });
       this.h.status(r.file ? `Report written to ${r.file}` : `Report made from ${r.records ?? 0} records`);
       return r;
     } });

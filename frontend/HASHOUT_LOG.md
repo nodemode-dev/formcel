@@ -60,6 +60,13 @@ One class, `fc-dashboard` on `#app`, does the work in CSS: the sheet's rows beco
 
 `report.run` (params `template`, `sql`, `out`) posts to the engine's `/api/workbooks/{id}/report`, which talks to FormTxt; the status line names the written file. A Button can run it: Assign Macro has a Commands group (buttons only) with "Run a report (report.run)" and three fields (template, SQL, save to) that are always in the dialog and enabled only while that entry is chosen, so choosing it does not resize the dialog. The control stores `cmd` and `args`. `fire` runs a stored command only when it is in `CONTROL_COMMANDS` (just `report.run`), so a workbook file cannot make a button run any other command.
 
+### report.run leaves out an empty path and can replace its own file
+- refers-to: src/automation/index.ts (command report.run); src/vba/controls.ts (fire)
+- kind: decision
+- logged: unreleased · 2026-11-19
+
+Found by running the Button's route against FormTxt's real report route. `report.run` used to send `out: null` when no path was given, and FormTxt takes `out` only as a string, so the person saw a raw validation list; it now leaves `out` out of the request when empty. `report.run` gains `overwrite` (default false) and sends it with `out` only. A Button sends `overwrite: true` whenever its "Save the PDF to" box has a path: choosing a fixed path is asking for that Button's previous output to be replaced, and without it the Button worked once and then failed with "already exists". A report with `overwrite` false still refuses an existing file, which is what a caller of the command alone gets. Checked by engine run only (the engine route with the window key against FormTxt's real engine); the Button click itself was not driven in a browser.
+
 ### The window key on every write
 - refers-to: src/ui/window-key.ts (loadWindowKey, keyHeaders, presentKey); src/main.ts; src/app.ts (api, export, import preview, importFile); src/automation/dom.ts (api); src/ui/backstage.ts (api); src/ui/collab.ts (call); src/ui/spell.ts (call); src/datatypes/api.ts (call); src/automation/hostCalls.ts; src/ui/dock-api.ts (request, socketTo); src/automation/bridge.ts; src/automation/tabMore.ts
 - kind: decision

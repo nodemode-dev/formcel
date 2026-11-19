@@ -167,7 +167,7 @@ def formtxt(monkeypatch):
             body = json.loads(self.rfile.read(int(self.headers["content-length"])))
             seen.append((self.path, body))
             ok = body.get("template") != "missing"
-            out = {"id": "r1", "title": "Invoice", "records": 2, "file": body.get("out")} if ok else {"detail": "No document missing."}
+            out = {"id": "r1", "title": "Invoice", "records": 2, "file": body.get("out", "")} if ok else {"detail": "No document missing."}
             self.send_response(200 if ok else 404)
             self.send_header("content-type", "application/json")
             self.end_headers()
@@ -189,10 +189,39 @@ def test_a_report_is_sent_to_formtxt_with_the_workbook_database(client, orders, 
     r = client.post(f"/api/workbooks/{wid}/report", json={"template": "doc1", "sql": "select * from orders", "out": "/tmp/invoice.pdf"})
     assert r.status_code == 200, r.text
     assert r.json() == {"id": "r1", "title": "Invoice", "records": 2, "file": "/tmp/invoice.pdf"}
-    assert formtxt == [("/api/reports/run", {"template": "doc1", "data": {"path": orders, "sql": "select * from orders"}, "mode": "list", "format": "pdf", "out": "/tmp/invoice.pdf"})]
+    assert formtxt == [("/api/reports/run", {"template": "doc1", "data": {"path": orders, "sql": "select * from orders"}, "mode": "list", "format": "pdf", "out": "/tmp/invoice.pdf", "overwrite": False})]
     r = client.post(f"/api/workbooks/{wid}/report", json={"template": "missing", "sql": "select 1"})
     assert r.status_code == 502 and "No document missing." in r.json()["detail"]
     assert client.post(f"/api/workbooks/{_book(client)}/report", json={"template": "doc1", "sql": "select 1"}).status_code == 422
+
+
+def test_a_report_without_a_path_sends_no_out(client, orders, formtxt):
+    wid = _book(client, {"dbPath": orders})
+    for body in ({"template": "doc1", "sql": "select 1"}, {"template": "doc1", "sql": "select 1", "out": None}, {"template": "doc1", "sql": "select 1", "out": "", "overwrite": True}):
+        assert client.post(f"/api/workbooks/{wid}/report", json=body).status_code == 200
+    assert [sent for _, sent in formtxt] == [{"template": "doc1", "data": {"path": orders, "sql": "select 1"}, "mode": "list", "format": "pdf"}] * 3
+
+
+def test_a_report_passes_overwrite_with_its_path(client, orders, formtxt):
+    wid = _book(client, {"dbPath": orders})
+    client.post(f"/api/workbooks/{wid}/report", json={"template": "doc1", "sql": "select 1", "out": "/tmp/a.pdf", "overwrite": True})
+    client.post(f"/api/workbooks/{wid}/report", json={"template": "doc1", "sql": "select 1", "out": "/tmp/a.pdf"})
+    assert [(sent["out"], sent["overwrite"]) for _, sent in formtxt] == [("/tmp/a.pdf", True), ("/tmp/a.pdf", False)]
+
+
+def test_a_report_checks_the_template_and_sql_with_formtxts_limits(client, orders, formtxt):
+    wid = _book(client, {"dbPath": orders})
+    cases = [
+        ({"template": "d" * 81, "sql": "select 1"}, "too long: 81 characters, and FormTxt allows 80"),
+        ({"template": "  ", "sql": "select 1"}, "Name the FormTxt document"),
+        ({"template": "doc1", "sql": "select 1 -- " + "x" * 20_000}, "SQL is too long"),
+        ({"template": "doc1", "sql": "  "}, "Give the SQL"),
+    ]
+    for body, said in cases:
+        r = client.post(f"/api/workbooks/{wid}/report", json=body)
+        assert r.status_code == 422 and said in r.json()["detail"], r.text
+    assert client.post(f"/api/workbooks/{wid}/report", json={"template": "d" * 80, "sql": "select 1"}).status_code == 200
+    assert len(formtxt) == 1
 
 
 def test_a_report_says_when_formtxt_is_not_running(client, orders, monkeypatch):

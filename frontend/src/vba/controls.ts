@@ -213,7 +213,7 @@ export class FormControls {
 
   private fire(c: Ctl): void {
     if (c.cmd && CONTROL_COMMANDS.includes(c.cmd)) {
-      void callCommand(c.cmd, { ...(c.args ?? {}) }).catch((err: unknown) => this.h.say(err instanceof Error ? err.message : String(err), true));
+      void callCommand(c.cmd, { ...(c.args ?? {}), ...(c.args?.out ? { overwrite: true } : {}) }).catch((err: unknown) => this.h.say(err instanceof Error ? err.message : String(err), true));
     } else if (c.py) {
       void this.h.runPy(c.py).then((r) => {
         for (const [ref, v] of r.writes) this.h.write(ref, v === null || v === undefined ? '' : String(v));
