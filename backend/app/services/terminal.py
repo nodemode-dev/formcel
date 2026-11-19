@@ -140,7 +140,7 @@ def open_session(cwd: str | None = None, cols: int = 100, rows: int = 30, title:
 
 def restart(sid: str) -> Session:
     session = get(sid)
-    if session.kind not in ("shell", "claude"):
+    if session.kind not in ("shell", "claude", "codex", "cursor"):
         raise ValueError("The Claude terminal has no shell to restart.")
     old = session.proc
     session.gen += 1
