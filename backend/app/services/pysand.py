@@ -71,7 +71,7 @@ def database(req: dict, db: dict | None, handler: bool) -> dict:
     if req.get("op") == "execute":
         if not handler:
             raise PermissionError("db.execute runs only in a Python handler, not in a cell formula")
-        if not pquery.write_allowed((db or {}).get("auto"), path):
+        if not pquery.write_allowed((db or {}).get("auto"), path, (db or {}).get("wid")):
             raise PermissionError(pquery.WRITE_REFUSED)
         return {"result": pquery.sqlite_exec(path, sql, params)}
     t = pquery.sqlite_table(path, sql, params)

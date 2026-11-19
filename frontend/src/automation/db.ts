@@ -57,8 +57,10 @@ export class Db {
     return text(p) || text(this.h.setting<string>('dbPath'));
   }
 
-  allowed(path: string): boolean {
-    return (this.h.setting<string[]>('dbWrite') ?? []).includes(path);
+  async allowed(path: string): Promise<boolean> {
+    if (!path || !(this.h.setting<string[]>('dbWrite') ?? []).includes(path)) return false;
+    const out = await api<{ allowed: boolean }>('GET', `/api/workbooks/${this.h.id()}/db/allowed?path=${encodeURIComponent(path)}`).catch(() => ({ allowed: false }));
+    return out.allowed === true;
   }
 
   async query(p: Record<string, unknown> = {}): Promise<DbRows> {
@@ -77,16 +79,19 @@ export class Db {
   async allow(p: Record<string, unknown> = {}): Promise<{ allowed: boolean; path: string }> {
     const path = this.path(p.path);
     if (!isAbs(path)) throw new Error('Name the database by its full path, such as path=/Users/me/orders.db.');
-    if (this.allowed(path)) return { allowed: true, path };
+    if (await this.allowed(path)) return { allowed: true, path };
     if (!(await askWrite(path))) return { allowed: false, path };
-    this.h.setSetting('dbWrite', [...(this.h.setting<string[]>('dbWrite') ?? []), path]);
+    const listed = this.h.setting<string[]>('dbWrite') ?? [];
+    if (!listed.includes(path)) this.h.setSetting('dbWrite', [...listed, path]);
     if (!this.h.setting<string>('dbPath')) this.h.setSetting('dbPath', path);
     await this.h.saveNow();
+    await api('PUT', `/api/workbooks/${this.h.id()}/db/allowed`, { path, allow: true });
     return { allowed: true, path };
   }
 
   async forbid(path: string): Promise<void> {
     this.h.setSetting('dbWrite', (this.h.setting<string[]>('dbWrite') ?? []).filter((x) => x !== path));
     await this.h.saveNow();
+    await api('PUT', `/api/workbooks/${this.h.id()}/db/allowed`, { path, allow: false }).catch(() => undefined);
   }
 }

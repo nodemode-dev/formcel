@@ -149,11 +149,16 @@ export class DataTab {
     return this.root.querySelector<T>(`[data-f="${name}"]`)!;
   }
 
+  private writeAsk = 0;
+
   private paintWrite(): void {
     const path = this.f<HTMLInputElement>('path').value.trim();
     const box = this.f<HTMLInputElement>('dbwrite');
-    const on = !!path && ((this.env.auto.settings.dbWrite as string[] | undefined) ?? []).includes(path);
-    if (box.checked !== on) box.checked = on;
+    const listed = !!path && ((this.env.auto.settings.dbWrite as string[] | undefined) ?? []).includes(path);
+    const ask = ++this.writeAsk;
+    const show = (on: boolean): void => { if (ask === this.writeAsk && box.checked !== on) box.checked = on; };
+    if (!listed) { show(false); return; }
+    void api<{ allowed: boolean }>('GET', `/api/workbooks/${this.env.id()}/db/allowed?path=${encodeURIComponent(path)}`).then((r) => show(r.allowed === true), () => show(false));
   }
 
   private async setWrite(on: boolean): Promise<void> {
@@ -163,6 +168,7 @@ export class DataTab {
       else {
         this.env.auto.settings.dbWrite = ((this.env.auto.settings.dbWrite as string[] | undefined) ?? []).filter((x) => x !== path);
         this.env.changed();
+        if (path) await api('PUT', `/api/workbooks/${this.env.id()}/db/allowed`, { path, allow: false });
       }
     } catch (err) {
       setText(this.msg, err instanceof Error ? err.message : String(err));

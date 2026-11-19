@@ -100,12 +100,32 @@ def db_query(wid: str, body: DbIn) -> dict:
 
 @router.post("/workbooks/{wid}/db/exec")
 def db_exec(wid: str, body: DbIn) -> dict:
-    if not pquery.write_allowed(_auto(wid), body.path):
+    if not pquery.write_allowed(_auto(wid), body.path, wid):
         raise HTTPException(403, pquery.WRITE_REFUSED)
     try:
         return pquery.sqlite_exec(body.path, body.sql, body.params)
     except pquery.QueryError as e:
         raise HTTPException(422, str(e))
+
+
+class DbAllowIn(BaseModel):
+    path: str = Field(max_length=4096)
+    allow: bool
+
+
+@router.get("/workbooks/{wid}/db/allowed")
+def db_allowed(wid: str, path: str = "") -> dict:
+    return {"allowed": pquery.write_allowed(_auto(wid), path, wid)}
+
+
+@router.put("/workbooks/{wid}/db/allowed")
+def db_allow(wid: str, body: DbAllowIn) -> dict:
+    _auto(wid)
+    try:
+        pquery.record_allow(wid, body.path, body.allow)
+    except pquery.QueryError as e:
+        raise HTTPException(422, str(e))
+    return {"allowed": body.allow}
 
 
 class PyRunIn(BaseModel):
@@ -127,7 +147,7 @@ def py_run(wid: str, body: PyRunIn) -> dict:
         raise HTTPException(404, f"No Python handler is named {body.name}.")
     b = store().book(wid)
     try:
-        out = pysand.run(code, [], lambda ref: pyxl.read(b, ref), db={"path": settings.get("dbPath") or "", "auto": auto}, handler=True, context={"event": body.event or {}, "record": body.record})
+        out = pysand.run(code, [], lambda ref: pyxl.read(b, ref), db={"path": settings.get("dbPath") or "", "auto": auto, "wid": wid}, handler=True, context={"event": body.event or {}, "record": body.record})
     except pysand.PyError as e:
         raise HTTPException(422, f"{body.name}: {e}")
     reply = {"value": out["value"], "printed": out["print"], "writes": out["writes"]}

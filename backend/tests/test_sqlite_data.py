@@ -74,6 +74,10 @@ def test_db_exec_writes_only_to_a_database_the_workbook_allows(client, orders, t
     other = _book(client, {"dbWrite": [str(tmp_path / "other.db")]})
     assert client.post(f"/api/workbooks/{other}/db/exec", json=body).status_code == 403
     allowed = _book(client, {"dbWrite": [str(tmp_path / ".." / tmp_path.name / "orders.db")]})
+    assert client.post(f"/api/workbooks/{allowed}/db/exec", json=body).status_code == 403
+    assert client.get(f"/api/workbooks/{allowed}/db/allowed", params={"path": orders}).json() == {"allowed": False}
+    assert client.put(f"/api/workbooks/{allowed}/db/allowed", json={"path": orders, "allow": True}).status_code == 200
+    assert client.get(f"/api/workbooks/{allowed}/db/allowed", params={"path": orders}).json() == {"allowed": True}
     r = client.post(f"/api/workbooks/{allowed}/db/exec", json=body)
     assert r.status_code == 200 and r.json()["rowcount"] == 1
     assert _count(orders) == 2
@@ -99,8 +103,12 @@ def test_python_saves_only_from_a_handler_to_an_allowed_database(orders):
         pysand.run("db.execute('delete from orders')", [], db={"path": orders, "auto": {"settings": {"dbWrite": [orders]}}})
     with pytest.raises(pysand.PyError, match="PermissionError: Saving to this database is not allowed"):
         pysand.run("db.execute('delete from orders')", [], db={"path": orders, "auto": {}}, handler=True)
+    listed = {"path": orders, "auto": {"settings": {"dbWrite": [orders]}}, "wid": "handler-test"}
+    with pytest.raises(pysand.PyError, match="PermissionError: Saving to this database is not allowed"):
+        pysand.run("db.execute('delete from orders')", [], db=listed, handler=True)
     assert _count(orders) == 3
-    out = pysand.run("db.execute('delete from orders where id = @id', id=1003)", [], db={"path": orders, "auto": {"settings": {"dbWrite": [orders]}}}, handler=True)
+    pquery.record_allow("handler-test", orders, True)
+    out = pysand.run("db.execute('delete from orders where id = @id', id=1003)", [], db=listed, handler=True)
     assert out["value"] == [["rowcount", 1], ["lastrowid", 0]]
     assert _count(orders) == 2
 
@@ -124,6 +132,8 @@ def test_a_python_handler_reads_the_database_and_queues_cell_writes(client, orde
     assert r.status_code == 422 and "PermissionError" in r.json()["detail"]
     assert client.post(f"/api/workbooks/{wid}/py/run", json={"name": "missing"}).status_code == 404
     allowed = _book(client, {"pyHandlers": handlers, "dbPath": orders, "dbWrite": [orders]})
+    assert client.post(f"/api/workbooks/{allowed}/py/run", json={"name": "drop"}).status_code == 422
+    client.put(f"/api/workbooks/{allowed}/db/allowed", json={"path": orders, "allow": True})
     assert client.post(f"/api/workbooks/{allowed}/py/run", json={"name": "drop"}).status_code == 200
     assert _count(orders) == 2
 

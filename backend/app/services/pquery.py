@@ -171,13 +171,52 @@ def sqlite_exec(path: str, sql: str, params: dict | None = None) -> dict:
 WRITE_REFUSED = "Saving to this database is not allowed for this workbook. Run data.dbAllowWrite in the FormCel window to allow it."
 
 
-def write_allowed(auto: dict | None, path: str) -> bool:
+ALLOWED_FILE = "db-allowed.json"
+
+
+def _real(path: str) -> str | None:
     p = Path(path or "").expanduser()
-    if not p.is_absolute():
+    return os.path.realpath(p) if p.is_absolute() else None
+
+
+def _allowed_record() -> dict:
+    from .. import config
+
+    try:
+        data = json.loads((config.DATA_DIR / ALLOWED_FILE).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def machine_allowed(wid: str | None) -> list[str]:
+    listed = _allowed_record().get(str(wid or ""))
+    return [x for x in listed if isinstance(x, str)] if isinstance(listed, list) else []
+
+
+def record_allow(wid: str, path: str, on: bool) -> list[str]:
+    from .. import config
+
+    want = _real(path)
+    if want is None:
+        raise QueryError("Name the database by its full path.")
+    data = _allowed_record()
+    now = [x for x in machine_allowed(wid) if x != want] + ([want] if on else [])
+    if now:
+        data[wid] = now
+    else:
+        data.pop(wid, None)
+    config.DATA_DIR.mkdir(parents=True, exist_ok=True)
+    (config.DATA_DIR / ALLOWED_FILE).write_text(json.dumps(data, indent=1), encoding="utf-8")
+    return now
+
+
+def write_allowed(auto: dict | None, path: str, wid: str | None = None) -> bool:
+    want = _real(path)
+    if want is None or want not in machine_allowed(wid):
         return False
-    want = os.path.realpath(p)
     listed = ((auto or {}).get("settings") or {}).get("dbWrite") or []
-    return isinstance(listed, list) and any(isinstance(x, str) and Path(x).expanduser().is_absolute() and os.path.realpath(Path(x).expanduser()) == want for x in listed)
+    return isinstance(listed, list) and any(isinstance(x, str) and _real(x) == want for x in listed)
 
 
 def unique(names: list[str]) -> list[str]:

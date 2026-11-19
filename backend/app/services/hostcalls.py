@@ -221,7 +221,7 @@ def python_cell(args: list, books=None, wid: str = ""):
     if wid and books is not None:
         try:
             auto = books(wid).auto or {}
-            db = {"path": (auto.get("settings") or {}).get("dbPath") or "", "auto": auto}
+            db = {"path": (auto.get("settings") or {}).get("dbPath") or "", "auto": auto, "wid": wid}
         except (KeyError, FileNotFoundError):
             db = None
     try:

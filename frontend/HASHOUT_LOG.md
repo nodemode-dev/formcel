@@ -67,6 +67,13 @@ One class, `fc-dashboard` on `#app`, does the work in CSS: the sheet's rows beco
 
 The engine refuses every write without `X-Formcel-Window-Key`. main.ts awaits `loadWindowKey()` once, after the shell is mounted and before `App` starts: the packaged shell's `window.__FORMCEL_WINDOW_KEY` first (read once and deleted), else `POST /api/window/key` (development), else the copy kept in sessionStorage for a reload of the same tab. Every helper that sends a write adds `keyHeaders()`; GET-only fetches are unchanged. `presentKey` sends `{type: "key", key}` as the first message of the live socket and of the terminal and chat streams; it is added as a listener before the caller's `onopen`, so it always goes first. Nothing visible changes. The REST API note in More now says that without a token programs can read but not change workbooks.
 
+### Saving to a database needs this machine's Allow
+- refers-to: src/automation/db.ts (Db.allowed, Db.allow, Db.forbid); src/automation/tabData.ts (paintWrite, setWrite, writeAsk)
+- kind: decision
+- logged: unreleased · 2026-11-19
+
+A path in the workbook's `dbWrite` is honoured only when the engine has this machine's record of the person's Allow (`GET/PUT /api/workbooks/{id}/db/allowed`). `Db.allowed` is now async and asks the engine; `Db.allow` still asks the person in the dialog, then adds the path to `dbWrite` if missing and records the Allow; `forbid` and the Data tab switch's off remove both. `paintWrite` sets only the checkbox's `checked`, after the engine answers, and drops answers that arrive after a newer paint (`writeAsk`), so a received workbook shows the switch off.
+
 ## Open items closed · v0.43.0 (2026-11-13)
 
 ### The demos as browser pages
