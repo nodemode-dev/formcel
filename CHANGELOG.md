@@ -17,6 +17,7 @@ Data forms and databases, Python handlers, a dashboard view, a terminal dock tha
 - The desktop app waits at most 10 seconds for its engine and says that the engine did not start instead of opening a window that cannot make changes. `./formcel mcp` and the Claude Desktop extension find the desktop app's engine.
 - AMOLED Black, a true-black theme for OLED screens, in Preferences, Family theme.
 - For agents: `agents/manifest.json` lists the MCP tools (which only read, which wait for your Allow), the skills and the dock, and `./formcel agents check` fails when it is out of date.
+- macOS: the app is built so that Apple's notary accepts it. The engine carries its Python library once, as a plain file; a second copy inside a framework folder carried a signature that was wrong where it sat, and the notary refuses an app with one.
 
 ## 0.43.0 · 2026-11-13
 
