@@ -8,9 +8,10 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from .. import config
-from ..services import agents, bridge
+from ..services import agent_programs, agents, bridge
 from ..version import VERSION
 from . import commands
+from .terminal import require_local
 
 router = APIRouter()
 
@@ -182,6 +183,12 @@ def put_allowed(body: Allowed) -> dict:
     global _declined_until
     _declined_until = 0.0
     return {"allowed": agents.set_allowed(body.allowed)}
+
+
+@router.get("/api/agents/status")
+def agent_status(request: Request, fresh: bool = False) -> dict:
+    require_local(request)
+    return agent_programs.report(fresh=fresh)
 
 
 @router.get("/api/mcp/status")
