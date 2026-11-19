@@ -33,9 +33,21 @@ def resolve(message: dict) -> None:
         fut.set_result(message)
 
 
-async def call(command: str, params: dict, timeout: float = 60) -> dict:
+def request_id() -> str:
+    return f"r{next(_ids)}"
+
+
+async def tell(message: dict) -> None:
+    for key, ws in sorted(_windows.items()):
+        try:
+            await ws.send_json(message)
+        except Exception:
+            detach(key)
+
+
+async def call(command: str, params: dict, timeout: float = 60, request: str | None = None) -> dict:
     for key, ws in sorted(_windows.items(), reverse=True):
-        rid = f"r{next(_ids)}"
+        rid = request or f"r{next(_ids)}"
         fut = asyncio.get_running_loop().create_future()
         _pending[rid] = fut
         _owner[rid] = key

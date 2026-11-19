@@ -1,5 +1,6 @@
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 
+from .. import window_key
 from ..services import bridge
 
 router = APIRouter()
@@ -12,6 +13,8 @@ async def live(ws: WebSocket) -> None:
         await ws.close(code=4403)
         return
     await ws.accept()
+    if not await window_key.admit(ws):
+        return
     key = bridge.attach(ws)
     try:
         while True:

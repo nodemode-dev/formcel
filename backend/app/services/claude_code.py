@@ -8,6 +8,7 @@ import subprocess
 import sys
 import threading
 import time
+import uuid
 from pathlib import Path
 
 from .. import config
@@ -330,7 +331,7 @@ def start(mode: str = "ask", fresh: bool = False, port: int | None = None) -> di
     AGENT.names.clear()
     set_state("starting")
     try:
-        proc = subprocess.Popen(args, cwd=str(config.REPO_DIR), env=child_env() | ({INAPP_VAR: agents.INAPP_TOKEN} if port else {}), stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, bufsize=1)
+        proc = subprocess.Popen(args, cwd=str(config.REPO_DIR), env=child_env() | ({INAPP_VAR: agents.mint("chat")} if port else {}), stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, bufsize=1)
     except OSError as exc:
         set_state("exited")
         raise RuntimeError(f"Claude Code could not start: {exc}")
@@ -355,6 +356,7 @@ def stop(quiet: bool = False) -> dict:
     proc = AGENT.proc
     AGENT.gen += 1
     AGENT.proc = None
+    agents.drop("chat")
     for gate in list(AGENT.waiting.values()):
         gate["allow"] = False
         gate["event"].set()
@@ -386,15 +388,15 @@ def program() -> str | None:
 
 
 def inapp_mcp_config(port: int) -> str:
-    return json.dumps({"mcpServers": {"formcel": {"type": "http", "url": f"http://127.0.0.1:{port}/mcp", "headers": {agents.INAPP_HEADER: "${" + INAPP_VAR + "}"}}}})
+    return json.dumps({"mcpServers": {"formcel_tab": {"type": "http", "url": f"http://127.0.0.1:{port}/mcp", "headers": {agents.INAPP_HEADER: "${" + INAPP_VAR + "}"}}}})
 
 
 def terminal_env() -> dict:
-    return {k: v for k, v in terminal.base_env().items() if not k.startswith("CLAUDE") or k in KEEP_ENV} | {INAPP_VAR: agents.INAPP_TOKEN}
+    return {k: v for k, v in terminal.base_env().items() if not k.startswith("CLAUDE") or k in KEEP_ENV} | {INAPP_VAR: agents.mint(uuid.uuid4().hex)}
 
 
 def terminal_argv(path: str, port: int, prompt: str | None, resume: str | None) -> list[str]:
-    cmd = [path, "--mcp-config", inapp_mcp_config(port), "--allowedTools", "mcp__formcel", "--append-system-prompt", TERMINAL_NOTE]
+    cmd = [path, "--mcp-config", inapp_mcp_config(port), "--allowedTools", "mcp__formcel_tab", "--append-system-prompt", TERMINAL_NOTE]
     if resume:
         cmd += ["--strict-mcp-config", "--resume", resume]
     if prompt:

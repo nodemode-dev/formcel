@@ -90,7 +90,9 @@ def app():
 def client(app):
     from fastapi.testclient import TestClient
 
-    with TestClient(app, base_url=own_origin()) as c:
+    from app import window_key
+
+    with TestClient(app, base_url=own_origin(), headers={window_key.HEADER: window_key.KEY}) as c:
         yield c
 
 

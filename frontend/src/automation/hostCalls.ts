@@ -1,4 +1,5 @@
 import { engine, type Changed } from '../engine';
+import { keyHeaders } from '../ui/window-key';
 
 type Scalar = string | number | boolean | null;
 
@@ -52,6 +53,7 @@ export interface CallHooks {
   custom(name: string, args: unknown[], stream?: (v: unknown) => void): Promise<unknown>;
   cancel(): void;
   note(text: string): void;
+  askExternal?(): void;
 }
 
 export class HostCalls {
@@ -115,12 +117,13 @@ export class HostCalls {
         const answers = new Map<string, string>();
         if (web.length) {
           try {
-            const r = await fetch('/api/host/resolve', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ keys: web, fresh, workbook: this.h.workbook() }) });
-            const j = (await r.json()) as { results: Record<string, { data: string; note: string }> };
+            const r = await fetch('/api/host/resolve', { method: 'POST', headers: { 'content-type': 'application/json', ...keyHeaders() }, body: JSON.stringify({ keys: web, fresh, workbook: this.h.workbook() }) });
+            const j = (await r.json()) as { results: Record<string, { data: string; note: string }>; ask?: string };
             for (const [k, v] of Object.entries(j.results)) {
               answers.set(k, v.data);
               if (v.note) this.h.note(v.note);
             }
+            if (j.ask === 'external') this.h.askExternal?.();
           } catch (err) {
             for (const k of web) answers.set(k, 'e:#N/A');
             this.h.note(`The engine process could not be reached: ${err instanceof Error ? err.message : String(err)}`);

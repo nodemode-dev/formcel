@@ -4,7 +4,8 @@ import json
 from fastapi import APIRouter, HTTPException, Request, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel, Field
 
-from ..services import claude_code, terminal
+from .. import window_key
+from ..services import agent_programs, claude_code, terminal
 from .terminal import document_folder, origin_ok, release_socket, require_local, server_port, take_socket
 
 router = APIRouter(prefix="/api/agent/claude", tags=["agent"])
@@ -35,7 +36,7 @@ def status(request: Request, fresh: bool = False) -> dict:
 def window_status(request: Request, fresh: bool = False) -> dict:
     require_local(request)
     tab = next((s.describe() for s in terminal.SESSIONS.values() if s.kind == "claude"), None)
-    return claude_code.info(fresh=fresh) | {"folder": claude_code.workdir(document_folder()), "terminal": tab}
+    return claude_code.info(fresh=fresh) | {"folder": claude_code.workdir(document_folder()), "terminal": tab, "agents": agent_programs.status()}
 
 
 @router.post("/start")
@@ -86,6 +87,9 @@ async def stream(ws: WebSocket) -> None:
         await ws.close(code=4429)
         return
     await ws.accept()
+    if not await window_key.admit(ws):
+        release_socket()
+        return
     queue: asyncio.Queue = asyncio.Queue()
     claude_code.AGENT.subscribers.add(queue)
 

@@ -20,6 +20,8 @@ export interface ChromeHost {
   save(): void;
   viewMode(): ViewMode;
   setViewMode(m: ViewMode): void;
+  dashboard(): boolean;
+  setDashboard(on: boolean): void;
   a11y(): Promise<{ bad: number; tips: number } | null>;
   toast(text: string): void;
 }
@@ -97,6 +99,8 @@ export function mountChrome(p: ShellParts, h: ChromeHost): StatusBar {
     save: () => h.save(),
     viewMode: () => h.viewMode(),
     setViewMode: (m) => h.setViewMode(m),
+    dashboard: () => h.dashboard(),
+    setDashboard: (on) => h.setDashboard(on),
     about,
     toast: (t) => h.toast(t),
   });

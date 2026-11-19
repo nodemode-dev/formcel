@@ -1,12 +1,13 @@
 import asyncio
 import json
+from typing import Literal
 from urllib.parse import urlparse
 
 from fastapi import APIRouter, HTTPException, Request, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel, Field
 
-from .. import config
-from ..services import claude_code, terminal
+from .. import config, window_key
+from ..services import agent_programs, claude_code, terminal
 
 router = APIRouter(prefix="/api/terminal", tags=["terminal"])
 
@@ -68,6 +69,12 @@ class ClaudeBody(BaseModel):
     fresh: bool = False
 
 
+class AgentBody(BaseModel):
+    kind: Literal["codex", "cursor"]
+    cols: int = Field(100, ge=10, le=500)
+    rows: int = Field(30, ge=4, le=200)
+
+
 def server_port(request: Request) -> int:
     server = request.scope.get("server")
     return server[1] if server and server[1] else int(terminal.engine_port())
@@ -111,6 +118,17 @@ def open_claude(body: ClaudeBody, request: Request) -> dict:
         raise HTTPException(status_code=500, detail=f"Claude Code could not start: {exc}")
 
 
+@router.post("/agent")
+def open_agent(body: AgentBody, request: Request) -> dict:
+    require_local(request)
+    try:
+        return agent_programs.open_terminal(body.kind, server_port(request), body.cols, body.rows, document_folder())
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    except OSError as exc:
+        raise HTTPException(status_code=500, detail=f"The program could not start: {exc}")
+
+
 @router.post("/{sid}/resize")
 def resize_terminal(sid: str, body: SizeBody, request: Request) -> dict:
     require_local(request)
@@ -147,6 +165,9 @@ async def attach(ws: WebSocket, sid: str) -> None:
         await ws.close(code=4429)
         return
     await ws.accept()
+    if not await window_key.admit(ws):
+        release_socket()
+        return
     try:
         session = terminal.get(sid)
     except KeyError:

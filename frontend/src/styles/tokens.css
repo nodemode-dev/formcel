@@ -73,5 +73,10 @@
   --shadow-md: 0 4px 14px rgba(96, 90, 70, 0.16);
 }
 
+:root[data-oled] {
+  --bg-hover: rgba(255, 255, 255, 0.1);
+  --border-soft: rgba(255, 255, 255, 0.12);
+}
+
 :root.fc-density-compact { --bar-h: 38px; --icon-box: 24px; }
 :root.fc-density-comfortable { --bar-h: 50px; --icon-box: 32px; }

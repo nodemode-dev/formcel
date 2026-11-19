@@ -8,7 +8,10 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
-BASE = f"http://127.0.0.1:{os.environ.get('FORMCEL_PORT', '8199')}/api/commands"
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from mcp_stdio import PORT
+
+BASE = f"http://127.0.0.1:{PORT}/api/commands"
 USAGE = "usage: ./formcel cli list [text] | describe <id> | run <id> [key=value ...]"
 
 
@@ -37,6 +40,30 @@ def get(url: str, body: dict | None = None) -> dict:
         raise SystemExit(f"[formcel] the reply from {url} is not JSON; check that FORMCEL_PORT names the FormCel engine.")
 
 
+def run_over_mcp(cid: str, params: dict) -> tuple[bool, object]:
+    import mcp_stdio
+
+    hello = {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"protocolVersion": "2025-06-18", "capabilities": {}, "clientInfo": {"name": "formcel cli", "version": mcp_stdio.read_version()}}}
+    call = {"jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": {"name": "run_command", "arguments": {"id": cid, "params": params}}}
+    replies = []
+    for message in (hello, call):
+        raw = mcp_stdio.forward(json.dumps(message))
+        try:
+            replies.append(json.loads(raw or "null") or {})
+        except ValueError:
+            return False, f"the reply from {mcp_stdio.URL} is not JSON; check that FORMCEL_PORT names the FormCel engine."
+    reply = replies[-1]
+    if "error" in reply:
+        return False, reply["error"].get("message", "the command failed")
+    outcome = reply.get("result") or {}
+    text = "".join(part.get("text", "") for part in outcome.get("content") or [] if isinstance(part, dict))
+    try:
+        result = json.loads(text)
+    except ValueError:
+        result = text
+    return not outcome.get("isError"), result
+
+
 def main(argv: list[str]) -> None:
     if not argv or argv[0] in ("-h", "--help", "help"):
         print(USAGE)
@@ -54,9 +81,9 @@ def main(argv: list[str]) -> None:
         print(json.dumps(get(f"{BASE}/{urllib.parse.quote(rest[0])}"), indent=2))
     elif cmd == "run" and rest:
         params = {k: value(v) for k, _, v in (a.partition("=") for a in rest[1:]) if k}
-        out = get(f"{BASE}/{urllib.parse.quote(rest[0])}", {"params": params})
-        print(json.dumps(out.get("result") if out.get("ok") else out, indent=2))
-        if not out.get("ok"):
+        ok, result = run_over_mcp(rest[0], params)
+        print(json.dumps(result, indent=2) if ok else f"[formcel] {result}")
+        if not ok:
             raise SystemExit(1)
     else:
         raise SystemExit(USAGE)

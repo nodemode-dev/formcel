@@ -1,16 +1,18 @@
+import asyncio
 import json
 import secrets
 import time
-from typing import Any
+from typing import Any, Literal
 
 from fastapi import APIRouter, Request, Response
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from .. import config
-from ..services import agents, bridge
+from ..services import agent_programs, agents, bridge
 from ..version import VERSION
 from . import commands
+from .terminal import require_local
 
 router = APIRouter()
 
@@ -20,14 +22,20 @@ INSTRUCTIONS = ("FormCel is a spreadsheet app open on this computer. Every actio
                 "every change happen. The terminal, Claude Code and chat commands are the person's own and are refused.")
 SWITCH = "Allow outside agents in FormCel's Preferences, Trust Center"
 DECLINE_SECONDS = 600
+CONSENT_SECONDS = 180
+RELOAD_SECONDS = 10
+BLOCKED = "Agents are blocked in FormCel's Preferences, Trust Center, Outside agents. Only the person at the window can change that. Do not retry."
+ANSWERS = ("deny", "once", "always")
+ALWAYS_COVERS = "all"
+WITHDRAWN = "consent-withdrawn"
 _sessions: dict[str, str] = {}
 _declined_until = 0.0
 
 TOOLS = [
     {"name": "list_commands", "description": "List the commands the FormCel window can run, optionally only those matching every word of text.",
-     "inputSchema": {"type": "object", "properties": {"text": {"type": "string"}}}},
+     "inputSchema": {"type": "object", "properties": {"text": {"type": "string"}}}, "annotations": {"readOnlyHint": True}},
     {"name": "describe_command", "description": "Describe one command: its title, what it does, whether it changes the workbook and its keys.",
-     "inputSchema": {"type": "object", "properties": {"id": {"type": "string"}}, "required": ["id"]}},
+     "inputSchema": {"type": "object", "properties": {"id": {"type": "string"}}, "required": ["id"]}, "annotations": {"readOnlyHint": True}},
     {"name": "run_command", "description": "Run a command in the open FormCel window and return its answer.",
      "inputSchema": {"type": "object", "properties": {"id": {"type": "string"}, "params": {"type": "object"}}, "required": ["id"]}},
 ]
@@ -47,7 +55,42 @@ def server_port(request: Request) -> int:
     return server[1] if server and server[1] else config.PORT
 
 
-async def consent(client: str) -> str | None:
+def question(rid: str, client: str, cid: str) -> dict:
+    found = commands.find(cid) or {}
+    return {"client": client, "request": rid, "agent": client, "tool": "run_command", "command": cid,
+            "what": f"run the command {found.get('title') or cid}", "answers": list(ANSWERS), "alwaysCovers": ALWAYS_COVERS,
+            "expiresIn": CONSENT_SECONDS, "expiresAt": round(time.time() + CONSENT_SECONDS, 3)}
+
+
+async def wait_for_answer(rid: str, ask: dict, gone: Any) -> tuple[dict, str]:
+    asked = time.monotonic()
+    away = 0.0
+    while True:
+        left = CONSENT_SECONDS - (time.monotonic() - asked)
+        if left <= 0:
+            return {}, "expired"
+        if gone is not None and await gone():
+            return {}, "hungup"
+        if not bridge.connected():
+            away = away or time.monotonic()
+            if time.monotonic() - away >= RELOAD_SECONDS:
+                return {}, "closed"
+            await asyncio.sleep(0.2)
+            continue
+        away = 0.0
+        task = asyncio.ensure_future(bridge.call("__consent__", ask, left, rid))
+        while not task.done():
+            await asyncio.wait({task}, timeout=0.5)
+            if not task.done() and gone is not None and await gone():
+                task.cancel()
+                await asyncio.gather(task, return_exceptions=True)
+                return {}, "hungup"
+        out = task.result()
+        if out.get("ok"):
+            return out, "answered"
+
+
+async def consent(client: str, cid: str = "", gone: Any = None) -> str | None:
     global _declined_until
     if agents.allowed():
         return None
@@ -55,16 +98,20 @@ async def consent(client: str) -> str | None:
         return f"The person chose not to allow outside agents in FormCel just now. Ask them to turn on {SWITCH}, then retry."
     if not bridge.connected():
         return "No FormCel window is open. Start it with ./formcel and open the app, then retry."
-    out = await bridge.call("__consent__", {"client": client}, 180)
-    if out.get("ok") and isinstance(out.get("result"), dict) and out["result"].get("allowed") is True:
-        agents.set_allowed(True)
+    rid = bridge.request_id()
+    out, reason = await wait_for_answer(rid, question(rid, client, cid), gone)
+    answer = out["result"] if out.get("ok") and isinstance(out.get("result"), dict) else {}
+    await bridge.tell({"t": WITHDRAWN, "id": rid, "reason": reason})
+    if answer.get("allowed") is True:
+        if answer.get("once") is not True:
+            agents.set_allowed(True)
         return None
     if out.get("ok"):
         _declined_until = time.monotonic() + DECLINE_SECONDS
     return f"The person did not allow outside agents in FormCel. Ask them to turn on {SWITCH}, then retry."
 
 
-async def call_tool(name: str, args: dict, client: str, inapp: bool) -> dict:
+async def call_tool(name: str, args: dict, client: str, inapp: bool, gone: Any = None) -> dict:
     if name == "list_commands":
         rows = commands.search(str(args.get("text") or ""))
         return text_result({"commands": [{k: c.get(k) for k in ("id", "title", "description")} for c in rows], "hint": "" if commands._catalogue else commands.EMPTY})
@@ -75,8 +122,10 @@ async def call_tool(name: str, args: dict, client: str, inapp: bool) -> dict:
     refusal = commands.window_only(cid)
     if refusal:
         return text_result(refusal, True)
+    if agents.blocked():
+        return text_result(BLOCKED, True)
     if not inapp:
-        why = await consent(client)
+        why = await consent(client, cid, gone)
         if why:
             return text_result(why, True)
     params = args.get("params")
@@ -117,7 +166,7 @@ async def dispatch(message: Any, request: Request) -> tuple[dict | None, dict]:
             return rpc_error(request_id, -32602, f"unknown tool {name}"), {}
         client = agents.INAPP_CLIENT if inapp else _sessions.get(sid) or request.headers.get("user-agent") or "an outside agent"
         try:
-            outcome = await call_tool(str(name), arguments if isinstance(arguments, dict) else {}, client, inapp)
+            outcome = await call_tool(str(name), arguments if isinstance(arguments, dict) else {}, client, inapp, request.is_disconnected)
         except Exception as exc:
             outcome = text_result(f"the tool failed: {exc}", True)
         return {"jsonrpc": "2.0", "id": request_id, "result": outcome}, {}
@@ -151,19 +200,35 @@ async def mcp(request: Request) -> Response:
 
 
 class Allowed(BaseModel):
-    allowed: bool
+    allowed: bool | None = None
+    choice: Literal["ask", "allowed", "blocked"] | None = None
+
+
+def stored_choice() -> dict:
+    now = agents.state()
+    return {"allowed": agents.allowed(), "choice": agents.choice(), "seal": now["seal"], "sealBroken": now["sealBroken"]}
 
 
 @router.get("/api/agents/allowed")
 def get_allowed() -> dict:
-    return {"allowed": agents.allowed()}
+    return stored_choice()
 
 
 @router.put("/api/agents/allowed")
 def put_allowed(body: Allowed) -> dict:
     global _declined_until
     _declined_until = 0.0
-    return {"allowed": agents.set_allowed(body.allowed)}
+    if body.choice is not None:
+        agents.set_choice(body.choice)
+    elif body.allowed is not None:
+        agents.set_allowed(body.allowed)
+    return stored_choice()
+
+
+@router.get("/api/agents/status")
+def agent_status(request: Request, fresh: bool = False) -> dict:
+    require_local(request)
+    return agent_programs.report(fresh=fresh)
 
 
 @router.get("/api/mcp/status")

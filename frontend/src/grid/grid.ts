@@ -74,6 +74,7 @@ export interface SheetView {
   sviews?: { name: string; text: string; rows: AxisState; cols: AxisState }[] | null;
   slicers?: { id: string; col: number; title: string; x: number; y: number; multi?: boolean; cols?: number; style?: string; pivot?: string; field?: string }[] | null;
   timeline?: TimelineView | null;
+  dashboard?: boolean | null;
 }
 
 export type MenuKind = 'rows' | 'cols' | 'cells';

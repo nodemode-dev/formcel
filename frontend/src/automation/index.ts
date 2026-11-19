@@ -9,6 +9,12 @@ import { blankAuto, type Auto, type Env, type Script } from './model';
 import { ScriptRunner, type RunResult, type ScriptHost } from './scripts';
 import { AssistantTab } from './tabAssistant';
 import { DataTab } from './tabData';
+import { Db } from './db';
+import { PythonTab } from './tabPython';
+import { DataForms } from '../forms/dataForm';
+import { runHandler, type PyRun } from './pyHandlers';
+import { engine } from '../engine';
+import { parseRef } from '../grid/a1';
 import { MoreTab } from './tabMore';
 import { ScriptsTab } from './tabScripts';
 import { PyCellEditor } from './pyCell';
@@ -19,6 +25,7 @@ import { isAppsScript } from './scriptCheck';
 import { strip } from './tsStrip';
 import { setVbaRuntime } from '../vbalang/bridge';
 import { macroAllowed } from '../vbalang/types';
+import { askExternal } from './external';
 import { VbaService } from '../vbalang/service';
 
 export interface AppHooks {
@@ -48,7 +55,7 @@ function compiled(s: Script): Script {
   }
 }
 
-const TABS: [string, string][] = [['scripts', 'Scripts'], ['server', 'Triggers'], ['assistant', 'Assistant'], ['data', 'Data'], ['more', 'More']];
+const TABS: [string, string][] = [['scripts', 'Scripts'], ['python', 'Python'], ['server', 'Triggers'], ['assistant', 'Assistant'], ['data', 'Data'], ['more', 'More']];
 
 export class Automation {
   private readonly auto: Auto = blankAuto();
@@ -63,6 +70,9 @@ export class Automation {
   private readonly more: MoreTab;
   private readonly server: ServerTab;
   private readonly py: PyCellEditor;
+  readonly db: Db;
+  private readonly python: PythonTab;
+  readonly forms: DataForms;
   private readonly panes: Record<string, HTMLElement>;
   private saveTimer = 0;
   private editTimer = 0;
@@ -101,6 +111,7 @@ export class Automation {
       },
       cancel: () => this.runner.cancelStreams(),
       note: (t) => h.status(t.slice(0, 140), true),
+      askExternal: () => void askExternal(h.id()).then((on) => { if (on) void this.calls.drain(true, true); }),
     });
     const env: Env = {
       auto: this.auto,
@@ -122,13 +133,16 @@ export class Automation {
     this.data = new DataTab(env);
     this.more = new MoreTab(env, () => this.scripts.reload());
     this.server = new ServerTab(env);
+    this.python = new PythonTab(env);
+    this.forms = new DataForms({ id: () => h.id(), setting: (k) => this.setting(k), setSetting: (k, v) => this.setSetting(k, v), status: (t, e) => h.status(t, e) });
+    this.db = new Db({ id: () => h.id(), setting: (k) => this.setting(k), setSetting: (k, v) => this.setSetting(k, v), saveNow: () => this.saveNow() });
     this.py = new PyCellEditor({ grid: h.grid, book: () => h.book(), sheets: () => h.sheets(), status: (t, e) => h.status(t, e), drain: () => this.calls.drain(false, true) });
     this.panel = el('section', 'fc-auto');
     this.panel.hidden = true;
     this.panel.setAttribute('aria-label', 'Automation');
     this.panel.innerHTML = `<header class="fc-auto-head"><div class="fc-auto-tabs" role="tablist">${TABS.map(([k, l]) => `<button type="button" class="fc-auto-tab" role="tab" data-tab="${k}">${l}</button>`).join('')}</div><button type="button" class="fc-tool" data-act="close" title="Close" aria-label="Close">${icon('close')}</button></header><div class="fc-auto-body"></div>`;
     const body = this.panel.querySelector<HTMLElement>('.fc-auto-body')!;
-    this.panes = { scripts: this.scripts.root, assistant: this.assistant.root, data: this.data.root, server: this.server.root, more: this.more.root };
+    this.panes = { scripts: this.scripts.root, python: this.python.root, assistant: this.assistant.root, data: this.data.root, server: this.server.root, more: this.more.root };
     for (const p of Object.values(this.panes)) {
       p.hidden = true;
       body.appendChild(p);
@@ -158,10 +172,26 @@ export class Automation {
     cmd('automate.panel', 'Scripts', 'Open the script editor: write TypeScript against the FormCel workbook API, run it, record actions, add buttons and triggers.', () => this.show('scripts'));
     cmd('assistant.panel', 'Assistant', 'Open the assistant: ask about the selection, get formulas, tables and filled columns as proposals you apply yourself. It needs a model endpoint you set.', () => this.show('assistant'));
     cmd('data.panel', 'Data connections', 'Import web tables, build and refresh queries from CSV, JSON, web tables, sheets and SQLite files.', () => this.show('data'));
+    registerCommand({ id: 'data.dbQuery', title: 'Query the database', description: 'Run one SELECT on a SQLite file and return its columns and rows. Params: sql, params (named @values), path (defaults to the workbook database).', changes: false, run: (p) => this.db.query(p) });
+    registerCommand({ id: 'data.dbExec', title: 'Save to the database', description: 'Run one INSERT, UPDATE or DELETE on a SQLite file this workbook may save to. Params: sql, params (named @values), path (defaults to the workbook database).', changes: true, run: (p) => this.db.exec(p) });
+    registerCommand({ id: 'data.dbAllowWrite', title: 'Allow saving to a database', description: 'Ask the person, once per database, to let this workbook save to a SQLite file. Params: path (full path; defaults to the workbook database).', changes: true, run: (p) => this.db.allow(p) });
     cmd('automate.record', 'Record actions', 'Start recording cell edits, formats and sorts into a script.', () => {
       this.show('scripts');
       (this.panes.scripts.querySelector('[data-a="record"]') as HTMLButtonElement).click();
     });
+    cmd('python.panel', 'Python handlers', 'Open the Python tab: write handlers that buttons and data forms run, with db.query, db.execute and put.', () => this.show('python'));
+    registerCommand({ id: 'python.run', title: 'Run a Python handler', description: 'Run a Python handler of this workbook and write the cells it puts. Params: name.', changes: true, run: async (p) => {
+      const r = await this.runPy(typeof p?.name === 'string' ? p.name : '', { type: 'command' });
+      for (const [ref, v] of r.writes) await this.write(ref, v);
+      return r;
+    } });
+    registerCommand({ id: 'report.run', title: 'Run a report', description: 'Print a list report through FormTxt from the workbook database: FormTxt merges the rows into a document and writes a PDF. Params: template (FormTxt document id), sql, out (file to write), overwrite (true to replace a file that already exists; default false). FormTxt must be open.', changes: false, run: async (p) => {
+      const template = typeof p?.template === 'string' ? p.template.trim() : '';
+      if (!template) throw new Error('Name the FormTxt document with template=<id>.');
+      const r = await api<{ file?: string | null; records?: number }>('POST', `/api/workbooks/${this.h.id()}/report`, { template, sql: typeof p?.sql === 'string' ? p.sql : '', ...(typeof p?.out === 'string' && p.out ? { out: p.out, overwrite: p.overwrite === true } : {}) });
+      this.h.status(r.file ? `Report written to ${r.file}` : `Report made from ${r.records ?? 0} records`);
+      return r;
+    } });
     registerCommand({ id: 'python.cell', title: 'Python cell', description: 'Edit the active cell as Python: write code with xl() to read ranges and pandas to shape them, and a DataFrame result spills with its headers.', changes: true, keys: 'Ctrl+Alt+Shift+P', run: () => this.py.open() });
     cmd('automate.run', 'Run script', 'Run the script shown in the script editor.', () => void this.scripts.runCurrent());
     cmd('data.refresh', 'Refresh all data', 'Fetch web functions and run every saved query again.', async () => {
@@ -179,6 +209,20 @@ export class Automation {
     if (tab === 'more') void this.more.load();
     if (tab === 'server') void this.server.load();
     if (tab === 'data') this.data.reload();
+    if (tab === 'python') this.python.reload();
+  }
+
+  async runPy(name: string, event: Record<string, unknown> = {}): Promise<PyRun> {
+    if (!name) throw new Error('Name a Python handler with name=handler1.');
+    await this.saveNow();
+    return runHandler(this.h.id(), name, event);
+  }
+
+  async write(ref: string, value: unknown): Promise<void> {
+    const b = parseRef(String(ref).toUpperCase());
+    if (!b) throw new Error(`${ref} is not a cell such as B2.`);
+    const c = await engine().apply(this.h.book(), [[b.r0, b.c0, value === null || value === undefined ? '' : String(value)]], this.h.grid.sheetIndex);
+    await this.h.grid.commitEdits(c);
   }
 
   opened(id: string, raw: Partial<Auto> | undefined): void {

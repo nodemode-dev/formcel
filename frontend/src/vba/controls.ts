@@ -2,8 +2,11 @@ import type { Grid } from '../grid/grid';
 import { icon, type IconName } from '../ui/icons';
 import { actions, field, makeModal } from '../ui/modal';
 import { parseRef } from '../grid/a1';
+import { callCommand } from '../ui/commands';
 
-export type CtlType = 'button' | 'check' | 'combo' | 'list' | 'option' | 'spin' | 'scroll' | 'label' | 'group';
+export const CONTROL_COMMANDS = ['report.run'];
+
+export type CtlType = 'button' | 'check' | 'combo' | 'list' | 'option' | 'spin' | 'scroll' | 'label' | 'group' | 'text' | 'date' | 'grid';
 
 export interface Ctl {
   id: string;
@@ -15,6 +18,9 @@ export interface Ctl {
   h: number;
   text: string;
   macro: string;
+  py: string;
+  cmd?: string;
+  args?: Record<string, string>;
   link: string;
   range: string;
   value: number;
@@ -35,7 +41,19 @@ export const CONTROL_TYPES: [CtlType, string, IconName, [number, number]][] = [
   ['group', 'Group Box', 'ctlGroup', [180, 110]],
   ['label', 'Label', 'ctlLabel', [110, 22]],
   ['scroll', 'Scroll Bar', 'ctlScroll', [160, 20]],
+  ['text', 'Text Field', 'ctlText', [150, 26]],
+  ['date', 'Date Field', 'ctlDate', [150, 26]],
+  ['grid', 'Data Grid', 'ctlGrid', [280, 140]],
 ];
+
+export function isoDate(shown: string): string {
+  const s = shown.trim();
+  if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 10);
+  const t = s ? Date.parse(s) : NaN;
+  if (Number.isNaN(t)) return '';
+  const d = new Date(t);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
 
 export interface ControlsHost {
   grid: Grid;
@@ -45,6 +63,8 @@ export interface ControlsHost {
   save(list: Ctl[]): void;
   macros(): string[];
   run(macro: string): void;
+  pyHandlers(): string[];
+  runPy(name: string): Promise<{ writes: [string, unknown][] }>;
   read(ref: string): string;
   readRange(ref: string): string[];
   write(ref: string, value: string): void;
@@ -55,7 +75,7 @@ const uid = () => Math.random().toString(36).slice(2, 10);
 
 export function blankControl(type: CtlType, sheet: number, x: number, y: number): Ctl {
   const t = CONTROL_TYPES.find((c) => c[0] === type)!;
-  return { id: uid(), type, sheet, x, y, w: t[3][0], h: t[3][1], text: type === 'button' ? 'Button' : type === 'check' ? 'Check Box' : type === 'option' ? 'Option Button' : type === 'group' ? 'Group Box' : type === 'label' ? 'Label' : '', macro: '', link: '', range: '', value: 0, min: 0, max: 100, step: 1, page: 10, checked: false };
+  return { id: uid(), type, sheet, x, y, w: t[3][0], h: t[3][1], text: type === 'button' ? 'Button' : type === 'check' ? 'Check Box' : type === 'option' ? 'Option Button' : type === 'group' ? 'Group Box' : type === 'label' ? 'Label' : '', macro: '', py: '', link: '', range: '', value: 0, min: 0, max: 100, step: 1, page: 10, checked: false };
 }
 
 interface Node {
@@ -191,17 +211,92 @@ export class FormControls {
     return c.link ? this.h.read(c.link) : '';
   }
 
+  private fire(c: Ctl): void {
+    if (c.cmd && CONTROL_COMMANDS.includes(c.cmd)) {
+      void callCommand(c.cmd, { ...(c.args ?? {}), ...(c.args?.out ? { overwrite: true } : {}) }).catch((err: unknown) => this.h.say(err instanceof Error ? err.message : String(err), true));
+    } else if (c.py) {
+      void this.h.runPy(c.py).then((r) => {
+        for (const [ref, v] of r.writes) this.h.write(ref, v === null || v === undefined ? '' : String(v));
+      }, (err: unknown) => this.h.say(err instanceof Error ? err.message : String(err), true));
+    } else if (c.macro) this.h.run(c.macro);
+  }
+
+  private fillField(n: Node): void {
+    const c = n.c;
+    const b = c.type === 'grid' && c.range ? parseRef(c.range) : null;
+    const cols = b ? b.c1 - b.c0 + 1 : 0;
+    const rows = b ? Math.min(b.r1 - b.r0 + 1, Math.floor(500 / Math.max(cols, 1))) : 0;
+    const key = JSON.stringify([c.type, c.link, c.range]);
+    if (key !== n.key) {
+      n.key = key;
+      if (c.type === 'grid') {
+        const wrap = Object.assign(document.createElement('div'), { className: 'fc-fctl-gridwrap' });
+        const t = Object.assign(document.createElement('table'), { className: 'fc-fctl-grid' });
+        const body = t.createTBody();
+        for (let r = 0; r < rows; r++) {
+          const tr = body.insertRow();
+          tr.dataset.r = String(r + 1);
+          for (let k = 0; k < cols; k++) tr.insertCell();
+        }
+        t.addEventListener('click', (e) => {
+          const tr = (e.target as HTMLElement).closest<HTMLElement>('tr');
+          if (!tr || e.ctrlKey || e.metaKey) return;
+          if (c.link) this.h.write(c.link, tr.dataset.r ?? '');
+          this.markRow(n, Number(tr.dataset.r));
+          this.fire(c);
+        });
+        wrap.appendChild(t);
+        n.el.replaceChildren(wrap);
+      } else {
+        const i = Object.assign(document.createElement('input'), { type: c.type === 'date' ? 'date' : 'text', className: 'fc-auto-input fc-fctl-field', spellcheck: false });
+        i.setAttribute('aria-label', c.type === 'date' ? 'Date Field' : 'Text Field');
+        i.addEventListener('change', () => {
+          if (c.link) this.h.write(c.link, i.value);
+          this.fire(c);
+        });
+        n.el.replaceChildren(i);
+      }
+      for (const ev of ['keydown', 'dblclick']) n.el.addEventListener(ev, (e) => e.stopPropagation());
+    }
+    if (c.type === 'grid') {
+      const vals = c.range ? this.h.readRange(c.range) : [];
+      const trs = n.el.querySelectorAll('tr');
+      trs.forEach((tr, r) => {
+        for (let k = 0; k < tr.cells.length; k++) {
+          const v = vals[r * cols + k] ?? '';
+          if (tr.cells[k].textContent !== v) tr.cells[k].textContent = v;
+        }
+      });
+      this.markRow(n, Number(this.link(c)));
+    } else {
+      const i = n.el.querySelector('input')!;
+      const v = c.type === 'date' ? isoDate(this.link(c)) : this.link(c);
+      if (document.activeElement !== i && i.value !== v) i.value = v;
+    }
+    n.el.dataset.macro = c.macro || c.py ? '1' : '';
+    this.grip(n);
+  }
+
+  private markRow(n: Node, row: number): void {
+    n.el.querySelectorAll<HTMLElement>('tr').forEach((tr) => {
+      const on = Number(tr.dataset.r) === row;
+      if (tr.classList.contains('is-on') !== on) tr.classList.toggle('is-on', on);
+    });
+  }
+
   private fill(n: Node): void {
     const c = n.c;
+    if (c.type === 'text' || c.type === 'date' || c.type === 'grid') {
+      this.fillField(n);
+      return;
+    }
     const items = c.type === 'combo' || c.type === 'list' ? (c.range ? this.h.readRange(c.range) : []) : [];
     const key = JSON.stringify([c.type, c.text, c.link, c.range, c.min, c.max, c.step, c.page, c.checked, c.value, items, c.link ? this.link(c) : '']);
     if (key === n.key) return;
     n.key = key;
     const el = n.el;
     const stop = (e: Event) => e.stopPropagation();
-    const run = () => {
-      if (c.macro) this.h.run(c.macro);
-    };
+    const run = () => this.fire(c);
     const num = () => {
       const v = Number(this.link(c));
       return Number.isFinite(v) && c.link ? v : c.value;
@@ -271,7 +366,7 @@ export class FormControls {
       el.appendChild(d);
     }
     for (const ev of ['keydown', 'dblclick']) el.addEventListener(ev, stop);
-    el.dataset.macro = c.macro ? '1' : '';
+    el.dataset.macro = c.macro || c.py || c.cmd ? '1' : '';
     this.grip(n);
   }
 
@@ -363,13 +458,32 @@ export class FormControls {
     const m = makeModal('Assign Macro');
     const sel = Object.assign(document.createElement('select'), { className: 'fc-auto-input' });
     sel.replaceChildren(Object.assign(document.createElement('option'), { value: '', textContent: '(none)' }), ...this.h.macros().map((n) => Object.assign(document.createElement('option'), { value: n, textContent: n })));
-    sel.value = c.macro;
+    const py = this.h.pyHandlers();
+    if (py.length) {
+      const g = Object.assign(document.createElement('optgroup'), { label: 'Python handlers' });
+      g.append(...py.map((n) => Object.assign(document.createElement('option'), { value: `py:${n}`, textContent: n })));
+      sel.appendChild(g);
+    }
+    if (c.type === 'button') {
+      const g = Object.assign(document.createElement('optgroup'), { label: 'Commands' });
+      g.append(Object.assign(document.createElement('option'), { value: 'cmd:report.run', textContent: 'Run a report (report.run)' }));
+      sel.appendChild(g);
+    }
+    sel.value = c.cmd ? `cmd:${c.cmd}` : c.py ? `py:${c.py}` : c.macro;
+    const arg = (k: string) => Object.assign(document.createElement('input'), { className: 'fc-auto-input', value: c.args?.[k] ?? '', spellcheck: false });
+    const args: [string, string, HTMLInputElement][] = c.type === 'button' ? [['template', 'Report template (FormTxt document id)', arg('template')], ['sql', 'Report SQL', arg('sql')], ['out', 'Save the PDF to', arg('out')]] : [];
+    const paint = () => { for (const [, , i] of args) i.disabled = !sel.value.startsWith('cmd:'); };
+    sel.addEventListener('change', paint);
+    paint();
     const done = () => {
       m.close();
       m.el.remove();
     };
-    m.body.append(field('Macro name', sel), actions('OK', () => {
-      c.macro = sel.value;
+    m.body.append(field('Macro name', sel), ...args.map(([, label, i]) => field(label, i)), actions('OK', () => {
+      c.cmd = sel.value.startsWith('cmd:') ? sel.value.slice(4) : '';
+      c.args = c.cmd ? Object.fromEntries(args.map(([k, , i]) => [k, i.value.trim()])) : {};
+      c.py = sel.value.startsWith('py:') ? sel.value.slice(3) : '';
+      c.macro = c.py || c.cmd ? '' : sel.value;
       this.h.save(this.list);
       this.fill({ c, el: this.nodes.get(c.id)!.el, key: '' } as Node);
       done();
@@ -388,8 +502,8 @@ export class FormControls {
     const step = inp(c.step);
     const rows: HTMLElement[] = [];
     if (['button', 'check', 'option', 'group', 'label'].includes(c.type)) rows.push(field('Text', text));
-    if (['combo', 'list'].includes(c.type)) rows.push(field('Input range', range, 'Cells that hold the items, such as A1:A10'));
-    if (['check', 'option', 'combo', 'list', 'spin', 'scroll'].includes(c.type)) rows.push(field('Cell link', link, 'The cell that receives the value, such as B1'));
+    if (['combo', 'list', 'grid'].includes(c.type)) rows.push(field('Input range', range, c.type === 'grid' ? 'Cells the grid shows, such as A1:D20' : 'Cells that hold the items, such as A1:A10'));
+    if (['check', 'option', 'combo', 'list', 'spin', 'scroll', 'text', 'date', 'grid'].includes(c.type)) rows.push(field('Cell link', link, c.type === 'grid' ? 'The cell that receives the selected row number, such as B1' : 'The cell that receives the value, such as B1'));
     if (['spin', 'scroll'].includes(c.type)) rows.push(field('Minimum value', min), field('Maximum value', max), field('Incremental change', step));
     const done = () => {
       m.close();

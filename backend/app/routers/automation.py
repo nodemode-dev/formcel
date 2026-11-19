@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, Field
 
-from ..services import aiclient, extbooks, extpkg, hostcalls, offline_ai, pquery, ranges, webdata
+from ..services import aiclient, extbooks, extpkg, hostcalls, offline_ai, pquery, ranges, trust, webdata
 from ..services.store import store
 from . import automation_x, queries, restapi, settings_app, settings_x
 from . import vba as vba_router
@@ -63,7 +63,7 @@ def resolve(body: ResolveIn) -> dict:
         if b is not None and k.startswith("PY\x1f"):
             with b.lock:
                 b.engine.host_set(k, data)
-    return {"results": out}
+    return {"results": out, "ask": "external" if body.workbook and body.workbook in trust.wanting else ""}
 
 
 class QueryRunIn(BaseModel):
@@ -175,7 +175,7 @@ def list_extensions() -> list[dict]:
     return extpkg.listing()
 
 
-bearer = HTTPBearer(auto_error=False, description="The token made under More, REST API. Calls are open when no token is set.")
+bearer = HTTPBearer(auto_error=False, description="The token made under More, REST API. While no token is set, reads are answered and a call that changes anything is refused.")
 
 
 def guard(cred: HTTPAuthorizationCredentials | None = Depends(bearer)) -> None:

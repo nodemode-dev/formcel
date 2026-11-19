@@ -4,6 +4,8 @@ const VARS = ['--bg-primary', '--bg-secondary', '--bg-tertiary', '--border-color
 
 export const FAMILY_LIGHT = new Set(['light', 'sand', 'nineties', 'duck', 'pro-light-grey', 'pro-light', 'classic', 'adwaita-light', 'soft-light']);
 
+export const FAMILY_OLED = new Set(['amoled']);
+
 export const FAMILY_THEMES: ReadonlyArray<readonly [string, string, readonly string[]]> = [
   ['studio', 'Studio Dark', ['#111111', '#17151b', '#222127', '#2a2a2a', '#34333a', '#f7f7f7', '#a4a4a4', '#717072', '#1c1b1d', '#5e5e60', '#191919']],
   ['nodemode-dark', 'NodeMode Dark', ['#0a0a0a', '#121218', '#1a1a24', '#2a2a35', '#3a3a48', '#e8e8ee', '#a8a8b8', '#6a6a7a', '#0a0a0a', 'rgba(255,255,255,0.04)']],
@@ -20,6 +22,7 @@ export const FAMILY_THEMES: ReadonlyArray<readonly [string, string, readonly str
   ['rose', 'Rose Noir', ['#170b10', '#211117', '#301a22', '#4d2b38', '#653a49', '#f5e7ec', '#cfa5b3', '#966b7b', '#170b10', 'rgba(255,190,215,0.05)']],
   ['terminal', 'Terminal Green', ['#050d05', '#0a140a', '#102010', '#1f3d1f', '#2b522b', '#d8f5d8', '#8fce8f', '#568a56', '#050d05', 'rgba(120,255,120,0.06)']],
   ['contrast', 'High Contrast', ['#000000', '#0a0a0a', '#161616', '#555555', '#777777', '#ffffff', '#d8d8d8', '#9a9a9a', '#000000', 'rgba(255,255,255,0.10)']],
+  ['amoled', 'AMOLED Black', ['#000000', '#000000', '#141414', '#262626', '#3a3a3a', '#ededed', '#a6a6a6', '#858585', '#000000', 'rgba(255,255,255,0.10)', '#000000']],
   ['nineties', '90s', ['#c0c0c0', '#d4d0c8', '#b4b0a8', '#808080', '#ffffff', '#000000', '#202020', '#585858', '#008080', 'rgba(0,0,0,0.12)', '#d4d0c8']],
   ['duck', 'Duck', ['#e9e4f7', '#f4f1fc', '#d9d2ef', '#c7bde6', '#b3a6dc', '#2b2540', '#4f4770', '#7a7299', '#e2dcf2', 'rgba(90,70,150,0.10)', '#f4f1fc']],
   ['pro-dark', 'Pro Dark', ['#1f1f1f', '#2b2b2b', '#363636', '#4a4a4a', '#818181', '#ececec', '#bdbdbd', '#a0a0a0', '#181818', 'rgba(255,255,255,0.05)']],
@@ -65,5 +68,6 @@ export function setFamilyTheme(id: string): void {
   root.style.background = p[0];
   root.style.colorScheme = FAMILY_LIGHT.has(id) ? 'light' : 'dark';
   root.setAttribute('data-theme', FAMILY_LIGHT.has(id) ? 'light' : 'dark');
+  if (FAMILY_OLED.has(id) !== root.hasAttribute('data-oled')) root.toggleAttribute('data-oled', FAMILY_OLED.has(id));
   document.querySelector('meta[name="theme-color"]')?.setAttribute('content', p[0]);
 }

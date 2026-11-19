@@ -7,6 +7,166 @@ Last updated: 2026-11-13 · v0.43.0: browser demo pages, the inline mark in the 
 
 ---
 
+## Unreleased · data forms, SQLite saving, Python handlers, dashboard view (discussion #12, 2026-11-18)
+
+The version bump comes in a later release commit.
+
+### Commands take params and give back a result
+- refers-to: src/ui/commands.ts (Command.run, callCommand); src/automation/bridge.ts (run)
+- kind: decision
+- logged: unreleased · 2026-11-18
+
+`Command.run` now receives the params an agent or `./formcel cli run id key=value` sends and may return a value; `callCommand(id, params)` runs one and hands its result back, and the bridge sends that result to the engine (it already carried both, the window dropped them). Commands that take nothing ignore the argument, so no existing command changed. Removed from the bridge: `return asAgent(async () => { await runCommand(command); });`. A command must treat its params as untrusted input: none of them may skip a question the window asks the person.
+
+### The database commands and the saving switch
+- refers-to: src/automation/db.ts (Db, askWrite); src/automation/index.ts (commands: data.dbQuery, data.dbExec, data.dbAllowWrite); src/automation/tabData.ts (dbwrite switch, paintWrite, setWrite)
+- kind: decision
+- logged: unreleased · 2026-11-18
+
+`data.dbQuery` and `data.dbExec` take `sql`, `params` (named `@values`) and `path`, which defaults to the workbook setting `dbPath`; the engine does the work and the check. `data.dbAllowWrite` asks with its own modal (the outside-agent dialog's shape) every time a path not yet in `dbWrite` is named, and has no param that skips the question; on Allow it appends the full path to `dbWrite`, sets `dbPath` when the workbook has none, and saves the automation at once so the engine sees it before the next `data.dbExec`. `data.dbQuery` with a full path also sets `dbPath` when none is set. The SQLite source row on the Data tab gets the "Allow saving to this database" switch: it shows whether the typed path is in `dbWrite`, on runs `data.dbAllowWrite`, off removes the path. Only the checkbox's `checked` changes, the row's size does not.
+
+### Python handlers
+- refers-to: src/automation/tabPython.ts (PythonTab); src/automation/pyHandlers.ts (handlerNames, runHandler); src/automation/index.ts (TABS, runPy, write, commands python.panel, python.run); src/vba/controls.ts (Ctl.py, ControlsHost.pyHandlers, runPy, fill run, assign); src/vba/index.ts (ControlsHost wiring)
+- kind: decision
+- logged: unreleased · 2026-11-18
+
+Handlers live in the workbook setting `pyHandlers` (`{name: code}`) and the Python tab sits second in the automation panel. The tab writes the code on every input (the automation save is debounced 700 ms) and only patches the select, name and textarea it owns; the option list is rebuilt only when the set of names changed. `python.run` saves the automation first, posts to `/py/run`, then writes each queued `put` through `engine().apply` on the active sheet and `grid.commitEdits`. A form control keeps its macro in `macro` and its handler in `py` (only one is set; Assign Macro lists handlers in a Python handlers group with `py:` values); a click with `py` set calls the route directly and applies the writes with `ControlsHost.write`. Controls saved before this have no `py` and behave as before.
+
+### Text Field, Date Field and Data Grid controls
+- refers-to: src/vba/controls.ts (CtlType, CONTROL_TYPES, isoDate, fire, fillField, markRow, fill, format); src/ui/icons.ts (ctlText, ctlDate, ctlGrid); src/styles/vba.css (.fc-fctl-field, .fc-fctl-gridwrap, .fc-fctl-grid)
+- kind: decision
+- logged: unreleased · 2026-11-18
+
+Named Text Field because `insert.textbox` is already the drawing shape. The other controls rebuild their node whenever their key, which includes the linked cell's value, changes; that would drop focus on every keystroke in a typed field, so the three new types go through `fillField`: the node is built once per type, link and range, and after that only the input's `value` (skipped while it has focus) or each grid cell's `textContent` and the row's `is-on` class are patched. A Text or Date Field writes its cell on `change` (Enter or leaving the field), not per keystroke. The Date Field is an `input type=date`; `isoDate` turns the cell's shown text back into yyyy-mm-dd. The Data Grid shows `range` read-only (at most 500 cells, row-major from `readRange`) in a scrolling box of the control's own size, and a row click writes its 1-based row number to `link`. All three run an assigned macro or handler after writing, as the other controls do. `fire` is the old inline `run` closure, moved to a method so both paths share it. The ribbon's Insert menu lists them because it maps `CONTROL_TYPES`.
+
+### Data Form
+- refers-to: src/forms/store.ts (DataFormDef, FormStore, kindOf, quoteName); src/forms/dataForm.ts (FormView, DataForms; commands form.new, form.open, form.list, form.delete); src/automation/index.ts (forms); src/automation/pyHandlers.ts (runHandler record); src/ui/ribbon-tabs.ts (Developer, Controls: Data Form); src/ui/icons.ts (dataForm); src/styles/vba.css (.fc-dform-*)
+- kind: decision
+- logged: unreleased · 2026-11-18
+
+Forms live in the workbook setting `dataForms` as `{id, name, path, table, key, fields[{name, label, kind}], onLoad, onSave}`. `form.new` reads the tables through `data.dbQuery` on `sqlite_master` (a small Table picker when no `table` param is given) and the columns through `pragma_table_info(@t)`, since a bare PRAGMA is not a statement the read path runs. Field kind: a type with DATE or TIME, or a name ending in date or day, is a date input; INT, REAL, FLOA, DOUB, NUM or DEC is a number; the rest text. The key is the single primary key column, else `rowid` (then the form reads `select rowid, *`). The modal is built once per open with `makeModal`; navigating changes only each input's `value` and the counter's text (min 9ch, tabular figures, so nothing beside it moves), and the note line has a fixed 40 px, two-line box, so messages never change the dialog's size. Save and Delete go through `data.dbExec` with values as `@p0..@pN` and the key as `@key`, so the engine's `dbWrite` check applies and a refusal shows in the note line. A new record leaves out a blank key so SQLite assigns it, then the form reloads and shows the saved row. onLoad runs on each shown record and only changes what is shown; onSave runs before writing and its `record` is what is written. Handlers get `event.today` because the sandbox cannot call `date.today()` (backend log).
+
+### Dashboard view
+- refers-to: src/ui/shellcmds.ts (view.dashboard, Esc listener, ShellHooks.dashboard, setDashboard); src/ui/shell-mount.ts (ChromeHost); src/app.ts (dashboard, setDashboard, showSheet, saveView, chrome hooks); src/grid/grid.ts (SheetView.dashboard); src/styles/grid.css (#app.fc-dashboard rules)
+- kind: decision
+- logged: unreleased · 2026-11-18
+
+One class, `fc-dashboard` on `#app`, does the work in CSS: the sheet's rows become `minmax(0, 1fr) auto`, the ribbon, formula bar and sheet bar get `display: none`, and the grid gets a negative top and left margin equal to the headings' size at the current zoom (`--fc-dash-top`, `--fc-dash-left`, read from `objectFrame()` when it turns on), so the canvas headings sit outside `.fc-sheet`'s `overflow: hidden`. The headings are painted on the canvas with 85 uses of `HEAD_W` and `HEAD_H` in grid.ts, so hiding them by margin is the one-place change. Gridlines are `grid.opts.gridlines`, saved before and put back after. Charts, slicers and controls are laid out from `objectFrame()` and the grid's box, so they keep their cells. The flag lives in the sheet view as `dashboard` (PATCHed alone; the engine merges view keys, and `saveView` now keeps it like `hidden`), and `showSheet` applies it, so a workbook reopens in dashboard view on that sheet. Esc is caught in the capture phase (the grid handles Escape itself) unless the target is a text field or a dialog is open. Open: changing the zoom while in dashboard view keeps the margins of the zoom it started with.
+
+### report.run and buttons that run a command
+- refers-to: src/automation/index.ts (command report.run); src/vba/controls.ts (CONTROL_COMMANDS, Ctl.cmd, Ctl.args, fire, assign)
+- kind: decision
+- logged: unreleased · 2026-11-18
+
+`report.run` (params `template`, `sql`, `out`) posts to the engine's `/api/workbooks/{id}/report`, which talks to FormTxt; the status line names the written file. A Button can run it: Assign Macro has a Commands group (buttons only) with "Run a report (report.run)" and three fields (template, SQL, save to) that are always in the dialog and enabled only while that entry is chosen, so choosing it does not resize the dialog. The control stores `cmd` and `args`. `fire` runs a stored command only when it is in `CONTROL_COMMANDS` (just `report.run`), so a workbook file cannot make a button run any other command.
+
+### report.run leaves out an empty path and can replace its own file
+- refers-to: src/automation/index.ts (command report.run); src/vba/controls.ts (fire)
+- kind: decision
+- logged: unreleased · 2026-11-19
+
+Found by running the Button's route against FormTxt's real report route. `report.run` used to send `out: null` when no path was given, and FormTxt takes `out` only as a string, so the person saw a raw validation list; it now leaves `out` out of the request when empty. `report.run` gains `overwrite` (default false) and sends it with `out` only. A Button sends `overwrite: true` whenever its "Save the PDF to" box has a path: choosing a fixed path is asking for that Button's previous output to be replaced, and without it the Button worked once and then failed with "already exists". A report with `overwrite` false still refuses an existing file, which is what a caller of the command alone gets. Checked by engine run only (the engine route with the window key against FormTxt's real engine); the Button click itself was not driven in a browser.
+
+### The window key on every write
+- refers-to: src/ui/window-key.ts (loadWindowKey, keyHeaders, presentKey); src/main.ts; src/app.ts (api, export, import preview, importFile); src/automation/dom.ts (api); src/ui/backstage.ts (api); src/ui/collab.ts (call); src/ui/spell.ts (call); src/datatypes/api.ts (call); src/automation/hostCalls.ts; src/ui/dock-api.ts (request, socketTo); src/automation/bridge.ts; src/automation/tabMore.ts
+- kind: decision
+- logged: unreleased · 2026-11-19
+
+The engine refuses every write without `X-Formcel-Window-Key`. main.ts awaits `loadWindowKey()` once, after the shell is mounted and before `App` starts: the packaged shell's `window.__FORMCEL_WINDOW_KEY` first (read once and deleted), else `POST /api/window/key` (development), else the copy kept in sessionStorage for a reload of the same tab. Every helper that sends a write adds `keyHeaders()`; GET-only fetches are unchanged. `presentKey` sends `{type: "key", key}` as the first message of the live socket and of the terminal and chat streams; it is added as a listener before the caller's `onopen`, so it always goes first. Nothing visible changes. The REST API note in More now says that without a token programs can read but not change workbooks.
+
+### Saving to a database needs this machine's Allow
+- refers-to: src/automation/db.ts (Db.allowed, Db.allow, Db.forbid); src/automation/tabData.ts (paintWrite, setWrite, writeAsk)
+- kind: decision
+- logged: unreleased · 2026-11-19
+
+A path in the workbook's `dbWrite` is honoured only when the engine has this machine's record of the person's Allow (`GET/PUT /api/workbooks/{id}/db/allowed`). `Db.allowed` is now async and asks the engine; `Db.allow` still asks the person in the dialog, then adds the path to `dbWrite` if missing and records the Allow; `forbid` and the Data tab switch's off remove both. `paintWrite` sets only the checkbox's `checked`, after the engine answers, and drops answers that arrive after a newer paint (`writeAsk`), so a received workbook shows the switch off.
+
+### External content asks once per workbook
+- refers-to: src/automation/external.ts (askExternal); src/automation/hostCalls.ts (CallHooks.askExternal, drain); src/automation/index.ts; src/vba/trust.ts (trust, forget)
+- kind: decision
+- logged: unreleased · 2026-11-19
+
+When `/api/host/resolve` answers `ask: "external"`, HostCalls calls `askExternal(id)`: one dialog (made once with `makeModal` and reused, like the database question), at most one question per workbook per window session, the answer stored by `PUT /api/workbooks/{id}/trust`, and on Allow a fresh drain of the host calls. The grid is not touched while the dialog is open. `trust()` and `forget()` in vba/trust.ts also tell the engine (`scripts: true` or `false`), which is what lets Apps Script triggers run in that workbook.
+
+### The message slot in the title bar keeps its width
+- refers-to: src/styles/titlebar.css (.fc-tb-doc, .fc-tb-doc .fc-title, .fc-tb-doc .fc-save)
+- kind: fix
+- logged: unreleased · 2026-11-19
+
+Found by clicking a report Button in headless Chrome at 1440 by 900 against both real engines: the status slot `.fc-save` (where `h.status` writes every message, including the report results and refusals) took a width from its text, so a long refusal made it 76 px and the workbook name beside it lost 4 px, and a short message gave them back. `.fc-tb-doc` now fills its grid column and centres its content, the name has a 260 px basis and the slot a zero basis that grows to its existing 220 px cap, so both widths come from the column and never from the text. Seen after: 72 px before and after every message, no other box moved, no node added. Left for the owner: at 1440 px the menus leave the middle column about 190 px, so the slot shows about ten characters and the full message only on hover (its title), and under 1100 px the slot is hidden.
+
+### A reload tries the kept key first
+- refers-to: src/ui/window-key.ts (loadWindowKey, stillWorks)
+- kind: fix
+- logged: unreleased · 2026-11-19
+
+From source the bootstrap answers once per engine launch. The page asked it first on every load, so every reload was refused (409) and the engine recorded a second claim that never happened. Now the order is: the packaged global; then the key kept in sessionStorage, if `POST /api/window/check` accepts it; then the bootstrap (a restarted engine has a new key, so the kept one fails and the bootstrap is asked). Same order as FormPath's window-key.ts.
+
+### AMOLED Black
+- refers-to: index.html (pre-paint script: PROFILES 'amoled', OLED); src/ui/family-themes.ts (FAMILY_THEMES 'amoled', FAMILY_OLED, setFamilyTheme); src/styles/tokens.css (:root[data-oled])
+- kind: decision
+- logged: unreleased · 2026-11-19
+
+A true-black theme for OLED screens, as FormTxt has it (its eb5bacd): `--bg-primary`, `--bg-secondary`, `--bg-node` and `--canvas-bg` #000000, `--bg-tertiary` #141414 (inputs, menus and hover fills use it as their only fill), borders #262626 and #3a3a3a, text #ededed, #a6a6a6, #858585; the accent stays the person's own. The pre-paint script is a second copy of the profile table, so the row is in both, and `OLED = { 'amoled': 1 }` sets `data-oled` before first paint; `setFamilyTheme` toggles the attribute only when it changes. True-black exceptions hang on `data-oled`, never on the id. FormCel has no `--bg-hover` or `--border-soft` in its own tokens (hover mostly fills with `--bg-tertiary`); the two-token rule is set anyway for the few rules that read `--bg-hover`. Interface or document: in every dark theme FormCel paints the cell area from the theme (`--cell-bg` is `--canvas-bg`), not paper white, so the grid is interface here and goes black like the rest. The grid canvas already takes its colours from the root tokens in `readPalette` and repaints on a root `style`, `data-theme` or `class` change, so a live switch repaints in place without a new canvas; no other surface needed a `data-oled` rule (measured: title bar, ribbon, formula bar, cells and headings, sheet tabs and status bar all #000000; the only non-black sample was the scroll thumb in the sheet bar).
+- verified: headless Chrome 1440 by 900, 4x CPU, 150 ms and 1.6 Mbit/s, cache off: cold load and hard reload with `amoled` saved, about 98 frames each up to the open workbook, every sample black except the scroll thumb; live switch Studio Dark to AMOLED and back: 4873 elements before and after, none new, none moved, the same grid canvas node.
+
+### A broken seal is said once, in the Outside agents note
+- refers-to: src/ui/agents-allow.ts (agentsPanel, paint)
+- kind: decision
+- logged: unreleased · 2026-11-19
+
+When `GET /api/agents/allowed` reports `sealBroken`, the note under the switch (the node that already holds the On or Off sentence) says "The saved agent permission was changed outside FormCel, so it is back to Ask." in place of the Off sentence; the switch shows off. Only that text node changes. The next answer from the switch (`PUT`) re-seals, and the engine no longer reports it. FormCel keeps no i18n table; its window text is English only. Seen in headless Chrome with a file-backed stand-in keyring: after the window allowed, the note read On; after the stored seal was changed by hand and the page reloaded, the engine reported `seal: broken` and the note read the sentence above. Seen in headless Chrome: load, reload, reload gave one bootstrap request, a 200 check on each reload, every page write 200 or 201, and `secondClaim: false`.
+
+### The dock is the family's shared module
+- refers-to: src/dock/ (copied whole from FormVis 38148cba, module 1.0.0-stage1, never edited here); src/dock-adapter.ts (formcelDock); src/styles/dock-tokens.css; src/ui/dock-mount.ts (mountDock); src/ui/dock-api.ts (openAgent, agentPrograms); src/styles/terminal.css; index.html (dock pre-paint script)
+- kind: decision
+- logged: unreleased · 2026-11-19
+
+`ui/terminal-dock.ts` and `ui/chat-pane.ts` are gone; the dock is `Dock` from `src/dock/`, the folder every app in the family carries byte for byte (its `MANIFEST.json` holds each file's SHA-256). Everything FormCel's own reaches it through `formcelDock(host)`: the names (FormCel, workbook, ./formcel), the storage key, the sizes (height 120 up to 70% of the window, default 280; width 320 up to 60%, default 440), Ctrl or Cmd+J, the host classes `fc-tool`, `fc-btn`, `fc-btn-primary`, `fc-input`, `fc-note`, the routes through `dockApi` (window key on every request, the key as the first socket message), and the mount (appended to `#app`, as before). `t` returns the English: FormCel keeps no language table. `onTheme` does nothing: there is no theme event, and the module re-themes open terminals from a MutationObserver on the root's `style`, `class` and `data-theme`, which is FormCel's own old mechanism taken into the module. The old shortcut guard (no toggle while an `.fc-modal` is open) is `dock.yieldsKey`; the module yields only when the key press comes from outside the dock, which is the case whenever a modal holds the focus.
+
+Stored state is one key, `formcel.dock` ({open, side, h, w, tab}); `formcel.terminal` ({open, h}) is moved into it once and removed, and the pre-paint script reads the new key, else the old one, so the first paint after the update already has the old height. The pre-paint script also sets `data-ft-dock-side`, `data-ft-dock-w` and `--ft-dock-wsize`. `terminal.css` keeps only FormCel's layout and what its host classes need: `#app` gets a second column (`--ft-dock-w`, zero unless the dock is open at the right) and its in-flow children get explicit areas, so the title bar spans both columns and the dock at the right sits beside `.fc-main` under the title bar; the grid canvas keeps its origin and only narrows. The other rules (tab icon box 14 px, ask mark 26 px, chat bar buttons, the chat status with no padding) keep the dock where it was with the module's own sizes. Every look rule now lives in `dock/dock.css`, written against `--dock-*` tokens that `dock-tokens.css` maps onto FormCel's tokens.
+
+What looks different at the bottom: the head has the side switch and the More agents button, and the plus, close, restart and send glyphs are the module's drawings; the Chat lead sentence is the module's wording.
+- verified: headless Chrome 1440 by 900 against Vite and the engine. Pixel comparison with the old dock (terminal text masked): closed 0; open on a shell 743, open on Chat 9612, all inside the dock (head buttons, the three glyphs, the lead sentence, 22 anti-aliased corner pixels of two Chat bar buttons); 51 more elements in every state (2 stylesheets, the hidden Codex and Cursor buttons, the More agents button and its menu, the side switch, one more path in the restart glyph). Side switch with a shell running: the same dock and terminal nodes, `MARK-42` still in the scrollback and a new command answered; the title bar and every child unchanged; `.fc-main` 1440x562 to 1000x862, the grid canvas at 0,200 in all three states. Width and height kept apart and restored after a reload. Cold load remembered at the right under 4x CPU, 150 ms and 1.6 Mbit/s, cache off: 204 frames with the workbook area, its right edge 1000 in every one, the dock at x 1000 in every frame. Studio Dark, AMOLED Black, Studio Dark re-coloured the open terminal in place (foreground f7f7f7, ededed, f7f7f7, same node).
+
+### The dock module is 2.1.0, and keys typed in the dock stay out of the workbook's capture listeners
+- refers-to: src/dock/ (copied whole from FormVis 8bbdf61b, module 2.1.0, the same 15 files, never edited here); src/dock-adapter.ts (formcelDock); src/ui/dock-keys.ts (dockKeeps, setDockKeeps); src/ui/dock-mount.ts (mountDock); src/ui/calc.ts; src/ui/key-tips.ts; src/ui/ribbon-mount.ts; src/ui/fontpicker.ts; src/charts/layer.ts; src/charts/shapeui.ts; src/vba/index.ts; backend/tests/test_dock_module.py
+- kind: decision
+- logged: unreleased · 2026-11-19
+
+The folder is module 2.1.0. `npm run typecheck` is clean again: 2.0.1 failed it with `src/dock/placement.ts(148,11): error TS6133: 'told' is declared but its value is never read.` and FormCel had nothing in its own files around that error, so nothing was deleted for it. FormCel keeps the built-in Chat, so `chat.ask` and the pane callbacks are not used, and nothing here calls `dock.sendChat`.
+
+Keys. `mountDock` hands `dock.keeps` to `ui/dock-keys.ts`, and eight capture-phase key listeners ask `dockKeeps(e)` first: calc.ts (keydown), key-tips.ts (keydown and keyup), ribbon-mount.ts (keyup), fontpicker.ts (`onKey`), charts/layer.ts (keydown), charts/shapeui.ts (`closer`, for keys only; a pointer press in the dock still closes the gallery), vba/index.ts (keydown). The chord and Ctrl+comma still reach them, because `keeps` is false for those. FormCel never had `ownsEvent` in these listeners (the 2.0.1 pass left them for later), so no guard was replaced. Lines replaced: `document.addEventListener('keydown', (e) => this.key(e), true);` in calc.ts, charts/layer.ts and vba/index.ts; `window.addEventListener('keydown', (e) => this.onDown(e), true);` and `window.addEventListener('keyup', (e) => this.onUp(e), true);` in key-tips.ts; `document.addEventListener('keyup', context, true);` in ribbon-mount.ts. Left as they were: the two lock listeners in statusbar.ts (147, 148), which only read Num Lock and Scroll Lock and are right wherever the key is typed.
+
+Guide. `legacy: ['formcel.terminal']` became `legacy: jsonLegacy(['formcel.terminal'], true)`: a person whose old dock layout is moved is taken to have seen the dock and is not shown the guide. The test line that held the old text holds the new one.
+
+Styles. No rule was deleted: FormCel had no rule on `.ft-dock-stage` or `.ft-term`, and `--dock-ask-ctl-h`, `--dock-stage-pad` and `--dock-tab-accent` are left at the module's defaults so nothing moves. `.ft-dock-tab > .ft-icon` is on public names now. Still on names that are not public, in styles/terminal.css lines 11 to 16: `.ft-dock-ask-mark`, `.ft-dock-note`, `.ft-chat-status`, `.ft-chat-install`, `.ft-chat-tool-mark`, `.ft-chat-ask-row`.
+
+- verified: `tsc --noEmit` clean. Backend suite 185 passed, 3 skipped, before and after. Headless Chrome 1440 by 900, dock closed, open on a shell, open on Chat, against captures taken on 2.0.1 in the same sitting: 0, 0 and 0 differing pixels (two runs of 2.0.1 against each other: 31, 9 and 9, one level in one channel). An old `formcel.terminal` of height 300 was moved with `seen`, and no guide came on opening with the chord. Not verified: the guide for a new person (not seen 2.5 s after the chord), and the key guards in a browser.
+
+### The dock module is 2.0.1, and the outside-agent question is its dialog
+- refers-to: src/dock/ (copied whole from FormVis 1ee307fc, module 2.0.1, 15 files, never edited here); src/dock-adapter.ts (formcelDock, socketChannel); src/ui/outside-agents.ts (outsideAgents); src/automation/bridge.ts (connectBridge); src/ui/agents-allow.ts (agentsPanel); src/ui/dock-api.ts (agentStatus); src/ui/dock-mount.ts (mountDock); src/styles/terminal.css
+- kind: decision
+- logged: unreleased · 2026-11-19
+
+The folder is module 2.0.1 (six new files: `CONTRACT.md`, `consent.ts`, `keys.ts`, `placement.ts`, `terminal.ts`, `tour.ts`). The adapter follows the 2.0 type: `words` (the Chat lead is FormCel's own sentence again, "Ask Claude about your workbook in the line below. It works through FormCel's own tools, and every change shows here and in the window."), `placement` (own, key `formcel.dock`, the old `formcel.terminal` moved once, the same sizes), `tabs()`, `errors.kind` (status 0 and 502 to 504 unreachable, 403 refused, a bare 404 or 405 old engine, "not installed" in the message), `terminal.channel` (the socket wrapped as the module's channel: text frames are output, a binary `{"type": "exit"}` frame is the end), one `agentStatus` request (`GET /api/agents/status`; `claudeCodeStatus` and `agentPrograms`, two reads of `/api/claude-code/status`, are gone), `chat.subscribe` with the three modes. `mountDock` builds the dock, sets `onTab`, then calls `dock.mount(app)`; nothing is asked of the engine and the terminal emulator is not loaded while the dock is closed.
+
+The chord is what FormCel had before the shared module: `isDockChord` is the old listener's test word for word, `(metaKey || ctrlKey) && !shiftKey && !altKey && code === 'KeyJ' && !repeat` and no `.fc-modal` open, wherever the focus is; `chordLabel` is Cmd+J on macOS and Ctrl+J elsewhere. So on macOS both Cmd+J and Ctrl+J toggle the dock, as on main (Ctrl+J therefore does not reach the shell as a line feed there, also as on main); elsewhere Ctrl+J toggles. `dock.yieldsKey` is gone with the module's old shortcut. `passKey` lets one chord out of the dock: Ctrl or Cmd with comma, Preferences. Every other key typed in a terminal, on a tab or in the ask line stays in the dock.
+
+Outside agents: `askConsent` and its `fc-modal` are removed from `ui/agents-allow.ts` (`modal = makeModal('Allow an outside agent?', { onClose: () => settle(false) })`, buttons Allow and Don't Allow, the sentence "... asks to use FormCel. Allowed agents can run FormCel's commands on the open workbook ..."), and the bridge no longer answers `__consent__` itself (`{ allowed: await askConsent(String(msg.params?.client ?? '')) }`). `outsideAgents` turns the engine's question into the module's request (`id`, `agent` empty when the engine says "an outside agent", `what`, `offers` from `answers`, `always: 'all'` because FormCel stores one yes for every outside agent, `expires` from `expiresAt`, `escape: 'deny'` because closing the old dialog was Don't Allow), answers on the live socket (`{allowed: false}`, `{allowed: true, once: true}`, `{allowed: true}`), and withdraws a request when the engine says `consent-withdrawn`. Two requests queue in the module, and each answer goes to its own id. After a reload the engine sends a waiting question to the new socket again. `storedChoice` reads and writes `choice` on `/api/agents/allowed`; `openSettings` opens Preferences at the Trust Center, where the Outside agents panel has a second switch, Block all agents.
+
+`terminal.css` lost `.ft-chat-bar .fc-btn, .ft-chat-bar .fc-input { flex: none; width: auto; height: 26px; min-height: 26px; padding: 0 var(--space-3); font-size: var(--text-sm); white-space: nowrap; }` (the module sizes its Chat bar controls now); the 14 px tab icon box, the 26 px ask mark and the host button sizes in the note, install row and permission card stay. The token map and the pre-paint script are unchanged.
+
+Open: `npm run typecheck` reports one error inside the module, `src/dock/placement.ts(148,11): 'told' is declared but its value is never read`, because FormCel checks with `noUnusedLocals` and FormVis does not. The folder is not edited here and FormCel's flags are not loosened; the fix is one line in the module's next version.
+- verified: headless Chrome 1440 by 900 against Vite and the engine from source, stand-in `claude`, `codex` and `cursor-agent`. Dock closed: 235 requests at load, none for a terminal, an agent status, Chat or the emulator. Old key moved once (height 300 kept, old key gone). A shell command printed its answer, and the scrollback came back after a reload; resize 300 to 397 stored. Keys x, Ctrl+Z, Delete, Escape typed in a terminal, on a tab and in the ask line reached no bubble listener on `document` or `window`; Ctrl+comma opened Preferences. Ctrl+J and Meta+J toggled from a terminal, Ctrl+Shift+J did not, and neither toggled with Preferences open, from the page or from the dock. Cold load under 4x CPU, 150 ms and 1.6 Mbit/s, cache off: at the right 450 frames with the workbook area, all with its right edge at 1000; at the bottom 453, all with its bottom at 600. Side switch under 4x CPU with a shell running: 70 frames in two states only, the same dock and terminal nodes, the old output in every frame, a new command answered. AMOLED Black and back re-coloured the open terminal in place (f7f7f7, ededed, f7f7f7). Consent through `/mcp` as an outside client: the dialog named the agent and the command, was modal, focused and above an open Preferences dialog; Allow once ran the call, stored nothing, and the next call asked again; with two waiting, answering the first left the second shown and its caller waiting; a reload showed it again; closing the caller's connection closed the dialog; Always allow stored `allowed` and the next call ran unasked; Deny refused and the next call was refused at once. Blocked refused an outside call and a call with a live Claude Code tab's token, and a shell tab still opened. After the Claude Code tab closed, its token was asked like an outside agent's and Escape refused it.
+
+### The REST API note says what a call without a token can do
+- refers-to: src/ui/settings-engine.ts (the REST API panel, paint)
+- kind: fix
+- logged: unreleased · 2026-11-19
+
+With no token set the note read "No token is set, so REST calls from this computer are open." That understated the engine: since the window key, a write to `/api/v1` with no REST token is answered 403 unless it carries the window key, which a script does not have, so only reads are answered. The note now reads "No token is set: REST calls from this computer can read, and a call that changes anything is refused until a token is made." One string in the same text node; the sentence shown when a token is set was already true. Seen on the engine from source with a temp data folder: no token, GET `/api/v1/workbooks` 200 and POST 403; with a token made, GET and POST without it 401, with it 200 and 201. The page itself was not opened (no browser in this session); `demo/assets/demo.js` still carries the old sentence until the next `npm run demo`.
+
 ## Open items closed · v0.43.0 (2026-11-13)
 
 ### The demos as browser pages

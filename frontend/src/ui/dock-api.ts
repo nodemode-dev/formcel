@@ -1,4 +1,7 @@
-export interface TerminalInfo { id: string; title: string; cwd?: string; alive: boolean; kind: 'shell' | 'claude' | 'agent' }
+import { keyHeaders, presentKey } from './window-key';
+
+export type AgentProgram = 'codex' | 'cursor';
+export interface TerminalInfo { id: string; title: string; cwd?: string; alive: boolean; kind: 'shell' | 'claude' | 'agent' | AgentProgram }
 export interface ClaudeCodeStatus { installed: boolean; version: string | null; install: string; signedIn: boolean | null }
 export interface ClaudeOpen { prompt?: string; resume?: string; cols?: number; rows?: number; fresh?: boolean }
 export type AgentMode = 'ask' | 'auto-edits' | 'plan';
@@ -25,7 +28,7 @@ const NOT_RUNNING = 'The FormCel engine is not running. Start it with ./formcel.
 
 async function request(path: string, init?: RequestInit): Promise<Response> {
   let res: Response;
-  try { res = await fetch(`/api${path}`, init); } catch {
+  try { res = await fetch(`/api${path}`, { ...init, headers: { ...(init?.headers as Record<string, string> | undefined), ...keyHeaders() } }); } catch {
     throw new ApiError(NOT_RUNNING, 0);
   }
   if (!res.ok) {
@@ -44,7 +47,7 @@ function json(body: unknown): RequestInit {
 }
 
 export function socketTo(path: string): WebSocket {
-  return new WebSocket(`${location.protocol === 'https:' ? 'wss:' : 'ws:'}//${location.host}/api${path}`);
+  return presentKey(new WebSocket(`${location.protocol === 'https:' ? 'wss:' : 'ws:'}//${location.host}/api${path}`));
 }
 
 export const dockApi = {
@@ -61,14 +64,6 @@ export const dockApi = {
     if (!info || typeof info.id !== 'string' || info.id === '') throw new ApiError('Claude Code did not start.', 502);
     return info as TerminalInfo;
   },
-  async claudeCodeStatus(): Promise<ClaudeCodeStatus | null> {
-    let now: Partial<ClaudeCodeStatus> | null = null;
-    try { now = (await (await request('/claude-code/status')).json()) as Partial<ClaudeCodeStatus>; } catch { now = null; }
-    if (now?.installed === true) return { installed: true, version: now.version ?? null, install: '', signedIn: now.signedIn ?? null };
-    const old = await dockApi.claudeStatus();
-    if (!now && !old) return null;
-    return { installed: now ? false : old?.installed === true, version: now?.version ?? old?.version ?? null, install: now?.install || old?.install || '', signedIn: now?.signedIn ?? old?.signedIn ?? null };
-  },
   async claudeStatus(fresh = false): Promise<ClaudeStatus | null> {
     try { return (await (await request(`/agent/claude/status${fresh ? '?fresh=true' : ''}`)).json()) as ClaudeStatus; } catch { return null; }
   },
@@ -76,4 +71,17 @@ export const dockApi = {
   async claudeSend(text: string): Promise<void> { await request('/agent/claude/send', json({ text })); },
   async claudeStop(): Promise<void> { await request('/agent/claude/stop', { method: 'POST' }); },
   async claudeAllow(id: string, allow: boolean): Promise<void> { await request('/agent/claude/permission', json({ id, allow })); },
+  async openAgent(kind: AgentProgram, cols: number, rows: number): Promise<TerminalInfo> {
+    return (await (await request('/terminal/agent', json({ kind, cols, rows }))).json()) as TerminalInfo;
+  },
+  async agentStatus(): Promise<Partial<Record<'claude' | AgentProgram, ClaudeCodeStatus>> | null> {
+    let told: Partial<Record<'claude' | AgentProgram, Partial<ClaudeCodeStatus>>>;
+    try { told = (await (await request('/agents/status')).json()) as typeof told; } catch { return null; }
+    const out: Partial<Record<'claude' | AgentProgram, ClaudeCodeStatus>> = {};
+    for (const name of ['claude', 'codex', 'cursor'] as const) {
+      const p = told[name];
+      if (p) out[name] = { installed: p.installed === true, version: p.version ?? null, install: p.install ?? '', signedIn: p.signedIn ?? null };
+    }
+    return out;
+  },
 };

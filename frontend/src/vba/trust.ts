@@ -1,4 +1,5 @@
 import { prefs, updatePrefs, type MacroPolicy } from '../ui/prefs';
+import { api } from '../automation/dom';
 
 export type MacroLevel = 'notify' | 'silent' | 'signed' | 'all';
 
@@ -51,12 +52,14 @@ export function trust(id: string, signature: string): void {
   const t = loadTrust();
   t.documents[id] = signature;
   saveTrust(t);
+  void api('PUT', `/api/workbooks/${id}/trust`, { scripts: true }).catch(() => undefined);
 }
 
 export function forget(id: string): void {
   const t = loadTrust();
   delete t.documents[id];
   saveTrust(t);
+  void api('PUT', `/api/workbooks/${id}/trust`, { scripts: false }).catch(() => undefined);
 }
 
 export function setLevel(level: MacroLevel): void {

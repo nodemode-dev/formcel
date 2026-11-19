@@ -1,5 +1,6 @@
 import { actions, el, field, makeModal } from '../ui/modal';
 import { attachFontInput } from '../ui/fontpicker';
+import { dockKeeps } from '../ui/dock-keys';
 import { DASH_LABELS, SHAPES, SHAPE_GROUPS, gallery, isLine, thumb, canon, type Variant } from './shapes';
 import type { Dash, ShapeSpec } from './types';
 
@@ -63,6 +64,7 @@ export function showGallery(at: { x: number; y: number }, pick: (v: Variant) => 
   root.style.left = `${Math.max(4, Math.min(at.x, window.innerWidth - r.width - 4))}px`;
   root.style.top = `${Math.max(4, Math.min(at.y, window.innerHeight - r.height - 4))}px`;
   closer = (e) => {
+    if (e instanceof KeyboardEvent && dockKeeps(e)) return;
     if (e instanceof KeyboardEvent ? e.key === 'Escape' : !root.contains(e.target as Node)) hideGallery();
   };
   document.addEventListener('pointerdown', closer, true);

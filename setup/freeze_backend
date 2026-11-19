@@ -25,8 +25,29 @@ needs_sign() {
 sign_macho() {
   codesign --force --options runtime --timestamp --entitlements "$entitlements" -s "$APPLE_SIGNING_IDENTITY" "$1"
 }
+plain_framework_libraries() {
+  local root link dest fw gone=()
+  root="$(cd "$1" && pwd -P)"
+  while IFS= read -r link; do
+    case "$link" in *.framework/*) continue ;; esac
+    dest="$( { cd "$(dirname "$link")" && cd "$(dirname "$(readlink "$link")")" && pwd -P; } 2>/dev/null || true)/$(basename "$(readlink "$link")")"
+    case "$dest" in "$root"/*.framework/*) ;; *) continue ;; esac
+    file -b "$dest" | grep -Eq 'Mach-O.*(executable|shared library|bundle)' || continue
+    cp -p "$dest" "$link.plain"
+    rm -f "$link"
+    mv "$link.plain" "$link"
+    codesign --remove-signature "$link"
+    fw="${dest%%.framework/*}.framework"
+    gone+=("$fw")
+  done < <(find "$root" -type l)
+  for fw in ${gone[@]+"${gone[@]}"}; do
+    case "$fw" in "$root"/*.framework) rm -rf "$fw" ;; esac
+  done
+  [ "${#gone[@]}" = 0 ] || echo "engine: framework libraries kept as plain files, their framework folders removed: ${#gone[@]}"
+}
 sign_engine() {
   local dir="$1" main="$1/formcel-engine" f count=0
+  plain_framework_libraries "$dir"
   while IFS= read -r f; do
     file -b "$f" | grep -q 'Mach-O' || continue
     if needs_sign "$f"; then sign_macho "$f"; count=$((count + 1)); fi
@@ -36,6 +57,10 @@ sign_engine() {
     count=$((count + 1))
   fi
   codesign --verify --strict "$main"
+  while IFS= read -r f; do
+    file -b "$f" | grep -q 'Mach-O' || continue
+    codesign --verify --strict "$f" || { echo "this library sits in a framework folder that nothing links to from outside, and its signature does not hold there; Apple's notary would refuse the app: $f" >&2; exit 1; }
+  done < <(find "$dir" -type f -path '*.framework/*' -print)
   echo "engine signed: $count Mach-O files re-signed with $APPLE_SIGNING_IDENTITY"
 }
 if [ "$os" = Darwin ]; then

@@ -206,7 +206,7 @@ export function ribbonTabs(h: RibbonHost): TabDef[] {
   const developer: TabDef = {
     id: 'developer', label: 'Developer', groups: [
       G('code', 'Code', L('vba.editor', 'Visual Basic', 'vba'), L('vba.macros', 'Macros', 'macros'), L('vba.record', 'Record Macro', 'record'), L('vba.security', 'Macro Security', 'protectBook')),
-      G('controls', 'Controls', M('devcontrols', 'Insert', 'controls', [...CONTROL_TYPES.map(([t, label, icon]) => c(`vba.control.${t}`, label, icon)), ...controlsMenu]), L('vba.controls', 'Form Controls', 'controls'), L('vba.view-code', 'View Code', 'vba')),
+      G('controls', 'Controls', M('devcontrols', 'Insert', 'controls', [...CONTROL_TYPES.map(([t, label, icon]) => c(`vba.control.${t}`, label, icon)), ...controlsMenu]), L('vba.controls', 'Form Controls', 'controls'), L('form.open', 'Data Form', 'dataForm'), L('vba.view-code', 'View Code', 'vba')),
     ],
   };
 

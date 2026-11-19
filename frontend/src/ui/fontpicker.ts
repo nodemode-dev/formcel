@@ -1,5 +1,6 @@
 import '../styles/fontpicker.css';
 import { ensureFont, fontGroups, isBundled, loadSystemFonts, noteRecentFont } from '../grid/fonts';
+import { dockKeeps } from './dock-keys';
 
 export interface FontPickerOpts {
   anchor: HTMLElement;
@@ -287,6 +288,7 @@ export function openFontPicker(o: FontPickerOpts): FontPickerHandle {
     close();
   };
   const onKey = (e: KeyboardEvent): void => {
+    if (dockKeeps(e)) return;
     if (e.key === 'Escape') { e.stopPropagation(); close(); o.anchor.querySelector('input')?.focus(); return; }
     if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
       e.preventDefault();

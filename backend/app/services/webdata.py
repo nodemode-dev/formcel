@@ -28,13 +28,31 @@ def fetch(url: str, fresh: bool = False, headers: dict | None = None) -> tuple[b
     hit = _cache.get(url)
     if hit and not fresh and time.time() - hit[0] < TTL:
         return hit[1], hit[2]
-    req = urllib.request.Request(url, headers={"User-Agent": "FormCel/0.34", **(headers or {})})
-    try:
-        with urllib.request.urlopen(req, timeout=TIMEOUT) as r:
-            body = r.read(MAX_BYTES + 1)
-            ctype = r.headers.get("Content-Type", "")
-    except (urllib.error.URLError, OSError, ValueError) as e:
-        raise FetchError(str(e))
+    from .gasrun import _NoRedirect, private_host
+
+    opener = urllib.request.build_opener(_NoRedirect)
+    target = url
+    for _ in range(6):
+        host = urllib.parse.urlsplit(target).hostname or ""
+        if not target.lower().startswith(("http://", "https://")) or not host:
+            raise FetchError("only http and https addresses are fetched")
+        if private_host(host):
+            raise FetchError(f"{host} is on this computer or a private network; only public addresses are fetched")
+        req = urllib.request.Request(target, headers={"User-Agent": "FormCel/0.34", **(headers or {})})
+        try:
+            with opener.open(req, timeout=TIMEOUT) as r:
+                body = r.read(MAX_BYTES + 1)
+                ctype = r.headers.get("Content-Type", "")
+            break
+        except urllib.error.HTTPError as e:
+            if e.code in (301, 302, 303, 307, 308) and e.headers.get("Location"):
+                target = urllib.parse.urljoin(target, e.headers["Location"])
+                continue
+            raise FetchError(str(e))
+        except (urllib.error.URLError, OSError, ValueError) as e:
+            raise FetchError(str(e))
+    else:
+        raise FetchError("too many redirects")
     if len(body) > MAX_BYTES:
         raise FetchError("the response is over 10 MB")
     _cache[url] = (time.time(), body, ctype)

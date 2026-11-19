@@ -6,6 +6,7 @@ import { registerPwa } from './pwa';
 import { registerCommand } from './ui/commands';
 import { CaptionButtons, TitleTools } from './ui/titlebar';
 import { fontsOrTimeout, revealApp, wantsCustomTitleBar } from './ui/desktop';
+import { loadWindowKey } from './ui/window-key';
 
 registerPwa();
 
@@ -34,6 +35,7 @@ registerCommand({
   run: () => { if (wantsCustomTitleBar()) caption.toggle(); },
 });
 activateAll(engine());
+await loadWindowKey();
 const app = new App(parts);
 void Promise.race([app.ready, new Promise((done) => setTimeout(done, 2500))])
   .then(() => fontsOrTimeout(2500))

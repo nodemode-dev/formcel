@@ -9,6 +9,7 @@ import { customizeQat, customizeRibbon } from './ribbon-customize';
 import { RibbonHost, type HostHooks } from './ribbon-host';
 import { ribbonTabs, simpleItems } from './ribbon-tabs';
 import { installResponsive } from './responsive';
+import { dockKeeps } from './dock-keys';
 import type { Grid } from '../grid/grid';
 
 export interface RibbonMount {
@@ -180,7 +181,7 @@ export function mountRibbon(root: HTMLElement, grid: Grid, deps: MountDeps): Rib
     });
   };
   document.addEventListener('pointerup', () => window.setTimeout(context, 0), true);
-  document.addEventListener('keyup', context, true);
+  document.addEventListener('keyup', (e) => { if (!dockKeeps(e)) context(); }, true);
 
   const refresh = (): void => {
     host.refreshState();

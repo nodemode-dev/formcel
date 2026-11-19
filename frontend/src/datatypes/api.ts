@@ -1,7 +1,8 @@
 import type { Candidate, FetchedRecord, TypeKind } from './model';
+import { keyHeaders } from '../ui/window-key';
 
 async function call<T>(method: string, path: string, body?: unknown): Promise<T> {
-  const r = await fetch(path, { method, headers: body === undefined ? undefined : { 'content-type': 'application/json' }, body: body === undefined ? undefined : JSON.stringify(body) });
+  const r = await fetch(path, { method, headers: { ...keyHeaders(), ...(body === undefined ? {} : { 'content-type': 'application/json' }) }, body: body === undefined ? undefined : JSON.stringify(body) });
   if (!r.ok) {
     let detail = `${r.status}`;
     try {

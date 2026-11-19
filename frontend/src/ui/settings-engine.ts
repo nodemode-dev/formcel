@@ -140,7 +140,7 @@ export function tokenPanel(): Panel {
   const paint = async (): Promise<void> => {
     try {
       const s = await api<{ enabled: boolean }>('GET', '/api/settings/api');
-      setText(state, s.enabled ? 'A token is required for the REST API: send Authorization: Bearer TOKEN.' : 'No token is set, so REST calls from this computer are open.');
+      setText(state, s.enabled ? 'A token is required for the REST API: send Authorization: Bearer TOKEN.' : 'No token is set: REST calls from this computer can read, and a call that changes anything is refused until a token is made.');
     } catch {
       setText(state, 'The engine process could not be reached.');
     }

@@ -6,11 +6,11 @@ Read `CLAUDE.md` first; it holds the layout, commands and rules. This file repea
 
 When the person wants something done in FormCel (a workbook saved or opened, a ribbon or menu action, anything the window can do), use the `formcel` MCP server, guided by the `formcel-driving` skill in `.agents/skills/formcel-driving` (the same skill sits in `.claude/skills`). `list_commands` finds a command in the window's catalogue, `describe_command` explains it, and `run_command` runs it in the open window, where the person sees the change. `./formcel cli list`, `describe` and `run` reach the same catalogue from a shell.
 
-`.mcp.json`, `.codex/config.toml` and `.cursor/mcp.json` run `./formcel mcp`, which starts the engine when it is not running. From any other folder, `./formcel agents install` sets up Claude Code, Codex and Cursor for the user account. The first command an outside agent runs asks the person once, in the window, to allow outside agents (Preferences, Trust Center keeps the switch). The terminal, Claude Code and chat commands (`terminal-toggle`, `terminal-new`, `claude-code`, `claude-chat`) are the person's own and are refused to every agent.
+`.mcp.json`, `.codex/config.toml` and `.cursor/mcp.json` run `./formcel mcp`, which starts the engine when it is not running. From any other folder, `./formcel agents install` sets up Claude Code, Codex and Cursor for the user account. The first command an outside agent runs asks the person once, in the window, to allow outside agents (Preferences, Trust Center keeps the switch). `./formcel cli run` is asked the same way, and only the window can change the switch: an agent or a script asks the person and never sets it. The terminal, Claude Code and chat commands (`terminal-toggle`, `terminal-new`, `claude-code`, `claude-chat`) are the person's own and are refused to every agent.
 
 ## Changing FormCel's code
 
-Read `CLAUDE.md` and `.agents/skills/formcel-harness/SKILL.md` first; its `terminal-operator` sub-skill covers the terminal dock, Claude Code, the window bridge and `/mcp`. Edit skills in `.claude/skills`, then run `./formcel agents sync`; `./formcel agents check` and `./formcel mcpb check` must pass (CI runs both).
+Read `CLAUDE.md` and `.agents/skills/formcel-harness/SKILL.md` first; its `terminal-operator` sub-skill covers the terminal dock, Claude Code, the window bridge and `/mcp`. Edit skills in `.claude/skills`, then run `./formcel agents sync`; `./formcel agents check` and `./formcel mcpb check` must pass (CI runs both). The same sync writes `agents/manifest.json`, the file that says which MCP tools and skills FormCel offers; it is generated from the code and never edited by hand.
 
 ## Declined for patent risk, 2026-10-23
 

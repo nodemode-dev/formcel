@@ -17,6 +17,21 @@ FormCel is a spreadsheet app. Its engine runs on `127.0.0.1:8199` and its window
 
 Command ids are dotted, for example `ribbon.collapse`, `ribbon.customize`, `qat.customize` and `app.settings`. Always find an id with `list_commands` first; never guess one.
 
+Commands that take params get them in `run_command`'s `params` (on the command line as `key=value`). Forms, databases and handlers:
+
+| Command | Params | What it does |
+| --- | --- | --- |
+| `data.dbQuery` | `path`, `sql`, `params` | One SELECT on a SQLite file; answers columns and rows |
+| `data.dbExec` | `path`, `sql`, `params` | One INSERT, UPDATE or DELETE; refused until the person allows that database for this workbook |
+| `data.dbAllowWrite` | `path` | Asks the person in the window to allow saving to that database; an agent cannot answer for them |
+| `form.new`, `form.open`, `form.list`, `form.delete` | `id` or `name` | Data forms over a SQLite table |
+| `python.run` | `name` | Runs a Python handler of the workbook and writes the cells it puts; needs Python cells on |
+| `python.panel` | | Opens the Python tab |
+| `view.dashboard` | | Turns dashboard view on or off for the sheet |
+| `report.run` | `template`, `sql`, `out` | Has FormTxt write a list report of the workbook database |
+
+A workbook asks the person before its formulas read local files or web pages; until they answer, those cells show `#N/A`. Do not try to answer that question or the database question yourself.
+
 ## How to work
 
 1. `list_commands` with a word from the person's request (`text: "sort"`).
@@ -27,13 +42,13 @@ Command ids are dotted, for example `ribbon.collapse`, `ribbon.customize`, `qat.
 ## Rules
 
 - The terminal, Claude Code and chat commands (`terminal-toggle`, `terminal-new`, `claude-code`, `claude-chat`) are the person's own and are refused to every agent. Do not retry them; tell the person where to find them in the window.
-- Outside agents need the person's consent. The first `run_command` from an outside agent asks once in the FormCel window; if the person says no, the refusal holds for ten minutes and the person can turn on Allow outside agents in Preferences, Trust Center. The Claude Code that the window's own terminal dock starts is never asked.
+- Outside agents need the person's consent. The first `run_command` from an outside agent asks once in the FormCel window; if the person says no, the refusal holds for ten minutes and the person can turn on Allow outside agents in Preferences, Trust Center. Only the FormCel window can change that switch: no tool, command or request of yours turns it on, so ask the person and do not look for another way. If the saved permission was changed outside FormCel, it counts as off, FormCel asks again, and Preferences says so. The Claude Code that the window's own terminal dock starts is never asked.
 - Reading the catalogue (`list_commands`, `describe_command`) needs no window; running a command does.
 - FormCel's calculation rules live in its engine. Do not compute a workbook's values yourself when a command or the window can show them.
 
 ## From a shell
 
-The same catalogue answers on the command line while the engine runs:
+The same catalogue answers on the command line while the engine runs. `list` and `describe` only read; `run` needs the open window and counts as an outside agent, so the first one asks the person in the window like any other:
 
 ```
 ./formcel cli list sort

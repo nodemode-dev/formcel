@@ -1,5 +1,6 @@
 import { engine } from '../engine';
 import type { Grid, Presence } from '../grid/grid';
+import { keyHeaders } from './window-key';
 import { colName, parseRef } from '../grid/a1';
 import type { Menu } from './menu';
 import { anchorRect } from './rb-state';
@@ -36,7 +37,7 @@ export function identityHeaders(): Record<string, string> {
 }
 
 export async function call<T>(method: string, url: string, body?: unknown): Promise<T> {
-  const r = await fetch(url, { method, headers: { ...identityHeaders(), ...(body === undefined ? {} : { 'content-type': 'application/json' }) }, body: body === undefined ? undefined : JSON.stringify(body) });
+  const r = await fetch(url, { method, headers: { ...identityHeaders(), ...keyHeaders(), ...(body === undefined ? {} : { 'content-type': 'application/json' }) }, body: body === undefined ? undefined : JSON.stringify(body) });
   if (!r.ok) {
     const detail = await r.json().then((j: { detail?: string }) => j.detail).catch(() => undefined);
     throw new Error(detail ?? `The engine answered ${r.status}.`);

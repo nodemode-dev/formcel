@@ -1,5 +1,6 @@
 import { MAX_COLS, colName } from '../grid/a1';
 import { actions, el, makeModal, type Modal } from './modal';
+import { keyHeaders } from './window-key';
 
 export interface SpellHost {
   area(): Promise<{ cells: [number, number, string][]; label: string }>;
@@ -19,7 +20,7 @@ interface Issue {
 const KEY = (r: number, c: number) => r * MAX_COLS + c;
 
 async function call<T>(method: string, url: string, body?: unknown): Promise<T> {
-  const r = await fetch(url, { method, headers: { 'content-type': 'application/json' }, body: body === undefined ? undefined : JSON.stringify(body) });
+  const r = await fetch(url, { method, headers: { 'content-type': 'application/json', ...keyHeaders() }, body: body === undefined ? undefined : JSON.stringify(body) });
   if (!r.ok) throw new Error(((await r.json().catch(() => ({}))) as { detail?: string }).detail ?? 'The spelling service did not answer.');
   return (await r.json()) as T;
 }

@@ -6,7 +6,7 @@ export interface Command {
   keys?: string;
   enabled?(): boolean;
   checked?(): boolean;
-  run(): void | Promise<void>;
+  run(params?: Record<string, unknown>): unknown;
 }
 
 const commands = new Map<string, Command>();
@@ -47,4 +47,10 @@ export async function runCommand(id: string): Promise<boolean> {
   if (!c) return false;
   await c.run();
   return true;
+}
+
+export async function callCommand(id: string, params: Record<string, unknown> = {}): Promise<unknown> {
+  const c = commands.get(id);
+  if (!c) throw new Error(`No command has the id ${id}.`);
+  return await c.run(params);
 }
