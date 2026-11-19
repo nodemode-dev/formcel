@@ -16,7 +16,9 @@ FormCel's terminal dock follows the Form family standard set by formvis: the eng
 | `backend/app/services/agents.py` | The per-run in-app token (`FORMCEL_INAPP_TOKEN` in the tab's environment, header `x-formcel-inapp`) and the outside-agent switch kept in `settings.json` |
 | `backend/app/services/bridge.py`, `routers/live.py` | The window bridge: the engine sends `{"t": "run", "id", "command", "params"}` on `/api/live` and waits for `{"t": "result", "id", "ok", "result" or "error"}` |
 | `backend/app/routers/commands.py`, `routers/mcp.py` | The mirrored catalogue (`PUT /api/commands`), describe and run for the CLI, and `/mcp` with `list_commands`, `describe_command` and `run_command`; `GET` and `PUT /api/agents/allowed`; `GET /api/mcp/status` |
-| `frontend/src/ui/terminal-dock.ts`, `chat-pane.ts`, `dock-api.ts`, `dock-mount.ts`, `styles/terminal.css` | The dock, the Chat tab, their engine calls and their commands (`terminal-toggle` Mod+J, `terminal-new`, `claude-code`, `claude-chat`) |
+| `frontend/src/dock/` | The family's shared dock module (the dock, the Chat tab, icons, strings, `dock.css` on `--dock-*` tokens), copied whole from FormVis with its `MANIFEST.json`; never edited here, and `./formcel agents check` fails when a file differs |
+| `frontend/src/dock-adapter.ts`, `styles/dock-tokens.css`, `ui/dock-api.ts`, `ui/dock-mount.ts`, `styles/terminal.css` | FormCel's side of the dock: its names, routes, storage key and host classes; its token map; its engine calls; its commands (`terminal-toggle` Mod+J, `terminal-new`, `claude-code`, `claude-chat`); the bottom row or right column in `#app` |
+| `backend/app/services/agent_programs.py` | Codex (`codex`) and Cursor (`cursor-agent`): found on PATH or by the login shell, reported as `agents` in `/api/claude-code/status`, started by `POST /api/terminal/agent` with their own in-app token in the environment |
 | `frontend/src/automation/bridge.ts`, `ui/agents-allow.ts` | The window side of `/api/live` and the consent question and switch |
 | `setup/mcp_stdio.py` | `./formcel mcp`: stdio to `/mcp`, starting `backend/boot_backend` when no engine answers (`FORMCEL_MCP_AUTOSTART=0` turns that off) |
 
@@ -29,5 +31,5 @@ FormCel's terminal dock follows the Form family standard set by formvis: the eng
 5. The dock's commands are window-only: `WINDOW_ONLY` in `routers/commands.py` refuses them to the CLI and to every agent, the in-app Claude Code included. Keep it in step with `WINDOW_ONLY` in `frontend/src/automation/bridge.ts`.
 6. Outside agents keep the consent flow; nothing auto-approves it. Only the in-app token skips the question.
 7. The bridge message format is the family's (formtxt's `/api/live`); change both sides together or not at all.
-8. Window changes obey the zero-flash law: the dock row is reserved before first paint, tabs and notes are patched in place.
+8. Window changes obey the zero-flash law: the dock row or column is reserved before first paint, tabs and notes are patched in place.
 9. Record the change in the side's `HASHOUT_LOG.md`.
