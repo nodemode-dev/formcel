@@ -20,12 +20,12 @@ TAG = re.compile(r"</?[A-Za-z][^>]*>")
 LAUNCHER = "formcel"
 LAUNCH = os.path.join(ROOT, "formcel.bat" if os.name == "nt" else "formcel")
 ARGS = ["mcp"]
-CLIENTS = ("claude", "codex", "cursor")
+CLIENTS = ("claude", "codex", "cursor", "antigravity")
 REGISTRY = "formcel"
 MANIFEST = os.path.join(ROOT, "agents", "manifest.json")
 MCP_SOURCE = os.path.join(ROOT, "backend", "app", "routers", "mcp.py")
 STDIO_SOURCE = os.path.join(ROOT, "setup", "mcp_stdio.py")
-DOCK = {"present": True, "positions": ["bottom", "right"], "tabs": ["chat", "shell", "claude", "codex", "cursor", "agent"]}
+DOCK = {"present": True, "positions": ["bottom", "right"], "tabs": ["chat", "shell", "claude", "codex", "cursor", "antigravity", "agent"]}
 DOCK_DIR = os.path.join(ROOT, "frontend", "src", "dock")
 DOCK_MANIFEST = os.path.join(DOCK_DIR, "MANIFEST.json")
 
@@ -453,10 +453,46 @@ def install_cursor(home, dry, said):
     copy_skills(os.path.join(home, ".agents", "skills"), dry, said)
 
 
+def ours(entry):
+    return isinstance(entry, dict) and entry.get("args") == ARGS and os.path.basename(str(entry.get("command", ""))) == os.path.basename(LAUNCH)
+
+
+def install_antigravity(home, dry, said):
+    said.append("Antigravity:")
+    cfg = os.path.join(home, ".gemini", "config", "mcp_config.json")
+    older = os.path.join(home, ".gemini", "antigravity-cli", "mcp_config.json")
+    if os.path.exists(older) and not os.path.exists(cfg):
+        said.append(f"  an older file was seen at {older} and left alone; the documented file is {cfg}")
+    try:
+        raw = open(cfg, encoding="utf-8").read() if os.path.exists(cfg) else ""
+        data = json.loads(raw) if raw.strip() else {}
+    except ValueError:
+        data = None
+    if not isinstance(data, dict) or not isinstance(data.get("mcpServers", {}), dict):
+        said.append(f"  {cfg} is not an MCP servers file FormCel can read; left alone")
+        return
+    entry = {"command": LAUNCH, "args": ARGS}
+    have = data.get("mcpServers", {}).get(LAUNCHER)
+    if have == entry:
+        said.append(f"  MCP server {LAUNCHER} already in {cfg}")
+    elif have is not None and not ours(have):
+        said.append(f"  {cfg} has a server named {LAUNCHER} that FormCel did not write; left alone")
+    else:
+        said.append(f"  MCP server {LAUNCHER} -> {cfg}")
+        if not dry:
+            backup(cfg, dry)
+            data.setdefault("mcpServers", {})[LAUNCHER] = entry
+            os.makedirs(os.path.dirname(cfg), exist_ok=True)
+            part = f"{cfg}.part-{os.getpid()}"
+            with open(part, "w", encoding="utf-8") as f:
+                f.write(json.dumps(data, indent=2) + "\n")
+            os.replace(part, cfg)
+
+
 def install(clients, dry):
     home, said = os.environ.get("HOME") or os.path.expanduser("~"), []
     for client in clients or CLIENTS:
-        {"claude": install_claude, "codex": install_codex, "cursor": install_cursor}[client](home, dry, said)
+        {"claude": install_claude, "codex": install_codex, "cursor": install_cursor, "antigravity": install_antigravity}[client](home, dry, said)
     print(("Would do (dry run):\n" if dry else "") + "\n".join(said))
     if not dry:
         print("\nRestart the clients. The first command an outside agent runs asks you once, in the FormCel window, to allow outside agents.")
@@ -468,14 +504,14 @@ def main():
     sub = parser.add_subparsers(dest="action", required=True)
     sub.add_parser("sync", help="mirror .claude/skills into .agents/skills").add_argument("--check", action="store_true", help="only check, as agents check does")
     sub.add_parser("check", help="check the mirror, the skills and the MCP configs")
-    put = sub.add_parser("install", help="register FormCel with Claude Code, Codex and Cursor for this user")
-    put.add_argument("clients", nargs="*", metavar="client", help="claude, codex or cursor (default all three)")
+    put = sub.add_parser("install", help="register FormCel with Claude Code, Codex, Cursor and Antigravity for this user")
+    put.add_argument("clients", nargs="*", metavar="client", help="claude, codex, cursor or antigravity (default all four); Antigravity gets the MCP server only, in ~/.gemini/config/mcp_config.json")
     put.add_argument("--dry-run", action="store_true", help="say what would change and change nothing")
     args = parser.parse_args()
     if args.action == "install":
         bad = [c for c in args.clients if c not in CLIENTS]
         if bad:
-            parser.error(f"unknown client {', '.join(bad)} (claude, codex or cursor)")
+            parser.error(f"unknown client {', '.join(bad)} (claude, codex, cursor or antigravity)")
         return install(args.clients, args.dry_run)
     return check() if args.action == "check" or args.check else sync()
 

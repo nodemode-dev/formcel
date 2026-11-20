@@ -75,7 +75,7 @@ def test_the_dock_folder_imports_only_itself_and_xterm():
 def test_the_manifest_dock_block_says_bottom_and_right():
     dock = json.loads((REPO / "agents" / "manifest.json").read_text(encoding="utf-8"))["dock"]
     assert dock["positions"] == ["bottom", "right"]
-    assert dock["tabs"] == ["chat", "shell", "claude", "codex", "cursor", "agent"]
+    assert dock["tabs"] == ["chat", "shell", "claude", "codex", "cursor", "antigravity", "agent"]
     assert "'formcel.dock'" in ADAPTER.read_text(encoding="utf-8") and "legacy: jsonLegacy(['formcel.terminal'], true)" in ADAPTER.read_text(encoding="utf-8")
 
 

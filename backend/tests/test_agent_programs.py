@@ -272,7 +272,33 @@ def test_a_tab_starts_a_node_style_program_with_its_folder_first_on_the_path(doc
 
 
 @pytest.mark.skipif(os.name == "nt", reason="stand-ins are shell scripts")
-def test_antigravity_is_reported_and_has_no_tab(dock_start, client):
+def test_an_antigravity_tab_gets_its_entry_in_its_own_folder_and_loses_it_when_it_closes(dock_start, client):
     node_style(dock_start / ".local" / "bin", "agy")
     assert told(client)["antigravity"]["finding"] == "runs"
-    assert client.post("/api/terminal/agent", json={"kind": "antigravity"}).status_code == 422
+    folder = agent_programs.tab_folder("antigravity")
+    path = folder / ".agents" / "mcp_config.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    seeded = {"mcpServers": {"other": {"command": "other"}}, "theme": "kept"}
+    path.write_text(json.dumps(seeded), encoding="utf-8")
+    res = client.post("/api/terminal/agent", json={"kind": "antigravity", "cols": 80, "rows": 20})
+    assert res.status_code == 200 and res.json()["kind"] == "antigravity" and res.json()["title"] == "Antigravity"
+    session = terminal.get(res.json()["id"])
+    token = session.env[agents.INAPP_VAR]
+    kept = json.loads(path.read_text(encoding="utf-8"))
+    assert kept["theme"] == "kept" and kept["mcpServers"]["other"] == {"command": "other"}
+    assert kept["mcpServers"][agent_programs.TAB_SERVER]["headers"] == {agents.INAPP_HEADER: token} and kept["mcpServers"][agent_programs.TAB_SERVER]["serverUrl"].endswith("/mcp")
+    assert stat.S_IMODE(path.stat().st_mode) == 0o600 and session.cwd == str(folder)
+    assert agents.is_inapp(token) and not any(token in part for part in session.argv)
+    assert client.delete(f"/api/terminal/{session.id}").status_code == 200
+    assert json.loads(path.read_text(encoding="utf-8")) == seeded
+    assert not agents.is_inapp(token)
+
+
+def test_a_tab_entry_that_is_not_this_tabs_is_left_alone(tmp_path):
+    agent_programs.write_tab_entry(tmp_path, 8199, "first")
+    agent_programs.write_tab_entry(tmp_path, 8199, "second")
+    agent_programs.remove_tab_entry(tmp_path, "first")
+    path = tmp_path / ".agents" / "mcp_config.json"
+    assert json.loads(path.read_text(encoding="utf-8"))["mcpServers"][agent_programs.TAB_SERVER]["headers"] == {agents.INAPP_HEADER: "second"}
+    agent_programs.remove_tab_entry(tmp_path, "second")
+    assert json.loads(path.read_text(encoding="utf-8")) == {"mcpServers": {}}

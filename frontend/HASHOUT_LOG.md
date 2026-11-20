@@ -7,6 +7,15 @@ Last updated: 2026-11-13 · v0.43.0: browser demo pages, the inline mark in the 
 
 ---
 
+## v0.45.0 entries · the dock is the family module 2.2.0 and has an Antigravity tab (2026-11-19)
+
+- src/dock/ · the family's shared module at 2.2.0, copied whole from FormVis ddc893ae, 16 entries with `MANIFEST.json` (`agents.ts` is new). Never edited here; `./formcel agents check` compares every file with the manifest. In 2.2.0 the module takes its agent kinds from the adapter, every control carries `data-dock-part`, and a kind the adapter does not list has no hidden button or row.
+- src/dock-adapter.ts :: `formcelDock`, `tabs` · the adapter is typed `DockAdapter<'antigravity'>` and lists `antigravity` as the sixth built-in tab kind. `terminal.open` already sends every kind that is not a shell or Claude Code to `POST /api/terminal/agent`, so the fourth kind needs no new branch.
+- src/ui/dock-api.ts :: `AgentProgram`, `agentStatus` · the type gains `antigravity` and the status answer passes its entry on (`signedIn` stays null: `agy` has no status command).
+- src/ui/dock-mount.ts :: `mountDock` · returns `Dock<'antigravity'>`.
+- Left alone: the adapter's optional parts of 2.2.0 (`note` on a program's status, `status` on a terminal record, automation ids on `data-dock-part`); `keyHeaders` stays because FormCel uses it.
+- Run: `tsc --noEmit` on a copy of the tree with the packages installed, clean. Not run: a browser, the Vite dev server, the desktop window, so the fourth button, its row in the menu and the guide's line were not looked at.
+
 ## After v0.44.0 · the dock treats the agent finder's sentences as "not installed" (2026-11-19)
 
 The version bump comes in a later release commit.

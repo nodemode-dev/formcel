@@ -70,7 +70,7 @@ class ClaudeBody(BaseModel):
 
 
 class AgentBody(BaseModel):
-    kind: Literal["codex", "cursor"]
+    kind: Literal["codex", "cursor", "antigravity"]
     cols: int = Field(100, ge=10, le=500)
     rows: int = Field(30, ge=4, le=200)
 
