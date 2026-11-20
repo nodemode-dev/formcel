@@ -59,6 +59,8 @@ def dock_start(tmp_path, monkeypatch):
     monkeypatch.setenv("HOME", str(home))
     monkeypatch.setenv("SHELL", str(shell))
     monkeypatch.setenv("PATH", "/usr/bin:/bin:/usr/sbin:/sbin")
+    for name in ("FORMCEL_CLAUDE_BIN", "FORMCEL_CODEX_BIN", "FORMCEL_CURSOR_BIN", "FORMCEL_ANTIGRAVITY_BIN", "NPM_CONFIG_PREFIX", "npm_config_prefix", "PNPM_HOME", "VOLTA_HOME", "BUN_INSTALL", "NVM_SYMLINK"):
+        monkeypatch.delenv(name, raising=False)
     monkeypatch.setattr(agent_lookup, "system_folders", lambda platform=None: [])
     monkeypatch.setitem(agent_programs._cache, "value", None)
     agent_lookup.forget()

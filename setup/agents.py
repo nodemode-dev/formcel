@@ -49,7 +49,10 @@ def check_dock(problems):
 
 LOOKUP = os.path.join(ROOT, "backend", "app", "services", "agent_lookup.py")
 LOOKUP_REL = "backend/app/services/agent_lookup.py"
-LOOKUP_HASHES = {"1.0.0": "252ea9bb9419d4990f174f91914f09800497bc69e98f849f5643bbf4217cc3f3"}
+LOOKUP_HASHES = {
+    "1.0.0": "252ea9bb9419d4990f174f91914f09800497bc69e98f849f5643bbf4217cc3f3",
+    "1.0.1": "62667f9b68b7d101e1896ce617240424e33b7e498c560bc79d45f0ab26c77d51",
+}
 
 
 def check_lookup(problems):

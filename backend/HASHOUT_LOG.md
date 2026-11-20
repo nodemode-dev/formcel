@@ -5,6 +5,14 @@ Living log of comment content and rationale for the engine process. Source stays
 Current build version: v0.43.0
 Last updated: 2026-11-13 · v0.43.0 has no change in the engine process; `scripts/demo-record.py` records the three demo workbooks for the browser demo pages (frontend log) and CI's sparkle step also reads `demo`, `demos` and `.js` files. Before: 2026-11-13 · v0.42.0: the agent bridge, MCP, terminals and Claude Code, the agent kit and demos (entries below). Before: 2026-11-13 · v0.41.1 has no change in the engine process; `setup/build_frontend` now always runs `engine/build_wasm` (removed: `[ -f public/engine/formcel.wasm ] || ../engine/build_wasm`), so a plain build after a Rust change no longer ships the old window engine, and the Python wheel takes the workspace version. The engine and frontend logs carry the rest. Before: 2026-11-12 · the v0.41.0 review fixes (entries below). Before: 2026-10-31 · .js, .mjs and .css keep their types on Windows (app/main.py). Before: 2026-10-30 · the Windows install stops on a failed step and never on a missing Tesseract. Before: 2026-10-26 · scripts run with no file, process or network reach (FB-043), and the test suite. Before: LocalGuard refuses cross-site requests that carry no Origin (FB-035). Before: only this computer's own window and agents reach the engine (FB-030), and full fonts in PDF export, freeze exclusions
 
+## v0.45.0 entries · four agent programs: Antigravity beside Claude Code, Codex and Cursor (2026-11-19)
+
+- services/agent_lookup.py · the family's finder is now its version 1.0.1, copied whole and unchanged from FormVis ddc893ae (SHA-256 `62667f9b68b7d101e1896ce617240424e33b7e498c560bc79d45f0ab26c77d51`). The entry below describes 1.0.0; the rule is the same, the file is never edited here.
+- setup/agents.py :: `LOOKUP_HASHES` · holds both versions, 1.0.0 and 1.0.1, so `check_lookup` accepts either file as a whole and nothing in between.
+- tests/test_dock_module.py :: `test_an_edited_agent_finder_is_named` · reads the version from the file's `VERSION` line, so no test pins a version number in a sentence.
+- tests/test_agent_programs.py :: `dock_start` · the made-up home also removes the four `FORMCEL_*_BIN` overrides and `NPM_CONFIG_PREFIX`, `npm_config_prefix`, `PNPM_HOME`, `VOLTA_HOME`, `BUN_INSTALL`, `NVM_SYMLINK`, so a package manager's folder named by the machine cannot stand in for the made-up home. The build machine has `BUN_INSTALL` set.
+- Run: the three test files about agents and the dock (28 passed) and `agents sync --check` (clean) with finder 1.0.1 in place.
+
 ## After v0.44.0 · the family's finder for Claude Code, Codex, Cursor and Antigravity (2026-11-19)
 
 The version bump and the CHANGELOG entry come in a later release commit.

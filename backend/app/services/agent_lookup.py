@@ -26,7 +26,7 @@ import time
 from dataclasses import dataclass, field
 from pathlib import Path
 
-VERSION = "1.0.0"
+VERSION = "1.0.1"
 PROGRAMS: dict = {
     "claude": {"title": "Claude Code", "names": ("claude",), "setting": "claudeBin",
                "install": "curl -fsSL https://claude.ai/install.sh | bash", "install_windows": "irm https://claude.ai/install.ps1 | iex",
@@ -376,7 +376,7 @@ def run(cmd: list, env: dict, timeout: float = 15.0, platform: str | None = None
 
 
 def _last_line(text: str) -> str:
-    lines = [line.strip() for line in (text or "").splitlines() if line.strip()]
+    lines = [line.strip() for line in (text or "").splitlines() if line.strip() and "use -[v]S to pass options" not in line]
     return lines[-1][:300] if lines else ""
 
 

@@ -55,7 +55,8 @@ def test_an_edited_agent_finder_is_named(tmp_path, monkeypatch):
     copy = tmp_path / "agent_lookup.py"
     copy.write_bytes((REPO / LOOKUP).read_bytes() + b"\n")
     monkeypatch.setattr(sync, "LOOKUP", str(copy))
-    assert lookup_problems(sync) == [f"{LOOKUP}: does not match the hash recorded for version 1.0.0 (the shared finder changes only as a whole new version)"]
+    version = re.search(r'^VERSION = "([^"]+)"$', (REPO / LOOKUP).read_text(encoding="utf-8"), re.M).group(1)
+    assert lookup_problems(sync) == [f"{LOOKUP}: does not match the hash recorded for version {version} (the shared finder changes only as a whole new version)"]
 
 
 def test_a_missing_agent_finder_is_named(tmp_path, monkeypatch):
