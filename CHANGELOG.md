@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.47.0 · 2026-11-20
+
+When FormCel cannot start, it now says why in a window of its own, and on Windows nothing is left running after the app ends.
+
+- When the engine cannot start, FormCel opens a small window of its own instead of leaving you with the loading screen. It says in one sentence what went wrong (for example that the engine stopped, that another FormCel engine holds the data folder, or that the engine gave no address within 90 seconds), shows the engine's last lines, its exit code and where its log is, and you can select and copy all of it. Close (or Escape) ends FormCel.
+- FormCel waits up to 90 seconds for its engine on a first start, then stops waiting and says so.
+- Windows: the engine ends together with FormCel however FormCel ends, even when it is closed from the Task Manager.
+- Windows: the engine runs with no console window of its own. Whoever builds FormCel can keep the console with `FORMCEL_ENGINE_WINDOWED=0`.
+- macOS: a start no longer refuses with "could not stop an engine that was left running" when that engine had in fact already ended.
+- Terminal panel: the first-run guide says that Codex, Cursor and Antigravity each get a button of their own when they are on this computer.
+- Nothing in this release has run on Windows or macOS yet; it was checked on Linux, and the desktop app was not built.
+
 ## 0.46.0 · 2026-11-20
 
 FormCel starts and stops cleanly: one engine for a data folder, none left behind, and a log to read when a start fails.
