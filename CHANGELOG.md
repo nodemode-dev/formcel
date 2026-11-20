@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.48.0 · 2026-11-20
+
+FormCel takes the family's look from FormVis, and the browser demo is current again.
+
+- The window uses the same colours, corners and fonts as FormVis: muted text, the green and amber of status marks, slightly tighter corners on menus and in Preferences (10 px instead of 12), and the system's own interface and code fonts first (San Francisco on macOS, Segoe UI on Windows), with the bundled Inter and JetBrains Mono after them. Your accent colour, the text size and the order in which panels and menus stack are unchanged.
+- The data model view shows its error text in the family's red.
+- The window that says why FormCel could not start uses the same colours and fonts.
+- The offline demo (`demo/index.html`, and the What-if and Lab pages) is rebuilt from this version; it had stayed at 0.43.0. Its window engine is smaller (about 5.5 MB instead of 6.1 MB).
+- Nothing in this release has run on Windows or macOS yet; it was checked on Linux, and the desktop app was not built.
+
 ## 0.47.0 · 2026-11-20
 
 When FormCel cannot start, it now says why in a window of its own, and on Windows nothing is left running after the app ends.
