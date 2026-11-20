@@ -7,6 +7,14 @@ Last updated: 2026-11-13 · v0.43.0: browser demo pages, the inline mark in the 
 
 ---
 
+## After v0.44.0 · the dock treats the agent finder's sentences as "not installed" (2026-11-19)
+
+The version bump comes in a later release commit.
+
+- src/dock-adapter.ts :: `errors.kind` · the engine now refuses a tab or Chat with the finder's own sentence ("Codex was not found. Looked in: ..." or "... but does not start: ..."), so the pattern that answers `notInstalled` also matches `was not found. Looked in` and `but does not start`. The dock then refreshes its program list and opens its menu as it did for the old "is not installed" text, and `errors.message` shows the sentence itself.
+- Left alone: `t` still returns the dock's English, so the Chat lead and a row of the menu say the module's own "is not installed" line and not the finder's sentence; FormVis keeps the last `said` per program for that (`tell`, `ownWords`), which is more than one change here. Nothing in `src/dock/` is touched.
+- The pattern was run in node against the three sentences. Not run: tsc (no node_modules here), a browser.
+
 ## Unreleased · data forms, SQLite saving, Python handlers, dashboard view (discussion #12, 2026-11-18)
 
 The version bump comes in a later release commit.
