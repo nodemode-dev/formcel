@@ -67,6 +67,9 @@ if [ "$os" = Darwin ]; then
   mode=--onedir
   [ -z "${APPLE_SIGNING_IDENTITY:-}" ] || extra+=(--codesign-identity "$APPLE_SIGNING_IDENTITY" --osx-entitlements-file "$entitlements")
 fi
+if [ "$ext" = .exe ] && [ "${FORMCEL_ENGINE_WINDOWED:-1}" != 0 ]; then
+  extra+=(--noconsole)
+fi
 rm -rf build/pyinstaller dist-engine
 pyinstaller --noconfirm --clean "$mode" --name formcel-engine \
   --distpath dist-engine --workpath build/pyinstaller --specpath build/pyinstaller \
