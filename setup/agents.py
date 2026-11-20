@@ -47,6 +47,32 @@ def check_dock(problems):
             problems.append(f"frontend/src/dock/{name} does not match MANIFEST.json; the shared dock module is never edited here, only copied in whole")
 
 
+LOOKUP = os.path.join(ROOT, "backend", "app", "services", "agent_lookup.py")
+LOOKUP_REL = "backend/app/services/agent_lookup.py"
+LOOKUP_HASHES = {"1.0.0": "252ea9bb9419d4990f174f91914f09800497bc69e98f849f5643bbf4217cc3f3"}
+
+
+def check_lookup(problems):
+    try:
+        raw = read_bytes(LOOKUP)
+    except OSError:
+        problems.append(f"{LOOKUP_REL}: missing (the shared finder for the agent programs)")
+        return
+    said = re.search(rb'^VERSION = "([^"\r\n]+)"\r?$', raw, re.M)
+    version = said.group(1).decode("ascii", "replace") if said else "unknown"
+    if LOOKUP_HASHES.get(version) != hashlib.sha256(raw).hexdigest():
+        problems.append(f"{LOOKUP_REL}: does not match the hash recorded for version {version} (the shared finder changes only as a whole new version)")
+
+
+def lookup():
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("formcel_agent_lookup", LOOKUP)
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
 def files_under(base):
     found = {}
     if not os.path.isdir(base):
@@ -183,6 +209,7 @@ def sync():
     print(f"[agents] .agents/skills mirrors .claude/skills ({len(source)} files, {changed} changed)")
     problems = []
     check_dock(problems)
+    check_lookup(problems)
     for line in problems:
         print(f"[agents] {line}", file=sys.stderr)
     return sync_manifest() or (1 if problems else 0)
@@ -332,12 +359,13 @@ def check():
     check_agent_files(problems)
     check_manifest(problems)
     check_dock(problems)
+    check_lookup(problems)
     if problems:
         for line in problems:
             print(f"[agents] {line}", file=sys.stderr)
         print(f"[agents] {len(problems)} problem(s)", file=sys.stderr)
         return 1
-    print("[agents] clean: mirror matches, skills pass the format gate, MCP configs name the launcher, manifest is current, the dock module matches its MANIFEST.json")
+    print("[agents] clean: mirror matches, skills pass the format gate, MCP configs name the launcher, manifest is current, the dock module matches its MANIFEST.json, the agent finder matches its recorded hash")
     return 0
 
 
@@ -364,20 +392,23 @@ def copy_skills(root, dry, said):
 
 def install_claude(home, dry, said):
     said.append("Claude Code:")
-    claude = shutil.which("claude")
+    finder = lookup()
+    found = finder.check(finder.find("claude", override_vars=("FORMCEL_CLAUDE_BIN",), home=home))
+    claude = found.path if found.state == "runs" else None
     line = subprocess.list2cmdline([LAUNCH, *ARGS])
     if claude:
-        have = subprocess.run([claude, "mcp", "get", LAUNCHER], capture_output=True, text=True)
+        env = finder.child_env(claude, home=home)
+        have = finder.run([claude, "mcp", "get", LAUNCHER], env, 60)
         if have.returncode == 0 and LAUNCH in have.stdout:
             said.append(f"  MCP server {LAUNCHER} already set (user scope)")
         else:
             said.append(f"  claude mcp add --scope user {LAUNCHER} -- {line}")
             if not dry:
                 if have.returncode == 0:
-                    subprocess.run([claude, "mcp", "remove", LAUNCHER, "--scope", "user"], capture_output=True)
-                subprocess.run([claude, "mcp", "add", "--scope", "user", LAUNCHER, "--", LAUNCH, *ARGS], check=True, capture_output=True)
+                    finder.run([claude, "mcp", "remove", LAUNCHER, "--scope", "user"], env, 60)
+                finder.run([claude, "mcp", "add", "--scope", "user", LAUNCHER, "--", LAUNCH, *ARGS], env, 60).check_returncode()
     else:
-        said.append(f"  the claude command is not installed here; once it is, run: claude mcp add --scope user {LAUNCHER} -- {line}")
+        said.append(f"  {finder.sentence(found, finder.install('claude'))} Once it runs: claude mcp add --scope user {LAUNCHER} -- {line}")
     copy_skills(os.path.join(home, ".claude", "skills"), dry, said)
 
 

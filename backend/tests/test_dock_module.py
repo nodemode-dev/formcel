@@ -37,6 +37,33 @@ def test_an_edited_dock_file_is_named(tmp_path, monkeypatch):
     assert len(problems) == 1 and problems[0].startswith("frontend/src/dock/dock.css ")
 
 
+LOOKUP = "backend/app/services/agent_lookup.py"
+
+
+def lookup_problems(sync):
+    problems = []
+    sync.check_lookup(problems)
+    return problems
+
+
+def test_the_agent_finder_matches_its_recorded_hash():
+    assert lookup_problems(agents_module()) == []
+
+
+def test_an_edited_agent_finder_is_named(tmp_path, monkeypatch):
+    sync = agents_module()
+    copy = tmp_path / "agent_lookup.py"
+    copy.write_bytes((REPO / LOOKUP).read_bytes() + b"\n")
+    monkeypatch.setattr(sync, "LOOKUP", str(copy))
+    assert lookup_problems(sync) == [f"{LOOKUP}: does not match the hash recorded for version 1.0.0 (the shared finder changes only as a whole new version)"]
+
+
+def test_a_missing_agent_finder_is_named(tmp_path, monkeypatch):
+    sync = agents_module()
+    monkeypatch.setattr(sync, "LOOKUP", str(tmp_path / "agent_lookup.py"))
+    assert lookup_problems(sync) == [f"{LOOKUP}: missing (the shared finder for the agent programs)"]
+
+
 def test_the_dock_folder_imports_only_itself_and_xterm():
     found = set()
     for path in DOCK.glob("*.ts"):
