@@ -21,7 +21,7 @@ The family's Windows start pattern, engine side, as built in FormTools 0.10.0. B
 - tests/test_startup.py · FormTools's 13 tests with FormCel's names, plus two of FormCel's own (a second real engine is refused; a packaged engine started by the app serves), added after the behaviour above was seen. Run with `test_f5_boot.py` and `test_window_key.py`: 30 passed. POSIX stand-ins only; the file skips on Windows.
 - Not run: Windows, macOS, a packaged engine, the desktop shell.
 
-## After v0.45.0 · an Antigravity tab whose folder file is not JSON says so (2026-11-19)
+## v0.46.0 entry · an Antigravity tab whose folder file is not JSON says so (2026-11-19)
 
 - Fault: `services/agent_programs.py` :: `_servers` read `.agents/mcp_config.json` of the tab's folder with `json.loads` and let its `ValueError` out; `routers/terminal.py` :: `open_agent` turns only `LookupError` and `OSError` into an answer, so the window got a 500 with no words. Seen in the test below before the change: the JSON error came out of the route.
 - services/agent_programs.py :: `_servers` · a file that is not valid JSON (or not UTF-8) now raises `OSError` with one sentence that names the file, so the route answers 500 with "The program could not start: <file> is not valid JSON, so FormCel left it alone and did not open the tab". The file is not touched, no tab is opened and the tab's token is revoked, as for a file that is JSON but not an MCP servers file. `remove_tab_entry` already returned quietly on both errors.

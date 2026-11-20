@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.46.0 · 2026-11-20
+
+FormCel starts and stops cleanly: one engine for a data folder, none left behind, and a log to read when a start fails.
+
+- Only one FormCel works on a data folder at a time. A second one started on the same folder stops and says that FormCel is already running there, so two engines no longer change the same workbooks side by side.
+- From this version on, an engine that was left running after its FormCel window was gone is stopped and replaced at the next start.
+- The engine stops within about two seconds when the FormCel app that started it ends, however the app ended.
+- The engine keeps a log, `Logs/formcel-engine.log` in FormCel's data folder (`FormCel` in your home folder unless you chose another). A start that fails leaves its reason there.
+- The engine program inside the installed app, when someone opens it by itself, opens FormCel, or says that it is a part of FormCel and serves nothing on its own.
+- Terminal panel: an Antigravity tab whose settings file in its folder is not valid JSON says so in a sentence and leaves the file as it is.
+- Nothing in this release has run on Windows or macOS yet; it was checked on Linux.
+
 ## 0.45.0 · 2026-11-19
 
 Antigravity joins Claude Code, Codex and Cursor, and FormCel finds all four however it was started.
