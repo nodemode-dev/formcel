@@ -11,12 +11,12 @@
 </p>
 
 <p align="center">
-  <img alt="version 0.47.0" src="https://img.shields.io/badge/version-0.47.0-eef0f4?style=flat-square">
+  <img alt="version 0.48.0" src="https://img.shields.io/badge/version-0.48.0-eef0f4?style=flat-square">
   <img alt="Rust and WebAssembly" src="https://img.shields.io/badge/engine-Rust%20%2B%20WebAssembly-b7410e?style=flat-square&logo=rust&logoColor=white">
   <img alt="TypeScript and Vite" src="https://img.shields.io/badge/TypeScript-Vite-3178c6?style=flat-square">
   <img alt="macOS, Windows, Linux" src="https://img.shields.io/badge/macOS%20%C2%B7%20Windows%20%C2%B7%20Linux-native-2f7bf5?style=flat-square">
   <img alt="License: Apache-2.0" src="https://img.shields.io/badge/license-Apache--2.0-3a3a3a?style=flat-square">
-  <img alt="Status: active development" src="https://img.shields.io/badge/status-active%20development-d69e2e?style=flat-square">
+  <img alt="Status: released" src="https://img.shields.io/badge/status-released-d69e2e?style=flat-square">
 </p>
 
 <p align="center">
@@ -162,7 +162,7 @@ cd formcel
 Ports are `FORMCEL_WEB_PORT` (5199) and `FORMCEL_PORT` (8199), bound to this computer only. `FORMCEL_DATA_DIR` moves the data folder (default `~/FormCel`).
 
 > [!IMPORTANT]
-> **Status:** active development. Comments, pictures, charts and PivotTables do not yet survive every file format, and FormCel says what it left out when it opens a file. See [`CHANGELOG.md`](CHANGELOG.md).
+> **Status:** released. FormCel is built and bundled for macOS, Windows and Linux and has been tested on all three. Comments, pictures, charts and PivotTables do not yet survive every file format, and FormCel says what it left out when it opens a file. See [`CHANGELOG.md`](CHANGELOG.md).
 
 **Contributing:** branch from `main`, keep changes to source here, and leave packaging and releases to FormCompiler. See [`AGENTS.md`](AGENTS.md) and [`CLAUDE.md`](CLAUDE.md).
 

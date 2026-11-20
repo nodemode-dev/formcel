@@ -80,6 +80,17 @@ const wasmFromPage = (): Plugin => ({
   },
 });
 
+const windowKeyInPage = (): Plugin => ({
+  name: 'formcel-demo-window-key',
+  enforce: 'pre',
+  transform(code, id) {
+    if (!id.endsWith('/frontend/src/main.ts')) return null;
+    const wait = 'await loadWindowKey();';
+    if (!code.includes(wait)) this.error('src/main.ts no longer waits for the window key the way the demo expects.');
+    return { code: code.replace(wait, 'void loadWindowKey();'), map: null };
+  },
+});
+
 const sharedEngine = (mode: string): Plugin => ({
   name: 'formcel-demo-shared-engine',
   generateBundle() {
@@ -170,7 +181,7 @@ export default defineConfig(({ mode }) => {
     base: './',
     publicDir: false,
     worker: { format: 'iife', plugins: () => [wasmFromPage()] },
-    plugins: [inlineWorkers(), tsWorker(id), quietFonts(), demoPage(id), classicScript(id), escapeSymbols(), sharedBundle(id), sharedEngine(id)],
+    plugins: [inlineWorkers(), windowKeyInPage(), tsWorker(id), quietFonts(), demoPage(id), classicScript(id), escapeSymbols(), sharedBundle(id), sharedEngine(id)],
     server: { host: false, port: DEMO_PORT, strictPort: true, fs: { allow: ['..'] } },
     preview: { host: false, port: DEMO_PORT + 1, strictPort: true },
     build: {
