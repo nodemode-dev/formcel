@@ -20,12 +20,12 @@ TAG = re.compile(r"</?[A-Za-z][^>]*>")
 LAUNCHER = "formcel"
 LAUNCH = os.path.join(ROOT, "formcel.bat" if os.name == "nt" else "formcel")
 ARGS = ["mcp"]
-CLIENTS = ("claude", "codex", "cursor")
+CLIENTS = ("claude", "codex", "cursor", "antigravity")
 REGISTRY = "formcel"
 MANIFEST = os.path.join(ROOT, "agents", "manifest.json")
 MCP_SOURCE = os.path.join(ROOT, "backend", "app", "routers", "mcp.py")
 STDIO_SOURCE = os.path.join(ROOT, "setup", "mcp_stdio.py")
-DOCK = {"present": True, "positions": ["bottom", "right"], "tabs": ["chat", "shell", "claude", "codex", "cursor", "agent"]}
+DOCK = {"present": True, "positions": ["bottom", "right"], "tabs": ["chat", "shell", "claude", "codex", "cursor", "antigravity", "agent"]}
 DOCK_DIR = os.path.join(ROOT, "frontend", "src", "dock")
 DOCK_MANIFEST = os.path.join(DOCK_DIR, "MANIFEST.json")
 
@@ -45,6 +45,35 @@ def check_dock(problems):
     for name in sorted(set(kept) | set(now)):
         if kept.get(name) != now.get(name):
             problems.append(f"frontend/src/dock/{name} does not match MANIFEST.json; the shared dock module is never edited here, only copied in whole")
+
+
+LOOKUP = os.path.join(ROOT, "backend", "app", "services", "agent_lookup.py")
+LOOKUP_REL = "backend/app/services/agent_lookup.py"
+LOOKUP_HASHES = {
+    "1.0.0": "252ea9bb9419d4990f174f91914f09800497bc69e98f849f5643bbf4217cc3f3",
+    "1.0.1": "62667f9b68b7d101e1896ce617240424e33b7e498c560bc79d45f0ab26c77d51",
+}
+
+
+def check_lookup(problems):
+    try:
+        raw = read_bytes(LOOKUP)
+    except OSError:
+        problems.append(f"{LOOKUP_REL}: missing (the shared finder for the agent programs)")
+        return
+    said = re.search(rb'^VERSION = "([^"\r\n]+)"\r?$', raw, re.M)
+    version = said.group(1).decode("ascii", "replace") if said else "unknown"
+    if LOOKUP_HASHES.get(version) != hashlib.sha256(raw).hexdigest():
+        problems.append(f"{LOOKUP_REL}: does not match the hash recorded for version {version} (the shared finder changes only as a whole new version)")
+
+
+def lookup():
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("formcel_agent_lookup", LOOKUP)
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module
 
 
 def files_under(base):
@@ -183,6 +212,7 @@ def sync():
     print(f"[agents] .agents/skills mirrors .claude/skills ({len(source)} files, {changed} changed)")
     problems = []
     check_dock(problems)
+    check_lookup(problems)
     for line in problems:
         print(f"[agents] {line}", file=sys.stderr)
     return sync_manifest() or (1 if problems else 0)
@@ -332,12 +362,13 @@ def check():
     check_agent_files(problems)
     check_manifest(problems)
     check_dock(problems)
+    check_lookup(problems)
     if problems:
         for line in problems:
             print(f"[agents] {line}", file=sys.stderr)
         print(f"[agents] {len(problems)} problem(s)", file=sys.stderr)
         return 1
-    print("[agents] clean: mirror matches, skills pass the format gate, MCP configs name the launcher, manifest is current, the dock module matches its MANIFEST.json")
+    print("[agents] clean: mirror matches, skills pass the format gate, MCP configs name the launcher, manifest is current, the dock module matches its MANIFEST.json, the agent finder matches its recorded hash")
     return 0
 
 
@@ -364,20 +395,23 @@ def copy_skills(root, dry, said):
 
 def install_claude(home, dry, said):
     said.append("Claude Code:")
-    claude = shutil.which("claude")
+    finder = lookup()
+    found = finder.check(finder.find("claude", override_vars=("FORMCEL_CLAUDE_BIN",), home=home))
+    claude = found.path if found.state == "runs" else None
     line = subprocess.list2cmdline([LAUNCH, *ARGS])
     if claude:
-        have = subprocess.run([claude, "mcp", "get", LAUNCHER], capture_output=True, text=True)
+        env = finder.child_env(claude, home=home)
+        have = finder.run([claude, "mcp", "get", LAUNCHER], env, 60)
         if have.returncode == 0 and LAUNCH in have.stdout:
             said.append(f"  MCP server {LAUNCHER} already set (user scope)")
         else:
             said.append(f"  claude mcp add --scope user {LAUNCHER} -- {line}")
             if not dry:
                 if have.returncode == 0:
-                    subprocess.run([claude, "mcp", "remove", LAUNCHER, "--scope", "user"], capture_output=True)
-                subprocess.run([claude, "mcp", "add", "--scope", "user", LAUNCHER, "--", LAUNCH, *ARGS], check=True, capture_output=True)
+                    finder.run([claude, "mcp", "remove", LAUNCHER, "--scope", "user"], env, 60)
+                finder.run([claude, "mcp", "add", "--scope", "user", LAUNCHER, "--", LAUNCH, *ARGS], env, 60).check_returncode()
     else:
-        said.append(f"  the claude command is not installed here; once it is, run: claude mcp add --scope user {LAUNCHER} -- {line}")
+        said.append(f"  {finder.sentence(found, finder.install('claude'))} Once it runs: claude mcp add --scope user {LAUNCHER} -- {line}")
     copy_skills(os.path.join(home, ".claude", "skills"), dry, said)
 
 
@@ -419,10 +453,46 @@ def install_cursor(home, dry, said):
     copy_skills(os.path.join(home, ".agents", "skills"), dry, said)
 
 
+def ours(entry):
+    return isinstance(entry, dict) and entry.get("args") == ARGS and os.path.basename(str(entry.get("command", ""))) == os.path.basename(LAUNCH)
+
+
+def install_antigravity(home, dry, said):
+    said.append("Antigravity:")
+    cfg = os.path.join(home, ".gemini", "config", "mcp_config.json")
+    older = os.path.join(home, ".gemini", "antigravity-cli", "mcp_config.json")
+    if os.path.exists(older) and not os.path.exists(cfg):
+        said.append(f"  an older file was seen at {older} and left alone; the documented file is {cfg}")
+    try:
+        raw = open(cfg, encoding="utf-8").read() if os.path.exists(cfg) else ""
+        data = json.loads(raw) if raw.strip() else {}
+    except ValueError:
+        data = None
+    if not isinstance(data, dict) or not isinstance(data.get("mcpServers", {}), dict):
+        said.append(f"  {cfg} is not an MCP servers file FormCel can read; left alone")
+        return
+    entry = {"command": LAUNCH, "args": ARGS}
+    have = data.get("mcpServers", {}).get(LAUNCHER)
+    if have == entry:
+        said.append(f"  MCP server {LAUNCHER} already in {cfg}")
+    elif have is not None and not ours(have):
+        said.append(f"  {cfg} has a server named {LAUNCHER} that FormCel did not write; left alone")
+    else:
+        said.append(f"  MCP server {LAUNCHER} -> {cfg}")
+        if not dry:
+            backup(cfg, dry)
+            data.setdefault("mcpServers", {})[LAUNCHER] = entry
+            os.makedirs(os.path.dirname(cfg), exist_ok=True)
+            part = f"{cfg}.part-{os.getpid()}"
+            with open(part, "w", encoding="utf-8") as f:
+                f.write(json.dumps(data, indent=2) + "\n")
+            os.replace(part, cfg)
+
+
 def install(clients, dry):
     home, said = os.environ.get("HOME") or os.path.expanduser("~"), []
     for client in clients or CLIENTS:
-        {"claude": install_claude, "codex": install_codex, "cursor": install_cursor}[client](home, dry, said)
+        {"claude": install_claude, "codex": install_codex, "cursor": install_cursor, "antigravity": install_antigravity}[client](home, dry, said)
     print(("Would do (dry run):\n" if dry else "") + "\n".join(said))
     if not dry:
         print("\nRestart the clients. The first command an outside agent runs asks you once, in the FormCel window, to allow outside agents.")
@@ -434,14 +504,14 @@ def main():
     sub = parser.add_subparsers(dest="action", required=True)
     sub.add_parser("sync", help="mirror .claude/skills into .agents/skills").add_argument("--check", action="store_true", help="only check, as agents check does")
     sub.add_parser("check", help="check the mirror, the skills and the MCP configs")
-    put = sub.add_parser("install", help="register FormCel with Claude Code, Codex and Cursor for this user")
-    put.add_argument("clients", nargs="*", metavar="client", help="claude, codex or cursor (default all three)")
+    put = sub.add_parser("install", help="register FormCel with Claude Code, Codex, Cursor and Antigravity for this user")
+    put.add_argument("clients", nargs="*", metavar="client", help="claude, codex, cursor or antigravity (default all four); Antigravity gets the MCP server only, in ~/.gemini/config/mcp_config.json")
     put.add_argument("--dry-run", action="store_true", help="say what would change and change nothing")
     args = parser.parse_args()
     if args.action == "install":
         bad = [c for c in args.clients if c not in CLIENTS]
         if bad:
-            parser.error(f"unknown client {', '.join(bad)} (claude, codex or cursor)")
+            parser.error(f"unknown client {', '.join(bad)} (claude, codex, cursor or antigravity)")
         return install(args.clients, args.dry_run)
     return check() if args.action == "check" or args.check else sync()
 

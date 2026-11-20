@@ -36,7 +36,7 @@ def status(request: Request, fresh: bool = False) -> dict:
 def window_status(request: Request, fresh: bool = False) -> dict:
     require_local(request)
     tab = next((s.describe() for s in terminal.SESSIONS.values() if s.kind == "claude"), None)
-    return claude_code.info(fresh=fresh) | {"folder": claude_code.workdir(document_folder()), "terminal": tab, "agents": agent_programs.status()}
+    return claude_code.info(fresh=fresh) | {"folder": claude_code.workdir(document_folder()), "terminal": tab, "agents": agent_programs.status(fresh)}
 
 
 @router.post("/start")

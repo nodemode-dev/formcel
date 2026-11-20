@@ -11,7 +11,7 @@ function person(run: () => void | Promise<void>): () => void | Promise<void> {
   };
 }
 
-export function mountDock(app: HTMLElement, titlebar: HTMLElement): Dock {
+export function mountDock(app: HTMLElement, titlebar: HTMLElement): Dock<'antigravity'> {
   const dock = new Dock(formcelDock());
   setDockKeeps((event) => dock.keeps(event));
   const cmd = (id: string, title: string, description: string, run: () => void | Promise<void>, extra: { keys?: string; checked?: () => boolean } = {}) =>

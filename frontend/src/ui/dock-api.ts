@@ -1,6 +1,6 @@
 import { keyHeaders, presentKey } from './window-key';
 
-export type AgentProgram = 'codex' | 'cursor';
+export type AgentProgram = 'codex' | 'cursor' | 'antigravity';
 export interface TerminalInfo { id: string; title: string; cwd?: string; alive: boolean; kind: 'shell' | 'claude' | 'agent' | AgentProgram }
 export interface ClaudeCodeStatus { installed: boolean; version: string | null; install: string; signedIn: boolean | null }
 export interface ClaudeOpen { prompt?: string; resume?: string; cols?: number; rows?: number; fresh?: boolean }
@@ -78,7 +78,7 @@ export const dockApi = {
     let told: Partial<Record<'claude' | AgentProgram, Partial<ClaudeCodeStatus>>>;
     try { told = (await (await request('/agents/status')).json()) as typeof told; } catch { return null; }
     const out: Partial<Record<'claude' | AgentProgram, ClaudeCodeStatus>> = {};
-    for (const name of ['claude', 'codex', 'cursor'] as const) {
+    for (const name of ['claude', 'codex', 'cursor', 'antigravity'] as const) {
       const p = told[name];
       if (p) out[name] = { installed: p.installed === true, version: p.version ?? null, install: p.install ?? '', signedIn: p.signedIn ?? null };
     }

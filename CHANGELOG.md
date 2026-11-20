@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.45.0 · 2026-11-19
+
+Antigravity joins Claude Code, Codex and Cursor, and FormCel finds all four however it was started.
+
+- Antigravity (Google's `agy` program) is the fourth agent program FormCel works with. When it is installed it gets a tab of its own in the terminal panel, beside Claude Code, Codex and Cursor, and FormCel sets its tools up for that tab in the way Google documents. The tab runs in a folder of FormCel's own, not among your workbooks.
+- `./formcel agents install` also connects FormCel to Antigravity, and `./formcel agents install antigravity` does only that. It adds FormCel to `~/.gemini/config/mcp_config.json`, keeps everything else in that file, makes a backup first, and leaves alone an entry named formcel that it did not write.
+- FormCel finds Claude Code, Codex, Cursor and Antigravity when it is started from the Dock, the Finder or the Start menu, not only from a terminal. Programs installed with Homebrew, npm or a version manager are found, and a program that needs `node` beside it starts. When a program is not found, FormCel says where it looked and how to install it.
+- Windows: the engine no longer stops at start when it is run without a console.
+
 ## 0.44.0 · 2026-11-19
 
 Data forms and databases, Python handlers, a dashboard view, a terminal dock that can sit at the right, and tighter rules for who can change a workbook.

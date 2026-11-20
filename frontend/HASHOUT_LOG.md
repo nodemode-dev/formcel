@@ -7,6 +7,24 @@ Last updated: 2026-11-13 · v0.43.0: browser demo pages, the inline mark in the 
 
 ---
 
+## v0.45.0 entries · the dock is the family module 2.2.0 and has an Antigravity tab (2026-11-19)
+
+- src/dock/ · the family's shared module at 2.2.0, copied whole from FormVis ddc893ae, 16 entries with `MANIFEST.json` (`agents.ts` is new). Never edited here; `./formcel agents check` compares every file with the manifest. In 2.2.0 the module takes its agent kinds from the adapter, every control carries `data-dock-part`, and a kind the adapter does not list has no hidden button or row.
+- src/dock-adapter.ts :: `formcelDock`, `tabs` · the adapter is typed `DockAdapter<'antigravity'>` and lists `antigravity` as the sixth built-in tab kind. `terminal.open` already sends every kind that is not a shell or Claude Code to `POST /api/terminal/agent`, so the fourth kind needs no new branch.
+- src/ui/dock-api.ts :: `AgentProgram`, `agentStatus` · the type gains `antigravity` and the status answer passes its entry on (`signedIn` stays null: `agy` has no status command).
+- src/ui/dock-mount.ts :: `mountDock` · returns `Dock<'antigravity'>`.
+- src/ui/agents-allow.ts, the Blocked sentence in Trust Center · names the four kinds of agent tab (Claude Code, Codex, Cursor and Antigravity); text only, the same node.
+- Left alone: the adapter's optional parts of 2.2.0 (`note` on a program's status, `status` on a terminal record, automation ids on `data-dock-part`); `keyHeaders` stays because FormCel uses it.
+- Run: `tsc --noEmit` on a copy of the tree with the packages installed, clean. Not run: a browser, the Vite dev server, the desktop window, so the fourth button, its row in the menu and the guide's line were not looked at.
+
+## After v0.44.0 · the dock treats the agent finder's sentences as "not installed" (2026-11-19)
+
+The version bump comes in a later release commit.
+
+- src/dock-adapter.ts :: `errors.kind` · the engine now refuses a tab or Chat with the finder's own sentence ("Codex was not found. Looked in: ..." or "... but does not start: ..."), so the pattern that answers `notInstalled` also matches `was not found. Looked in` and `but does not start`. The dock then refreshes its program list and opens its menu as it did for the old "is not installed" text, and `errors.message` shows the sentence itself.
+- Left alone: `t` still returns the dock's English, so the Chat lead and a row of the menu say the module's own "is not installed" line and not the finder's sentence; FormVis keeps the last `said` per program for that (`tell`, `ownWords`), which is more than one change here. Nothing in `src/dock/` is touched.
+- The pattern was run in node against the three sentences. Not run: tsc (no node_modules here), a browser.
+
 ## Unreleased · data forms, SQLite saving, Python handlers, dashboard view (discussion #12, 2026-11-18)
 
 The version bump comes in a later release commit.

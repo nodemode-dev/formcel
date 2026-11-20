@@ -29,7 +29,7 @@ function socketChannel(socket: WebSocket): DockChannel {
   };
 }
 
-export function formcelDock(): DockAdapter {
+export function formcelDock(): DockAdapter<'antigravity'> {
   return {
     words: {
       app: 'FormCel', noun: 'workbook', start: './formcel', example: 'add a total under this column',
@@ -43,7 +43,7 @@ export function formcelDock(): DockAdapter {
     isDockChord: (e) => (e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey && e.code === 'KeyJ' && !e.repeat && !document.querySelector('.fc-modal:not([hidden])'),
     chordLabel: () => `${isMac ? 'Cmd' : 'Ctrl'}+J`,
     passKey: (e) => (e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey && e.key === ',',
-    tabs: () => ({ builtin: ['chat', 'shell', 'claude', 'codex', 'cursor'] }),
+    tabs: () => ({ builtin: ['chat', 'shell', 'claude', 'codex', 'cursor', 'antigravity'] }),
     classes: { iconButton: 'fc-tool', button: 'fc-btn', primaryButton: 'fc-btn-primary', input: 'fc-input', select: 'fc-input', note: 'fc-note' },
     t: (_key, english) => english,
     onTheme: () => undefined,
@@ -56,7 +56,7 @@ export function formcelDock(): DockAdapter {
         if (err.status === 0 || err.status === 502 || err.status === 503 || err.status === 504) return 'unreachable';
         if (err.status === 403) return 'refused';
         if ((err.status === 404 || err.status === 405) && /^(Not Found|Method Not Allowed)$/i.test(err.message)) return 'oldEngine';
-        return /not installed/i.test(err.message) ? 'notInstalled' : null;
+        return /not installed|was not found\. Looked in|but does not start/i.test(err.message) ? 'notInstalled' : null;
       },
     },
     terminal: {

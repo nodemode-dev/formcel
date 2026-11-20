@@ -37,6 +37,7 @@ class Session:
         self.kind = kind
         self.argv = argv
         self.env = env
+        self.on_close: list = []
 
     def describe(self) -> dict:
         return {"id": self.id, "title": self.title, "cwd": self.cwd, "alive": self.alive, "kind": self.kind}
@@ -140,7 +141,7 @@ def open_session(cwd: str | None = None, cols: int = 100, rows: int = 30, title:
 
 def restart(sid: str) -> Session:
     session = get(sid)
-    if session.kind not in ("shell", "claude", "codex", "cursor"):
+    if session.kind not in ("shell", "claude", "codex", "cursor", "antigravity"):
         raise ValueError("The Claude terminal has no shell to restart.")
     old = session.proc
     session.gen += 1
@@ -198,6 +199,8 @@ def close(sid: str) -> None:
     from . import agents
 
     agents.revoke((session.env or {}).get(agents.INAPP_VAR))
+    for done in session.on_close:
+        done()
     session.gen += 1
     if session.proc is not None:
         try:

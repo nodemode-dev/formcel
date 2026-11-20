@@ -11,7 +11,7 @@
 </p>
 
 <p align="center">
-  <img alt="version 0.44.0" src="https://img.shields.io/badge/version-0.44.0-eef0f4?style=flat-square">
+  <img alt="version 0.45.0" src="https://img.shields.io/badge/version-0.45.0-eef0f4?style=flat-square">
   <img alt="Rust and WebAssembly" src="https://img.shields.io/badge/engine-Rust%20%2B%20WebAssembly-b7410e?style=flat-square&logo=rust&logoColor=white">
   <img alt="TypeScript and Vite" src="https://img.shields.io/badge/TypeScript-Vite-3178c6?style=flat-square">
   <img alt="macOS, Windows, Linux" src="https://img.shields.io/badge/macOS%20%C2%B7%20Windows%20%C2%B7%20Linux-native-2f7bf5?style=flat-square">
@@ -119,8 +119,8 @@ The window, the command line and the MCP server call the same command catalogue,
 ```sh
 ./formcel cli list sort             # the open window's commands, filtered by a word
 ./formcel cli run ribbon.collapse   # run one by id
-./formcel mcp                       # MCP server on stdio for Claude Code, Codex and Cursor
-./formcel agents install            # register FormCel with Claude Code, Codex and Cursor for your account
+./formcel mcp                       # MCP server on stdio for Claude Code, Codex, Cursor and Antigravity
+./formcel agents install            # register FormCel with Claude Code, Codex, Cursor and Antigravity for your account
 ```
 
 `.mcp.json`, `.codex/config.toml` and `.cursor/mcp.json` are already wired in this repo. The first command an outside agent runs asks you once, in the window, to allow outside agents; `./formcel cli run` counts as one, so the window must be open and you answer there the first time. Only the window can change that choice (Preferences, Trust Center, Outside agents). See [`AGENTS.md`](AGENTS.md).
