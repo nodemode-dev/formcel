@@ -1031,3 +1031,10 @@ TypedMark holds the record id, and resolved means the id is not empty. Convertin
 - logged: v0.47.0 · 2026-11-20
 
 Copied unchanged from FormVis commit 23b01889 (`git show`, each file). The first-run guide's two sentences for a computer that has Claude Code now say that Codex, Cursor and Antigravity each get a button of their own when they are on this computer. FormCel carries no translations of the panel's sentences, so nothing else changed; its checks expect no module version of their own (`./formcel agents check` compares the folder with its MANIFEST.json).
+
+### The page that says why FormCel could not start
+- refers-to: public/failure.html, public/splash.html
+- kind: decision
+- logged: v0.47.0 · 2026-11-20
+
+The shell's failure window shows this page (see src-tauri/HASHOUT_LOG.md). It is bundled with the app because the engine is what failed. It carries FormCel's token values inline (dark, and light by `prefers-color-scheme`), reads `window.__FORMCEL_FAILURE` in a script at the end of the body, so it paints once, and its text can be selected and copied. Checked in headless Chromium at 560 by 420, dark and light, 4x CPU throttle, with a busy sample and a quiet one: the same layout at first paint and later, no layout shift, no overflow, no console error, Close and Escape ask the shell to end. The splash lost its failure line.

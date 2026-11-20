@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark light">
+  <title>FormCel</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --accent-color: #f97316;
+      --accent-color-hover: color-mix(in srgb, var(--accent-color) 82%, #ffffff);
+      --bg-primary: #111111;
+      --bg-secondary: #17151b;
+      --bg-tertiary: #222127;
+      --border-color: #2a2a2a;
+      --border-light: #34333a;
+      --text-primary: #f7f7f7;
+      --text-secondary: #a4a4a4;
+      --text-muted: #8a8a8b;
+      --bad: #f87171;
+      --font-ui: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+      --text-sm: 12px;
+      --text-md: 13px;
+      --text-lg: 15px;
+      --space-2: 8px;
+      --space-3: 12px;
+      --space-4: 16px;
+      --space-5: 20px;
+      --radius: 6px;
+      --radius-md: 8px;
+    }
+    @media (prefers-color-scheme: light) {
+      :root {
+        color-scheme: light;
+        --bg-primary: #ecebe6;
+        --bg-secondary: #f7f6f1;
+        --bg-tertiary: #e2e0d8;
+        --border-color: #d1cdc1;
+        --border-light: #beb9aa;
+        --text-primary: #26241d;
+        --text-secondary: #4c4a40;
+        --text-muted: #8b887a;
+        --bad: #b91c1c;
+      }
+    }
+    html, body { height: 100%; margin: 0; }
+    body { box-sizing: border-box; display: flex; flex-direction: column; gap: var(--space-3); padding: var(--space-5); background: var(--bg-primary); color: var(--text-primary); font: var(--text-md)/1.5 var(--font-ui); overflow: hidden; -webkit-user-select: text; user-select: text; cursor: default; }
+    h1 { margin: 0; font-size: var(--text-lg); font-weight: 600; line-height: 1.4; color: var(--text-primary); }
+    h2 { margin: 0 0 4px; font-size: var(--text-sm); font-weight: 600; color: var(--text-secondary); }
+    .lines { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
+    pre { flex: 1 1 auto; min-height: 0; margin: 0; padding: var(--space-3); overflow: auto; background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: var(--radius-md); color: var(--text-primary); font: var(--text-sm)/1.55 var(--font-mono); white-space: pre-wrap; overflow-wrap: anywhere; }
+    .note { margin: 0; color: var(--text-secondary); }
+    dl { display: grid; grid-template-columns: max-content 1fr; gap: 2px var(--space-3); margin: 0; font-size: var(--text-sm); }
+    dt { color: var(--text-secondary); }
+    dd { margin: 0; font-family: var(--font-mono); overflow-wrap: anywhere; }
+    .bar { display: flex; justify-content: flex-end; margin-top: auto; }
+    button { min-width: 84px; height: 30px; padding: 0 var(--space-4); border: 1px solid var(--accent-color); border-radius: var(--radius); background: var(--accent-color); color: #ffffff; font: 600 var(--text-md) var(--font-ui); cursor: pointer; }
+    button:hover { background: var(--accent-color-hover); }
+    button:focus-visible { outline: 2px solid var(--text-primary); outline-offset: 2px; }
+    [hidden] { display: none !important; }
+  </style>
+</head>
+<body>
+  <h1 id="sentence">FormCel could not start.</h1>
+  <section class="lines" id="lines-box" hidden><h2>The engine's last lines</h2><pre id="lines"></pre></section>
+  <p class="note" id="note" hidden></p>
+  <dl id="facts" hidden><dt id="code-label" hidden>Exit code</dt><dd id="code" hidden></dd><dt id="log-label" hidden>Log</dt><dd id="log" hidden></dd></dl>
+  <div class="bar"><button type="button" id="close">Close</button></div>
+  <script>
+    (function () {
+      var data = window.__FORMCEL_FAILURE || {};
+      var put = function (id, text) {
+        var node = document.getElementById(id);
+        node.textContent = text;
+        node.hidden = false;
+      };
+      if (data.sentence) document.getElementById('sentence').textContent = data.sentence;
+      if (data.lines && data.lines.length) {
+        put('lines', data.lines.join('\n'));
+        document.getElementById('lines-box').hidden = false;
+      }
+      if (data.note) put('note', data.note);
+      if (data.code !== null && data.code !== undefined) {
+        put('code', String(data.code));
+        document.getElementById('code-label').hidden = false;
+      }
+      if (data.log) {
+        put('log', data.log);
+        document.getElementById('log-label').hidden = false;
+      }
+      if (!document.getElementById('code').hidden || data.log) document.getElementById('facts').hidden = false;
+      var close = document.getElementById('close');
+      close.addEventListener('click', function () {
+        var tauri = window.__TAURI_INTERNALS__;
+        if (tauri && tauri.invoke) tauri.invoke('failure_close');
+        else window.close();
+      });
+      document.addEventListener('keydown', function (event) {
+        if (event.key === 'Escape') close.click();
+      });
+      close.focus();
+    })();
+  </script>
+</body>
+</html>
