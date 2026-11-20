@@ -1022,3 +1022,19 @@ y2Fmt formats the secondary axis of a combo chart and sizes its label column. re
 - logged: v0.40.0 · 2026-10-23
 
 TypedMark holds the record id, and resolved means the id is not empty. Converting a cell and choosing a match still pass the fetched record text in the chip line once; the engine takes it into the store and the cell keeps the id, so no cell holds a record. Refresh calls putRecords with the id read from the cell, one undo step through grouped. applyEffect drains the engine's record changes and app.ts posts them to the engine process in order with the chip changes. Copy collects a portable chip line (record text included) per linked cell in the range, and pasting all, formulas, or formulas and formats sets it on the destination, which takes the record into that workbook's store; the line exists only in the in-memory copy buffer, not on the system clipboard, so a paste from another window brings the cell's text only. Opening a workbook loads its records before its sheets.
+
+## v0.47.0 entries
+
+### The shared panel module is 2.2.1
+- refers-to: src/dock/ (every file, MANIFEST.json included)
+- kind: decision
+- logged: v0.47.0 · 2026-11-20
+
+Copied unchanged from FormVis commit 23b01889 (`git show`, each file). The first-run guide's two sentences for a computer that has Claude Code now say that Codex, Cursor and Antigravity each get a button of their own when they are on this computer. FormCel carries no translations of the panel's sentences, so nothing else changed; its checks expect no module version of their own (`./formcel agents check` compares the folder with its MANIFEST.json).
+
+### The page that says why FormCel could not start
+- refers-to: public/failure.html, public/splash.html
+- kind: decision
+- logged: v0.47.0 · 2026-11-20
+
+The shell's failure window shows this page (see src-tauri/HASHOUT_LOG.md). It is bundled with the app because the engine is what failed. It carries FormCel's token values inline (dark, and light by `prefers-color-scheme`), reads `window.__FORMCEL_FAILURE` in a script at the end of the body, so it paints once, and its text can be selected and copied. Checked in headless Chromium at 560 by 420, dark and light, 4x CPU throttle, with a busy sample and a quiet one: the same layout at first paint and later, no layout shift, no overflow, no console error, Close and Escape ask the shell to end. The splash lost its failure line.
