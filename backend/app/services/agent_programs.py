@@ -127,7 +127,10 @@ def _mcp_file(folder: Path) -> Path:
 
 
 def _servers(path: Path) -> dict:
-    data = json.loads(path.read_text(encoding="utf-8") or "{}") if path.exists() else {}
+    try:
+        data = json.loads(path.read_text(encoding="utf-8") or "{}") if path.exists() else {}
+    except ValueError:
+        raise OSError(f"{path} is not valid JSON, so FormCel left it alone and did not open the tab") from None
     if not isinstance(data, dict) or not isinstance(data.get("mcpServers", {}), dict):
         raise OSError(f"{path} is not an MCP servers file FormCel can read, so it was left alone")
     return data

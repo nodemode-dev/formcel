@@ -302,3 +302,17 @@ def test_a_tab_entry_that_is_not_this_tabs_is_left_alone(tmp_path):
     assert json.loads(path.read_text(encoding="utf-8"))["mcpServers"][agent_programs.TAB_SERVER]["headers"] == {agents.INAPP_HEADER: "second"}
     agent_programs.remove_tab_entry(tmp_path, "second")
     assert json.loads(path.read_text(encoding="utf-8")) == {"mcpServers": {}}
+
+
+@pytest.mark.skipif(os.name == "nt", reason="stand-ins are shell scripts")
+def test_an_antigravity_tab_says_so_when_the_file_in_its_folder_is_not_json(dock_start, client):
+    node_style(dock_start / ".local" / "bin", "agy")
+    assert told(client)["antigravity"]["finding"] == "runs"
+    path = agent_programs.tab_folder("antigravity") / ".agents" / "mcp_config.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("{not json", encoding="utf-8")
+    open_before = terminal.listing()
+    res = client.post("/api/terminal/agent", json={"kind": "antigravity", "cols": 80, "rows": 20})
+    assert res.status_code == 500
+    assert res.json()["detail"] == f"The program could not start: {path} is not valid JSON, so FormCel left it alone and did not open the tab"
+    assert path.read_text(encoding="utf-8") == "{not json" and terminal.listing() == open_before
