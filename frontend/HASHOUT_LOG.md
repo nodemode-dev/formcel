@@ -13,6 +13,7 @@ Last updated: 2026-11-13 · v0.43.0: browser demo pages, the inline mark in the 
 - src/dock-adapter.ts :: `formcelDock`, `tabs` · the adapter is typed `DockAdapter<'antigravity'>` and lists `antigravity` as the sixth built-in tab kind. `terminal.open` already sends every kind that is not a shell or Claude Code to `POST /api/terminal/agent`, so the fourth kind needs no new branch.
 - src/ui/dock-api.ts :: `AgentProgram`, `agentStatus` · the type gains `antigravity` and the status answer passes its entry on (`signedIn` stays null: `agy` has no status command).
 - src/ui/dock-mount.ts :: `mountDock` · returns `Dock<'antigravity'>`.
+- src/ui/agents-allow.ts, the Blocked sentence in Trust Center · names the four kinds of agent tab (Claude Code, Codex, Cursor and Antigravity); text only, the same node.
 - Left alone: the adapter's optional parts of 2.2.0 (`note` on a program's status, `status` on a terminal record, automation ids on `data-dock-part`); `keyHeaders` stays because FormCel uses it.
 - Run: `tsc --noEmit` on a copy of the tree with the packages installed, clean. Not run: a browser, the Vite dev server, the desktop window, so the fourth button, its row in the menu and the guide's line were not looked at.
 

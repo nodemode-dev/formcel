@@ -7,9 +7,9 @@ usage() {
 usage: ./formcel [command]
 
   (none) | boot          boot the engine (8199) and the window (5199) together
-  mcp [--where]          FormCel over MCP's stdio transport, for Claude Code, Codex, Cursor and Claude Desktop
+  mcp [--where]          FormCel over MCP's stdio transport, for Claude Code, Codex, Cursor, Antigravity and Claude Desktop
   agents sync | check    mirror .claude/skills into .agents/skills; check the mirror, the skills and the MCP configs
-  agents install [--dry-run] [claude|codex|cursor]  register FormCel with those clients for this user
+  agents install [--dry-run] [claude|codex|cursor|antigravity]  register FormCel with those clients for this user
   cli list [text] | describe ID | run ID [key=value ...]  the window's commands from a shell
   mcpb check | build DIR validate the Claude Desktop extension manifest; write formcel.mcpb into DIR
   help                   this text

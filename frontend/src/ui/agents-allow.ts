@@ -20,7 +20,7 @@ export function agentsPanel(): Panel {
     row.set(s.allowed);
     block.set(s.choice === 'blocked');
     setText(msg, s.choice === 'blocked'
-      ? 'Blocked. No agent can run FormCel\'s commands: outside agents, Chat and Claude Code, Codex and Cursor tabs in the dock are all refused. The dock and its plain terminals still open.'
+      ? 'Blocked. No agent can run FormCel\'s commands: outside agents, Chat and Claude Code, Codex, Cursor and Antigravity tabs in the dock are all refused. The dock and its plain terminals still open.'
       : s.sealBroken
       ? 'The saved agent permission was changed outside FormCel, so it is back to Ask.'
       : s.allowed

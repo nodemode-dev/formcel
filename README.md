@@ -119,8 +119,8 @@ The window, the command line and the MCP server call the same command catalogue,
 ```sh
 ./formcel cli list sort             # the open window's commands, filtered by a word
 ./formcel cli run ribbon.collapse   # run one by id
-./formcel mcp                       # MCP server on stdio for Claude Code, Codex and Cursor
-./formcel agents install            # register FormCel with Claude Code, Codex and Cursor for your account
+./formcel mcp                       # MCP server on stdio for Claude Code, Codex, Cursor and Antigravity
+./formcel agents install            # register FormCel with Claude Code, Codex, Cursor and Antigravity for your account
 ```
 
 `.mcp.json`, `.codex/config.toml` and `.cursor/mcp.json` are already wired in this repo. The first command an outside agent runs asks you once, in the window, to allow outside agents; `./formcel cli run` counts as one, so the window must be open and you answer there the first time. Only the window can change that choice (Preferences, Trust Center, Outside agents). See [`AGENTS.md`](AGENTS.md).

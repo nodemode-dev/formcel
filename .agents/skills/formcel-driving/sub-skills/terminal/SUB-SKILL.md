@@ -14,7 +14,7 @@ These are for the person to run in the FormCel folder, or for you to run in your
 | Goal | Command |
 | --- | --- |
 | Start FormCel (engine and window) | `./formcel` |
-| Connect Claude Code, Codex and Cursor to FormCel for this user | `./formcel agents install` (add `--dry-run` to see what it would do) |
+| Connect Claude Code, Codex, Cursor and Antigravity to FormCel for this user | `./formcel agents install` (add `--dry-run` to see what it would do) |
 | Run the MCP server as a client would (stdio) | `./formcel mcp` (it starts the engine if none is running) |
 | Run a window command from a shell | `./formcel cli run ID` |
 | Windows | the same commands through `formcel.bat` |
